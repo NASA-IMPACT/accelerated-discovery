@@ -1,0 +1,150 @@
+name: CICD 🚀
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - production
+
+jobs:
+  gitflow-enforcer:
+    name: Enforce gitflow 👮‍♂️
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch
+        if: github.base_ref == 'staging' && github.head_ref != 'development' || github.base_ref == 'production' && github.head_ref != 'staging'
+        run: |
+          echo "ERROR: You can only merge to staging from development and to production from staging"
+          exit 1   
+
+  define-environment:
+    name: Set ✨ environment ✨
+    needs: [gitflow-enforcer]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set the environment based on the branch
+        id: define_environment
+        run: |
+          if [ "${{ github.ref_name }}" = "development" ]; then
+            echo "env_name=development" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "staging" ]; then
+            echo "env_name=staging" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref_name }}" = "production" ]; then
+            echo "env_name=production" >> $GITHUB_OUTPUT
+          fi
+      - name: Print the environment
+        run: echo "The environment is ${{ steps.define_environment.outputs.env_name }}"
+
+    outputs:
+      env_name: ${{ steps.define_environment.outputs.env_name }}
+
+  check-tags:
+    name: Validate CFN Template ✅
+    needs: [define-environment]
+    environment: ${{ needs.define-environment.outputs.env_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: "true"
+          submodules: "recursive"
+
+      - name: Checkout rules
+        run: |
+          mkdir cfn-guard
+          curl -o cfn-guard/enforce-tags.guard https://impact-cfn-guard-bucket.s3.us-west-2.amazonaws.com/enforce-tags.guard
+
+      - name: Install AWS CloudFormation Guard
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/aws-cloudformation/cloudformation-guard/main/install-guard.sh | sh
+
+      - name: Set up python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+        working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
+
+      - name: Install aws cdk v2
+        run: npm install -g aws-cdk@2
+
+      - name: Sythesise the CDK stack
+        run: |
+          cdk synth
+        working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
+
+      - name: Validate CloudFormation Templates
+        run: |
+          export PATH=~/.guard/bin:$PATH
+          chmod +r cfn-guard/enforce-tags.guard
+          cfn-guard validate -d ${{ vars.PATH_TO_CFN_TEMPLATE }} -r cfn-guard/enforce-tags.guard
+  
+  deploy:
+    name: Deploy to ${{ needs.define-environment.outputs.env_name }} 🚀
+    concurrency: ${{ needs.define-environment.outputs.env_name }}
+    if: ${{ needs.define-environment.outputs.env_name }}
+    needs: [define-environment, check-tags]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.define-environment.outputs.env_name }}
+    env:
+      STAGE: ${{ github.ref_name }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      secrets: inherit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: "true"
+          submodules: "recursive"
+
+      - name: Set up python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+        working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ secrets.DEPLOYMENT_ROLE_ARN }}
+          role-session-name: ${{ github.repository_owner}}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install aws cdk v2
+        run: npm install -g aws-cdk@2
+
+      - name: Deploy cdk stack
+        run: |
+          cdk deploy --all --require-approval never --outputs-file ${{ github.workspace }}/cdk-outputs.json
+        working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
+
+      - name: Upload CDK output
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: cdk output
+          path: ${{ github.workspace }}/cdk-outputs.json
+
+      - name: Destroy stack on failure
+        if: failure()
+        run: |
+          cdk destroy --all --force
+        working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
