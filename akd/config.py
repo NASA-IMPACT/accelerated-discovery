@@ -48,6 +48,7 @@ class ModelConfig(BaseModel):
     temperature: float = Field(default=0.0)
     max_tokens: int = Field(default=120_000_000)
     api_keys: ApiKey = Field(default=ApiKey())
+    default_no_answer: str = Field(default="Answer not found")
 
 
 class BaseConfig(BaseModel):
