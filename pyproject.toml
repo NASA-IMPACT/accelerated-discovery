@@ -5,5 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "atomic-agents>=1.0.23",
+    "crawl4ai>=0.5.0.post4",
+    "instructor>=1.7.7",
     "loguru>=0.7.3",
+    "markdownify>=1.1.0",
+    "openai>=1.66.5",
 ]
