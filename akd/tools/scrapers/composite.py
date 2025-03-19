@@ -1,5 +1,9 @@
-from loguru import logger
+from typing import Union
 
+from loguru import logger
+from pydantic import HttpUrl
+
+from .resolvers import BaseArticleResolver
 from .web_scrapers import (
     WebpageMetadata,
     WebpageScraperToolInputSchema,
@@ -46,3 +50,21 @@ class CompositeWebScraper(WebScraperToolBase):
                 )
                 continue
         return result
+
+
+class ResearchArticleResolver(BaseArticleResolver):
+    def __init__(self, *resolvers: BaseArticleResolver):
+        self.resolvers = resolvers
+
+    def resolve(self, url: Union[str, HttpUrl]) -> str:
+        url = str(url)
+        original_url = str(url)
+        for resolver in self.resolvers:
+            rname = resolver.__class__.__name__
+            try:
+                logger.debug(f"Using resolver={rname} for url={url}")
+                url = resolver.run(url)
+                break
+            except:
+                logger.error(f"Error using resolver={rname}")
+        return url
