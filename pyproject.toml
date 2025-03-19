@@ -1,0 +1,9 @@
+[project]
+name = "accelerated-discovery"
+version = "0.0.1"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "loguru>=0.7.3",
+]
