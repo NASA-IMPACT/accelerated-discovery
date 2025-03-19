@@ -1,8 +1,42 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, HttpUrl
 
 from .config import CONFIG
+
+
+class SearchResultItem(BaseModel):
+    """This schema represents a single search result item"""
+
+    url: HttpUrl = Field(..., description="The URL of the search result")
+    pdf_url: Optional[HttpUrl] = Field(
+        None,
+        description="The PDF URL of the search paper",
+    )
+    title: str = Field(..., description="The title of the search result")
+    content: Optional[str] = Field(
+        None,
+        description="The content snippet of the search result",
+    )
+    query: str = Field(..., description="The query used to obtain the search result")
+    category: Optional[str] = Field(None, description="Category of the search result")
+    doi: Optional[str] = Field(
+        None,
+        description="Digital Object Identifier (DOI) of the search result",
+    )
+    published_date: Optional[str] = Field(
+        None,
+        description="Publication date for the search result",
+    )
+    engine: Optional[str] = Field(
+        None,
+        description="Engine that fetched the search result",
+    )
+    tags: Optional[List[str]] = Field(None, description="Tags for the search result")
+    extra: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Extra information from the search result",
+    )
 
 
 class ExtractionSchema(BaseModel):

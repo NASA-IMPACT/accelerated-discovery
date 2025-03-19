@@ -1,49 +1,16 @@
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 import aiohttp
 from atomic_agents.agents.base_agent import BaseIOSchema
 from atomic_agents.lib.base.base_tool import BaseTool, BaseToolConfig
 from loguru import logger
-from pydantic import BaseModel
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
-
-class SearchResultItem(BaseModel):
-    """This schema represents a single search result item"""
-
-    url: HttpUrl = Field(..., description="The URL of the search result")
-    pdf_url: Optional[HttpUrl] = Field(
-        None,
-        description="The PDF URL of the search paper",
-    )
-    title: str = Field(..., description="The title of the search result")
-    content: Optional[str] = Field(
-        None,
-        description="The content snippet of the search result",
-    )
-    query: str = Field(..., description="The query used to obtain the search result")
-    category: Optional[str] = Field(None, description="Category of the search result")
-    doi: Optional[str] = Field(
-        None,
-        description="Digital Object Identifier (DOI) of the search result",
-    )
-    published_date: Optional[str] = Field(
-        None,
-        description="Publication date for the search result",
-    )
-    engine: Optional[str] = Field(
-        None,
-        description="Engine that fetched the search result",
-    )
-    tags: Optional[List[str]] = Field(None, description="Tags for the search result")
-    extra: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Extra information from the search result",
-    )
+from ..structures import SearchResultItem
 
 
 class SearxNGSearchToolInputSchema(BaseIOSchema):

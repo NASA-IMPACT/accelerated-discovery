@@ -44,7 +44,7 @@ class ModelConfig(BaseModel):
     """Decoupled model configuration"""
 
     provider: ModelProvider = Field(default=ModelProvider.OPENAI)
-    model_name: str = Field(default=os.getenv("MODEL_NAME_GLOBAL", "gpt-4o-mini"))
+    model_name: str = Field(default=os.getenv("MODEL_NAME_GLOBAL", "gpt-4o"))
     temperature: float = Field(default=0.0)
     max_tokens: int = Field(default=120_000_000)
     api_keys: ApiKey = Field(default=ApiKey())
