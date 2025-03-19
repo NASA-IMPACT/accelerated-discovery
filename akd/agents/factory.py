@@ -10,6 +10,7 @@ from ..config import CONFIG
 from ..structures import ExtractionSchema, SingleEstimation
 from .extraction import ExtractionInputSchema
 from .intents import IntentAgent
+from .query import QueryAgent
 
 
 def create_intent_agent(config: Optional[BaseAgentConfig] = None) -> IntentAgent:
@@ -32,7 +33,7 @@ def create_intent_agent(config: Optional[BaseAgentConfig] = None) -> IntentAgent
     return IntentAgent(config)
 
 
-def build_extraction_agent(
+def create_extraction_agent(
     extraction_output_schema: Union[ExtractionSchema, List[SingleEstimation]],
     config: Optional[BaseAgentConfig] = None,
 ) -> BaseAgent:
@@ -85,3 +86,31 @@ def build_extraction_agent(
             output_schema=_ExtractionOutputSchema,
         ),
     )
+
+
+def create_query_agent(config: Optional[BaseAgentConfig] = None) -> QueryAgent:
+    config = config or BaseAgentConfig(
+        client=instructor.from_openai(
+            openai.OpenAI(api_key=CONFIG.model_config_.api_keys.openai),
+        ),
+        model=CONFIG.model_config_.model_name,
+        system_prompt_generator=SystemPromptGenerator(
+            background=[
+                (
+                    "You are an expert scientific search engine query generator with a deep understanding of which"
+                    "queries will maximize the number of relevant results for science."
+                ),
+            ],
+            steps=[
+                "Analyze the given instruction to identify key concepts and aspects that need to be researched",
+                "For each aspect, craft a search query using appropriate search operators and syntax",
+                "Ensure queries cover different angles of the topic (technical, practical, comparative, etc.)",
+            ],
+            output_instructions=[
+                "Return exactly the requested number of queries",
+                "Format each query like a search engine query, not a natural language question",
+                "Each query should be a concise string of keywords and operators",
+            ],
+        ),
+    )
+    return QueryAgent(config)
