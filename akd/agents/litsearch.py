@@ -1,3 +1,5 @@
+from typing import List
+
 from atomic_agents.agents.base_agent import BaseAgent
 from atomic_agents.lib.base.base_tool import BaseTool
 from loguru import logger
