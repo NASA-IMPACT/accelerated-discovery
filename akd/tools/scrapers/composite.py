@@ -62,9 +62,10 @@ class ResearchArticleResolver(BaseArticleResolver):
         for resolver in self.resolvers:
             rname = resolver.__class__.__name__
             try:
-                logger.debug(f"Using resolver={rname} for url={url}")
-                url = resolver.run(url)
-                break
+                logger.debug(f"Using resolver={rname} for url={original_url}")
+                url = resolver.run(original_url)
+                if url:
+                    break
             except:
                 logger.error(f"Error using resolver={rname}")
         return url

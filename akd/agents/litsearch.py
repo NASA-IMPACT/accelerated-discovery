@@ -2,6 +2,7 @@ from atomic_agents.agents.base_agent import BaseAgent
 from atomic_agents.lib.base.base_tool import BaseTool
 from loguru import logger
 
+from ..structures import ExtractionDTO
 from ..tools.scrapers.resolvers import BaseArticleResolver
 from ..tools.scrapers.web_scrapers import (
     WebpageMetadata,
@@ -37,7 +38,7 @@ class LitAgent(BaseAgent):
 
         self.n_queries = n_queries
 
-    def run(self, query: str):
+    def run(self, query: str) -> List[ExtractionDTO]:
         intent_output = self.intent_agent.run(IntentInputSchema(query=query))
         logger.debug(f"query={query} | intent={intent_output.intent}")
 
@@ -84,18 +85,20 @@ class LitAgent(BaseAgent):
             content = scraped_content.content or result.content
             logger.debug(
                 f"Result {i}: {result.title} | "
-                f"{result.url} | {content[:100]}.. | words={len(content.split())}",
+                f"{url} | {content[:100]}.. | words={len(content.split())}",
             )
-            contents.append(content)
+            contents.append(ExtractionDTO(source=str(url), result=content))
 
         results = []
         for content in contents:
             extraction_agent.reset_memory()
             answer = extraction_agent.run(
-                ExtractionInputSchema(query=query, content=content),
+                ExtractionInputSchema(query=query, content=content.result),
             ).answer
-            logger.debug(f"Answer={answer}")
-            results.append(answer)
+            logger.debug(f"Source={content.source} | Answer={answer}")
+            if answer:
+                content.result = answer
+                results.append(content)
 
         return results
 

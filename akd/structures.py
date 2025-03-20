@@ -75,7 +75,10 @@ class ResearchData(BaseModel):
         "(e.g., HLS, MERRA-2) in the research",
     )
     # source: str = Field(..., description="Source for the literature research")
-    data_url: Optional[HttpUrl] = Field(None, description="URL to download data")
+    data_url: Optional[HttpUrl] = Field(
+        None,
+        description="URL to download data that the research references/uses. If not available, leave empty/None",
+    )
 
 
 class SingleEstimation(ExtractionSchema):
@@ -109,3 +112,8 @@ class SingleEstimation(ExtractionSchema):
         None,
         description="How the estimation was validated or cross-checked",
     )
+
+
+class ExtractionDTO(BaseModel):
+    source: str
+    result: Any

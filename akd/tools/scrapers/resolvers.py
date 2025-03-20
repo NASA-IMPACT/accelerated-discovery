@@ -53,7 +53,7 @@ class BaseArticleResolver(BaseTool):
         """Check if this resolver can handle the given URL."""
         raise NotImplementedError("Subclasses must implement this method")
 
-    def run(self, url) -> str:
+    def run(self, url: Union[str, HttpUrl]) -> str:
         return self.resolve(url)
 
 
