@@ -13,6 +13,7 @@ from crawl4ai import AsyncWebCrawler
 from markdownify import markdownify
 from pydantic import Field, HttpUrl
 from readability import Document
+from requests import HTTPError, RequestException
 
 from ..search import SearchResultItem
 

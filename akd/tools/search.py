@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -13,10 +15,10 @@ from pydantic.networks import HttpUrl
 from ..structures import SearchResultItem
 
 
-class SearxNGSearchToolInputSchema(BaseIOSchema):
+class SearchToolInputSchema(BaseIOSchema):
     """
-    Schema for input to a tool for searching for information, news, references, and other content using SearxNG.
-    Returns a list of search results with a short description or content snippet and URLs for further exploration
+    Schema for input to a tool for searching for information,
+    news, references, and other content.
     """
 
     queries: List[str] = Field(..., description="List of search queries.")
@@ -26,8 +28,9 @@ class SearxNGSearchToolInputSchema(BaseIOSchema):
     )
 
 
-class SearxNGSearchToolOutputSchema(BaseIOSchema):
-    """This schema represents the output of the SearxNG search tool."""
+class SearchToolOutputSchema(BaseIOSchema):
+    """Schema for output of a tool for searching for information,
+    news, references, and other content."""
 
     results: List[SearchResultItem] = Field(
         ...,
@@ -39,14 +42,48 @@ class SearxNGSearchToolOutputSchema(BaseIOSchema):
     )
 
 
+class SearchTool(BaseTool):
+    """
+    Tool for performing searches on SearxNG based on the provided queries and category.
+
+    Attributes:
+        input_schema (SearchToolInputSchema): The schema for the input data.
+        output_schema (SearchToolOutputSchema): The schema for the output data.
+        max_results (int): The maximum number of search results to return.
+        base_url (str): The base URL for the SearxNG instance to use.
+    """
+
+    input_schema = SearchToolInputSchema
+    output_schema = SearchToolOutputSchema
+
+
+class SearxNGSearchToolInputSchema(SearchToolInputSchema):
+    """
+    Schema for input to a tool for searching for information,
+    news, references, and other content.
+    """
+
+    pass
+
+
+class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
+    """Schema for output of a tool for searching for information,
+    news, references, and other content."""
+
+    pass
+
+
 class SearxNGSearchToolConfig(BaseToolConfig):
     base_url: HttpUrl = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
-    max_results: int = 10
-    engines: List[str] = ["google", "arxiv", "google_scholar"]
+    max_results: int = os.getenv("SEARXNG_MAX_RESULTS", 10)
+    engines: List[str] = os.getenv(
+        "SEARXNG_ENGINES",
+        "google,arxiv,google_scholar",
+    ).split(",")
     debug: bool = False
 
 
-class SearxNGSearchTool(BaseTool):
+class SearxNGSearchTool(SearchTool):
     """
     Tool for performing searches on SearxNG based on the provided queries and category.
 
@@ -77,6 +114,27 @@ class SearxNGSearchTool(BaseTool):
         self.max_results = config.max_results
         self.engines = config.engines
         self.debug = config.debug
+
+    @classmethod
+    def from_params(
+        cls,
+        base_url: Optional[HttpUrl] = None,
+        max_results: int = 10,
+        engines: Optional[List[str]] = None,
+        debug: bool = False,
+    ) -> SearxNGSearchTool:
+        base_url = base_url or os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
+        engines = engines or os.getenv(
+            "SEARXNG_ENGINES",
+            "google,arxiv,google_scholar",
+        ).split(",")
+        config = SearxNGSearchToolConfig(
+            base_url=base_url,
+            max_results=max_results,
+            engines=engines,
+            debug=debug,
+        )
+        return cls(config)
 
     async def _fetch_search_results(
         self,

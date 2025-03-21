@@ -5,7 +5,7 @@ from atomic_agents.lib.base.base_tool import BaseTool
 from loguru import logger
 
 from ..structures import ExtractionDTO
-from ..tools.scrapers.resolvers import BaseArticleResolver
+from ..tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
 from ..tools.scrapers.web_scrapers import (
     WebpageMetadata,
     WebpageScraperToolInputSchema,
@@ -72,7 +72,10 @@ class LitAgent(BaseAgent):
         contents = []
         for i, result in enumerate(search_results.results, 1):
             logger.debug(f"Result {i} : Scraping the url {result.url}")
-            url = self.article_resolver.run(url=result.url)
+            resolver_output = self.article_resolver.run(
+                ResolverInputSchema(url=result.url),
+            )
+            url = resolver_output.url
             try:
                 scraped_content = self.web_scraper.run(
                     WebpageScraperToolInputSchema(url=url),

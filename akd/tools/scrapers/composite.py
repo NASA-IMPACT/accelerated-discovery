@@ -3,7 +3,7 @@ from typing import Union
 from loguru import logger
 from pydantic import HttpUrl
 
-from .resolvers import BaseArticleResolver
+from .resolvers import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
 from .web_scrapers import (
     WebpageMetadata,
     WebpageScraperToolInputSchema,
@@ -56,16 +56,29 @@ class ResearchArticleResolver(BaseArticleResolver):
     def __init__(self, *resolvers: BaseArticleResolver):
         self.resolvers = resolvers
 
-    def resolve(self, url: Union[str, HttpUrl]) -> str:
-        url = str(url)
+    def resolve(self, url: Union[str, HttpUrl]) -> ResolverOutputSchema:
         original_url = str(url)
+        rname = self.__class__.__name__
+        output = ResolverOutputSchema(
+            url=original_url,
+            resolver=rname,
+        )
         for resolver in self.resolvers:
             rname = resolver.__class__.__name__
             try:
                 logger.debug(f"Using resolver={rname} for url={original_url}")
-                url = resolver.run(original_url)
-                if url:
+                output = resolver.run(ResolverInputSchema(url=original_url))
+                if not output.url:
+                    raise ValueError("Resolver failure")
+                if output.url:
                     break
             except:
                 logger.error(f"Error using resolver={rname}")
-        return url
+        return output
+
+    def run(self, params: ResolverInputSchema) -> ResolverOutputSchema:
+        output = self.resolve(params.url)
+        if not output.url:
+            output.url = params.url
+            output.resolver = self.__class__.__name__
+        return output
