@@ -1,0 +1,7 @@
+langchain_community
+langchain_openai
+langchain_fireworks
+langgraph 
+wikipedia 
+duckduckgo-search 
+google-api-python-client
