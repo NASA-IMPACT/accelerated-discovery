@@ -1,0 +1,283 @@
+{
+    "input": "Question: Tell me a bio of Lanny Flaherty.",
+    "output": "Lanny Flaherty is an American actor born on December 18, 1949, in Pensacola, Florida. He has appeared in numerous films, television shows, and theater productions throughout his career, which began in the late 1970s. Some of his notable film credits include \"King of New York,\" \"The Abyss,\" \"Natural Born Killers,\" \"The Game,\" and \"The Straight Story.\" On television, he has appeared in shows such as \"Law & Order,\" \"The Sopranos,\" \"Boardwalk Empire,\" and \"The Leftovers.\" Flaherty has also worked extensively in theater, including productions at the Public Theater and the New York Shakespeare Festival. He is known for his distinctive looks and deep gravelly voice, which have made him a memorable character actor in the industry.",
+    "topic": "Lanny Flaherty",
+    "cat": [
+        "very rare",
+        "North America"
+    ],
+    "annotations": [
+        {
+            "text": "Lanny Flaherty is an American actor born on December 18, 1949, in Pensacola, Florida.",
+            "is-relevant": true,
+            "model-atomic-facts": [
+                {
+                    "text": "Lanny Flaherty is an American actor."
+                },
+                {
+                    "text": "Lanny Flaherty was born on December 18, 1949."
+                },
+                {
+                    "text": "Lanny Flaherty was born in Pensacola, Florida."
+                }
+            ],
+            "human-atomic-facts": [
+                {
+                    "text": "Lanny Flaherty is an American.",
+                    "label": "S"
+                },
+                {
+                    "text": "Lanny Flaherty is an actor.",
+                    "label": "S"
+                },
+                {
+                    "text": "Lanny Flaherty was born on December 18, 1949.",
+                    "label": "NS"
+                },
+                {
+                    "text": "Lanny Flaherty was born in Pensacola.",
+                    "label": "NS"
+                },
+                {
+                    "text": "Pensacola is in Florida.",
+                    "label": "IR"
+                }
+            ]
+        },
+        {
+            "text": "He has appeared in numerous films, television shows, and theater productions throughout his career, which began in the late 1970s.",
+            "is-relevant": true,
+            "model-atomic-facts": [
+                {
+                    "text": "He has appeared in numerous films."
+                },
+                {
+                    "text": "He has appeared in numerous television shows."
+                },
+                {
+                    "text": "He has appeared in numerous theater productions."
+                },
+                {
+                    "text": "His career began in the late 1970s."
+                },
+                {
+                    "text": "Since his career began, he has appeared in numerous films."
+                },
+                {
+                    "text": "Since his career began, he has appeared in numerous television shows."
+                },
+                {
+                    "text": "Since his career began, he has appeared in numerous theater productions."
+                }
+            ],
+            "human-atomic-facts": [
+                {
+                    "text": "He has appeared in numerous films.",
+                    "label": "S"
+                },
+                {
+                    "text": "He has appeared in numerous television shows.",
+                    "label": "S"
+                },
+                {
+                    "text": "He has appeared in numerous theater productions.",
+                    "label": "NS"
+                },
+                {
+                    "text": "His career began in the late 1970s.",
+                    "label": "NS"
+                }
+            ]
+        },
+        {
+            "text": "Some of his notable film credits include \"King of New York,\" \"The Abyss,\" \"Natural Born Killers,\" \"The Game,\" and \"The Straight Story.\"",
+            "is-relevant": true,
+            "model-atomic-facts": [
+                {
+                    "text": "He has notable film credits."
+                },
+                {
+                    "text": "His notable film credits include King of New York."
+                },
+                {
+                    "text": "His notable film credits include The Abyss."
+                },
+                {
+                    "text": "His notable film credits include Natural Born Killers."
+                },
+                {
+                    "text": "His notable film credits include The Game."
+                },
+                {
+                    "text": "His notable film credits include The Straight Story."
+                }
+            ],
+            "human-atomic-facts": [
+                {
+                    "text": "His notable film credits include King of New York.",
+                    "label": "NS"
+                },
+                {
+                    "text": "King of New York is a film.",
+                    "label": "IR"
+                },
+                {
+                    "text": "His notable film credits include The Abyss.",
+                    "label": "NS"
+                },
+                {
+                    "text": "The Abyss is a film.",
+                    "label": "IR"
+                },
+                {
+                    "text": "His notable film credits include Natural Born Killers.",
+                    "label": "S"
+                },
+                {
+                    "text": "Natural Born Killers is a film.",
+                    "label": "S"
+                },
+                {
+                    "text": "His notable film credits include The Game.",
+                    "label": "NS"
+                },
+                {
+                    "text": "The Game is a film.",
+                    "label": "IR"
+                },
+                {
+                    "text": "His notable film credits include The Straight Story.",
+                    "label": "NS"
+                },
+                {
+                    "text": "The Straight Story is a film.",
+                    "label": "IR"
+                }
+            ]
+        },
+        {
+            "text": "On television, he has appeared in shows such as \"Law & Order,\" \"The Sopranos,\" \"Boardwalk Empire,\" and \"The Leftovers.\"",
+            "is-relevant": true,
+            "model-atomic-facts": [
+                {
+                    "text": "He has appeared on television."
+                },
+                {
+                    "text": "He has appeared on Law & Order."
+                },
+                {
+                    "text": "He has appeared on The Sopranos."
+                },
+                {
+                    "text": "He has appeared on Boardwalk Empire."
+                },
+                {
+                    "text": "He has appeared on The Leftovers."
+                }
+            ],
+            "human-atomic-facts": [
+                {
+                    "text": "He has appeared in television shows.",
+                    "label": "S"
+                },
+                {
+                    "text": "He has appeared in Law & Order.",
+                    "label": "NS"
+                },
+                {
+                    "text": "Law & Order is a television show.",
+                    "label": "IR"
+                },
+                {
+                    "text": "He has appeared in The Sopranos.",
+                    "label": "NS"
+                },
+                {
+                    "text": "The Sopranos is a television show.",
+                    "label": "IR"
+                },
+                {
+                    "text": "He has appeared in Boardwalk Empire.",
+                    "label": "NS"
+                },
+                {
+                    "text": "Boardwalk Empire is a television show.",
+                    "label": "IR"
+                },
+                {
+                    "text": "He has appeared in The Leftovers.",
+                    "label": "NS"
+                },
+                {
+                    "text": "The Leftovers is a television show.",
+                    "label": "IR"
+                }
+            ]
+        },
+        {
+            "text": "Flaherty has also worked extensively in theater, including productions at the Public Theater and the New York Shakespeare Festival.",
+            "is-relevant": true,
+            "model-atomic-facts": [
+                {
+                    "text": "Flaherty has worked extensively in theater."
+                },
+                {
+                    "text": "Flaherty has worked in productions at the Public Theater."
+                },
+                {
+                    "text": "Flaherty has worked in productions at the New York Shakespeare Festival."
+                }
+            ],
+            "human-atomic-facts": [
+                {
+                    "text": "Flaherty has worked extensively in theater.",
+                    "label": "NS"
+                },
+                {
+                    "text": "Flaherty has worked in productions at the Public Theater.",
+                    "label": "NS"
+                },
+                {
+                    "text": "Flaherty has worked in productions at the New York Shakespeare Festival.",
+                    "label": "NS"
+                }
+            ]
+        },
+        {
+            "text": "He is known for his distinctive looks and deep gravelly voice, which have made him a memorable character actor in the industry.",
+            "is-relevant": true,
+            "model-atomic-facts": [
+                {
+                    "text": "He is known for his distinctive looks."
+                },
+                {
+                    "text": "He is known for his deep gravelly voice."
+                },
+                {
+                    "text": "His distinctive looks and deep gravelly voice have made him a memorable character actor."
+                },
+                {
+                    "text": "He is a memorable character actor in the industry."
+                }
+            ],
+            "human-atomic-facts": [
+                {
+                    "text": "He is known for his distinctive looks.",
+                    "label": "NS"
+                },
+                {
+                    "text": "He is known for his deep gravelly voice.",
+                    "label": "NS"
+                },
+                {
+                    "text": "His distinctive looks and deep gravelly voice have made him a memorable character actor.",
+                    "label": "NS"
+                },
+                {
+                    "text": "He is a memorable character actor in the industry.",
+                    "label": "NS"
+                }
+            ]
+        }
+    ]
+}
