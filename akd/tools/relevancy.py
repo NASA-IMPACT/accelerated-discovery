@@ -20,6 +20,19 @@ class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
     pass
 
 
+class _RelevancyCheckerSwappedInputSchema(BaseIOSchema):
+    """Schema with swapped field order"""
+
+    content: str = Field(
+        ...,
+        description="The content to check for relevance.",
+    )
+    query: str = Field(
+        ...,
+        description="The query to check for relevance.",
+    )
+
+
 class RelevancyCheckerOutputSchema(BaseIOSchema):
     """Output schema for the RelevancyChecker."""
 
@@ -73,8 +86,10 @@ class RelevancyChecker(BaseTool):
         outputs = self._run(param, n_iter=self.config.n_iter)
         if self.config.swapping:
             logger.info(f"Running swapping pass. Query and Content swapped")
-            param_swapped = param.model_copy()
-            param_swapped.query, param_swapped.content = param.content, param.query
+            param_swapped = _RelevancyCheckerSwappedInputSchema(
+                content=param.content,
+                query=param.query,
+            )
             outputs.extend(self._run(param_swapped, n_iter=self.config.n_iter))
         return self._ensemble(outputs)
 
