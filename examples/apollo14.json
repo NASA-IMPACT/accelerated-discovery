@@ -1,0 +1,68 @@
+{
+    "name": "The Apollo 14 Example",
+    "query": "",
+    "response": "",
+    "num_atoms": 4,
+    "num_contexts": 8,
+    "atoms": [
+        {
+            "id": "a0",
+            "text": "The Apollo 14 mission to the Moon took place on January 31, 1971."
+        },
+        {
+            "id": "a1",
+            "text": "This mission was significant as it marked the third time humans set foot on the lunar surface, with astronauts Alan Shepard and Edgar Mitchell joining Captain Stuart Roosa, who had previously flown on Apollo 13."
+        },
+        {
+            "id": "a2",
+            "text": "The mission lasted for approximately 8 days, during which the crew conducted various experiments and collected samples from the lunar surface."
+        },
+        {
+            "id": "a3",
+            "text": "Apollo 14 brought back approximately 70 kilograms of lunar material, including rocks, soil, and core samples, which have been invaluable for scientific research ever since."
+        }
+    ],
+    "contexts": [
+        {
+            "id": "c_a0_0",
+            "atom_id": "a0",
+            "text": "Apollo 14 (January 31 – February 9, 1971) was the eighth crewed mission in the United States Apollo program, the third to land on the Moon, and the first to land in the lunar highlands. It was the last of the H missions, landings at specific sites of scientific interest on the Moon for two-day stays with two lunar extravehicular activities (EVAs or moonwalks)."
+        },
+        {
+            "id": "c_a0_1",
+            "atom_id": "a0",
+            "text": "Shepard and Mitchell made their lunar landing on February 5 in the Fra Mauro formation – originally the target of Apollo 13. During the two walks on the surface, they collected 94.35 pounds (42.80 kg) of Moon rocks and deployed several scientific experiments. To the dismay of some geologists, Shepard and Mitchell did not reach the rim of Cone crater as had been planned, though they came close. In Apollo 14's most famous event, Shepard hit two golf balls he had brought with him with a makeshift club."
+        },
+        {
+            "id": "c_a1_0",
+            "atom_id": "a1",
+            "text": "The mission was originally scheduled for 1970, but was postponed because of the investigation following the failure of Apollo 13 to reach the Moon's surface, and the need for modifications to the spacecraft as a result. Commander Alan Shepard, Command Module Pilot Stuart Roosa, and Lunar Module Pilot Edgar Mitchell launched on their nine-day mission on Sunday, January 31, 1971, at 4:03:02 p.m. EST. En route to the lunar landing, the crew overcame malfunctions that might have resulted in a second consecutive aborted mission, and possibly, the premature end of the Apollo program."
+        },
+        {
+            "id": "c_a1_1",
+            "atom_id": "a1",
+            "text": "Apollo 14 (January 31 – February 9, 1971) was the eighth crewed mission in the United States Apollo program, the third to land on the Moon, and the first to land in the lunar highlands. It was the last of the H missions, landings at specific sites of scientific interest on the Moon for two-day stays with two lunar extravehicular activities (EVAs or moonwalks)."
+        },
+        {
+            "id": "c_a2_0",
+            "atom_id": "a2",
+            "text": "The mission was originally scheduled for 1970, but was postponed because of the investigation following the failure of Apollo 13 to reach the Moon's surface, and the need for modifications to the spacecraft as a result. Commander Alan Shepard, Command Module Pilot Stuart Roosa, and Lunar Module Pilot Edgar Mitchell launched on their nine-day mission on Sunday, January 31, 1971, at 4:03:02 p.m. EST. En route to the lunar landing, the crew overcame malfunctions that might have resulted in a second consecutive aborted mission, and possibly, the premature end of the Apollo program."
+        },
+        {
+            "id": "c_a2_1",
+            "atom_id": "a2",
+            "text": "Shepard stated, after stepping onto the lunar surface, And it's been a long way, but we're here. The first EVA began at 9:42 am EST (14:42 UTC) on February 5, 1971, having been delayed by a problem with the communications system which set back the start of the first EVA to five hours after landing. The astronauts devoted much of the first EVA to equipment offloading, deployment of the ALSEP and the US flag, as well as setting up and loading the MET. These activities were televised back to Earth, though the picture tended to degenerate during the latter portion of the EVA. Mitchell deployed the ASE's geophone lines, unreeling and emplacing the two 310 feet (94 m) lines leading out from the ALSEP's Central Station. He then fired the thumper explosives, vibrations from which would give scientists back on Earth information about the depth and composition of the lunar regolith. Of the 21 thumpers, five failed to fire. On the way back to the LM, the astronauts collected and documented lunar samples, and took photographs of the area. The first EVA lasted 4 hours, 47 minutes, 50 seconds."
+        },
+        {
+            "id": "c_a3_0",
+            "atom_id": "a3",
+            "text": "A total of 94 pounds (43 kg) of Moon rocks, or lunar samples, were brought back from Apollo 14. Most are breccias, which are rocks composed of fragments of other, older rocks. Breccias form when the heat and pressure of meteorite impacts fuse small rock fragments together. There were a few basalts that were collected in this mission in the form of clasts (fragments) in breccia. The Apollo 14 basalts are generally richer in aluminum and sometimes richer in potassium than other lunar basalts. Most lunar mare basalts collected during the Apollo program were formed from 3.0 to 3.8 billion years ago. The Apollo 14 basalts were formed 4.0 to 4.3 billion years ago, older than the volcanism known to have occurred at any of the mare locations reached during the Apollo program."
+        },
+        {
+            "id": "c_a3_1",
+            "atom_id": "a3",
+            "text": "Shepard and Mitchell made their lunar landing on February 5 in the Fra Mauro formation – originally the target of Apollo 13. During the two walks on the surface, they collected 94.35 pounds (42.80 kg) of Moon rocks and deployed several scientific experiments. To the dismay of some geologists, Shepard and Mitchell did not reach the rim of Cone crater as had been planned, though they came close. In Apollo 14's most famous event, Shepard hit two golf balls he had brought with him with a makeshift club."
+        }
+    ]
+}
+

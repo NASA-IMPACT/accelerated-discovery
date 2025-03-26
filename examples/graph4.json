@@ -1,0 +1,85 @@
+{
+    "nodes": [
+        {
+            "id": "a1",
+            "type": "atom",
+            "probability": 0.5
+        },
+        {
+            "id": "a2",
+            "type": "atom",
+            "probability": 0.5
+        },
+        {
+            "id": "c11",
+            "type": "context",
+            "probability": 1.0
+        },
+        {
+            "id": "c12",
+            "type": "context",
+            "probability": 1.0
+        },
+        {
+            "id": "c21",
+            "type": "context",
+            "probability": 1.0
+        },
+        {
+            "id": "c22",
+            "type": "context",
+            "probability": 1.0
+        }
+    ],
+    "edges": [
+        {
+            "from": "c11",
+            "to": "a1",
+            "relation": "contradiction",
+            "probability": 0.7,
+            "link": "context_atom"
+        },
+        {
+            "from": "c12",
+            "to": "a1",
+            "relation": "entailment",
+            "probability": 0.6,
+            "link": "context_atom"
+        },
+        {
+            "from": "c21",
+            "to": "a2",
+            "relation": "entailment",
+            "probability": 0.8,
+            "link": "context_atom"
+        },
+        {
+            "from": "c22",
+            "to": "a2",
+            "relation": "contradiction",
+            "probability": 0.8,
+            "link": "context_atom"
+        },
+        {
+            "from": "c11",
+            "to": "c21",
+            "relation": "contradiction",
+            "probability": 0.7,
+            "link": "context_context"
+        },
+        {
+            "from": "c12",
+            "to": "c22",
+            "relation": "contradiction",
+            "probability": 0.8,
+            "link": "context_context"
+        },
+        {
+            "from": "a1",
+            "to": "a2",
+            "relation": "entailment",
+            "probability": 0.9,
+            "link": "atom_atom"
+        }        
+    ]
+}
