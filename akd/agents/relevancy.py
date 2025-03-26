@@ -1,14 +1,13 @@
-from enum import Enum
 from typing import List, Optional
 
 import instructor
 import openai
-from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseIOSchema
-from loguru import logger
+from atomic_agents.agents.base_agent import BaseAgentConfig, BaseIOSchema
 from pydantic import Field
 
 from ..config import CONFIG
 from ..structures import RelevancyLabel
+from ._base import BaseAgent
 
 
 class RelevancyAgentInputSchema(BaseIOSchema):

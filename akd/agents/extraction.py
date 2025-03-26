@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
-from atomic_agents.agents.base_agent import BaseIOSchema
+import instructor
+import openai
+from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseIOSchema
 from loguru import logger
 from pydantic import Field
 
+from ..config import CONFIG
 from ..structures import ExtractionSchema, SingleEstimation
+from ._base import BaseAgent
 from .intents import Intent
 
 
@@ -45,3 +49,8 @@ class ExtractionInputSchema(BaseIOSchema):
         ...,
         description="Actual text/content to extract information from",
     )
+
+
+class EstimationExtractionAgent(BaseAgent):
+    input_schema = ExtractionInputSchema
+    output_schema = List[SingleEstimation]

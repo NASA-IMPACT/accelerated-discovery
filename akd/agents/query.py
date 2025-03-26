@@ -1,7 +1,9 @@
 from typing import List, Literal, Optional
 
-from atomic_agents.agents.base_agent import BaseAgent, BaseIOSchema
+from atomic_agents.agents.base_agent import BaseIOSchema
 from pydantic import Field
+
+from ._base import BaseAgent
 
 
 class QueryAgentInputSchema(BaseIOSchema):

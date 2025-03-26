@@ -1,7 +1,5 @@
 from typing import List
 
-from atomic_agents.agents.base_agent import BaseAgent
-from atomic_agents.lib.base.base_tool import BaseTool
 from loguru import logger
 
 from ..structures import ExtractionDTO
@@ -13,6 +11,7 @@ from ..tools.scrapers.web_scrapers import (
     WebScraperToolBase,
 )
 from ..tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
+from ._base import BaseAgent
 from .extraction import ExtractionInputSchema, ExtractionSchemaMapper
 from .factory import create_extraction_agent
 from .intents import IntentAgent, IntentInputSchema
