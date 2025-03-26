@@ -7,13 +7,13 @@ from pydantic import Field
 class QueryAgentInputSchema(BaseIOSchema):
     """This is the input schema for the QueryAgent."""
 
-    instruction: str = Field(
+    query: str = Field(
         ...,
-        description="A detailed instruction or request to "
+        description="A detailed query/instruction or request to "
         "generate search engine queries for.",
     )
     num_queries: int = Field(
-        ...,
+        default=3,
         description="The number of search queries to generate.",
     )
 

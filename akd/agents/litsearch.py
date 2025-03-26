@@ -51,7 +51,7 @@ class LitAgent(BaseAgent):
 
         logger.info("Analyzing input query to generate relevant search queries...")
         query_agent_output = self.query_agent.run(
-            QueryAgentInputSchema(instruction=query, num_queries=self.n_queries),
+            QueryAgentInputSchema(query=query, num_queries=self.n_queries),
         )
         query_agent_output.queries.insert(0, query)
         logger.debug("Generated search queries:")
