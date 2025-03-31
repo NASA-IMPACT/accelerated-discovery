@@ -1,38 +1,86 @@
-name: Feature request
-description: Suggest an idea for this project
+name: Feature Request
+description: Suggest an idea or enhancement for this project
 
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping us to improve
+        # Feature Request
+        
+        Before submitting, please check if a similar feature request already exists.
+
+  - type: dropdown
+    id: feature_type
+    attributes:
+      label: Feature Type
+      description: What type of feature are you suggesting?
+      options:
+        - New functionality
+        - Enhancement to existing feature
+        - User experience improvement
+        - Performance optimization
+        - Documentation
+        - Other
+    validations:
+      required: true
+
   - type: textarea
     id: describe_the_feature
     attributes:
-      label: Is your feature request related to a problem?
-      description: A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
-      render: shell
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: I'm always frustrated when [...]
     validations:
       required: true
 
   - type: textarea
     id: solution_description
     attributes:
-      label: Describe the solution you'd like
-      description: A clear and concise description of what you want to happen.
-      render: shell
+      label: Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+      placeholder: I would like to see [...]
+    validations:
+      required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Describe alternatives you've considered
-      description: A clear and concise description of any alternative solutions or features you've considered.
-      render: shell
+      label: Alternative Solutions
+      description: Describe any alternative solutions or features you've considered.
+      placeholder: I've also thought about [...]
+
+  - type: textarea
+    id: user_benefits
+    attributes:
+      label: User Benefits
+      description: How would this feature benefit users of the project?
+      placeholder: This would help users to [...]
+
+  - type: textarea
+    id: implementation_ideas
+    attributes:
+      label: Implementation Ideas
+      description: If you have any ideas about how this could be implemented, share them here.
+      placeholder: This could potentially be implemented by [...]
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to contribute to this feature?
+      options:
+        - label: I'm willing to submit a PR for this feature
+        - label: I'm willing to test this feature
+        - label: I'm willing to help document this feature
 
   - type: textarea
     id: more_info
     attributes:
-      label: Additional context
-      description: Add any other context or screenshots about the feature request here.
-      render: shell
+      label: Additional Context
+      description: Add any other context, screenshots, mockups, or examples about the feature request here.
 
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        Once we discuss the issue as a team, we can start working on this issue. Please use Sub-issues to track incremental progress and deliverables for each step on this issue.
