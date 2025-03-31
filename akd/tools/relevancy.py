@@ -1,8 +1,7 @@
 import itertools
 from typing import List, Optional
 
-from atomic_agents.agents.base_agent import BaseIOSchema
-from atomic_agents.lib.base.base_tool import BaseTool, BaseToolConfig
+from atomic_agents.lib.base.base_tool import BaseToolConfig
 from loguru import logger
 from pydantic import Field
 
@@ -12,6 +11,7 @@ from ..agents.relevancy import (
     RelevancyAgentOutputSchema,
 )
 from ..structures import RelevancyLabel
+from ._base import BaseIOSchema, BaseTool
 
 
 class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
@@ -75,25 +75,30 @@ class RelevancyChecker(BaseTool):
     input_schema = RelevancyCheckerInputSchema
     output_schema = RelevancyCheckerOutputSchema
 
-    def __init__(self, config: Optional[RelevancyCheckerConfig] = None):
+    def __init__(
+        self,
+        config: Optional[RelevancyCheckerConfig] = None,
+        debug: bool = False,
+    ) -> None:
         config = config or RelevancyCheckerConfig()
-        super().__init__(config)
-        self.debug = config.debug
-        self.config = config
+        super().__init__(config, debug)
 
-    def run(self, param: RelevancyCheckerInputSchema) -> RelevancyCheckerOutputSchema:
+    async def arun(
+        self,
+        param: RelevancyCheckerInputSchema,
+    ) -> RelevancyCheckerOutputSchema:
         logger.info(f"Running relevancy check for query: {param.query}")
-        outputs = self._run(param, n_iter=self.config.n_iter)
+        outputs = await self._run(param, n_iter=self.config.n_iter)
         if self.config.swapping:
             logger.info(f"Running swapping pass. Query and Content swapped")
             param_swapped = _RelevancyCheckerSwappedInputSchema(
                 content=param.content,
                 query=param.query,
             )
-            outputs.extend(self._run(param_swapped, n_iter=self.config.n_iter))
-        return self._ensemble(outputs)
+            outputs.extend(await self._run(param_swapped, n_iter=self.config.n_iter))
+        return await self._ensemble(outputs)
 
-    def _run(
+    async def _run(
         self,
         param: RelevancyCheckerInputSchema,
         n_iter: int = 3,
@@ -107,7 +112,7 @@ class RelevancyChecker(BaseTool):
             self.config.agent.reset_memory()
         return outputs
 
-    def _ensemble(
+    async def _ensemble(
         self,
         outputs: List[RelevancyAgentOutputSchema],
     ) -> RelevancyCheckerOutputSchema:
