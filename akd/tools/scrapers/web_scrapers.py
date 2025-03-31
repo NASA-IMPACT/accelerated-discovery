@@ -6,8 +6,6 @@ from typing import List, Optional
 from urllib.parse import urlparse
 
 import requests
-from atomic_agents.agents.base_agent import BaseIOSchema
-from atomic_agents.lib.base.base_tool import BaseTool, BaseToolConfig
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 from markdownify import markdownify
@@ -15,6 +13,7 @@ from pydantic import Field, HttpUrl
 from readability import Document
 from requests import HTTPError, RequestException
 
+from .._base import BaseIOSchema, BaseTool, BaseToolConfig
 from ..search import SearchResultItem
 
 
@@ -83,7 +82,11 @@ class WebScraperToolBase(BaseTool):
     input_schema = WebpageScraperToolInputSchema
     output_schema = WebpageScraperToolOutputSchema
 
-    def __init__(self, config: Optional[WebpageScraperToolConfig] = None):
+    def __init__(
+        self,
+        config: Optional[WebpageScraperToolConfig] = None,
+        debug: bool = False,
+    ) -> None:
         """
         Initializes the WebpageScraperTool.
 
@@ -91,14 +94,12 @@ class WebScraperToolBase(BaseTool):
             config (WebpageScraperToolConfig): Configuration for the tool.
         """
         config = config or WebpageScraperToolConfig()
-        super().__init__(config)
+        super().__init__(config, debug)
         self.user_agent = config.user_agent
         self.timeout = config.timeout
         self.max_content_length = config.max_content_length
-        self.debug = config.debug
-        self.config = config
 
-    def _extract_author(self, soup: BeautifulSoup) -> Optional[str]:
+    async def _extract_author(self, soup: BeautifulSoup) -> Optional[str]:
         """
         Extracts the author information from the webpage using multiple methods.
 
@@ -137,7 +138,7 @@ class WebScraperToolBase(BaseTool):
 
         return None
 
-    def _extract_metadata(
+    async def _extract_metadata(
         self,
         soup: BeautifulSoup,
         doc: Document,
@@ -272,7 +273,7 @@ class WebScraperToolBase(BaseTool):
             metadata["keywords"] = [metadata["keywords"]]
         return WebpageMetadata(**metadata)
 
-    def _extract_title(self, soup: BeautifulSoup) -> str:
+    async def _extract_title(self, soup: BeautifulSoup) -> str:
         """
         Extracts the title using multiple fallback methods.
 
@@ -299,30 +300,13 @@ class WebScraperToolBase(BaseTool):
 
         return None
 
-    @abstractmethod
-    def run(
-        self,
-        params: WebpageScraperToolInputSchema,
-    ) -> WebpageScraperToolOutputSchema:
-        """
-        Runs the WebpageScraperTool with the given parameters.
-
-        Args:
-            params (WebpageScraperToolInputSchema): The input parameters for the tool.
-
-        Returns:
-            WebpageScraperToolOutputSchema: The output containing the markdown content and metadata.
-        """
-
-        raise NotImplementedError()
-
 
 class SimpleWebScraper(WebScraperToolBase):
     """
     Tool for scraping webpage content and converting it to markdown format.
     """
 
-    def _fetch_webpage(self, url: str) -> str:
+    async def _fetch_webpage(self, url: str) -> str:
         """
         Fetches the webpage content with custom headers and proper error handling.
 
@@ -360,7 +344,7 @@ class SimpleWebScraper(WebScraperToolBase):
         except requests.exceptions.RequestException as req_err:
             raise RequestException(f"Error fetching webpage: {req_err}")
 
-    def _clean_markdown(self, markdown: str) -> str:
+    async def _clean_markdown(self, markdown: str) -> str:
         """
         Cleans up the markdown content by removing excessive whitespace and normalizing formatting.
 
@@ -378,7 +362,7 @@ class SimpleWebScraper(WebScraperToolBase):
         markdown = markdown.strip() + "\n"
         return markdown
 
-    def _extract_main_content(self, soup: BeautifulSoup) -> str:
+    async def _extract_main_content(self, soup: BeautifulSoup) -> str:
         """
         Extracts the main content from the webpage using custom heuristics.
 
@@ -410,7 +394,7 @@ class SimpleWebScraper(WebScraperToolBase):
 
         return str(main_content) if main_content else str(soup)
 
-    def run(
+    async def arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
@@ -426,13 +410,13 @@ class SimpleWebScraper(WebScraperToolBase):
 
         if params.url.path.endswith((".pdf", ".PDF")):
             raise RuntimeError(f"Can't parse url with PDF :: {params.url}")
-        html_content = self._fetch_webpage(str(params.url))
+        html_content = await self._fetch_webpage(str(params.url))
 
         # Parse HTML with BeautifulSoup
         soup = BeautifulSoup(html_content, "html.parser")
 
         # Extract main content using custom extraction
-        main_content = self._extract_main_content(soup)
+        main_content = await self._extract_main_content(soup)
 
         # Convert to markdown
         markdown_options = {
@@ -448,10 +432,14 @@ class SimpleWebScraper(WebScraperToolBase):
         markdown_content = markdownify(main_content, **markdown_options)
 
         # Clean up the markdown
-        markdown_content = self._clean_markdown(markdown_content)
+        markdown_content = await self._clean_markdown(markdown_content)
 
         # Extract metadata
-        metadata = self._extract_metadata(soup, Document(html_content), str(params.url))
+        metadata = await self._extract_metadata(
+            soup,
+            Document(html_content),
+            str(params.url),
+        )
 
         return WebpageScraperToolOutputSchema(
             content=markdown_content,
@@ -464,7 +452,7 @@ class Crawl4AIWebScraper(WebScraperToolBase):
         async with AsyncWebCrawler() as crawler:
             return await crawler.arun(url=url)
 
-    async def run_async(
+    async def arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
@@ -479,18 +467,13 @@ class Crawl4AIWebScraper(WebScraperToolBase):
         html_content = crawl_result.html
 
         soup = BeautifulSoup(html_content, "html.parser")
-        metadata = self._extract_metadata(soup, Document(html_content), str(params.url))
+        metadata = await self._extract_metadata(
+            soup,
+            Document(html_content),
+            str(params.url),
+        )
 
         return WebpageScraperToolOutputSchema(
             content=crawl_result.markdown,
             metadata=metadata,
         )
-
-    def run(
-        self,
-        params: WebpageScraperToolInputSchema,
-    ) -> WebpageScraperToolOutputSchema:
-        """
-        Synchronous wrapper for run_async.
-        """
-        return asyncio.run(self.run_async(params))

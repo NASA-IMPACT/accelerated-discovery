@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from abc import abstractmethod
 from typing import Optional
 
 from atomic_agents.agents.base_agent import BaseIOSchema
@@ -35,6 +36,7 @@ class BaseTool(AtomicBaseTool):
     def from_params(cls, **params) -> BaseTool:
         raise NotImplementedError()
 
+    @abstractmethod
     async def arun(self, params: BaseIOSchema, **kwargs) -> BaseIOSchema:
         """
         Executes the tool with the provided parameters in async.

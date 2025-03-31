@@ -9,6 +9,7 @@ from loguru import logger
 from markdownify import markdownify
 from pydantic import Field, FilePath, HttpUrl
 
+from .._base import BaseIOSchema
 from .web_scrapers import (
     WebpageMetadata,
     WebpageScraperToolInputSchema,
@@ -78,7 +79,7 @@ class SimplePDFScraper(WebScraperToolBase):
     and converting it to markdown format.
     """
 
-    def _fetch_pdf_text(self, pdf_path: str) -> str:
+    async def _fetch_pdf_text(self, pdf_path: str) -> str:
         """
         Extracts text from a PDF file using PyMuPDF (fitz).
         """
@@ -95,7 +96,7 @@ class SimplePDFScraper(WebScraperToolBase):
         except Exception as e:
             raise RuntimeError(f"Error extracting text from PDF: {e}")
 
-    def _extract_metadata(self, path: str) -> PdfMetadata:
+    async def _extract_metadata(self, path: str) -> PdfMetadata:
         """
         Extracts metadata from a PDF file.
         """
@@ -121,7 +122,7 @@ class SimplePDFScraper(WebScraperToolBase):
         except Exception as e:
             raise RuntimeError(f"Error extracting metadata from PDF: {e}")
 
-    def _clean_markdown(self, markdown: str) -> str:
+    async def _clean_markdown(self, markdown: str) -> str:
         """
         Cleans up extracted markdown text.
         """
@@ -149,7 +150,7 @@ class SimplePDFScraper(WebScraperToolBase):
     def _is_pdf(val) -> bool:
         return val.lower().endswith(".pdf")
 
-    def _download_pdf_from_url(
+    async def _download_pdf_from_url(
         self,
         url: str,
     ) -> Tuple[str, tempfile.NamedTemporaryFile]:
@@ -186,7 +187,7 @@ class SimplePDFScraper(WebScraperToolBase):
             os.unlink(temp_file.name)
             raise RuntimeError(f"Error downloading PDF from URL: {e}")
 
-    def _process_pdf(self, path: str) -> tuple[str, PdfMetadata]:
+    async def _process_pdf(self, path: str) -> tuple[str, PdfMetadata]:
         """
         Processes a PDF file, extracting text and metadata.
 
@@ -197,20 +198,20 @@ class SimplePDFScraper(WebScraperToolBase):
             tuple containing the markdown content and metadata
         """
         # Extract text from the PDF
-        extracted_text = self._fetch_pdf_text(path)
+        extracted_text = await self._fetch_pdf_text(path)
 
         # Convert to markdown
         markdown_content = markdownify(extracted_text)
 
         # Clean markdown content
-        markdown_content = self._clean_markdown(markdown_content)
+        markdown_content = await self._clean_markdown(markdown_content)
 
         # Extract metadata
-        metadata = self._extract_metadata(path)
+        metadata = await self._extract_metadata(path)
 
         return markdown_content, metadata
 
-    def run(
+    async def arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
@@ -231,8 +232,8 @@ class SimplePDFScraper(WebScraperToolBase):
         try:
             # Handle URL vs local file path
             if self._is_url(path):
-                pdf_path, temp_file = self._download_pdf_from_url(path)
-            markdown_content, metadata = self._process_pdf(pdf_path)
+                pdf_path, temp_file = await self._download_pdf_from_url(path)
+            markdown_content, metadata = await self._process_pdf(pdf_path)
             metadata.url = metadata.pdf_url = path
             return WebpageScraperToolOutputSchema(
                 content=markdown_content,

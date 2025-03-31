@@ -21,7 +21,7 @@ class CompositeWebScraper(WebScraperToolBase):
         self.debug = bool(debug)
         self.scrapers = scrapers
 
-    def run(
+    async def arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
@@ -41,7 +41,7 @@ class CompositeWebScraper(WebScraperToolBase):
                         f"for {params}",
                     )
 
-                result = scraper.run(params)
+                result = await scraper.arun(params)
                 if result:
                     break
             except Exception as e:
