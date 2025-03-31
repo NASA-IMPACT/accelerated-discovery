@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import os
-from concurrent.futures import ThreadPoolExecutor
 from typing import List, Literal, Optional
 
 import aiohttp
-from atomic_agents.agents.base_agent import BaseIOSchema
-from atomic_agents.lib.base.base_tool import BaseTool, BaseToolConfig
 from loguru import logger
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
 from ..structures import SearchResultItem
+from ._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 
 class SearchToolInputSchema(BaseIOSchema):
@@ -97,7 +95,11 @@ class SearxNGSearchTool(SearchTool):
     input_schema = SearxNGSearchToolInputSchema
     output_schema = SearxNGSearchToolOutputSchema
 
-    def __init__(self, config: Optional[SearxNGSearchToolConfig] = None):
+    def __init__(
+        self,
+        config: Optional[SearxNGSearchToolConfig] = None,
+        debug: bool = False,
+    ):
         """
         Initializes the SearxNGTool.
 
@@ -109,7 +111,7 @@ class SearxNGSearchTool(SearchTool):
                     - and optional title and description overrides.
         """
         config = config or SearxNGSearchToolConfig()
-        super().__init__(config)
+        super().__init__(config, debug)
         self.base_url = config.base_url
         self.max_results = config.max_results
         self.engines = config.engines
@@ -184,7 +186,7 @@ class SearxNGSearchTool(SearchTool):
 
             return results
 
-    async def run_async(
+    async def arun(
         self,
         params: SearxNGSearchToolInputSchema,
         max_results: Optional[int] = None,
@@ -277,30 +279,3 @@ class SearxNGSearchTool(SearchTool):
             results=results,
             category=params.category,
         )
-
-    def run(
-        self,
-        params: SearxNGSearchToolInputSchema,
-        max_results: Optional[int] = None,
-    ) -> SearxNGSearchToolOutputSchema:
-        """
-        Runs the SearxNGTool synchronously with the given parameters.
-
-        This method creates an event loop in a separate thread to run the asynchronous operations.
-
-        Args:
-            params (SearxNGSearchToolInputSchema): The input parameters for the tool, adhering to the input schema.
-            max_results (Optional[int]): The maximum number of search results to return.
-
-        Returns:
-            SearxNGSearchToolOutputSchema: The output of the tool, adhering to the output schema.
-
-        Raises:
-            ValueError: If the base URL is not provided.
-            Exception: If the request to SearxNG fails.
-        """
-        with ThreadPoolExecutor() as executor:
-            return executor.submit(
-                asyncio.run,
-                self.run_async(params, max_results),
-            ).result()
