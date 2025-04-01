@@ -65,7 +65,7 @@ class BaseTool(AtomicBaseTool):
         Raises:
             NotImplementedError: If the method is not implemented by a subclass.
         """
-        return await self.arun(params)
+        return await self.arun(params, **kwargs)
 
     def run(self, params: BaseIOSchema, **kwargs) -> BaseIOSchema:
         """

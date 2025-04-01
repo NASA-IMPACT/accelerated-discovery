@@ -1,25 +1,20 @@
+import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, Union
+from typing import Any, List, Union
 
-import instructor
-import openai
-from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseIOSchema
+from atomic_agents.agents.base_agent import BaseAgent, BaseIOSchema
 from loguru import logger
 from pydantic import Field
 
-from ..config import CONFIG
 from ..structures import ExtractionSchema, SingleEstimation
+from ..utils import AsyncRunMixin
 from ._base import BaseAgent
 from .intents import Intent
 
 
-class ExtractionSchemaMapper(ABC):
+class ExtractionSchemaMapper(ABC, AsyncRunMixin):
     def __init__(self, debug: bool = False) -> None:
         self.debug = bool(debug)
-
-    @abstractmethod
-    def run(self, *args, **kwargs) -> Any:
-        raise NotImplementedError()
 
     def __call__(self, *args, **kwargs) -> Any:
         return self.run(*args, **kwargs)
@@ -32,7 +27,11 @@ class IntentBasedExtractionSchemaMapper(ExtractionSchemaMapper):
     If GENERAL, return base ExtractionSchema
     """
 
-    def run(self, intent: Intent) -> Union[ExtractionSchema, List[SingleEstimation]]:
+    async def arun(
+        self,
+        intent: Intent,
+        **kwargs,
+    ) -> Union[ExtractionSchema, List[SingleEstimation]]:
         res = ExtractionSchema
         if intent == Intent.ESTIMATION:
             res = List[SingleEstimation]
@@ -51,6 +50,15 @@ class ExtractionInputSchema(BaseIOSchema):
     )
 
 
+class EstimationExtractionOutputSchema(BaseIOSchema):
+    """Estimation Extraction output schema"""
+
+    estimations: List[SingleEstimation] = Field(
+        ...,
+        description="List of estimations extracted from the query and the content",
+    )
+
+
 class EstimationExtractionAgent(BaseAgent):
     input_schema = ExtractionInputSchema
-    output_schema = List[SingleEstimation]
+    output_schema = EstimationExtractionOutputSchema

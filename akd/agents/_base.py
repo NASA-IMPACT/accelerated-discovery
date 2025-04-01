@@ -3,7 +3,7 @@ from typing import Optional
 import instructor
 import openai
 from atomic_agents.agents.base_agent import BaseAgent as AtomicBaseAgent
-from atomic_agents.agents.base_agent import BaseAgentConfig, BaseIOSchema
+from atomic_agents.agents.base_agent import BaseAgentConfig
 
 from ..config import CONFIG
 

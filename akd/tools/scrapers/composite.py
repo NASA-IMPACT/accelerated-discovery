@@ -56,7 +56,7 @@ class ResearchArticleResolver(BaseArticleResolver):
     def __init__(self, *resolvers: BaseArticleResolver):
         self.resolvers = resolvers
 
-    def resolve(self, url: Union[str, HttpUrl]) -> ResolverOutputSchema:
+    async def resolve(self, url: Union[str, HttpUrl]) -> ResolverOutputSchema:
         original_url = str(url)
         rname = self.__class__.__name__
         output = ResolverOutputSchema(
@@ -67,7 +67,7 @@ class ResearchArticleResolver(BaseArticleResolver):
             rname = resolver.__class__.__name__
             try:
                 logger.debug(f"Using resolver={rname} for url={original_url}")
-                output = resolver.run(ResolverInputSchema(url=original_url))
+                output = await resolver.arun(ResolverInputSchema(url=original_url))
                 if not output.url:
                     raise ValueError("Resolver failure")
                 if output.url:
@@ -76,8 +76,8 @@ class ResearchArticleResolver(BaseArticleResolver):
                 logger.error(f"Error using resolver={rname}")
         return output
 
-    def run(self, params: ResolverInputSchema) -> ResolverOutputSchema:
-        output = self.resolve(params.url)
+    async def arun(self, params: ResolverInputSchema) -> ResolverOutputSchema:
+        output = await self.resolve(params.url)
         if not output.url:
             output.url = params.url
             output.resolver = self.__class__.__name__

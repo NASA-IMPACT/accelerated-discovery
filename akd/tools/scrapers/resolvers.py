@@ -3,10 +3,11 @@ from typing import Optional, Union
 from urllib.parse import urljoin
 
 import requests
-from atomic_agents.agents.base_agent import BaseIOSchema
-from atomic_agents.lib.base.base_tool import BaseTool, BaseToolConfig
 from bs4 import BeautifulSoup
+from loguru import logger
 from pydantic import Field, HttpUrl
+
+from .._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 
 class ResolverInputSchema(BaseIOSchema):
@@ -55,9 +56,10 @@ class BaseArticleResolver(BaseTool):
     def __init__(
         self,
         config: Optional[ArticleResolverConfig] = None,
+        debug: bool = False,
     ):
         config = config or ArticleResolverConfig()
-        super().__init__(config)
+        super().__init__(config, debug)
         self.session = config.session
         self.user_agent = config.user_agent
         self.debug = config.debug
@@ -76,6 +78,7 @@ class BaseArticleResolver(BaseTool):
                 user_agent=user_agent,
                 debug=debug,
             ),
+            debug=debug,
         )
 
     @property
@@ -85,7 +88,7 @@ class BaseArticleResolver(BaseTool):
         }
 
     @abstractmethod
-    def resolve(self, url: Union[str, HttpUrl]) -> str:
+    async def resolve(self, url: Union[str, HttpUrl]) -> str:
         """Resolve a URL to its DOI or full-text link."""
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -94,9 +97,9 @@ class BaseArticleResolver(BaseTool):
         """Check if this resolver can handle the given URL."""
         raise NotImplementedError("Subclasses must implement this method")
 
-    def run(self, params: ResolverInputSchema) -> ResolverOutputSchema:
+    async def arun(self, params: ResolverInputSchema) -> ResolverOutputSchema:
         return ResolverOutputSchema(
-            url=self.resolve(params.url),
+            url=await self.resolve(params.url),
             resolver=self.__class__.__name__,
         )
 
@@ -107,14 +110,14 @@ class IdentityResolver(BaseArticleResolver):
 
 
 class ArxivResolver(BaseArticleResolver):
-    def validate_url(self, url):
+    async def validate_url(self, url):
         if "arxiv.org" not in url:
             raise RuntimeError(f"Not a valid arxiv url")
         return True
 
-    def resolve(self, url: Union[str, HttpUrl]) -> str:
+    async def resolve(self, url: Union[str, HttpUrl]) -> str:
         url = str(url)
-        self.validate_url(url)
+        await self.validate_url(url)
         paper_id = url.split("/")[-1]
         return f"https://arxiv.org/pdf/{paper_id}.pdf"
 
@@ -144,8 +147,9 @@ class ADSResolver(BaseArticleResolver):
             # Fetch the ADS page
             response = self.session.get(url, headers=self.headers)
             if response.status_code != 200:
-                print(f"Failed to fetch ADS page: HTTP {response.status_code}")
-                return None
+                raise RuntimeError(
+                    f"Failed to fetch ADS page: HTTP {response.status_code}",
+                )
 
             # Parse the HTML
             soup = BeautifulSoup(response.text, "html.parser")
@@ -181,5 +185,5 @@ class ADSResolver(BaseArticleResolver):
             return None
 
         except Exception as e:
-            print(f"Error resolving ADS URL: {e}")
+            logger.error(f"Error resolving ADS URL: {e}")
             return None
