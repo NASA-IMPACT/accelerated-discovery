@@ -8,10 +8,10 @@ from atomic_agents.agents.base_agent import BaseIOSchema
 from atomic_agents.lib.base.base_tool import BaseTool as AtomicBaseTool
 from atomic_agents.lib.base.base_tool import BaseToolConfig
 
-from ..utils import get_event_loop
+from ..utils import AsyncRunMixin, get_event_loop
 
 
-class BaseTool(AtomicBaseTool):
+class BaseTool(AtomicBaseTool, AsyncRunMixin):
     def __init__(
         self,
         config: Optional[BaseToolConfig] = None,
