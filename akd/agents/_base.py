@@ -8,10 +8,10 @@ from loguru import logger
 from pydantic import BaseModel
 
 from ..config import CONFIG
-from ..utils import AsyncRunMixin
+from ..utils import AsyncRunMixin, LangchainToolMixin
 
 
-class BaseAgent(AtomicBaseAgent, AsyncRunMixin):
+class BaseAgent(AtomicBaseAgent, AsyncRunMixin, LangchainToolMixin):
     def __init__(
         self,
         config: Optional[BaseAgentConfig] = None,
