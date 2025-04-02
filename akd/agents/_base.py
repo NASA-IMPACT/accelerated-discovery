@@ -19,7 +19,7 @@ class BaseAgent(AtomicBaseAgent, AsyncRunMixin):
     ) -> None:
         config = config or BaseAgentConfig(
             client=instructor.from_openai(
-                openai.OpenAI(api_key=CONFIG.model_config_.api_keys.openai),
+                openai.AsyncOpenAI(api_key=CONFIG.model_config_.api_keys.openai),
             ),
             model=CONFIG.model_config_.model_name,
             temperature=0.0,

@@ -81,7 +81,7 @@ class LitAgent(BaseAgent):
         self.extraction_agent.reset_memory()
 
         logger.info("Analyzing input query to generate relevant search queries...")
-        query_agent_output = self.query_agent.run(
+        query_agent_output = await self.query_agent.arun(
             QueryAgentInputSchema(query=params.query, num_queries=self.n_queries),
         )
         query_agent_output.queries.insert(0, params.query)
@@ -128,7 +128,7 @@ class LitAgent(BaseAgent):
         results = []
         for content in contents:
             self.extraction_agent.reset_memory()
-            answer = self.extraction_agent.run(
+            answer = await self.extraction_agent.arun(
                 ExtractionInputSchema(query=query, content=content.result),
             )
             logger.debug(f"Source={content.source} | Answer={answer}")
