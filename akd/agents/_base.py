@@ -11,7 +11,7 @@ from ..config import CONFIG
 from ..utils import AsyncRunMixin, LangchainToolMixin
 
 
-class BaseAgent(AtomicBaseAgent, AsyncRunMixin, LangchainToolMixin):
+class BaseAgent(AsyncRunMixin, LangchainToolMixin, AtomicBaseAgent):
     def __init__(
         self,
         config: Optional[BaseAgentConfig] = None,

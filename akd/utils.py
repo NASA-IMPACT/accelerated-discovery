@@ -1,6 +1,6 @@
 import asyncio
 from abc import abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 try:
     from langchain_core.tools.structured import StructuredTool
@@ -61,7 +61,11 @@ class LangchainToolMixin:
         - async run method (arun)
     """
 
-    def to_langchain_structured_tool(self) -> Any:
+    def to_langchain_structured_tool(
+        self,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> StructuredTool:
         if not LANGCHAIN_CORE_INSTALLED:
             raise ImportError("langchain-core is required to use this method")
 
@@ -78,9 +82,28 @@ class LangchainToolMixin:
             # Convert output Pydantic object to dictionary
             return output_obj.model_dump()
 
+        def _wrapped_run(**input_data: Dict[str, Any]) -> Dict[str, Any]:
+            """
+            A wrapper around the tool's run method to accept JSON-like input and return JSON-like output.
+            """
+            # Validate and parse input using Pydantic
+            validated_input = self.input_schema(**input_data)
+
+            # Execute the tool
+            output_obj = self.run(validated_input)
+
+            # Convert output Pydantic object to dictionary
+            return output_obj.model_dump()
+
+        name = name or self.__class__.__name__
+        doc = (self.__class__.__doc__ or "").strip()
+        description = description or f"A tool that executes {name}." + (
+            f" Description: {doc}" if doc else ""
+        )
         return StructuredTool.from_function(
-            func=_wrapped_arun,
-            name=self.__class__.__name__,
-            description=f"A tool that executes {self.__class__.__name__}",
+            func=_wrapped_run,
+            coroutine=_wrapped_arun,
+            name=name,
+            description=description,
             args_schema=self.input_schema,
         )

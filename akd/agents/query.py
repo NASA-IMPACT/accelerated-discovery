@@ -37,5 +37,9 @@ class QueryAgentOutputSchema(BaseIOSchema):
 
 
 class QueryAgent(BaseAgent):
+    """
+    Agent that generates search engine queries based on a given query.
+    """
+
     input_schema = QueryAgentInputSchema
     output_schema = QueryAgentOutputSchema
