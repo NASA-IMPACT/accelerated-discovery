@@ -1,10 +1,6 @@
 
 ## ADAM IMPORTS
-from adam.abstractions.single_task_crew import get_single_task_crew
-from adam.globals import memory_client
-from memory_backend_client.api.default import (initialize_memory_db_initialize_memory_db_post,
-                                               memorize_memorize_post)
-    
+from accelerated_discovery.adam_core.abstractions.single_task_crew import get_single_task_crew
 
 
 ## INTERNAL IMPORTS
@@ -132,12 +128,12 @@ Search query should be composed by two short search phrases, grouped by () and s
             state.retrieved_documents = output_documents
         return state
     
-    async def update_agent_memory(self, state):
-        for document in state.retrieved_documents.document_list:    
-            path = document.download_path
-            memorize_memorize_post.sync(client=memory_client,url_query = path, memory_id=state.memory_id)
-        print(f"Memory {state.memory_id} updated with {len(state.retrieved_documents.document_list)} documents")
-        return state
+    # async def update_agent_memory(self, state):
+    #     for document in state.retrieved_documents.document_list:    
+    #         path = document.download_path
+    #         memorize_memorize_post.sync(client=memory_client,url_query = path, memory_id=state.memory_id)
+    #     print(f"Memory {state.memory_id} updated with {len(state.retrieved_documents.document_list)} documents")
+    #     return state
         
     
     
@@ -188,15 +184,13 @@ Draft conclusions on whether you have enough material to answer the main researc
         flow.add_node(self.execute_subquestions)
         flow.add_node(self.download_documents)
         flow.add_node(self.write_literature_review)
-        flow.add_node(self.update_agent_memory)
         flow.add_node(self.wrap_data_product)
         flow.add_edge(START, "initialize_variables")
         flow.add_edge("initialize_variables","decompose_question_into_subquestions")
         flow.add_edge("decompose_question_into_subquestions","execute_subquestions")
         flow.add_edge("execute_subquestions", "download_documents")
         flow.add_edge("download_documents", "write_literature_review")
-        flow.add_edge("write_literature_review","update_agent_memory")
-        flow.add_edge("update_agent_memory","wrap_data_product")
+        flow.add_edge("write_literature_review","wrap_data_product")
         flow.add_edge("wrap_data_product",END)
         self.__graph=flow.compile()
 

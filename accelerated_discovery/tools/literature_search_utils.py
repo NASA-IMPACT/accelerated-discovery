@@ -1,7 +1,7 @@
 import requests
 import ads
 import os
-from models.document import Document
+from accelerated_discovery.models.document import Document
 from uuid import uuid4
 from dotenv import load_dotenv
 load_dotenv()
@@ -91,7 +91,7 @@ def search_serper_run(query,k:int=20,document_type:str = "scholar", return_reada
     "q": query
     })
     headers = {
-    'X-API-KEY': '',
+    'X-API-KEY': os.getenv("SERPER_API_KEY"),
     'Content-Type': 'application/json'
     }
     conn.request("POST", f"/{document_type}", payload, headers)

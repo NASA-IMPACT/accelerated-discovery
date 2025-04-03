@@ -2,14 +2,14 @@ import streamlit as st
 from accelerated_discovery.flows.literature_review_flow import LiteratureResearchState
 import streamlit as st
 import os
-from globals import crewai_persistance
+from adam_core.globals import crewai_persistance
 from accelerated_discovery.frontend.streamlit_utils import pydantic_to_markdown
 from accelerated_discovery.flows.literature_review_flow import LiteratureResearchState
 from accelerated_discovery.utils.file_system_utils import sanitize_filename
 os.environ["STREAMLIT_SERVER_PORT"] = "8502"
+from dotenv import load_dotenv
 
-
-
+load_dotenv()
 st.header("📚 Literature Research Workflow")
 
 with st.popover("ℹ️ **README: About This Workflow**"):
