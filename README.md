@@ -27,22 +27,36 @@ conda activate ad
 ```sh
 pip install -r requirements.txt
 ```
-``
 
 
 ### **4️⃣ Set Environment Variables**
 Copy the `.env` template and configure the **AGENT_PERSISTANCE_PATH**:
+
 ```sh
 cp .env_copy .env
 ```
 Edit `.env` and set:
-```
 
 ```
-📌 **To use workflows, provide your** WatsonX **credentials.**  
+SERPER_API_KEY 
+WATSONX_API_KEY
+WATSONX_PROJECT_ID
+```
+NOTE: because of a bug, please copy the same file .env under accelerated_discovery/tools/
 
 
 ### 🖥 **Run Litarature Review Flow**
+run single workflow 
+```sh
+python accelerated_discovery/frontend/literature_review.py' 
+```
+
+
+use streamlit interface
+```sh
+streamlit run accelerated_discovery/frontend/literature_review.py
+```
+
 
 ---
 

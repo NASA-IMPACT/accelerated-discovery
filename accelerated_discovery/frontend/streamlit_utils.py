@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from typing import Any
 from pydantic import BaseModel
 

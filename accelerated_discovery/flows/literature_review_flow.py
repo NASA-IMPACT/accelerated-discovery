@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 
 ## ADAM IMPORTS
 from accelerated_discovery.adam_core.abstractions.single_task_crew import get_single_task_crew
@@ -161,20 +163,21 @@ Generate a complete reference list in the end following same style, containing a
         
 
     
-    async def wrap_data_product(self, state):
-        crew= get_single_task_crew(output_file = os.path.join(state.output_path , "final_report.md") if state.output_path else None,
-   			output_pydantic=QuestionDecompositionOutput,
-            )
-        state.final_report = crew.kickoff({"task_description" : f"""
-{state.model_dump()}
-Write a final report describing the work done so far to answer the main research question
-Describe statistics on the generated lists of documents 
-Summarize the main findings aggregated from both the literature report
-Draft conclusions on whether you have enough material to answer the main research question and provide an answer if possible.
-""",
-						"expected_output" : """ Report in Markdown format """
-						}).raw
-        return state
+#     async def wrap_data_product(self, state):
+        
+#         crew= get_single_task_crew(output_file = os.path.join(state.output_path , "final_report.md") if state.output_path else None,
+#    			output_pydantic=QuestionDecompositionOutput,
+#             )
+#         state.final_report = crew.kickoff({"task_description" : f"""
+# {state.model_dump()}
+# Write a final report describing the work done so far to answer the main research question
+# Describe statistics on the generated lists of documents 
+# Summarize the main findings aggregated from both the literature report
+# Draft conclusions on whether you have enough material to answer the main research question and provide an answer if possible.
+# """,
+# 						"expected_output" : """ Report in Markdown format """
+# 						}).raw
+#         return state
         
     
     def initialize_flow(self):
@@ -184,14 +187,12 @@ Draft conclusions on whether you have enough material to answer the main researc
         flow.add_node(self.execute_subquestions)
         flow.add_node(self.download_documents)
         flow.add_node(self.write_literature_review)
-        flow.add_node(self.wrap_data_product)
         flow.add_edge(START, "initialize_variables")
         flow.add_edge("initialize_variables","decompose_question_into_subquestions")
         flow.add_edge("decompose_question_into_subquestions","execute_subquestions")
         flow.add_edge("execute_subquestions", "download_documents")
         flow.add_edge("download_documents", "write_literature_review")
-        flow.add_edge("write_literature_review","wrap_data_product")
-        flow.add_edge("wrap_data_product",END)
+        flow.add_edge("write_literature_review",END)
         self.__graph=flow.compile()
 
     async def run_flow(self):
@@ -202,10 +203,9 @@ Draft conclusions on whether you have enough material to answer the main researc
 import asyncio
 if __name__ == "__main__":
 
-
     input = LiteratureResearchState(main_question="Long term memory transformers",
-                                    output_path = "/Users/gliozzo/Documents/Code/adam/data/nasa_impact/literature_review/Laggraph_Flow_try",
-                                    n_subquestions = 3,
+                                    output_path = "/tmp/workflow_output",
+                                    n_subquestions = 7,
                                     selected_sources = ["papers", "patents"],
                                     n_publications = 20,
                                     )

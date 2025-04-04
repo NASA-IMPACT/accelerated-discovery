@@ -5,7 +5,7 @@ from accelerated_discovery.models.document import Document
 from uuid import uuid4
 from dotenv import load_dotenv
 load_dotenv()
-ads.config.token = os.environ["ADS_DEV_KEY"]
+#ads.config.token = os.["ADS_DEV_KEY"]
 
 
 
@@ -85,13 +85,14 @@ Abstract:
 import http.client
 import json
 def search_serper_run(query,k:int=20,document_type:str = "scholar", return_readable:bool=False):   
-
+    
     conn = http.client.HTTPSConnection("google.serper.dev")
     payload = json.dumps({
     "q": query
     })
     headers = {
-    'X-API-KEY': os.getenv("SERPER_API_KEY"),
+    'X-API-KEY': "03801aeaa4a605dcb89ada380471e454c6a4e524",
+    #'X-API-KEY': os.getenv("SERPER_API_KEY"),
     'Content-Type': 'application/json'
     }
     conn.request("POST", f"/{document_type}", payload, headers)
