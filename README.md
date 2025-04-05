@@ -30,7 +30,8 @@ pip install -r requirements.txt
 
 
 ### **4️⃣ Set Environment Variables**
-Copy the `.env` template and configure the **AGENT_PERSISTANCE_PATH**:
+Copy the `.env` template and configure **PERSISTANCE_PATH** to a local folder of your choice.
+It will be automatically created and contain all the backend DBs that will be used by agents and workflows.
 
 ```sh
 cp .env_copy .env
@@ -46,11 +47,11 @@ NOTE: because of a bug, please copy the same file .env under accelerated_discove
 
 
 ### 🖥 **Run Litarature Review Flow**
+
 run single workflow 
 ```sh
-python accelerated_discovery/frontend/literature_review.py' 
+python accelerated_discovery/flows/literature_review_flow.py
 ```
-
 
 use streamlit interface
 ```sh
@@ -79,11 +80,3 @@ streamlit run accelerated_discovery/frontend/literature_review.py
 ### **🌟 Star this repository if you find it useful!** ⭐  
 
 ---
-
-
-
-
-
-
-
-
