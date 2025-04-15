@@ -1,9 +1,18 @@
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, HttpUrl
 
+try:
+    from langchain_core.tools.structured import StructuredTool
+
+    LANGCHAIN_CORE_INSTALLED = True
+except:
+    LANGCHAIN_CORE_INSTALLED = False
+
+from .agents._base import BaseAgent
 from .config import CONFIG
+from .tools._base import BaseTool
 
 
 class SearchResultItem(BaseModel):
@@ -123,3 +132,11 @@ class ExtractionDTO(BaseModel):
 class RelevancyLabel(str, Enum):
     RELEVANT = "Relevant"
     NOT_RELEVANT = "Not Relevant"
+
+
+if LANGCHAIN_CORE_INSTALLED:
+    from langchain_core.tools.structured import StructuredTool
+
+    Tool = Union[BaseTool, BaseAgent, StructuredTool]
+else:
+    Tool = Union[BaseToo, BaseAgent]
