@@ -1,13 +1,14 @@
+# flake8: noqa: E501
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, HttpUrl
 
 try:
-    from langchain_core.tools.structured import StructuredTool
+    import langchain_core
 
     LANGCHAIN_CORE_INSTALLED = True
-except:
+except ImportError:
     LANGCHAIN_CORE_INSTALLED = False
 
 from .agents._base import BaseAgent
@@ -87,7 +88,8 @@ class ResearchData(BaseModel):
     # source: str = Field(..., description="Source for the literature research")
     data_url: Optional[HttpUrl] = Field(
         None,
-        description="URL to download data that the research references/uses. If not available, leave empty/None",
+        description="URL to download data that the research references/uses. "
+        "If not available, leave empty/None",
     )
 
 
@@ -139,4 +141,6 @@ if LANGCHAIN_CORE_INSTALLED:
 
     Tool = Union[BaseTool, BaseAgent, StructuredTool]
 else:
-    Tool = Union[BaseToo, BaseAgent]
+    Tool = Union[BaseTool, BaseAgent]
+
+GuardrailType = Union[BaseTool, Callable, Coroutine]

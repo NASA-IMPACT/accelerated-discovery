@@ -38,7 +38,9 @@ class ToolSearchResult(BaseModel):
 class NodeState(BaseModel):
     """Fields common to all node-like states."""
 
-    messages: List[Union[BaseMessage, Dict[str, Any]]] = Field(default_factory=list)
+    messages: List[Union[BaseMessage, Dict[str, Any]]] = Field(
+        default_factory=list,
+    )
     inputs: Dict[str, Any] = Field(default_factory=dict)
     output: Dict[str, Any] = Field(default_factory=dict)
 
@@ -51,6 +53,14 @@ class SupervisorState(NodeState):
 
 
 class NodeTemplateState(NodeState):
-    supervisor_state: SupervisorState
+    supervisor_state: SupervisorState = Field(default_factory=SupervisorState)
     input_guardrails: Dict[str, Any] = Field(default_factory=dict)
     output_guardrails: Dict[str, Any] = Field(default_factory=dict)
+
+
+class GlobalState(NodeState):
+    """
+    Global state of the system.
+    """
+
+    node_states: Dict[str, NodeTemplateState] = Field(default_factory=dict)
