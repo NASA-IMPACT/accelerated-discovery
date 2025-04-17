@@ -1,6 +1,6 @@
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
 
@@ -70,6 +70,26 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
                     logger.error(f"[{name}] guardrail {name!r} error: {e!r}")
                 results[name] = None
         return results
+
+    def to_langgraph_node(self) -> Callable[[GlobalState], Awaitable[GlobalState]]:
+        """
+        Convert to langgraph compatile node.
+        Global state in -> global state out
+        Assumption:
+            - NodeTemplate should mutate the global state itself
+            - Supervisor should handle how to access keys
+        """
+
+        async def _node_fn(gs: GlobalState) -> GlobalState:
+            # 1) make sure this node has its local state slice
+            if self.node_id not in gs.node_states:
+                gs.node_states[self.node_id] = NodeTemplateState()
+            # 2) run the node’s logic (guardrails → supervisor → guardrails → write‐back)
+            await self.arun(gs)
+            # 3) return the (mutated) GlobalState
+            return gs
+
+        return _node_fn
 
 
 class DefaultNodeTemplate(AbstractNodeTemplate):
