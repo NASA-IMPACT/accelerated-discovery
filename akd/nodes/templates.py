@@ -33,7 +33,8 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
         debug: bool = False,
     ) -> None:
         assert isinstance(
-            supervisor, BaseSupervisor
+            supervisor,
+            BaseSupervisor,
         ), "supervisor must be an instance of BaseSupervisor"
         self.supervisor = supervisor
         self.input_guardrails = input_guardrails
@@ -58,9 +59,9 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
             if not isinstance(guard, BaseTool):
                 guard = tool_wrapper(guard)
             try:
-                # build the guard's inputs from matching keys in the state
+                # build the guard's inputs from matching keys in the data
                 schema = guard.input_schema
-                kwargs = {k: data.get(k) for k in schema.__fields__}
+                kwargs = {k: data.get(k) for k in schema.model_fields}
                 tool_input = schema(**kwargs)
                 tool_output = await guard.arun(tool_input)
                 results[name] = getattr(tool_output, "result", tool_output)
@@ -84,7 +85,8 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
 
         # 1) run input guardrails against node_state.inputs
         node_state.input_guardrails = await self._apply_guardrails(
-            self.input_guardrails, node_state.inputs.copy()
+            self.input_guardrails,
+            node_state.inputs.copy(),
         )
 
         # 2) merge validated inputs into the supervisor_state
@@ -100,7 +102,8 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
 
         # 4) run output guardrails against that output
         node_state.output_guardrails = await self._apply_guardrails(
-            self.output_guardrails, node_state.output.copy()
+            self.output_guardrails,
+            node_state.output.copy(),
         )
 
         # 5) write back into the global state, in place
