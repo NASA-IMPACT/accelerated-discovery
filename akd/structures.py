@@ -1,6 +1,6 @@
 # flake8: noqa: E501
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -144,3 +144,7 @@ else:
     Tool = Union[BaseTool, BaseAgent]
 
 GuardrailType = Union[BaseTool, Callable, Coroutine]
+
+# A callable or a tuple of callable and input key mapping
+AnyCallable = Union[BaseTool, BaseAgent, Callable[..., Any]]
+CallableSpec = Union[AnyCallable, Tuple[AnyCallable, Dict[str, str]]]

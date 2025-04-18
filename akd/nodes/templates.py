@@ -4,9 +4,9 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
 
-from ..structures import GuardrailType
+from ..structures import CallableSpec
 from ..tools._base import BaseTool
-from ..tools.utils import tool_wrapper
+from ..tools.utils import ToolRunner, tool_wrapper
 from ..utils import AsyncRunMixin, LangchainToolMixin
 from .states import GlobalState, NodeTemplateState
 from .supervisor import BaseSupervisor
@@ -27,9 +27,10 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
     def __init__(
         self,
         supervisor: BaseSupervisor,
-        input_guardrails: List[GuardrailType],
-        output_guardrails: List[GuardrailType],
+        input_guardrails: List[CallableSpec],
+        output_guardrails: List[CallableSpec],
         node_id: Optional[str] = None,
+        tool_runner: Optional[ToolRunner] = None,
         debug: bool = False,
     ) -> None:
         assert isinstance(
@@ -41,6 +42,7 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
         self.output_guardrails = output_guardrails
         self.debug = bool(debug)
         self.node_id = node_id or str(uuid.uuid4().hex)
+        self.tool_runner = tool_runner or ToolRunner(debug=debug)
 
     @abstractmethod
     async def arun(self, state: GlobalState) -> NodeTemplateState:
@@ -49,21 +51,31 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
 
     async def _apply_guardrails(
         self,
-        guardrails: List[GuardrailType],
+        guardrails: List[CallableSpec],
         data: Dict[str, Any],
     ) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
+        """
+        Note:
+            If guardrails are callables,
+            they will be wrapped into BaseTool via tool_wrapper.
 
+            If they are BaseTool instances, they will be used as is.
+
+            If they are Tuple,
+            the 2nd element is the mapping of input keys.
+        """
+        results: Dict[str, Any] = {}
         for guard in guardrails:
-            name = guard.__class__.__name__
-            if not isinstance(guard, BaseTool):
-                guard = tool_wrapper(guard)
+            if isinstance(guard, tuple):
+                name = guard[0].__class__.__name__
+            else:
+                name = guard.__class__.__name__
             try:
                 # build the guard's inputs from matching keys in the data
-                schema = guard.input_schema
-                kwargs = {k: data.get(k) for k in schema.model_fields}
-                tool_input = schema(**kwargs)
-                tool_output = await guard.arun(tool_input)
+                tool_output = await self.tool_runner.arun(
+                    spec=guard,
+                    data=data,
+                )
                 results[name] = getattr(tool_output, "result", tool_output)
             except Exception as e:
                 if self.debug:
