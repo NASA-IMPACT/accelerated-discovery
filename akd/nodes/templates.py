@@ -96,9 +96,7 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
     async def arun(self, global_state: GlobalState) -> NodeTemplateState:
         # 0) grab or create this node’s local state slice
         node_id = self.node_id
-        node_state = global_state.node_states[node_id]
-        if node_state is None:
-            node_state = NodeTemplateState()
+        node_state = global_state.node_states.get(node_id, NodeTemplateState())
 
         if self.debug:
             logger.debug(f"[Node {node_id}] node_state={node_state}")
@@ -113,7 +111,10 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
         node_state.supervisor_state.inputs.update(node_state.inputs)
 
         # 3) call the supervisor with its slice of state
-        sup_out = await self.supervisor.arun(node_state.supervisor_state)
+        sup_out = await self.supervisor.arun(
+            node_state.supervisor_state,
+            global_state=global_state,
+        )
 
         #    copy back supervisor outputs & messages into node_state
         node_state.supervisor_state = sup_out

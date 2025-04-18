@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from ..structures import Tool
 from ..utils import AsyncRunMixin
-from .states import SupervisorState, ToolSearchResult
+from .states import GlobalState, SupervisorState, ToolSearchResult
 
 
 class BaseSupervisor(ABC, AsyncRunMixin):
@@ -105,7 +105,12 @@ class BaseSupervisor(ABC, AsyncRunMixin):
         return self.state
 
     @abstractmethod
-    async def arun(self, state: SupervisorState) -> SupervisorState:
+    async def arun(
+        self,
+        state: SupervisorState,
+        global_state: Optional[GlobalState] = None,
+        **kwargs,
+    ) -> SupervisorState:
         raise NotImplementedError("Subclass should implement this.")
 
 
@@ -226,7 +231,12 @@ class DummyLLMSupervisor(ReactLLMSupervisor):
     Dummy LLM based supervisor using ReAct
     """
 
-    async def arun(self, state: SupervisorState) -> SupervisorState:
+    async def arun(
+        self,
+        state: SupervisorState,
+        global_state: Optional[GlobalState] = None,
+        **kwargs,
+    ) -> SupervisorState:
         query = (
             state.inputs.get("query", "")
             or state.inputs.get("question", "")
