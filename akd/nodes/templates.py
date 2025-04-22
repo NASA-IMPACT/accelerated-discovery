@@ -92,14 +92,14 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
             - Supervisor should handle how to access keys
         """
 
-        async def _node_fn(gs: GlobalState) -> GlobalState:
+        async def _node_fn(gs: GlobalState) -> Dict[str, NodeTemplateState]:
             # 1) make sure this node has its local state slice
             if self.node_id not in gs.node_states:
                 gs.node_states[self.node_id] = NodeTemplateState()
             # 2) run the node’s logic (guardrails → supervisor → guardrails → write‐back)
-            await self.arun(gs)
-            # 3) return the (mutated) GlobalState
-            return gs
+            ns = await self.arun(gs)
+            # 3) return the (mutated) NodeTemplateState as mapping with its id
+            return {self.node_id: ns}
 
         return _node_fn
 
