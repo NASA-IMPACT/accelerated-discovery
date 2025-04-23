@@ -31,6 +31,11 @@ class BaseTool(AtomicBaseTool, AsyncRunMixin, LangchainToolMixin):
         self.config = config
         self.debug = bool(debug) or getattr(config, "debug", False)
         super().__init__(config)
+        self.__set_attrs_from_config()
+
+    def __set_attrs_from_config(self):
+        for attr, value in self.config.model_dump().items():
+            setattr(self, attr, value)
 
     @classmethod
     def from_params(cls, **params) -> BaseTool:

@@ -115,17 +115,14 @@ class SearxNGSearchTool(SearchTool):
                 Configuration for the tool, including
                     - base URL
                     - max results,
+                    - engines,
+                    - max pages,
+                    - results per page,
+                    - score cutoff,
                     - and optional title and description overrides.
         """
         config = config or SearxNGSearchToolConfig()
         super().__init__(config, debug)
-        self.base_url = config.base_url
-        self.max_results = config.max_results
-        self.engines = config.engines
-        self.debug = config.debug
-        self.max_pages = config.max_pages
-        self.results_per_page = config.results_per_page
-        self.score_cutoff = config.score_cutoff
 
     @classmethod
     def from_params(
@@ -135,6 +132,7 @@ class SearxNGSearchTool(SearchTool):
         engines: Optional[List[str]] = None,
         max_pages: int = 5,
         results_per_page: int = 10,
+        score_cutoff: float = 0.25,
         debug: bool = False,
     ) -> SearxNGSearchTool:
         base_url = base_url or os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
@@ -148,9 +146,10 @@ class SearxNGSearchTool(SearchTool):
             engines=engines,
             max_pages=max_pages,
             results_per_page=results_per_page,
+            score_cutoff=score_cutoff,
             debug=debug,
         )
-        return cls(config)
+        return cls(config, debug)
 
     async def _fetch_search_results(
         self,
