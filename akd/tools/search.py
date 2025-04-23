@@ -24,6 +24,10 @@ class SearchToolInputSchema(BaseIOSchema):
         "science",
         description="Category of the search queries.",
     )
+    max_results: int = Field(
+        10,
+        description="Maximum number of search results to return.",
+    )
 
 
 class SearchToolOutputSchema(BaseIOSchema):
@@ -253,7 +257,8 @@ class SearxNGSearchTool(SearchTool):
             else unique_results
         )
 
-        filtered_results = filtered_results[: max_results or self.max_results]
+        max_results = max_results or params.max_results or self.max_results
+        filtered_results = filtered_results[:max_results]
 
         if self.debug:
             logger.debug(filtered_results)
