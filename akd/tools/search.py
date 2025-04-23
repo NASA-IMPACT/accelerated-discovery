@@ -82,6 +82,9 @@ class SearxNGSearchToolConfig(BaseToolConfig):
         "SEARXNG_ENGINES",
         "google,arxiv,google_scholar",
     ).split(",")
+    max_pages: int = int(os.getenv("SEARXNG_MAX_PAGES", 25))
+    results_per_page: int = int(os.getenv("SEARXNG_RESULTS_PER_PAGE", 10))
+    score_cutoff: float = float(os.getenv("SEARXNG_SCORE_CUTOFF", 0.25))
     debug: bool = False
 
 
@@ -120,6 +123,9 @@ class SearxNGSearchTool(SearchTool):
         self.max_results = config.max_results
         self.engines = config.engines
         self.debug = config.debug
+        self.max_pages = config.max_pages
+        self.results_per_page = config.results_per_page
+        self.score_cutoff = config.score_cutoff
 
     @classmethod
     def from_params(
@@ -127,6 +133,8 @@ class SearxNGSearchTool(SearchTool):
         base_url: Optional[HttpUrl] = None,
         max_results: int = 10,
         engines: Optional[List[str]] = None,
+        max_pages: int = 5,
+        results_per_page: int = 10,
         debug: bool = False,
     ) -> SearxNGSearchTool:
         base_url = base_url or os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
@@ -138,6 +146,8 @@ class SearxNGSearchTool(SearchTool):
             base_url=base_url,
             max_results=max_results,
             engines=engines,
+            max_pages=max_pages,
+            results_per_page=results_per_page,
             debug=debug,
         )
         return cls(config)
@@ -146,7 +156,8 @@ class SearxNGSearchTool(SearchTool):
         self,
         session: aiohttp.ClientSession,
         query: str,
-        category: Optional[str],
+        category: Optional[str] = None,
+        page_num: int = 1,
     ) -> List[dict]:
         """
         Fetches search results for a single query asynchronously.
@@ -155,6 +166,7 @@ class SearxNGSearchTool(SearchTool):
             session (aiohttp.ClientSession): The aiohttp session to use for the request.
             query (str): The search query.
             category (Optional[str]): The category of the search query.
+            page_num (int): The page number to fetch.
 
         Returns:
             List[dict]: A list of search result dictionaries.
@@ -168,6 +180,7 @@ class SearxNGSearchTool(SearchTool):
             "format": "json",
             "language": "en",
             "engines": ",".join(self.engines),
+            "pageno": page_num,
         }
 
         if category:
@@ -190,41 +203,13 @@ class SearxNGSearchTool(SearchTool):
 
             return results
 
-    async def arun(
-        self,
-        params: SearxNGSearchToolInputSchema,
-        max_results: Optional[int] = None,
-    ) -> SearxNGSearchToolOutputSchema:
-        """
-        Runs the SearxNGTool asynchronously with the given parameters.
-
-        Args:
-            params (SearxNGSearchToolInputSchema): The input parameters for the tool, adhering to the input schema.
-            max_results (Optional[int]): The maximum number of search results to return.
-
-        Returns:
-            SearxNGSearchToolOutputSchema: The output of the tool, adhering to the output schema.
-
-        Raises:
-            ValueError: If the base URL is not provided.
-            Exception: If the request to SearxNG fails.
-        """
-        async with aiohttp.ClientSession() as session:
-            tasks = [
-                self._fetch_search_results(session, query, params.category)
-                for query in params.queries
-            ]
-            results = await asyncio.gather(*tasks)
-
-        all_results = [item for sublist in results for item in sublist]
-
-        # Sort the combined results by score in descending order
+    async def _process_results(self, results: List[dict]) -> List[dict]:
+        results = filter(lambda r: r.get("score", 0) >= self.score_cutoff, results)
         sorted_results = sorted(
-            all_results,
+            results,
             key=lambda x: x.get("score", 0),
             reverse=True,
         )
-
         # Remove duplicates while preserving order
         seen_urls = set()
         unique_results = []
@@ -249,20 +234,118 @@ class SearxNGSearchTool(SearchTool):
                 seen_urls.add(result["url"])
             if "doi" in result and isinstance(result["doi"], list):
                 result["doi"] = result["doi"][0]
+        return unique_results
 
-        # Filter results to include only those with the correct category if it is set
-        filtered_results = (
-            list(filter(lambda r: r.get("category") == params.category, unique_results))
-            if params.category
-            else unique_results
-        )
+    async def _fetch_search_results_paginated(
+        self,
+        session: aiohttp.ClientSession,
+        query: str,
+        category: Optional[str],
+        target_results: int,
+    ) -> List[dict]:
+        """
+        Fetches search results for a single query across multiple pages
+        to reach the target number of results.
 
+        Args:
+            session (aiohttp.ClientSession):
+                The aiohttp session to use for the request.
+            query (str):
+                The search query.
+            category (Optional[str]):
+                The category of the search query.
+            target_results (int): The target number of results to fetch.
+
+        Returns:
+            List[dict]: A list of search result dictionaries.
+        """
+        all_results = []
+        current_page = 1
+
+        while len(all_results) < target_results and current_page <= self.max_pages:
+            try:
+                if self.debug:
+                    logger.debug(f"Fetching page {current_page} for query: {query}")
+
+                results = await self._fetch_search_results(
+                    session,
+                    query,
+                    category,
+                    current_page,
+                )
+                if self.debug:
+                    logger.debug(
+                        f"Fetched {len(results)} results for page {current_page}",
+                    )
+
+                # Add and process so that the final list will be better
+                all_results.extend(results)
+                all_results = await self._process_results(all_results)
+                current_page += 1
+
+                # Add a short delay to avoid hammering the SearxNG instance
+                await asyncio.sleep(0.1)
+
+            except Exception as e:
+                logger.error(
+                    f"Error fetching page {current_page} for query '{query}': {str(e)}",
+                )
+                break
+
+        if self.debug and current_page > 1:
+            logger.debug(
+                f"Fetched {len(all_results)} results across {current_page-1} pages for query: {query}",
+            )
+
+        return all_results
+
+    async def arun(
+        self,
+        params: SearxNGSearchToolInputSchema,
+        max_results: Optional[int] = None,
+    ) -> SearxNGSearchToolOutputSchema:
+        """
+        Runs the SearxNGTool asynchronously with the given parameters.
+
+        Args:
+            params (SearxNGSearchToolInputSchema):
+                The input parameters for the tool, adhering to the input schema.
+            max_results (Optional[int]):
+                The maximum number of search results to return.
+
+        Returns:
+            SearxNGSearchToolOutputSchema:
+                The output of the tool, adhering to the output schema.
+
+        Raises:
+            ValueError: If the base URL is not provided.
+            Exception: If the request to SearxNG fails.
+        """
         max_results = max_results or params.max_results or self.max_results
+        multiplier = 1.5
+        target_results_per_query = min(
+            int((max_results * multiplier) / len(params.queries)),
+            self.max_pages * self.results_per_page,  # Don't exceed max possible results
+        )
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                self._fetch_search_results_paginated(
+                    session,
+                    query,
+                    params.category,
+                    target_results_per_query,
+                )
+                for query in params.queries
+            ]
+            results = await asyncio.gather(*tasks)
+
+        filtered_results = await self._process_results(
+            [item for sublist in results for item in sublist],
+        )
         filtered_results = filtered_results[:max_results]
 
         if self.debug:
             logger.debug(filtered_results)
-            # print(filtered_results)
 
         results = [
             SearchResultItem(
