@@ -1,0 +1,204 @@
+{
+    "factuality_score": 0.19230769230769232,
+    "num_atoms": 26,
+    "num_contexts": 53,
+    "num_true_atoms": 5,
+    "num_false_atoms": 0,
+    "num_uniform_atoms": 21,
+    "entropy": 3.348283212183595,
+    "avg_entropy": 0.12878012354552287,
+    "gold_factuality_score": 0.2692307692307692,
+    "gold_true_atoms": 7,
+    "true_positive": 4,
+    "true_negative": 18,
+    "false_positive": 1,
+    "false_negative": 3,
+    "predictions": " a0: S a1: S a10: NS a11: S a12: NS a13: NS a14: S a15: NS a16: NS a17: NS a18: NS a19: NS a2: NS a20: S a21: NS a22: NS a23: NS a24: NS a25: NS a3: NS a4: NS a5: NS a6: NS a7: NS a8: NS a9: NS",
+    "references": " a0: S a1: S a10: S a11: S a12: NS a13: NS a14: S a15: NS a16: NS a17: NS a18: NS a19: NS a2: NS a20: NS a21: NS a22: NS a23: NS a24: NS a25: NS a3: NS a4: S a5: S a6: NS a7: NS a8: NS a9: NS",
+    "input": "Question: Tell me a bio of Lanny Flaherty.",
+    "marginals": [
+        {
+            "variable": "a0",
+            "probabilities": [
+                0.104949,
+                0.895051
+            ]
+        },
+        {
+            "variable": "a1",
+            "probabilities": [
+                0.104892,
+                0.895108
+            ]
+        },
+        {
+            "variable": "a10",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a11",
+            "probabilities": [
+                0.019353,
+                0.980647
+            ]
+        },
+        {
+            "variable": "a12",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a13",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a14",
+            "probabilities": [
+                0.101722,
+                0.898278
+            ]
+        },
+        {
+            "variable": "a15",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a16",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a17",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a18",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a19",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a2",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a20",
+            "probabilities": [
+                0.126002,
+                0.873998
+            ]
+        },
+        {
+            "variable": "a21",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a22",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a23",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a24",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a25",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a3",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a4",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a5",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a6",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a7",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a8",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        },
+        {
+            "variable": "a9",
+            "probabilities": [
+                0.5,
+                0.5
+            ]
+        }
+    ],
+    "model_name": "llama-3.1-70b-instruct"
+}

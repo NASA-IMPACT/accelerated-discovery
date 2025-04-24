@@ -1,0 +1,55 @@
+{
+    "nodes": [
+        {
+            "id": "a0",
+            "type": "atom",
+            "probability": 0.5
+        },
+        {
+            "id": "c0",
+            "type": "context",
+            "probability": 0.9
+        },
+        {
+            "id": "c1",
+            "type": "context",
+            "probability": 0.9
+        },
+        {
+            "id": "c2",
+            "type": "context",
+            "probability": 0.9
+        }
+    ],
+    "edges": [
+        {
+            "from": "c1",
+            "to": "a0",
+            "relation": "contradiction",
+            "probability": 0.9569115485793083,
+            "link": "context_atom"
+        },        
+        {
+            "from": "c2",
+            "to": "a0",
+            "relation": "entailment",
+            "probability": 0.9614362065426066,
+            "link": "context_atom"
+        },
+        {
+            "from": "c0",
+            "to": "c2",
+            "relation": "entailment",
+            "probability": 0.9329360553324163,
+            "link": "context_context"
+        },        
+        {
+            "from": "c1",
+            "to": "c2",
+            "relation": "entailment",
+            "probability": 0.9550415112373323,
+            "link": "context_context"
+        }
+
+    ]
+}
