@@ -1,0 +1,35 @@
+{
+    "nodes": [
+        {
+            "id": "a1",
+            "type": "atom",
+            "probability": 0.5
+        },
+        {
+            "id": "c1",
+            "type": "context",
+            "probability": 0.99
+        },
+        {
+            "id": "c2",
+            "type": "context",
+            "probability": 0.99
+        }
+    ],
+    "edges": [
+        {
+            "from": "c1",
+            "to": "a1",
+            "relation": "contradiction",
+            "probability": 0.9,
+            "link": "context_atom"
+        },
+        {
+            "from": "c2",
+            "to": "a1",
+            "relation": "entailment",
+            "probability": 0.8,
+            "link": "context_atom"
+        }
+    ]
+}
