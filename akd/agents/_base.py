@@ -7,7 +7,8 @@ from atomic_agents.agents.base_agent import BaseAgentConfig, BaseIOSchema
 from loguru import logger
 from pydantic import BaseModel
 
-from ..config import CONFIG
+from akd.configs.project import CONFIG
+
 from ..utils import AsyncRunMixin, LangchainToolMixin
 
 
@@ -19,9 +20,9 @@ class BaseAgent(AsyncRunMixin, LangchainToolMixin, AtomicBaseAgent):
     ) -> None:
         config = config or BaseAgentConfig(
             client=instructor.from_openai(
-                openai.AsyncOpenAI(api_key=CONFIG.model_config_.api_keys.openai),
+                openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
             ),
-            model=CONFIG.model_config_.model_name,
+            model=CONFIG.model_config_settings.model_name,
             temperature=0.0,
         )
         self.debug = debug
