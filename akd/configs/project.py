@@ -2,7 +2,7 @@ from enum import Enum, auto
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -55,5 +55,6 @@ class ProjectSettings(BaseSettings):
 @lru_cache
 def get_project_settings() -> ProjectSettings:
     return ProjectSettings()
+
 
 CONFIG = get_project_settings()

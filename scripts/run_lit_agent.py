@@ -14,31 +14,24 @@ from akd.agents.factory import create_query_agent
 from akd.agents.intents import IntentAgent
 from akd.agents.litsearch import LitAgent, LitAgentInputSchema
 from akd.configs.lit_config import get_lit_agent_settings
-from akd.configs.project import CONFIG
 from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
 from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
-from akd.tools.scrapers.web_scrapers import (
-    Crawl4AIWebScraper,
-    SimpleWebScraper,
-    WebpageScraperToolConfig,
-)
-from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig
+from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
+from akd.tools.search import SearxNGSearchTool
 
 
 async def main(args):
     lit_agent_config = get_lit_agent_settings(args.config)
-    search_settings = lit_agent_config.search
-    scraper_settings = lit_agent_config.scraper
+    search_config = lit_agent_config.search
+    scraper_config = lit_agent_config.scraper
 
-    search_cfg = SearxNGSearchToolConfig(**search_settings.model_dump())
-    search_tool = SearxNGSearchTool(config=search_cfg)
+    search_tool = SearxNGSearchTool(config=search_config)
 
-    scraper_cfg = WebpageScraperToolConfig(**scraper_settings.model_dump())
     scraper = CompositeWebScraper(
-        SimpleWebScraper(scraper_cfg),
-        Crawl4AIWebScraper(scraper_cfg),
-        SimplePDFScraper(scraper_cfg),
+        SimpleWebScraper(scraper_config),
+        Crawl4AIWebScraper(scraper_config),
+        SimplePDFScraper(scraper_config),
         debug=True,
     )
 
@@ -49,9 +42,7 @@ async def main(args):
     )
 
     intent_agent = IntentAgent(
-        config=BaseAgentConfig(
-            client=instructor.from_openai(openai.AsyncOpenAI())
-        )
+        config=BaseAgentConfig(client=instructor.from_openai(openai.AsyncOpenAI())),
     )
 
     query_agent = create_query_agent()
@@ -74,7 +65,7 @@ async def main(args):
 
     print(result[0].model_dump())
 
-    with open("test.json", "w") as f:
+    with open("test_lit_agent.json", "w") as f:
         f.write(json.dumps([r.model_dump(mode="json") for r in result], indent=2))
 
 
