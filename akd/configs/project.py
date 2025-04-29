@@ -3,7 +3,7 @@ from enum import Enum, auto
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,6 +51,15 @@ class ProjectSettings(BaseSettings):
         extra="allow",
         env_nested_delimiter="__",
     )
+
+    # Add a validator to convert string to Environment enum
+    @field_validator("env", mode="before")
+    def validate_env(cls, value):
+        if isinstance(value, str):
+            return Environment[
+                value.upper()
+            ]  # Convert string to enum (e.g., "local" -> Environment.LOCAL)
+        return value
 
 
 @lru_cache
