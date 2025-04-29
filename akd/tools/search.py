@@ -9,7 +9,8 @@ from loguru import logger
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
-from ..structures import SearchResultItem
+from akd.structures import SearchResultItem
+
 from ._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 

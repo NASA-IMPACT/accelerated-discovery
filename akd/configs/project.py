@@ -1,3 +1,4 @@
+import os
 from enum import Enum, auto
 from functools import lru_cache
 from typing import Optional
@@ -25,10 +26,10 @@ class ModelProvider(str, Enum):
 
 
 class ApiKeys(BaseModel):
-    openai: Optional[str] = None
-    anthropic: Optional[str] = None
-    ollama: Optional[str] = None
-    vllm: Optional[str] = None
+    openai: Optional[str] = os.getenv("OPENAI_API_KEY")
+    anthropic: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
+    ollama: Optional[str] = os.getenv("OLLAMA_API_KEY")
+    vllm: Optional[str] = os.getenv("VLLM_API_KEY")
 
 
 class ModelConfigSettings(BaseSettings):

@@ -2,8 +2,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..structures import Tool
-from ..utils import LANGCHAIN_CORE_INSTALLED
+from akd.structures import Tool
+from akd.utils import LANGCHAIN_CORE_INSTALLED
 
 if LANGCHAIN_CORE_INSTALLED:
     from langchain_core.messages import BaseMessage

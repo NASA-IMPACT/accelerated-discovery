@@ -5,8 +5,9 @@ import openai
 from atomic_agents.agents.base_agent import BaseAgentConfig, BaseIOSchema
 from pydantic import Field
 
-from ..config import CONFIG
-from ..structures import RelevancyLabel
+from akd.configs.project import CONFIG
+from akd.structures import RelevancyLabel
+
 from ._base import BaseAgent
 
 
@@ -44,17 +45,3 @@ class RelevancyAgentOutputSchema(BaseIOSchema):
 class RelevancyAgent(BaseAgent):
     input_schema = RelevancyAgentInputSchema
     output_schema = RelevancyAgentOutputSchema
-
-    def __init__(
-        self,
-        config: Optional[BaseAgentConfig] = None,
-        debug: bool = False,
-    ) -> None:
-        config = config or BaseAgentConfig(
-            client=instructor.from_openai(
-                openai.OpenAI(api_key=CONFIG.model_config_.api_keys.openai),
-            ),
-            model=CONFIG.model_config_.model_name,
-            temperature=0.0,
-        )
-        super().__init__(config, debug=debug)
