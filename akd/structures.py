@@ -11,8 +11,9 @@ try:
 except ImportError:
     LANGCHAIN_CORE_INSTALLED = False
 
+from akd.configs.project import CONFIG
+
 from .agents._base import BaseAgent
-from .config import CONFIG
 from .tools._base import BaseTool
 
 
@@ -54,9 +55,8 @@ class ExtractionSchema(BaseModel):
     """
     Base schema for information extraction
     """
-
     answer: str = Field(
-        CONFIG.model_config_.default_no_answer,
+        CONFIG.model_config_settings.default_no_answer,
         description="Direct, concise answer to the input query",
     )
     related_knowledge: List[str] = Field(

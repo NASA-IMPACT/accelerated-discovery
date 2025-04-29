@@ -6,7 +6,8 @@ from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseIOSc
 from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
 from pydantic import create_model
 
-from ..config import CONFIG
+from akd.configs.project import CONFIG
+
 from ..structures import ExtractionSchema, SingleEstimation
 from .extraction import ExtractionInputSchema
 from .intents import IntentAgent
@@ -16,9 +17,9 @@ from .query import QueryAgent
 def create_intent_agent(config: Optional[BaseAgentConfig] = None) -> IntentAgent:
     config = config or BaseAgentConfig(
         client=instructor.from_openai(
-            openai.AsyncOpenAI(api_key=CONFIG.model_config_.api_keys.openai),
+            openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
         ),
-        model=CONFIG.model_config_.model_name,
+        model=CONFIG.model_config_settings.model_name,
         system_prompt_generator=SystemPromptGenerator(
             background=[
                 ("You are an expert intent detector."),
@@ -51,9 +52,9 @@ def create_extraction_agent(
     return BaseAgent(
         BaseAgentConfig(
             client=instructor.from_openai(
-                openai.OpenAI(api_key=CONFIG.model_config_.api_keys.openai),
+                openai.OpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
             ),
-            model=CONFIG.model_config_.model_name,
+            model=CONFIG.model_config_settings.model_name,
             system_prompt_generator=SystemPromptGenerator(
                 background=[
                     (
@@ -91,9 +92,9 @@ def create_extraction_agent(
 def create_query_agent(config: Optional[BaseAgentConfig] = None) -> QueryAgent:
     config = config or BaseAgentConfig(
         client=instructor.from_openai(
-            openai.AsyncOpenAI(api_key=CONFIG.model_config_.api_keys.openai),
+            openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
         ),
-        model=CONFIG.model_config_.model_name,
+        model=CONFIG.model_config_settings.model_name,
         system_prompt_generator=SystemPromptGenerator(
             background=[
                 (
