@@ -14,19 +14,23 @@ from akd.agents.factory import create_query_agent
 from akd.agents.intents import IntentAgent
 from akd.agents.litsearch import LitAgent, LitAgentInputSchema
 from akd.configs.lit_config import get_lit_agent_settings
+from akd.configs.project import CONFIG
 from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
 from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
 from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 from akd.tools.search import SearxNGSearchTool
+from akd.tools.vector_database import VectorDBSearchTool
 
 
 async def main(args):
     lit_agent_config = get_lit_agent_settings(args.config)
     search_config = lit_agent_config.search
     scraper_config = lit_agent_config.scraper
+    vector_search_config = lit_agent_config.vectordb_search
 
     search_tool = SearxNGSearchTool(config=search_config)
+    vector_search_tool = VectorDBSearchTool(config=vector_search_config)
 
     scraper = CompositeWebScraper(
         SimpleWebScraper(scraper_config),
@@ -55,6 +59,7 @@ async def main(args):
         query_agent=query_agent,
         extraction_agent=extraction_agent,
         search_tool=search_tool,
+        vector_search_tool=vector_search_tool,
         web_scraper=scraper,
         article_resolver=article_resolver,
     )
@@ -64,6 +69,7 @@ async def main(args):
     result = await lit_agent.arun(LitAgentInputSchema(query=args.query))
 
     print(result[0].model_dump())
+    breakpoint()
 
     with open("test_lit_agent.json", "w") as f:
         f.write(json.dumps([r.model_dump(mode="json") for r in result], indent=2))

@@ -12,3 +12,10 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 timeout = 20
 max_content_length = 1000000
 debug = true
+
+[vectordb_search]
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+milvus_uri = "./milvus/litagent.db"
+collection_name = "litagent_demo"
+drop_old = true
+k = 3
