@@ -137,7 +137,7 @@ class LitAgent(BaseAgent):
         ### Store Search results in Vector DB...
         langchain_docs = []
         assert len(search_results.results) == len(
-            contents
+            contents,
         ), "Search results and contents are out of sync!"
 
         for search_result, content in zip(search_results.results, contents):
@@ -157,7 +157,7 @@ class LitAgent(BaseAgent):
                     continue
 
             langchain_docs.append(
-                Document(page_content=content.result, metadata=sanitized_metadata)
+                Document(page_content=content.result, metadata=sanitized_metadata),
             )
 
         logger.info(f"Indexing {len(langchain_docs)} documents into Vector DB...")
