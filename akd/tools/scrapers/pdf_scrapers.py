@@ -9,7 +9,6 @@ from loguru import logger
 from markdownify import markdownify
 from pydantic import Field, FilePath, HttpUrl
 
-from .._base import BaseIOSchema
 from .web_scrapers import (
     WebpageMetadata,
     WebpageScraperToolInputSchema,

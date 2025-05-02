@@ -5,21 +5,22 @@ from langchain_core.documents import Document
 from loguru import logger
 from pydantic import Field
 
-from ..structures import ExtractionDTO
-from ..tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
-from ..tools.scrapers.web_scrapers import (
+from akd.structures import ExtractionDTO
+from akd.tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
+from akd.tools.scrapers.web_scrapers import (
     WebpageMetadata,
     WebpageScraperToolInputSchema,
     WebpageScraperToolOutputSchema,
     WebScraperToolBase,
 )
-from ..tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
-from ..tools.vector_database import (
+from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
+from akd.tools.vector_database import (
     VectorDBIndexInputSchema,
     VectorDBQueryInputSchema,
     VectorDBQueryOutputSchema,
     VectorDBSearchTool,
 )
+
 from ._base import BaseAgent, BaseAgentConfig
 from .extraction import (
     EstimationExtractionAgent,

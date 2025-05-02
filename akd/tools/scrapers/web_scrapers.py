@@ -13,8 +13,8 @@ from pydantic import Field, HttpUrl
 from readability import Document
 from requests import HTTPError, RequestException
 
-from .._base import BaseIOSchema, BaseTool, BaseToolConfig
-from ..search import SearchResultItem
+from akd.structures import SearchResultItem
+from akd.tools._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 
 class WebpageScraperToolInputSchema(BaseIOSchema):

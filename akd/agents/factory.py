@@ -7,8 +7,8 @@ from atomic_agents.lib.components.system_prompt_generator import SystemPromptGen
 from pydantic import create_model
 
 from akd.configs.project import CONFIG
+from akd.structures import ExtractionSchema, SingleEstimation
 
-from ..structures import ExtractionSchema, SingleEstimation
 from .extraction import ExtractionInputSchema
 from .intents import IntentAgent
 from .query import QueryAgent

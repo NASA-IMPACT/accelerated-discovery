@@ -1,8 +1,9 @@
+import os
 from enum import Enum, auto
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,10 +26,10 @@ class ModelProvider(str, Enum):
 
 
 class ApiKeys(BaseModel):
-    openai: Optional[str] = None
-    anthropic: Optional[str] = None
-    ollama: Optional[str] = None
-    vllm: Optional[str] = None
+    openai: Optional[str] = os.getenv("OPENAI_API_KEY")
+    anthropic: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
+    ollama: Optional[str] = os.getenv("OLLAMA_API_KEY")
+    vllm: Optional[str] = os.getenv("VLLM_API_KEY")
 
 
 class ModelConfigSettings(BaseSettings):
@@ -50,6 +51,15 @@ class ProjectSettings(BaseSettings):
         extra="allow",
         env_nested_delimiter="__",
     )
+
+    # Add a validator to convert string to Environment enum
+    @field_validator("env", mode="before")
+    def validate_env(cls, value):
+        if isinstance(value, str):
+            return Environment[
+                value.upper()
+            ]  # Convert string to enum (e.g., "local" -> Environment.LOCAL)
+        return value
 
 
 

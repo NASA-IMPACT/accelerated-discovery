@@ -5,12 +5,13 @@ from atomic_agents.lib.base.base_tool import BaseToolConfig
 from loguru import logger
 from pydantic import Field
 
-from ..agents.relevancy import (
+from akd.agents.relevancy import (
     RelevancyAgent,
     RelevancyAgentInputSchema,
     RelevancyAgentOutputSchema,
 )
-from ..structures import RelevancyLabel
+from akd.structures import RelevancyLabel
+
 from ._base import BaseIOSchema, BaseTool
 
 

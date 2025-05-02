@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 from pydantic import Field, HttpUrl
 
-from .._base import BaseIOSchema, BaseTool, BaseToolConfig
+from akd.tools._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 
 class ResolverInputSchema(BaseIOSchema):

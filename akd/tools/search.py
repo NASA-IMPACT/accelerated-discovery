@@ -9,7 +9,8 @@ from loguru import logger
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
-from ..structures import SearchResultItem
+from akd.structures import SearchResultItem
+
 from ._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 
@@ -202,7 +203,11 @@ class SearxNGSearchTool(SearchTool):
 
             return results
 
-    async def _process_results(self, results: List[dict]) -> List[dict]:
+    async def _process_results(
+        self,
+        results: List[dict],
+        process_title: bool = True,
+    ) -> List[dict]:
         results = filter(lambda r: r.get("score", 0) >= self.score_cutoff, results)
         sorted_results = sorted(
             results,
@@ -213,26 +218,25 @@ class SearxNGSearchTool(SearchTool):
         seen_urls = set()
         unique_results = []
         for result in sorted_results:
-            if (
-                "content" not in result
-                or "title" not in result
-                or "url" not in result
-                or "query" not in result
-            ):
+            if "content" not in result or "title" not in result or "url" not in result:
                 continue
             if result["url"] not in seen_urls:
                 unique_results.append(result)
-                if "metadata" in result:
-                    result[
-                        "title"
-                    ] = f"{result['title']} - (Published {result['metadata']})"
-                if "publishedDate" in result and result["publishedDate"]:
+                if (
+                    process_title
+                    and "publishedDate" in result
+                    and result["publishedDate"]
+                    and "title" in result
+                ):
                     result[
                         "title"
                     ] = f"{result['title']} - (Published {result['publishedDate']})"
                 seen_urls.add(result["url"])
-            if "doi" in result and isinstance(result["doi"], list):
-                result["doi"] = result["doi"][0]
+            if "doi" in result:
+                if isinstance(result["doi"], list):
+                    result["doi"] = result["doi"][0]
+                elif not isinstance(result["doi"], str):
+                    result["doi"] = str(result["doi"])
         return unique_results
 
     async def _fetch_search_results_paginated(
@@ -338,8 +342,12 @@ class SearxNGSearchTool(SearchTool):
             ]
             results = await asyncio.gather(*tasks)
 
+        # Process final time
+        # No need to process title here
+        # because already done during pagination
         filtered_results = await self._process_results(
             [item for sublist in results for item in sublist],
+            process_title=False,
         )
         filtered_results = filtered_results[:max_results]
 
