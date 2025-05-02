@@ -207,7 +207,6 @@ class SearxNGSearchTool(SearchTool):
     async def _process_results(
         self,
         results: List[dict],
-        process_title: bool = True,
     ) -> List[dict]:
         results = filter(lambda r: r.get("score", 0) >= self.score_cutoff, results)
         sorted_results = sorted(
@@ -223,15 +222,6 @@ class SearxNGSearchTool(SearchTool):
                 continue
             if result["url"] not in seen_urls:
                 unique_results.append(result)
-                if (
-                    process_title
-                    and "publishedDate" in result
-                    and result["publishedDate"]
-                    and "title" in result
-                ):
-                    result[
-                        "title"
-                    ] = f"{result['title']} - (Published {result['publishedDate']})"
                 seen_urls.add(result["url"])
             if "doi" in result:
                 if isinstance(result["doi"], list):
@@ -348,7 +338,6 @@ class SearxNGSearchTool(SearchTool):
         # because already done during pagination
         filtered_results = await self._process_results(
             [item for sublist in results for item in sublist],
-            process_title=False,
         )
         filtered_results = filtered_results[:max_results]
 
@@ -604,20 +593,20 @@ class SemanticScholarSearchTool(BaseTool):
             and item["openAccessPdf"]
             and isinstance(item["openAccessPdf"], dict)
         ):
-            pdf_url = item["openAccessPdf"].get("url")
+            pdf_url = item["openAccessPdf"].get("url") or None
 
         return SearchResultItem(
-            url=item.get("url"),
+            url=item.pop("url"),
             pdf_url=pdf_url,
-            title=item.get("title"),
-            content=item.get("abstract"),  # Map abstract to content
+            title=item.pop("title"),
+            content=item.pop("abstract"),  # Map abstract to content
             query=query,
             category=category,
             doi=doi,
-            published_date=str(item.get("year")) if item.get("year") else None,
+            published_date=str(item.pop("year")) if item.get("year") else None,
             engine="semanticscholar",
             tags=authors if authors else None,
-            extra={k: v for k, v in item.items() if k not in self.fields},
+            extra=item,
         )
 
     async def _fetch_search_results_paginated(
