@@ -69,7 +69,6 @@ async def main(args):
     result = await lit_agent.arun(LitAgentInputSchema(query=args.query))
 
     print(result[0].model_dump())
-    breakpoint()
 
     with open("test_lit_agent.json", "w") as f:
         f.write(json.dumps([r.model_dump(mode="json") for r in result], indent=2))
