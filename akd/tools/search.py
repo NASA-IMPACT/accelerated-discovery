@@ -385,7 +385,9 @@ class SemanticScholarSearchToolOutputSchema(SearchToolOutputSchema):
 class SemanticScholarSearchToolConfig(BaseToolConfig):
     """Configuration for the Semantic Scholar Search Tool."""
 
-    api_key: Optional[str] = Field(default=os.getenv("SEMANTIC_SCHOLAR_API_KEY"))
+    api_key: Optional[str] = Field(
+        default=(os.getenv("SEMANTIC_SCHOLAR_API_KEY") or os.getenv("S2_API_KEY")),
+    )
     base_url: HttpUrl = Field(default="https://api.semanticscholar.org")
     max_results: int = Field(default=int(os.getenv("SEMANTIC_SCHOLAR_MAX_RESULTS", 10)))
     fields: List[str] = Field(
@@ -398,6 +400,7 @@ class SemanticScholarSearchToolConfig(BaseToolConfig):
             "year",
             "authors.name",
             "isOpenAccess",
+            "openAccessPdf",
         ],
     )
     # Semantic Scholar API limits per request
@@ -577,7 +580,7 @@ class SemanticScholarSearchTool(BaseTool):
             return None  # Skip incomplete results
 
         external_ids = item.get("externalIds") or {}
-        doi = external_ids.get("DOI")
+        doi = external_ids.pop("DOI")
 
         # Extract author names if requested and available
         authors = [
