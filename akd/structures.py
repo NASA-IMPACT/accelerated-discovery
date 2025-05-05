@@ -2,7 +2,7 @@
 from enum import Enum
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, computed_field
 
 try:
     import langchain_core
@@ -50,11 +50,21 @@ class SearchResultItem(BaseModel):
         description="Extra information from the search result",
     )
 
+    @computed_field
+    @property
+    def title_augmented(self) -> str:
+        return (
+            f"{self.title} - (Published {self.published_date})"
+            if self.published_date
+            else self.title
+        )
+
 
 class ExtractionSchema(BaseModel):
     """
     Base schema for information extraction
     """
+
     answer: str = Field(
         CONFIG.model_config_settings.default_no_answer,
         description="Direct, concise answer to the input query",
