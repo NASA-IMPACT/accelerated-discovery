@@ -34,25 +34,28 @@ from akd.tools.fact_reasoner.fm_factual.query_builder import QueryBuilder
 from akd.tools.fact_reasoner.fm_factual.search_api import SearchAPI
 
 COLLECTION_NAME = "wikipedia_en"
-DB_PATH = "/home/radu/wiki_data"
+DB_PATH = "/Users/jbarry/work_projects/nasa_contrib/accelerated-discovery/milvus"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 
 CHARACTER_SPLITTER = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", ". ", " ", ""],
-    #keep_separator=False,
+    # keep_separator=False,
     chunk_size=1000,
-    chunk_overlap=0
+    chunk_overlap=0,
 )
 
 # TOKEN_SPLITTER = SentenceTransformersTokenTextSplitter(chunk_overlap=0, tokens_per_chunk=256)
 
+
 def remove_citation(paragraph: str) -> str:
     """Remove all citations (numbers in side square brackets) in paragraph"""
-    return re.sub(r'\[\d+\]', '', paragraph)
+    return re.sub(r"\[\d+\]", "", paragraph)
+
 
 def remove_new_line(paragraph: str) -> str:
     return paragraph.replace("\n", "")
+
 
 def compose_fns(functions: List[Callable]) -> Callable:
     def ret(input):
@@ -63,27 +66,30 @@ def compose_fns(functions: List[Callable]) -> Callable:
 
     return ret
 
+
 def html_to_text2(html_text: str) -> str:
     text_maker = html2text.HTML2Text()
     text_maker.ignore_links = True
     text_maker.ignore_tables = True
     text_maker.ignore_images = True
-    text_maker.emphasis_mark = ''
+    text_maker.emphasis_mark = ""
     text_maker.body_width = 0
-    text = text_maker.handle(html_text).replace('\n', '').strip()
+    text = text_maker.handle(html_text).replace("\n", "").strip()
     return text
 
+
 def html_to_text(html_text: str) -> str:
-    soup = BeautifulSoup(html_text, 'html.parser')
+    soup = BeautifulSoup(html_text, "html.parser")
 
     preprocess_fn = compose_fns([remove_citation, remove_new_line])
-    paragraphs = list(map(lambda p: preprocess_fn(p.getText()), soup.find_all('p')))
+    paragraphs = list(map(lambda p: preprocess_fn(p.getText()), soup.find_all("p")))
     return "\n".join(paragraphs)
+
 
 def fetch_text_from_link(link: str, max_size: int = None) -> str:
     print(f"Fetching text from link: {link}")
     try:
-        if link.endswith('.pdf'): # pdf page
+        if link.endswith(".pdf"):  # pdf page
             r = requests.get(link, timeout=10)
             f = io.BytesIO(r.content)
 
@@ -93,22 +99,24 @@ def fetch_text_from_link(link: str, max_size: int = None) -> str:
             # Filter the empty strings
             pdf_texts = [text for text in pdf_texts if text]
             contents = "\n".join(pdf_texts)
-        else: # html page
+        else:  # html page
             html = requests.get(link, timeout=10).text
             contents = html_to_text(html)
-    
+
         if max_size is not None and len(contents) > max_size:
             contents = contents[:max_size]
     except Exception as _:
         contents = ""
     return contents
 
+
 def get_title(text: str) -> str:
     """
     Get the title of the retrived document. By definition, the first line in the
     document is the title (we embedded them like that).
     """
-    return text[:text.find("\n")]
+    return text[: text.find("\n")]
+
 
 def make_uniform(text: str) -> str:
     """
@@ -126,6 +134,7 @@ def make_uniform(text: str) -> str:
     # torch.cuda.empty_cache()
 
     # return " ".join(token_split_texts)
+
 
 class ChromaReader:
     def __init__(
@@ -148,7 +157,7 @@ class ChromaReader:
             collection_metadata: dict
                 A dict containing the collection metadata.
         """
-        
+
         self.device = "cpu"
         if torch.cuda.is_available():
             self.device = "cuda"
@@ -157,9 +166,11 @@ class ChromaReader:
         self.persist_directory = persist_directory
         self.collection_name = collection_name
         self.embedding_model = embedding_model
-        self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=self.embedding_model,
-            device=self.device,
+        self.embedding_function = (
+            embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name=self.embedding_model,
+                device=self.device,
+            )
         )
         self.collection = self.client.get_or_create_collection(
             name=self.collection_name,
@@ -173,7 +184,7 @@ class ChromaReader:
     def query(self, query_texts: str, n_results: int = 5):
         """
         Returns the closests vector to the question vector
-        
+
         Args:
             query_texts: str
                 The user query text.
@@ -184,7 +195,7 @@ class ChromaReader:
             The closest result to the given question.
         """
         return self.collection.query(query_texts=query_texts, n_results=n_results)
-  
+
 
 class ContextRetriever:
     """
@@ -192,19 +203,19 @@ class ContextRetriever:
     using a remote chromadb store (API exists), a local chromadb store, langchain
     based wikipedia retriever, and possibly others.
     """
-    
+
     def __init__(
-            self,
-            db_address: str = "9.59.197.15",
-            db_port: int = "5000",
-            db_remote: bool = False,
-            service_type: str = "chromadb",
-            db_path: str = "milvus/litagent.db",
-            top_k: int = 1,
-            cache_dir: Optional[str] = None,
-            debug: bool = False,
-            fetch_text: bool = False,
-            query_builder: QueryBuilder = None
+        self,
+        db_address: str = "9.59.197.15",
+        db_port: int = "5000",
+        db_remote: bool = False,
+        service_type: str = "chromadb",
+        # db_path: str = "milvus/litagent.db",
+        top_k: int = 1,
+        cache_dir: Optional[str] = None,
+        debug: bool = False,
+        fetch_text: bool = False,
+        query_builder: QueryBuilder = None,
     ):
         """
         Initialize the context retriever component.
@@ -229,13 +240,13 @@ class ContextRetriever:
             query_builder: QueryBuilder
                 An instance of QueryBuilder to generate search queries.
         """
-        
+
         self.top_k = top_k
         self.db_address = db_address
         self.db_port = db_port
         self.db_remote = db_remote
         self.service_type = service_type
-        self.db_path = db_path
+        # self.db_path = db_path
         self.chromadb_retriever = None
         self.milvusdb_retriever = None
         self.langchain_retriever = None
@@ -248,38 +259,39 @@ class ContextRetriever:
         assert self.service_type in ["chromadb", "milvusdb", "langchain", "google"]
 
         if self.service_type == "chromadb":
-            if not self.db_remote: # Create a local ChromaDB client
+            if not self.db_remote:  # Create a local ChromaDB client
                 self.chromadb_retriever = ChromaReader(
-                    collection_name=COLLECTION_NAME, 
-                    persist_directory=DB_PATH, 
-                    embedding_model=EMBEDDING_MODEL, 
-                    collection_metadata={"hnsw:space": "cosine"}
+                    collection_name=COLLECTION_NAME,
+                    persist_directory=DB_PATH,
+                    embedding_model=EMBEDDING_MODEL,
+                    collection_metadata={"hnsw:space": "cosine"},
                 )
         elif self.service_type == "milvusdb":
             from langchain.embeddings import HuggingFaceEmbeddings
             from langchain_milvus import Milvus
-            
+
             embedding_function = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
             self.milvusdb_retriever = Milvus(
-                    collection_name="litagent_demo",
-                    connection_args={"uri": self.db_path},
-                    embedding_function=embedding_function
-                )
-            
+                collection_name="litagent_demo",
+                connection_args={"uri": f"{DB_PATH}/litagent.db"},
+                embedding_function=embedding_function,
+            )
 
         elif self.service_type == "langchain":
             # Create the Wikipedia retriever. Note that page content is capped
             # at 4000 chars. The metadata has a `title` and a `summary` of the page.
-            self.langchain_retriever = WikipediaRetriever(lang="en", top_k_results=top_k)
+            self.langchain_retriever = WikipediaRetriever(
+                lang="en", top_k_results=top_k
+            )
         elif self.service_type == "google":
             self.google_retriever = SearchAPI(cache_dir=self.cache_dir)
 
     def set_query_builder(self, query_builder: QueryBuilder = None):
         self.query_builder = query_builder
-    
+
     def query(
-            self, 
-            text: str,
+        self,
+        text: str,
     ) -> List[str]:
         """
         Retrieve a number of contexts relevant to the input text.
@@ -296,21 +308,27 @@ class ContextRetriever:
 
         if not text:
             print("Text is None")
-            results = [dict(title="", text="", snippet="", link="") for _ in range(self.top_k)]
+            results = [
+                dict(title="", text="", snippet="", link="") for _ in range(self.top_k)
+            ]
             return results
 
         results = []
         if self.service_type == "chromadb":
             if self.db_remote:
                 if self.debug:
-                    print(f"Retrieving {self.top_k} relevant documents for query: {text}")
+                    print(
+                        f"Retrieving {self.top_k} relevant documents for query: {text}"
+                    )
                     print(f"Using chromadb")
 
                 # Send a POST request with JSON data using the session object
-                headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
-                url = "http://" + self.host_address + ":" + str(self.host_port) + "/query"
+                headers = {"Content-type": "application/json", "Accept": "text/plain"}
+                url = (
+                    "http://" + self.host_address + ":" + str(self.host_port) + "/query"
+                )
                 data = dict(
-                    query_text=text, 
+                    query_text=text,
                     n_results=self.top_k,
                 )
 
@@ -318,12 +336,14 @@ class ContextRetriever:
                 with requests.Session() as s:
                     response = s.post(url, json=data, headers=headers)
                     results = []
-                    if response.status_code == 200: # success
+                    if response.status_code == 200:  # success
                         passages = response.json()
                         results = [passages[str(i)] for i in range(len(passages))]
-            else: # local
+            else:  # local
                 if self.debug:
-                    print(f"Retrieving {self.top_k} relevant documents for query: {text}")
+                    print(
+                        f"Retrieving {self.top_k} relevant documents for query: {text}"
+                    )
                     print(f"Using chromadb")
 
                 # Retrieve the relevant chunks from the vector store
@@ -334,21 +354,31 @@ class ContextRetriever:
 
                 # Get the chunks (documents)
                 docs = relevant_chunks["documents"][0]
-                passages = [dict(title=get_title(doc), text=make_uniform(doc), snippet="", link="") for doc in docs]
+                passages = [
+                    dict(
+                        title=get_title(doc),
+                        text=make_uniform(doc),
+                        snippet="",
+                        link="",
+                    )
+                    for doc in docs
+                ]
 
                 n = min(self.top_k, len(passages))
                 for i in range(n):
-                    results.append(passages[i]) # a passage is a dict with title and text as keys
+                    results.append(
+                        passages[i]
+                    )  # a passage is a dict with title and text as keys
 
         elif self.service_type == "milvusdb":
             if self.debug:
                 print(f"Retrieving {self.top_k} relevant documents for query: {text}")
                 print(f"Using Milvus")
 
-            passages = []                
+            passages = []
             rel_docs = self.milvusdb_retriever.similarity_search(
                 query=text,
-                k=self.top_k
+                k=self.top_k,
             )
 
             for doc in rel_docs:
@@ -356,12 +386,16 @@ class ContextRetriever:
                 summary = ""
                 link = doc.metadata["url"]
                 doc_content = make_uniform(doc.page_content)
-                passages.append(dict(title=title, text=doc_content, snippet=summary, link=link))
+                passages.append(
+                    dict(title=title, text=doc_content, snippet=summary, link=link)
+                )
 
             # Extract the top_k passages
             n = min(self.top_k, len(passages))
             for i in range(n):
-                results.append(passages[i]) # a passage is a dict with title and text as keys
+                results.append(
+                    passages[i]
+                )  # a passage is a dict with title and text as keys
 
             print("RESULTS")
             print(results)
@@ -371,7 +405,7 @@ class ContextRetriever:
                 print(f"Retrieving {self.top_k} relevant documents for query: {text}")
                 print(f"Using langchain WikipediaRetriever")
 
-            passages = []                
+            passages = []
 
             # Get most relevant docs to the query
             rel_docs = self.langchain_retriever.invoke(text)
@@ -380,12 +414,16 @@ class ContextRetriever:
                 summary = doc.metadata["summary"]
                 link = doc.metadata["source"]
                 doc_content = make_uniform(doc.page_content)
-                passages.append(dict(title=title, text=doc_content, snippet=summary, link=link))
-            
+                passages.append(
+                    dict(title=title, text=doc_content, snippet=summary, link=link)
+                )
+
             # Extract the top_k passages
             n = min(self.top_k, len(passages))
             for i in range(n):
-                results.append(passages[i]) # a passage is a dict with title and text as keys
+                results.append(
+                    passages[i]
+                )  # a passage is a dict with title and text as keys
         elif self.service_type == "google":
             print(f"Retrieving {self.top_k} search results for: {text}")
 
@@ -395,7 +433,7 @@ class ContextRetriever:
                 query_text = result.get("query", text)
             else:
                 query_text = text
-            
+
             # Truncate the text if too long (for Google)
             query_text = query_text if len(query_text) < 2048 else query_text[:2048]
             print(f"Using query text: {query_text}")
@@ -407,8 +445,8 @@ class ContextRetriever:
             n = len(search_results[query_text])
 
             # If no hits then relax query by removing specific '"' (if any)
-            if n == 0: # no hits
-                query_text = query_text.replace('"', '') # relax query text
+            if n == 0:  # no hits
+                query_text = query_text.replace('"', "")  # relax query text
                 search_results = self.google_retriever.get_snippets([query_text])
 
             n = len(search_results[query_text])
@@ -416,29 +454,36 @@ class ContextRetriever:
             i = 0
             cont_content = 0
             index_available = []
-            
-            while ((i < n) and (cont_content < self.top_k)):
+
+            while (i < n) and (cont_content < self.top_k):
                 # we retrieve content from the link
                 if self.fetch_text:
                     # loop to check that the content retrieved is not empty: if it is empty, check the next link
-                    while (i < n):
+                    while i < n:
                         res = search_results[query_text][i]
-                        title = res['title']
-                        snippet = res['snippet']
-                        link = res['link']
+                        title = res["title"]
+                        snippet = res["snippet"]
+                        link = res["link"]
                         page_text = fetch_text_from_link(link, max_size=4000)
-                        doc_content = make_uniform(page_text) if len(page_text) > 0 else ""                        
-                        
+                        doc_content = (
+                            make_uniform(page_text) if len(page_text) > 0 else ""
+                        )
+
                         # no content from the link
-                        # or the content may be AI-generated or talking about a dataset used to test LLMs                      
+                        # or the content may be AI-generated or talking about a dataset used to test LLMs
                         # we store the index in case we run out of links and we have to come back to the previous ones
-                        if (doc_content == "") or ("chatgpt" in doc_content.lower()) or ("factscore" in doc_content.lower()) or ("dataset viewer" in doc_content.lower()):
+                        if (
+                            (doc_content == "")
+                            or ("chatgpt" in doc_content.lower())
+                            or ("factscore" in doc_content.lower())
+                            or ("dataset viewer" in doc_content.lower())
+                        ):
                             doc_content = ""
                             index_available.append(i)
                             i += 1
 
                         # found content from the link
-                        else: 
+                        else:
                             cont_content += 1
                             i += 1
                             break
@@ -446,47 +491,54 @@ class ContextRetriever:
                 # we do not retrieve content from the link
                 else:
                     res = search_results[query_text][i]
-                    title = res['title']
-                    snippet = res['snippet']
-                    link = res['link']
+                    title = res["title"]
+                    snippet = res["snippet"]
+                    link = res["link"]
                     doc_content = ""
                     i += 1
                     cont_content += 1
 
-                passages.append(dict(title=title, text=doc_content, snippet=snippet, link=link))
+                passages.append(
+                    dict(title=title, text=doc_content, snippet=snippet, link=link)
+                )
 
             # in case we run out of links and we have to come back to the previous ones, whose content is empty
-            if (cont_content < self.top_k):
+            if cont_content < self.top_k:
                 for i in index_available:
                     res = search_results[query_text][i]
-                    title = res['title']
-                    snippet = res['snippet']
-                    link = res['link']
+                    title = res["title"]
+                    snippet = res["snippet"]
+                    link = res["link"]
                     doc_content = ""
 
-                    passages.append(dict(title=title, text=doc_content, snippet=snippet, link=link))
+                    passages.append(
+                        dict(title=title, text=doc_content, snippet=snippet, link=link)
+                    )
 
                     cont_content += 1
                     if cont_content == self.top_k:
                         break
 
             for passage in passages:
-                results.append(passage) # a passage is a dict with title and text as keys
+                results.append(
+                    passage
+                )  # a passage is a dict with title and text as keys
 
         return results
-        
-    
+
+
 def test_html_to_text():
     import sys
 
-    #link = "https://m.imdb.com/title/tt0098844/fullcredits/cast/?ref_=tt_cl_sm"
-    #link = "https://www.washingtonpost.com/history/2024/06/26/treasure-hunter-was-ready-retire-then-he-found-hundreds-coins/"
+    # link = "https://m.imdb.com/title/tt0098844/fullcredits/cast/?ref_=tt_cl_sm"
+    # link = "https://www.washingtonpost.com/history/2024/06/26/treasure-hunter-was-ready-retire-then-he-found-hundreds-coins/"
     link = "https://olympics.com/en/athletes/roxana-diaz"
 
     html = requests.get(link, timeout=10).text
     contents = html_to_text(html)
     print(contents)
     sys.exit(0)
+
 
 def test_langchain():
     import sys
@@ -499,7 +551,7 @@ def test_langchain():
         "https://en.wikipedia.org/wiki/Lanny_Flaherty",
         "https://m.imdb.com/title/tt0098844/fullcredits/cast/?ref_=tt_cl_sm",
         "https://www.tvguide.com/celebrities/lanny-flaherty/credits/3030406905/",
-        "https://www.fandango.com/people/lanny-flaherty-220003"
+        "https://www.fandango.com/people/lanny-flaherty-220003",
     ]
 
     loader = AsyncHtmlLoader(urls)
@@ -524,7 +576,8 @@ def test_langchain():
     print("****" * 20)
     sys.exit(0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 
     query = "Lanny Flaherty has appeared in Law & Order."
     cache_dir = "my_database.db"
@@ -534,11 +587,11 @@ if __name__ == '__main__':
         top_k=5,
         service_type="google",
         cache_dir=cache_dir,
-        query_builder=query_builder
+        query_builder=query_builder,
     )
-    
+
     contexts = retriever.query(text=query)
-    
+
     print(f"Number of contexts: {len(contexts)}")
     for context in contexts:
         print(context)

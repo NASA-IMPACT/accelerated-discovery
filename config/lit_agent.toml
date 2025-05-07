@@ -27,4 +27,4 @@ context_retriever_service_type = "milvusdb"
 merlin_path = "/Users/jbarry/work_projects/nasa_contrib/merlin/build/merlin"
 db_path = "./milvus/litagent.db"
 collection_name = "litagent_demo"
-
+cache_dir = ""

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 from pydantic import Field
@@ -19,21 +19,30 @@ from ._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 
 class FactReasonerToolConfig(BaseToolConfig):
-    gen_model: str = os.getenv("GEN_MODEL_ID", "llama-3.3-70b-instruct")
-    context_retriever_service_type: str = os.getenv("CONTEXT_RETRIEVER_SERVICE_TYPE", "milvusdb")
-    cache_dir: str = os.getenv("MILVUS_CACHE_DIR", "my_database.db")
-    collection_name: str = os.getenv("MILVUS_COLLECTION", "litagent_demo")
-    k: int = 3
-    merlin_path: str = os.getenv("MERLIN_PATH", "/Users/jbarry/work_projects/nasa_contrib/merlin/build/merlin")
+    gen_model: str
+    context_retriever_service_type: str
+    cache_dir: str
+    collection_name: str
+    k: int
+    merlin_path: str
 
 
 class FactReasonerInputSchema(BaseIOSchema):
-    response: str = Field(..., description="The response to be passed to the FactReasoner module.")
+    """Schema for input of a tool for generating factuality scores."""
+
+    response: str = Field(
+        ..., description="The response to be passed to the FactReasoner module."
+    )
 
 
 class FactReasonerOutputSchema(BaseIOSchema):
-    results: List[str] = Field(..., description="FactReasoner result values.")
-    marginals: List[float] = Field(..., description="Marginal probabilities from the reasoning engine.")
+    """Schema for output of a tool for generating factuality scores."""
+
+    results: Dict[str, Any] = Field(..., description="FactReasoner result dictionary.")
+    marginals: List[Dict[str, Any]] = Field(
+        ...,
+        description="Marginal probabilities from the reasoning engine.",
+    )
 
 
 class FactReasonerTool(BaseTool):
@@ -41,7 +50,9 @@ class FactReasonerTool(BaseTool):
     output_schema = FactReasonerOutputSchema
 
     def __init__(
-        self, config: Optional[FactReasonerToolConfig] = None, debug: bool = False
+        self,
+        config: Optional[FactReasonerToolConfig] = None,
+        debug: bool = False,
     ):
         config = config or FactReasonerToolConfig()
         super().__init__(config, debug)
@@ -70,12 +81,13 @@ class FactReasonerTool(BaseTool):
     @classmethod
     def from_params(
         cls,
-        gen_model: str = "llama-3.3-70b-instruct",
-        collection_name: str = "docling_demo",
-        merlin_path: str = "/path/to/merlin",
-        cache_dir: str = "my_database.db",
-        k: int = 3,
-        debug: bool = False,
+        gen_model: str,
+        collection_name: str,
+        merlin_path: str,
+        cache_dir: str,
+        db_path: str,
+        k: int,
+        debug: bool,
     ) -> FactReasonerTool:
         config = FactReasonerToolConfig(
             gen_model=gen_model,

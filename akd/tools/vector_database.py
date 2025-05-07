@@ -16,7 +16,8 @@ from ._base import BaseIOSchema, BaseTool, BaseToolConfig
 
 class VectorDBToolConfig(BaseToolConfig):
     embedding_model: str = os.getenv(
-        "EMBED_MODEL_ID", "sentence-transformers/all-MiniLM-L6-v2"
+        "EMBED_MODEL_ID",
+        "sentence-transformers/all-MiniLM-L6-v2",
     )
     milvus_uri: str = os.getenv("MILVUS_URI", "./milvus/litagent.db")
     collection_name: str = os.getenv("MILVUS_COLLECTION", "litagent_demo")
@@ -28,7 +29,8 @@ class VectorDBIndexInputSchema(BaseIOSchema):
     """Schema for input of a tool for indexing documents into a vector database."""
 
     documents: List[Document] = Field(
-        ..., description="List of LangChain Document objects to index."
+        ...,
+        description="List of LangChain Document objects to index.",
     )
 
 
@@ -50,12 +52,14 @@ class VectorDBSearchTool(BaseTool):
     output_schema = VectorDBQueryOutputSchema
 
     def __init__(
-        self, config: Optional[VectorDBToolConfig] = None, debug: bool = False
+        self,
+        config: Optional[VectorDBToolConfig] = None,
+        debug: bool = False,
     ):
         config = config or VectorDBToolConfig()
         super().__init__(config, debug)
         self.embedding: Embeddings = HuggingFaceEmbeddings(
-            model_name=config.embedding_model
+            model_name=config.embedding_model,
         )
         self.vectorstore: Milvus = Milvus(
             embedding_function=self.embedding,
@@ -93,7 +97,8 @@ class VectorDBSearchTool(BaseTool):
                 collection_name=self.config.collection_name,
                 connection_args={"uri": self.config.milvus_uri},
                 index_params={"index_type": "FLAT"},
-                drop_old=self.config.drop_old, # set to True if seeking to drop the collection with that name if it exists
+                auto_id=True,  # automatically create IDS
+                drop_old=self.config.drop_old,  # set to True if seeking to drop the collection with that name if it exists
             )
         else:
             await asyncio.to_thread(self.vectorstore.add_documents, params.documents)

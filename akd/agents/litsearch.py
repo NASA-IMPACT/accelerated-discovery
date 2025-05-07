@@ -190,16 +190,16 @@ class LitAgent(BaseAgent):
         # Run FactReasoner on the results
         if self.fact_reasoner_tool is not None:
             sample_result = results[0]
-            foobar = self.fact_reasoner_tool.arun(FactReasonerInputSchema(
-                response=sample_result
-            ))
+            print("Outputs of FR")
+            fr_output = await self.fact_reasoner_tool.arun(
+                FactReasonerInputSchema(
+                    response=sample_result,
+                ),
+            )
 
-            print(foobar)
+            print(fr_output)
+            breakpoint()
 
-
-
-
-        # TODO: could add FR as verification to 'longform_answer'
         return results
 
     def clear_history(self) -> None:
