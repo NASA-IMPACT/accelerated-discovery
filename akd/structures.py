@@ -59,6 +59,10 @@ class ExtractionSchema(BaseModel):
         CONFIG.model_config_settings.default_no_answer,
         description="Direct, concise answer to the input query",
     )
+    longform_answer: str = Field(
+        CONFIG.model_config_settings.default_no_answer,
+        description="Long-form, summary style answer for helping answering the input query",
+    )
     related_knowledge: List[str] = Field(
         None,
         description="List of related information that can support "

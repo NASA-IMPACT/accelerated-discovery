@@ -93,7 +93,7 @@ class VectorDBSearchTool(BaseTool):
                 collection_name=self.config.collection_name,
                 connection_args={"uri": self.config.milvus_uri},
                 index_params={"index_type": "FLAT"},
-                drop_old=True,
+                drop_old=self.config.drop_old, # set to True if seeking to drop the collection with that name if it exists
             )
         else:
             await asyncio.to_thread(self.vectorstore.add_documents, params.documents)
