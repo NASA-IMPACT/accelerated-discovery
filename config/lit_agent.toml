@@ -19,3 +19,12 @@ milvus_uri = "./milvus/litagent.db"
 collection_name = "litagent_demo"
 drop_old = true
 k = 3
+
+[fact_reasoner]
+gen_model = "llama-3.3-70b-instruct"
+k = 3
+context_retriever_service_type = "milvusdb"
+merlin_path = "/Users/jbarry/work_projects/nasa_contrib/merlin/build/merlin"
+db_path = "./milvus/litagent.db"
+collection_name = "litagent_demo"
+

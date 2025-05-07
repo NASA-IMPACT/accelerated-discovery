@@ -15,11 +15,12 @@
 
 # Query builder for atoms to retrieve results from Google and/or Wikipedia
 
-from tqdm import tqdm
 from typing import Dict, List
 
-from fm_factual.utils import extract_last_square_brackets
-from fm_factual.llm_handler import LLMHandler
+from tqdm import tqdm
+
+from akd.tools.fact_reasoner.fm_factual.llm_handler import LLMHandler
+from akd.tools.fact_reasoner.fm_factual.utils import extract_last_square_brackets
 
 # Single turn version
 QUERY_BUILDER_PROMPT_V1 = """{_PROMPT_BEGIN_PLACEHOLDER}

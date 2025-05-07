@@ -16,26 +16,22 @@
 # Context summarization using LLMs
 
 import os
-import litellm
 import string
-
 from typing import List
+
+import litellm
+import numpy as np
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-import numpy as np
-
-from fm_factual.utils import (
-    RITS_MODELS, 
-    DEFAULT_PROMPT_BEGIN, 
-    DEFAULT_PROMPT_END, 
-    strip_string, 
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    RITS_MODELS,
+    dotdict,
     extract_first_code_block,
-    dotdict
+    strip_string,
 )
-
-
-
 
 # v1
 CONTEXT_SUMMARIZATION_PROMPT1 = """{_PROMPT_BEGIN_PLACEHOLDER}

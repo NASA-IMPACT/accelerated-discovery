@@ -15,6 +15,7 @@ from akd.agents.intents import IntentAgent
 from akd.agents.litsearch import LitAgent, LitAgentInputSchema
 from akd.configs.lit_config import get_lit_agent_settings
 from akd.configs.project import CONFIG
+from akd.tools.fact_reasoner_tool import FactReasonerTool
 from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
 from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
@@ -28,9 +29,12 @@ async def main(args):
     search_config = lit_agent_config.search
     scraper_config = lit_agent_config.scraper
     vector_search_config = lit_agent_config.vectordb_search
+    fact_reasoner_config = lit_agent_config.fact_reasoner
+
 
     search_tool = SearxNGSearchTool(config=search_config)
     vector_search_tool = VectorDBSearchTool(config=vector_search_config)
+    fact_reasoner_tool = FactReasonerTool(config=fact_reasoner_config)
 
     scraper = CompositeWebScraper(
         SimpleWebScraper(scraper_config),
@@ -60,6 +64,7 @@ async def main(args):
         extraction_agent=extraction_agent,
         search_tool=search_tool,
         vector_search_tool=vector_search_tool,
+        fact_reasoner_tool=fact_reasoner_tool,
         web_scraper=scraper,
         article_resolver=article_resolver,
     )

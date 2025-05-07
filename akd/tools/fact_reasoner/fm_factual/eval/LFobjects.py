@@ -1,18 +1,25 @@
 # Read the Human annotations from the VeriScore paper.
 
-import os
 import json
-import litellm
-
+import os
 from typing import List
-from tqdm import tqdm
-from dotenv import load_dotenv
 
-from fm_factual.fact_utils import Atom, Context, build_atoms
-from fm_factual.atom_extractor import AtomExtractor
-from fm_factual.atom_reviser import AtomReviser
-from fm_factual.utils import RITS_MODELS, DEFAULT_PROMPT_BEGIN, DEFAULT_PROMPT_END
-from fm_factual.context_retriever import fetch_text_from_link, make_uniform
+import litellm
+from dotenv import load_dotenv
+from tqdm import tqdm
+
+from akd.tools.fact_reasoner.fm_factual.atom_extractor import AtomExtractor
+from akd.tools.fact_reasoner.fm_factual.atom_reviser import AtomReviser
+from akd.tools.fact_reasoner.fm_factual.context_retriever import (
+    fetch_text_from_link,
+    make_uniform,
+)
+from akd.tools.fact_reasoner.fm_factual.fact_utils import Atom, Context, build_atoms
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    RITS_MODELS,
+)
 
 GEN_PROMPT_TEMPLATE = """{_PROMPT_BEGIN_PLACEHOLDER}
 

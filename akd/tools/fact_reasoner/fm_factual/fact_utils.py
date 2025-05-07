@@ -13,19 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Atom and Context classes
-from typing import Tuple, Union, List, Optional
-from operator import itemgetter
 from itertools import combinations
-from nltk.tokenize import sent_tokenize
+from operator import itemgetter
+
+# Atom and Context classes
+from typing import List, Optional, Tuple, Union
+
 import nltk
+from nltk.tokenize import sent_tokenize
 
 # Local
-from fm_factual.atom_extractor import AtomExtractor
-from fm_factual.context_retriever import ContextRetriever
-from fm_factual.nli_extractor import NLIExtractor, NLIExtractorOld
-from fm_factual.utils import punctuation_only_inside_quotes
-
+from akd.tools.fact_reasoner.fm_factual.atom_extractor import AtomExtractor
+from akd.tools.fact_reasoner.fm_factual.context_retriever import ContextRetriever
+from akd.tools.fact_reasoner.fm_factual.nli_extractor import (
+    NLIExtractor,
+    NLIExtractorOld,
+)
+from akd.tools.fact_reasoner.fm_factual.utils import punctuation_only_inside_quotes
 
 PRIOR_PROB_ATOM = 0.5
 PRIOR_PROB_CONTEXT = 0.9

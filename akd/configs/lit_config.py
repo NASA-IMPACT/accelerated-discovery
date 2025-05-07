@@ -5,6 +5,7 @@ import tomllib
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
 
+from akd.tools.fact_reasoner_tool import FactReasonerToolConfig
 from akd.tools.scrapers.web_scrapers import WebpageScraperToolConfig
 from akd.tools.search import SearxNGSearchToolConfig
 from akd.tools.vector_database import VectorDBToolConfig
@@ -14,6 +15,7 @@ class LitAgentSettings(BaseSettings):
     search: SearxNGSearchToolConfig
     scraper: WebpageScraperToolConfig
     vectordb_search: VectorDBToolConfig
+    fact_reasoner: FactReasonerToolConfig
 
     @classmethod
     def from_toml(cls, toml_file_path: str) -> LitAgentSettings:

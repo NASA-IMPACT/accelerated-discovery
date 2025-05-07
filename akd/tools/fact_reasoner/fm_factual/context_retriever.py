@@ -30,8 +30,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import WikipediaRetriever
 from pypdf import PdfReader
 
-from fm_factual.query_builder import QueryBuilder
-from fm_factual.search_api import SearchAPI
+from akd.tools.fact_reasoner.fm_factual.query_builder import QueryBuilder
+from akd.tools.fact_reasoner.fm_factual.search_api import SearchAPI
 
 COLLECTION_NAME = "wikipedia_en"
 DB_PATH = "/home/radu/wiki_data"

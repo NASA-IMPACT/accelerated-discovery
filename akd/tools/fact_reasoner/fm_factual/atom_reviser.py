@@ -16,19 +16,19 @@
 # Atomic fact decontextualization using LLMs
 
 import string
-
 from typing import List
+
 from tqdm import tqdm
 
-from fm_factual.utils import (
-    RITS_MODELS, 
-    DEFAULT_PROMPT_BEGIN, 
-    DEFAULT_PROMPT_END, 
-    strip_string, 
-    extract_first_code_block, 
-    extract_last_wrapped_response
+from akd.tools.fact_reasoner.fm_factual.llm_handler import LLMHandler
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    RITS_MODELS,
+    extract_first_code_block,
+    extract_last_wrapped_response,
+    strip_string,
 )
-from fm_factual.llm_handler import LLMHandler
 
 _SYMBOL = 'Foo'
 _NOT_SYMBOL = 'Not Foo'

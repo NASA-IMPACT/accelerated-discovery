@@ -14,21 +14,30 @@
 # limitations under the License.
 
 
-import os
 import json
-import torch
-import pandas as pd
-import litellm
-
+import os
 from typing import List
-from tqdm import tqdm
-from dotenv import load_dotenv
 
-from fm_factual.fact_utils import Atom, Context, build_atoms, build_contexts
-from fm_factual.atom_extractor import AtomExtractor
-from fm_factual.atom_reviser import AtomReviser
-from fm_factual.context_retriever import ContextRetriever
-from fm_factual.utils import RITS_MODELS, DEFAULT_PROMPT_BEGIN, DEFAULT_PROMPT_END
+import litellm
+import pandas as pd
+import torch
+from dotenv import load_dotenv
+from tqdm import tqdm
+
+from akd.tools.fact_reasoner.fm_factual.atom_extractor import AtomExtractor
+from akd.tools.fact_reasoner.fm_factual.atom_reviser import AtomReviser
+from akd.tools.fact_reasoner.fm_factual.context_retriever import ContextRetriever
+from akd.tools.fact_reasoner.fm_factual.fact_utils import (
+    Atom,
+    Context,
+    build_atoms,
+    build_contexts,
+)
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    RITS_MODELS,
+)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

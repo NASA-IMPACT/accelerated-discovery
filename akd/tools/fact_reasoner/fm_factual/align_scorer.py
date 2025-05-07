@@ -15,10 +15,11 @@
 
 
 from typing import List
+
 import torch
 
-from fm_factual.utils import get_freer_gpu
-from fm_factual.nli.alignscore import AlignScore
+from akd.tools.fact_reasoner.fm_factual.nli.alignscore import AlignScore
+from akd.tools.fact_reasoner.fm_factual.utils import get_freer_gpu
 
 
 class AlignScorer:
