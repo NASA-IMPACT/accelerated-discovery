@@ -4,11 +4,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.pregel import RetryPolicy
 from pydantic import BaseModel, Field
 
-from ..tools.storm.state import ResearchState
-from ..tools.storm.nodes import *
-from ..tools.storm.config import initialise_storm_config
-from ..configs.storm_config import StormSettings, STORM_SETTINGS
+from .state import ResearchState
+from .nodes import *
+from .config import initialise_storm_config
+from akd.configs.storm_config import StormSettings, STORM_SETTINGS
 
+from akd.agents._base import BaseAgent
 
 class StormInputSchema(BaseModel):
     """Input schema for storm agent"""
@@ -30,7 +31,7 @@ class StormOutputSchema(BaseModel):
     )
 
 
-class StormAgent():
+class StormAgent(BaseAgent):
 
     input_schema = StormInputSchema
     output_schema = StormOutputSchema
@@ -39,7 +40,7 @@ class StormAgent():
         self,
         config: Optional[StormSettings] = None,
     ) -> None:
-        
+        super().__init__(debug=False)
         # Set this configuration 
         config = config or STORM_SETTINGS
         initialise_storm_config(config)
@@ -74,4 +75,4 @@ class StormAgent():
 
         article_state = await self.storm.ainvoke({"topic": topic}, config,)
         article = article_state['article']
-        return article
+        return StormOutputSchema(article=article)

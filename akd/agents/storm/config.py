@@ -3,7 +3,7 @@ from langchain_community.retrievers import WikipediaRetriever
 from langchain_google_community import GoogleSearchAPIWrapper
 from langchain_community.utilities.duckduckgo_search import DuckDuckGoSearchAPIWrapper
 
-from ...configs.storm_config import STORM_SETTINGS, StormSettings
+from akd.configs.storm_config import STORM_SETTINGS, StormSettings
 
 class StormConfig:
 
