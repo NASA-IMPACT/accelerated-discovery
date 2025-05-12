@@ -15,9 +15,13 @@ from akd.tools.scrapers.web_scrapers import (
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
 
 from ._base import BaseAgent
-from .extraction import EstimationExtractionAgent, ExtractionSchemaMapper
+from .extraction import (
+    EstimationExtractionAgent,
+    ExtractionInputSchema,
+    ExtractionSchemaMapper,
+)
 from .intents import IntentAgent
-from .query import QueryAgent
+from .query import QueryAgent, QueryAgentInputSchema
 
 
 class LitAgentInputSchema(BaseIOSchema):
@@ -26,6 +30,10 @@ class LitAgentInputSchema(BaseIOSchema):
     """
 
     query: str = Field(..., description="Query to search for relevant web pages")
+    max_search_results: int = Field(
+        5,
+        description="Maximum number of search results to retrieve",
+    )
 
 
 class LitAgentOutputSchema(BaseIOSchema):
@@ -91,6 +99,7 @@ class LitAgent(BaseAgent):
             SearxNGSearchToolInputSchema(
                 queries=query_agent_output.queries,
                 category="science",
+                max_results=params.max_search_results,
             ),
         )
 
@@ -124,14 +133,19 @@ class LitAgent(BaseAgent):
         results = []
         for content in contents:
             self.extraction_agent.reset_memory()
-            answer = await self.extraction_agent.arun(
-                ExtractionInputSchema(query=query, content=content.result),
-            )
-            logger.debug(f"Source={content.source} | Answer={answer}")
-            if answer:
-                content.result = answer
-                results.append(content)
-        return results
+            try:
+                answer = await self.extraction_agent.arun(
+                    ExtractionInputSchema(query=query, content=content.result),
+                )
+                logger.debug(f"Source={content.source} | Answer={answer}")
+                if answer:
+                    content.result = answer
+                    results.append(content)
+            except KeyboardInterrupt:
+                break
+            except:
+                continue
+        return LitAgentOutputSchema(results=results)
 
     def clear_history(self) -> None:
         logger.warning("Clearing history for all the agents")
