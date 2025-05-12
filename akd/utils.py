@@ -29,8 +29,8 @@ class AsyncRunMixin:
     async def arun(self, *args, **kwargs) -> Any:
         raise NotImplementedError("Subclasses should implement this method")
 
-    async def ainvoke(self, *args, **kwargs) -> Any:
-        return await self.arun(*args, **kwargs)
+    # async def ainvoke(self, *args, **kwargs) -> Any:
+    #     return await self.arun(*args, **kwargs)
 
     def run(self, *args, **kwargs) -> Any:
         """

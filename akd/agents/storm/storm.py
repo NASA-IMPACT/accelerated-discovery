@@ -1,7 +1,7 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel import RetryPolicy
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from akd.agents._base import BaseAgent
 from akd.configs.storm_config import STORM_SETTINGS, StormSettings
@@ -14,14 +14,20 @@ from .state import ResearchState
 class StormInputSchema(BaseModel):
     """Input schema for storm agent"""
 
-    config: dict = Field(
-        ...,
+    config: Optional[dict] = Field(
+        None,
         description="The configuration dict to track the state of the storm agent.",
     )
-    topic: str = Field(
+
+    query: str = Field(
         ...,
         description="The topic to create the article for.",
     )
+
+    @computed_field
+    @property
+    def topic(self) -> str:
+        return self.query
 
 
 class StormOutputSchema(BaseModel):
@@ -51,7 +57,7 @@ class StormAgent(BaseAgent):
         config = config or STORM_SETTINGS
         initialise_storm_config(config)
 
-        builder_of_storm = StateGraph(ResearchState)
+        self.storm_builder = StateGraph(ResearchState)
 
         nodes = [
             ("init_research", initialize_research),
@@ -65,20 +71,27 @@ class StormAgent(BaseAgent):
 
         for i in range(len(nodes)):
             name, node = nodes[i]
-            builder_of_storm.add_node(name, node, retry=RetryPolicy(max_attempts=3))
+            self.storm_builder.add_node(name, node, retry=RetryPolicy(max_attempts=3))
             if i > 0:
-                builder_of_storm.add_edge(nodes[i - 1][0], name)
+                self.storm_builder.add_edge(nodes[i - 1][0], name)
 
-        builder_of_storm.add_edge(START, nodes[0][0])
-        builder_of_storm.add_edge(nodes[-1][0], END)
-        self.storm = builder_of_storm.compile(checkpointer=MemorySaver())
+        self.storm_builder.add_edge(START, nodes[0][0])
+        self.storm_builder.add_edge(nodes[-1][0], END)
+        # self.storm = builder_of_storm.compile(checkpointer=MemorySaver())
+        # self.storm = builder_of_storm.compile()
 
     async def arun(self, params: StormInputSchema) -> StormOutputSchema:
 
-        config = params.config
+        config = params.config or {}
         topic = params.topic
 
-        article_state = await self.storm.ainvoke({"topic": topic}, config)
+        storm = (
+            self.storm_builder.compile(checkpointer=MemorySaver())
+            if config
+            else self.storm_builder.compile()
+        )
+
+        article_state = await storm.ainvoke({"topic": topic}, config)
         article = article_state["article"]
         perspectives = article_state["editors"]
         return StormOutputSchema(article=article, perspectives=perspectives)
