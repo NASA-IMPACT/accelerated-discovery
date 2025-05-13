@@ -1,16 +1,10 @@
-from typing import List, Optional
+from typing import List
 
 from atomic_agents.agents.base_agent import BaseIOSchema
-from langchain_core.documents import Document
 from loguru import logger
 from pydantic import Field
 
 from akd.structures import ExtractionDTO
-from akd.tools.fact_reasoner_tool import (
-    FactReasonerInputSchema,
-    FactReasonerOutputSchema,
-    FactReasonerTool,
-)
 from akd.tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
 from akd.tools.scrapers.web_scrapers import (
     WebpageMetadata,
@@ -19,12 +13,6 @@ from akd.tools.scrapers.web_scrapers import (
     WebScraperToolBase,
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
-from akd.tools.vector_database import (
-    VectorDBIndexInputSchema,
-    VectorDBQueryInputSchema,
-    VectorDBQueryOutputSchema,
-    VectorDBSearchTool,
-)
 
 from ._base import BaseAgent
 from .extraction import (
@@ -72,10 +60,8 @@ class LitAgent(BaseAgent):
         search_tool: SearxNGSearchTool,
         web_scraper: WebScraperToolBase,
         article_resolver: BaseArticleResolver,
-        n_queries: int = 1,
+        n_queries: int = 3,
         debug: bool = False,
-        vector_search_tool: Optional[VectorDBSearchTool] = None,
-        fact_reasoner_tool: Optional[FactReasonerTool] = None,
     ) -> None:
         self.intent_agent = intent_agent
         self.schema_mapper = schema_mapper
@@ -85,8 +71,6 @@ class LitAgent(BaseAgent):
         self.search_tool = search_tool
         self.web_scraper = web_scraper
         self.article_resolver = article_resolver
-        self.vector_search_tool = vector_search_tool
-        self.fact_reasoner_tool = fact_reasoner_tool
 
         self.n_queries = n_queries
         super().__init__(debug=debug)
@@ -145,40 +129,6 @@ class LitAgent(BaseAgent):
                 f"{url} | {content[:100]}.. | words={len(content.split())}",
             )
             contents.append(ExtractionDTO(source=str(url), result=content))
-
-        if self.vector_search_tool is not None:
-            # Store Search results in Vector DB
-            langchain_docs = []
-            assert len(search_results.results) == len(
-                contents,
-            ), "Search results and contents are out of sync!"
-
-            for search_result, content in zip(search_results.results, contents):
-                metadata = search_result.model_dump()
-                # Remove large or redundant fields
-                metadata.pop("content", None)
-                metadata.pop("extra", None)
-
-                sanitized_metadata = {}
-                for key, value in metadata.items():
-                    try:
-                        if value is None:
-                            continue
-                        value_as_str = str(value)
-                        sanitized_metadata[key] = value_as_str
-                    except Exception:
-                        continue
-
-                langchain_docs.append(
-                    Document(page_content=content.result, metadata=sanitized_metadata),
-                )
-
-            logger.info(f"Indexing {len(langchain_docs)} documents into Vector DB...")
-            await self.vector_search_tool.arun_index(
-                VectorDBIndexInputSchema(
-                    documents=langchain_docs,
-                ),
-            )
 
         results = []
         for content in contents:
