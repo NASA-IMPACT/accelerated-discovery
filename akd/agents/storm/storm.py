@@ -1,7 +1,7 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel import RetryPolicy
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from akd.agents._base import BaseAgent
 from akd.configs.storm_config import STORM_SETTINGS, StormSettings
@@ -14,14 +14,20 @@ from .state import ResearchState
 class StormInputSchema(BaseModel):
     """Input schema for storm agent"""
 
-    config: dict = Field(
-        ...,
+    config: Optional[dict] = Field(
+        None,
         description="The configuration dict to track the state of the storm agent.",
     )
-    topic: str = Field(
+
+    query: str = Field(
         ...,
         description="The topic to create the article for.",
     )
+
+    @computed_field
+    @property
+    def topic(self) -> str:
+        return self.query
 
 
 class StormOutputSchema(BaseModel):
@@ -35,6 +41,10 @@ class StormOutputSchema(BaseModel):
         ...,
         description="List of editors working on the article",
     )
+    interview_results: list = Field(
+        ...,
+        description="Interview results between editors"
+    )
 
 
 class StormAgent(BaseAgent):
@@ -44,6 +54,7 @@ class StormAgent(BaseAgent):
 
     def __init__(
         self,
+        set_hitl: Optional[bool] = False,
         config: Optional[StormSettings] = None,
     ) -> None:
         super().__init__(debug=False)
@@ -51,34 +62,38 @@ class StormAgent(BaseAgent):
         config = config or STORM_SETTINGS
         initialise_storm_config(config)
 
-        builder_of_storm = StateGraph(ResearchState)
+        storm_builder = StateGraph(ResearchState)
 
         nodes = [
             ("init_research", initialize_research),
-            # ("hitl_editors", hitl_editors),
+            ("hitl_editors", hitl_editors) if set_hitl else None,
             ("conduct_interviews", conduct_interviews),
             ("refine_outline", refine_outline),
             ("index_references", index_references),
             ("write_sections", write_sections),
             ("write_article", write_article),
         ]
+        nodes = [node for node in nodes if node is not None]
 
         for i in range(len(nodes)):
             name, node = nodes[i]
-            builder_of_storm.add_node(name, node, retry=RetryPolicy(max_attempts=3))
+            storm_builder.add_node(name, node, retry=RetryPolicy(max_attempts=3))
             if i > 0:
-                builder_of_storm.add_edge(nodes[i - 1][0], name)
+                storm_builder.add_edge(nodes[i - 1][0], name)
 
-        builder_of_storm.add_edge(START, nodes[0][0])
-        builder_of_storm.add_edge(nodes[-1][0], END)
-        self.storm = builder_of_storm.compile(checkpointer=MemorySaver())
+
+        storm_builder.add_edge(START, nodes[0][0])
+        storm_builder.add_edge(nodes[-1][0], END)
+        self.storm = storm_builder.compile(checkpointer=MemorySaver())
+        
 
     async def arun(self, params: StormInputSchema) -> StormOutputSchema:
 
-        config = params.config
+        config = params.config or {}
         topic = params.topic
 
         article_state = await self.storm.ainvoke({"topic": topic}, config)
         article = article_state["article"]
         perspectives = article_state["editors"]
-        return StormOutputSchema(article=article, perspectives=perspectives)
+        interview_results = article_state['interview_results']
+        return StormOutputSchema(article=article, perspectives=perspectives, interview_results=interview_results)

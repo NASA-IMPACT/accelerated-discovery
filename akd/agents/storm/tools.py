@@ -1,5 +1,6 @@
 from typing import Optional
 import json
+import time
 
 from langchain_core.runnables import RunnableLambda, RunnableConfig
 from langchain_core.runnables import chain as as_runnable
@@ -21,6 +22,7 @@ fast_llm = storm_config.fast_llm
 long_context_llm = storm_config.long_context_llm
 wikipedia_retriever = storm_config.wikipedia_retriever
 EMBEDDING_MODEL_ID = storm_config.EMBEDDING_MODEL_ID
+search_engine_wrapper = storm_config.search_engine_wrapper
 
 
 # ======================
@@ -105,7 +107,9 @@ async def generate_question(state: InterviewState):
 @tool
 def search_engine(query: str, top_n: int = 5):
     """Search and return the top 5 results."""
-    results = search_engine.results(query, top_n)
+    results = search_engine_wrapper.results(query, top_n)
+    # TODO: Replace, this is temporary to avoid ddg rate limits
+    time.sleep(10)
     return [{"content": r["snippet"], "url": r["link"]} for r in results]
 
 
