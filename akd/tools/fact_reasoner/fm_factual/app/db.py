@@ -15,21 +15,24 @@
 
 # Embeds Wikipedia into a vector store (e.g., Chromadb)
 
-import re
 import argparse
+import re
+import uuid
+from typing import Any, Iterable, List, Optional
+
 import chromadb
+import nltk
 import numpy as np
 import torch
-import nltk
-import uuid
-
-from langchain.text_splitter import RecursiveCharacterTextSplitter, SentenceTransformersTokenTextSplitter
-
-from typing import Any, Iterable, List, Optional
 from chromadb.utils import embedding_functions
 from datasets import load_dataset
+from langchain.text_splitter import (
+    RecursiveCharacterTextSplitter,
+    SentenceTransformersTokenTextSplitter,
+)
 from tqdm import tqdm
-from fm_factual.utils import set_seed
+
+from akd.tools.fact_reasoner.fm_factual.utils import set_seed
 
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 

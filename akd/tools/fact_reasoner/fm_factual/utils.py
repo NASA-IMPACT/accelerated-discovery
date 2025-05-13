@@ -82,6 +82,15 @@ RITS_MODELS = {
         "prompt_end": "<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"
         # "prompt_template": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
     },
+    "granite-3.2-8b-instruct": {
+        "model_id": "openai/ibm-granite/granite-3.2-8b-instruct",
+        "api_base": "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/granite-3-2-8b-instruct/v1",
+        "max_new_tokens": 128000,
+        "prompt_template": "<|start_of_role|>user<|end_of_role|>{}<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>",
+        "prompt_begin": "<|start_of_role|>user<|end_of_role|>",
+        "prompt_end": "<|end_of_text|>\n<|start_of_role|>assistant<|end_of_role|>"
+        # "prompt_template": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    },
     "llama-3.2-90b-instruct": {
         "model_id": "openai/meta-llama/Llama-3.2-90B-Vision-Instruct",
         "api_base": "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-3-2-90b-instruct/v1",
@@ -94,6 +103,14 @@ RITS_MODELS = {
         "model_id": "openai/meta-llama/Llama-3.2-11B-Vision-Instruct",
         "api_base": "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-3-2-11b-instruct/v1",
         "max_new_tokens": 8196,
+        "prompt_template": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
+        "prompt_begin": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>",
+        "prompt_end": "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    },
+    "mixtral-8x22b-instruct-priority": {
+        "model_id": "openai/mistralai/mixtral-8x22B-instruct-v0.1",
+        "api_base": "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/mixtral-8x22b-test/v1",
+        "max_new_tokens": 16384,
         "prompt_template": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
         "prompt_begin": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>",
         "prompt_end": "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
@@ -117,6 +134,22 @@ RITS_MODELS = {
     "llama-3.1-405b-instruct": {
         "model_id": "openai/meta-llama/llama-3-1-405b-instruct-fp8",
         "api_base": "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/llama-3-1-405b-instruct-fp8/v1",
+        "max_new_tokens": 8196,
+        "prompt_template": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
+        "prompt_begin": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>",
+        "prompt_end": "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    },
+    "phi-4": {
+        "model_id": "openai/microsoft/phi-4",
+        "api_base": "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/microsoft-phi-4/v1",
+        "max_new_tokens": 8196,
+        "prompt_template": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
+        "prompt_begin": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>",
+        "prompt_end": "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    },
+    "wizardlm-2-8x22b": {
+        "model_id": "openai/alpindale/WizardLM-2-8x22B",
+        "api_base": "https://inference-3scale-apicast-production.apps.rits.fmaas.res.ibm.com/alpindale-wizardlm-2-8x22b/v1",
         "max_new_tokens": 8196,
         "prompt_template": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
         "prompt_begin": "<|begin_of_text|><|start_header_id|>user<|end_header_id|>",
@@ -195,6 +228,20 @@ def join_segments(*args: Union[str, List[str]], separator: str = '\n\n\n') -> st
 def strip_string(s: str) -> str:
     """Strips a string of newlines and spaces."""
     return s.strip(' \n')
+
+def punctuation_only_inside_quotes(text):
+    # find all quoted sections (single or double quotes)
+    quoted_spans = [match.span() for match in re.finditer(r'"[^"]*"|\'[^\']*\'', text)]
+
+    def is_inside_quotes(index):
+        return any(start < index < end for start, end in quoted_spans)
+
+    # check each comma and semicolon
+    for i, char in enumerate(text):
+        if char in [",", ";"]:
+            if not is_inside_quotes(i):
+                return False  # found punctuation outside quotes
+    return True
 
 
 def extract_first_square_brackets(input_string: str) -> str:

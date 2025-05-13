@@ -3,7 +3,11 @@
 import json
 from typing import List
 
-from fm_factual.context_retriever import fetch_text_from_link, make_uniform
+from akd.tools.fact_reasoner.fm_factual.context_retriever import (
+    fetch_text_from_link,
+    make_uniform,
+)
+
 
 def clean_claims(claims: List[dict], fetch_text: bool = False):
     """Clean the claims

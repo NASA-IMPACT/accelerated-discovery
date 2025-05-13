@@ -16,21 +16,21 @@
 # NLI scorer with Prompting (llama-3-70b-instruct)
 
 import operator
-import numpy as np
-
-from typing import List
-from tqdm import tqdm
 from difflib import SequenceMatcher
 from operator import itemgetter
-from fm_factual.align_scorer import AlignScorer
-from fm_factual.llm_handler import LLMHandler
+from typing import List
 
-from fm_factual.utils import (
-    RITS_MODELS, 
-    DEFAULT_PROMPT_BEGIN, 
-    DEFAULT_PROMPT_END, 
-    dotdict, 
-    extract_last_square_brackets
+import numpy as np
+from tqdm import tqdm
+
+from akd.tools.fact_reasoner.fm_factual.align_scorer import AlignScorer
+from akd.tools.fact_reasoner.fm_factual.llm_handler import LLMHandler
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    RITS_MODELS,
+    dotdict,
+    extract_last_square_brackets,
 )
 
 NLI_LABELS = ['entailment', 'contradiction', 'neutral']

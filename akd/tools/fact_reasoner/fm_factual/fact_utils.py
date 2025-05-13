@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023-present the International Business Machines.
+# Copyright 2023-present the International Business Machines.g
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,27 +13,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Atom and Context classes
-from typing import Tuple, Union, List
-from operator import itemgetter
 from itertools import combinations
+from operator import itemgetter
+
+# Atom and Context classes
+from typing import List, Optional, Tuple, Union
+
+import nltk
+from nltk.tokenize import sent_tokenize
 
 # Local
-from fm_factual.atom_extractor import AtomExtractor
-from fm_factual.context_retriever import ContextRetriever
-from fm_factual.nli_extractor import NLIExtractor, NLIExtractorOld
+from akd.tools.fact_reasoner.fm_factual.atom_extractor import AtomExtractor
+from akd.tools.fact_reasoner.fm_factual.context_retriever import ContextRetriever
+from akd.tools.fact_reasoner.fm_factual.nli_extractor import (
+    NLIExtractor,
+    NLIExtractorOld,
+)
+from akd.tools.fact_reasoner.fm_factual.utils import punctuation_only_inside_quotes
 
 PRIOR_PROB_ATOM = 0.5
 PRIOR_PROB_CONTEXT = 0.9
+
 
 class Atom:
     """
     Represents an atomic unit of the model's response.
     """
-    
+
     def __init__(
-            self, 
-            id: str, 
+            self,
+            id: str,
             text: str,
             label: str = None
     ):
@@ -47,35 +56,38 @@ class Atom:
             label: str
                 The gold label associated with the atom (S or NS).
         """
-        
+
         self.id = id
         self.text = text
-        self.original = text # keeps around the original atom
+        self.original = text  # keeps around the original atom
         self.label = label
-        self.contexts = []
+        self.contexts = {}
         self.search_results = []
-        self.probability = PRIOR_PROB_ATOM # prior probability of the atom being true
+        self.probability = PRIOR_PROB_ATOM  # prior probability of the atom being true
 
     def __str__(self) -> str:
-        return f"Atom {self.id}: {self.text}" 
+        return f"Atom {self.id}: {self.text}"
 
     def get_text(self, text_only: bool = True):
         return self.text
     
+    def get_synthetic_summary(self, text_only: bool = True):
+        return self.text
+
     def set_text(self, new_text: str):
         self.text = new_text
 
     def get_original(self):
         return self.original
-    
+
     def set_original(self, new_original: str):
         self.original = new_original
-    
+
     def get_label(self):
         return self.label
-       
+
     def add_context(
-            self, 
+            self,
             context
     ):
         """
@@ -85,7 +97,7 @@ class Atom:
             context: Context
                 The context relevat to the atom.
         """
-        self.contexts.append(context)
+        self.contexts[context.id] = context
 
     def add_contexts(
             self,
@@ -97,7 +109,8 @@ class Atom:
             context: list
                 The contexts relevant to the atom.
         """
-        self.contexts.extend(contexts)
+        for context in contexts:
+            self.contexts[context.id] = context
 
     def get_contexts(self):
         """
@@ -105,16 +118,18 @@ class Atom:
         """
         return self.contexts
 
+
 class Context:
     """
     Represents a context retrieved from an external source of knowledge.
     """
-    
+
     def __init__(
-            self, 
+            self,
             id: str,
-            atom: Atom, 
-            text: str,
+            atom: Optional[Atom],
+            text: str = "",
+            synthetic_summary: Optional[str] = None,
             title: str = "",
             link: str = "",
             snippet: str = ""
@@ -128,6 +143,8 @@ class Context:
                 The reference atom (from the answer)
             text: str
                 The text of the context (one or more paragraphs)
+            sumary: str
+                The summary of the context (one or more paragraphs)
             title: str
                 The title of the context (e.g., title of the wikipedia page)
             link: str
@@ -140,42 +157,77 @@ class Context:
         self.id = id
         self.atom = atom
         self.text = text
+        self.synthetic_summary = synthetic_summary
         self.title = title
         self.link = link
         self.snippet = snippet
-        self.probability = PRIOR_PROB_CONTEXT # prior probability of the context being true
-    
+        self.probability = PRIOR_PROB_CONTEXT  # prior probability of the context being true
+
     def __str__(self) -> str:
         return f"Context {self.id} [{self.title}]: {self.text}"
-    
+
     def get_id(self):
         return self.id
+
+    def get_synthetic_summary(self, text_only: bool = True):
+        if self.synthetic_summary is not None:
+            return self.synthetic_summary
+        else:
+            return self.get_text(text_only)
+
+    # def get_text2(self):
+    #    return f"{self.title}\n{self.snippet}\n{self.link}\n{self.text}"
+
+    def get_snippet_and_text(self):
+        if self.snippet != "" and self.text != "":
+            return "Snippet/Summary of Text:\n\n" + self.snippet + "\n\n" + "Text:\n\n" + self.text 
+        elif self.snippet == "" and self.text != "":
+            return self.text
+        elif self.snippet != "" and self.text == "":
+            return self.snippet
+        else:
+            return ""
+
     def get_text(self, text_only: bool = True):
         if text_only:
             return self.text
         else:
-            return f"Title: {self.title}\nSummary: {self.snippet}\nLink: {self.link}\nText: {self.text}"
+            return self.get_snippet_and_text()
+            # return f"Title: {self.title}\nSummary: {self.snippet}\nLink: {self.link}\nText: {self.text}"
         
     def get_title(self):
         return self.title
+
     def get_link(self):
         return self.link
+
     def get_snippet(self):
         return self.snippet
+
     def set_atom(self, atom):
         self.atom = atom
+
     def set_link(self, link: str):
         self.link = link
+
     def set_snippet(self, snippet: str):
         self.snippet = snippet
+
+    def set_synthetic_summary(self, synthetic_summary: str):
+        self.synthetic_summary = synthetic_summary
+
     def get_probability(self):
         return self.probability
+
+    def set_probability(self, probability):
+        self.probability = probability
+        
 
 class Relation:
     """
     Represents the NLI relationship between a source text and a target text.
     """
-    
+
     def __init__(
             self,
             source: Union[Atom, Context],
@@ -205,12 +257,12 @@ class Relation:
         contradicts A (same with neutral, equivalence). However, if A entails B
         then B doesn't necessarily entails A.
         """
-        
+
         assert (type in ["entailment", "contradiction", "equivalence", "neutral"]), \
             f"Unknown relation type: {type}."
         assert (link in ["context_atom", "context_context", "atom_atom"]), \
             f"Unknown link type: {link}"
-        
+
         self.source = source
         self.target = target
         self.type = type
@@ -219,12 +271,13 @@ class Relation:
 
     def __str__(self) -> str:
         return f"[{self.source.id} -> {self.target.id}] : {self.type} : {self.probability}"
-    
+
     def get_type(self) -> str:
         return self.type
 
     def get_probability(self) -> float:
         return self.probability
+
 
 def predict_nli_relationships(
         object_pairs: List[Tuple[Union[Atom, Context], Union[Atom, Context]]],
@@ -232,7 +285,6 @@ def predict_nli_relationships(
         links_type: str = "context_atom",
         text_only: bool = True,
     ) -> list[Relation]:
-
     """
     Predict the NLI relationship between two objects using an model based NLI extractor.
 
@@ -250,8 +302,12 @@ def predict_nli_relationships(
     assert (nli_extractor is not None), "NLI extractor cannot be None."
     assert isinstance(nli_extractor, NLIExtractor), "NLI extractor must be NLIExtractor."
 
-    premises = [pair[0] if isinstance(pair[0],str) else pair[0].get_text(text_only) for pair in object_pairs]
-    hypotheses = [pair[1] if isinstance(pair[1],str) else pair[1].get_text(text_only) for pair in object_pairs]
+    premises = [pair[0] if isinstance(pair[0], str) else pair[0].get_synthetic_summary(text_only) for pair in object_pairs]
+    hypotheses = [pair[1] if isinstance(pair[1], str) else pair[1].get_synthetic_summary(text_only) for pair in object_pairs]
+
+    # premises = [pair[0] if isinstance(pair[0],str) else pair[0].get_text(text_only) for pair in object_pairs]
+    # hypotheses = [pair[1] if isinstance(pair[1],str) else pair[1].get_text(text_only) for pair in object_pairs]
+
 
     results = nli_extractor.runall(premises, hypotheses)
 
@@ -318,7 +374,7 @@ def get_nli_relations_prompting(
             else:
                 if atom!=previous_atom:
                     candidates_per_atom.append([])
-            
+
             #if label == 'neutral':continue
             link = links_type if links_type is not None else "unknown"
             rel = Relation(
@@ -339,6 +395,7 @@ def get_nli_relations_prompting(
 
     return relations
 
+
 def build_atoms(response: str, atom_extractor: AtomExtractor) -> dict:
     """
     Decompose the given response into atomic units (i.e., atoms).
@@ -354,27 +411,29 @@ def build_atoms(response: str, atom_extractor: AtomExtractor) -> dict:
 
     assert (response is not None and len(response) > 0), \
         f"Make sure that the response is not empty."
-    
+
     print(f"[Building atoms ...]")
     result = atom_extractor.run(response)
     candidates = [
         Atom(
-            id="a" + str(i), 
+            id="a" + str(i),
             text=elem["atom"]
         ) for i, elem in enumerate(result["all_facts"])
     ]
-    
+
     atoms = {}
     for atom in candidates:
         print(atom)
         atoms[atom.id] = atom
-    
+
     print(f"[Atoms built: {len(atoms)}]")
 
     return atoms
 
+
 def build_contexts(
-        atoms: dict = {}, 
+        atoms: dict = {},
+        question: str = None,
         retriever: ContextRetriever = None,
 ):
     """
@@ -391,47 +450,164 @@ def build_contexts(
         "Please ensure a non-empty list of atoms."
     assert (retriever is not None), \
         "Please ensure an existing context retriever instance."
-    
+
     # Building the contexts
     print(f"[Building contexts...]")
     contexts = {}
 
     for aid, atom in atoms.items():
+        
         retrieved_contexts = retriever.query(
             text=atom.text,
         )
-
+        
         if len(retrieved_contexts) > 0:
             contexts_per_atom = [
                 Context(
                     id="c_" + aid + "_" + str(j),
-                    atom=atom, 
+                    atom=atom,
                     text=context["text"],
                     title=context["title"],
                     link=context["link"],
                     snippet=context["snippet"]
-                ) for j, context in enumerate(retrieved_contexts)
+                    # An empty summary means that the context is not relevant, therefore we do not add it to the list of contexts for the pipeline
+                ) for j, context in enumerate(retrieved_contexts) 
             ]
-            
+
             for ctxt in contexts_per_atom:
                 contexts[ctxt.id] = ctxt
             atoms[aid].add_contexts(contexts_per_atom)
 
+    # we retrieve the contexts for the question
+    retrieved_contexts = retriever.query(
+        text=question,
+    )
+    
+    if len(retrieved_contexts) > 0:
+        contexts_per_atom = [
+            Context(
+                id="c_q_" + str(j),
+                atom=None,
+                text=context["text"],
+                title=context["title"],
+                link=context["link"],
+                snippet=context["snippet"]
+                # An empty summary means that the context is not relevant, therefore we do not add it to the list of contexts for the pipeline
+            ) for j, context in enumerate(retrieved_contexts) 
+        ]
+
+        for ctxt in contexts_per_atom:
+            contexts[ctxt.id] = ctxt
+    
     print(f"[Contexts built: {len(contexts)}]")
     return contexts
 
-def remove_duplicated_contexts(contexts: dict) -> dict:
+def remove_duplicated_atoms(atoms: dict) -> dict:
+    """
+    Remove the duplicated atoms.
+    """
+    duplicates = {}
+    filtered_atoms = {}
+    for aid, atom in atoms.items():
+        text = atom.get_text(text_only=False)
+        if text not in duplicates:
+            duplicates[text] = aid
+            filtered_atoms[aid] = atom
+    
+    return filtered_atoms
+
+
+def remove_duplicated_contexts(contexts: dict, atoms: dict) -> dict:
     """
     Remove the duplicated contexts.
     """
     duplicates = {}
     filtered_contexts = {}
     for cid, context in contexts.items():
-        text = context.get_text()
+        text = context.get_text(text_only=False)
         if text not in duplicates:
             duplicates[text] = cid
             filtered_contexts[cid] = context
-    return filtered_contexts
+        elif context.atom:
+            del atoms[context.atom.id].contexts[cid]
+    
+    return filtered_contexts, atoms
+
+
+def is_relevant_context(context: str) -> dict:
+    """
+    Check if context is relevant.
+    """
+
+    keywords = [
+        "not provide information about the atom",
+        "not provide any information about the atom",
+        "not provide specific information about the atom",
+        "not contain information about the atom",
+        
+        "not provide any information related to the atom",
+        "not provide specific information related to the atom",
+        "not provide information related to the atom",
+        
+        "not contain information about the atom",   
+        "not contain any information about the atom",
+        "not contain specific information about the atom",
+        
+        "not provide information on the atom",
+        "not provide any information on the atom",
+        "not provide specific information on the atom",
+        
+        "insufficient to make a conclusion about the atom",
+        "not provide enough information to make a conclusion about the atom",
+        "not contain enough information to make a conclusion about the atom",
+
+        "not provide any relevant information about the atom",
+        "information about the atom cannot be found",
+        "information is not about the atom",
+        "information is not related to the atom",
+
+        "is known that",
+        "is generally known that",
+        "is believed that",
+        
+        "don't have permission to view this page",
+        "due to a 403 forbidden error",
+        "shows a 403 forbidden error",
+        "is a 403 forbidden error",
+        "not have permission to view",
+        "not have permission to access",
+        "access to the page is forbidden",
+        "context is not available",
+        "context is not accessible",
+
+        "not possible to summarize the context",
+        "verify the given atom",
+
+        "atom statement",
+        "atom states",
+    ]
+
+    context_lower = context.lower()
+    if not all(keyword.lower() not in context_lower for keyword in keywords):
+        return False
+            
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        print("'punkt' not found. Downloading...")
+        nltk.download('punkt')
+
+    sentences = sent_tokenize(context)
+    num_sentences = len(sentences)
+    # we filter out summaries of only one sentence of the form: "the context does not..."
+    if (num_sentences == 1 
+        and punctuation_only_inside_quotes(sentences[0]) 
+        and ("the context does not" in sentences[0].lower())
+       ):
+            return False
+    
+    return True
+
 
 def build_relations(
         atoms: dict = {},
@@ -478,11 +654,11 @@ def build_relations(
     context_context_pairs2 = []
 
     relations = []
-    
+
     # Create atom-context relations (i.e., Context -> Atom)
-    if rel_atom_context == True:
+    if rel_atom_context:
         print(f"[Building atom-context relations...]")
-        if not contexts_per_atom_only: # use all contexts for each atom
+        if not contexts_per_atom_only:  # use all contexts for each atom
             # Create the (context, atom) pairs
             print(f"Using all contexts retrieved per atom.")
             for _, atom in atoms.items():
@@ -517,9 +693,9 @@ def build_relations(
             if rel.get_type() != "neutral":
                 print(rel)
                 relations.append(rel)
-                
+
     # Create context-context relations
-    if rel_context_context == True:
+    if rel_context_context:
         print(f"[Building context-context relations...]")
         clist = [ci for ci in sorted(contexts.keys())]
         all_pairs = list(combinations(clist, 2))
@@ -565,8 +741,10 @@ def build_relations(
 
         relations_tmp = [pair[0] if pair[0].get_probability()>pair[1].get_probability() else pair[1] for pair in zip(relations1,relations2)]
         assert len(relations_tmp) == len(relations1) # safety checks
+
         for rel_ind in range(len(relations_tmp)):
-            if not (relations1[rel_ind].get_type() == "entailment" and relations2[rel_ind].get_type() == "entailment"): continue
+            if not (relations1[rel_ind].get_type() == "entailment" and relations2[
+                rel_ind].get_type() == "entailment"): continue
             relations_tmp[rel_ind].type = "equivalence"
         for rel in relations_tmp:
             if rel.get_type() != "neutral":

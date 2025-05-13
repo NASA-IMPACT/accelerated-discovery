@@ -131,4 +131,9 @@ dmypy.json
 # VS Code
 .vscode/
 .DS_Store
+
+# PyCharm
+.idea/
+
+
 log_*.txt

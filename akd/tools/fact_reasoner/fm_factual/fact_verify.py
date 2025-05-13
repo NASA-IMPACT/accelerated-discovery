@@ -15,26 +15,37 @@
 
 # Our implementation of the VeryScore paper using LLAMA3 models
 
-import os
-import json
-import sys
 import argparse
-import torch
+import json
+import os
+import sys
+from typing import List
+
 import litellm
 import pandas as pd
-
-from typing import List
-from tqdm import tqdm
+import torch
 from dotenv import load_dotenv
+from tqdm import tqdm
+
+# Local
+from akd.tools.fact_reasoner.fm_factual.atom_extractor import AtomExtractor
+from akd.tools.fact_reasoner.fm_factual.atom_reviser import AtomReviser
+from akd.tools.fact_reasoner.fm_factual.context_retriever import ContextRetriever
+from akd.tools.fact_reasoner.fm_factual.fact_utils import (
+    Atom,
+    Context,
+    build_atoms,
+    build_contexts,
+)
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    RITS_MODELS,
+    extract_last_wrapped_response,
+)
 
 # litellm.set_verbose = True
 
-# Local
-from fm_factual.atom_extractor import AtomExtractor
-from fm_factual.atom_reviser import AtomReviser
-from fm_factual.context_retriever import ContextRetriever
-from fm_factual.fact_utils import Atom, Context, build_atoms, build_contexts
-from fm_factual.utils import RITS_MODELS, DEFAULT_PROMPT_BEGIN, DEFAULT_PROMPT_END, extract_last_wrapped_response
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -538,6 +549,8 @@ class FactVerify:
                     model=self.model_id,
                     api_base=self.api_base,
                     messages=messages,
+                    temperature=0,
+                    seed=42,
                     api_key=self.RITS_API_KEY,
                     extra_headers={
                         "RITS_API_KEY": self.RITS_API_KEY

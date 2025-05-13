@@ -16,12 +16,16 @@
 # Split the input text into atomic facts/claims (based on FactBench/VERIFY).
 
 import sys
-
 from typing import Any, List
+
 from tqdm import tqdm
 
-from fm_factual.utils import RITS_MODELS, DEFAULT_PROMPT_BEGIN, DEFAULT_PROMPT_END
-from fm_factual.llm_handler import LLMHandler
+from akd.tools.fact_reasoner.fm_factual.llm_handler import LLMHandler
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    RITS_MODELS,
+)
 
 # v1
 ATOM_EXTRACTION_PROMPT1 = """{_PROMPT_BEGIN_PLACEHOLDER}

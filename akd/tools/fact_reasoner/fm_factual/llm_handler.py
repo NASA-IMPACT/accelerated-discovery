@@ -1,9 +1,16 @@
-from vllm import LLM, SamplingParams
 import os
+
 import litellm
 import torch
 from dotenv import load_dotenv
-from fm_factual.utils import RITS_MODELS, DEFAULT_PROMPT_BEGIN, DEFAULT_PROMPT_END, HF_MODELS
+from vllm import LLM, SamplingParams
+
+from akd.tools.fact_reasoner.fm_factual.utils import (
+    DEFAULT_PROMPT_BEGIN,
+    DEFAULT_PROMPT_END,
+    HF_MODELS,
+    RITS_MODELS,
+)
 
 GPU = torch.cuda.is_available()
 DEVICE = GPU*"cuda" + (not GPU)*"cpu"
@@ -80,7 +87,14 @@ class LLMHandler:
         :param prompts: A single string or a list of strings.
         :param kwargs: Additional parameters.
         """
-        params = {**self.default_kwargs, **kwargs}  # Merge defaults with provided params
+        params = {
+            "temperature": 0,
+            "seed": 42,
+            # the two above are overwritten if passed
+            # as kwargs
+            **self.default_kwargs,
+            **kwargs
+        }  # Merge defaults with provided params
 
         if self.RITS:
             # Ensure we always send a list to batch_completion

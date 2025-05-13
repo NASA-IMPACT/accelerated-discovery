@@ -15,12 +15,14 @@
 
 # Query builder for atoms to retrieve results from Google and/or Wikipedia
 
-from tqdm import tqdm
 from typing import Dict, List
 
-from fm_factual.utils import extract_last_square_brackets
-from fm_factual.llm_handler import LLMHandler
+from tqdm import tqdm
 
+from akd.tools.fact_reasoner.fm_factual.llm_handler import LLMHandler
+from akd.tools.fact_reasoner.fm_factual.utils import extract_last_square_brackets
+
+# Single turn version
 QUERY_BUILDER_PROMPT_V1 = """{_PROMPT_BEGIN_PLACEHOLDER}
 Instructions:
 Your task is to generate a Google Search query about a given STATEMENT. \
@@ -51,7 +53,7 @@ STATEMENT:
 {_STATEMENT_PLACEHOLDER}
 """
 
-
+# Multi-turn version (experimental)
 QUERY_BUILDER_PROMPT_V2 = """{_PROMPT_BEGIN_PLACEHOLDER}
 Instructions:
 You are engaged in a multi-round process to refine Google Search queries about a given STATEMENT. \
@@ -189,14 +191,16 @@ class QueryBuilder:
 
 if __name__ == "__main__":
 
-    model = "llama-3.1-70b-instruct"
+    model = "mixtral-8x22b-instruct"
     prompt_version = "v1"
     use_rits = True
 
     qbuilder = QueryBuilder(model=model, prompt_version=prompt_version, use_rits=use_rits)
 
     # Process a single atom (no knowledge)
-    atom = "The Apollo 14 mission to the Moon took place on January 31, 1971."
+    # atom = "The Apollo 14 mission to the Moon took place on January 31, 1971."
+    atom = "You'd have to yell if your friend is outside the same location"
+
     result = qbuilder.run(atom)
     query = result["query"]
     response = result["response"]
@@ -205,20 +209,30 @@ if __name__ == "__main__":
     print(f"Query: {query}")
 
     # Process multiple atoms (no knowledge)
-    atoms = [
-        "Lanny Flaherty was born in Pensacola, Florida", 
-        "Vitamin C is taken from oranges."
-    ]
-    knwoledges = ["", ""]
-    results = qbuilder.runall(atoms, knwoledges)
-    for i, result in enumerate(results):
-        query = result["query"]
-        atom = atoms[i]
-        response = result["response"]
-        print(f"Atom: {atom}")
-        print(f"Response: {response}")
-        print(f"Query: {query}")
-        print("-------"*10)
+    # print(f"Generating queries for multiple atoms...")
+    # print("-------"*10)
+    # atoms = [
+    #     "Lanny Flaherty was born in Pensacola, Florida", 
+    #     "Vitamin C is taken from oranges.",
+    #     "Ko Itakura is a professional football player.",
+    #     "Rin Iwanaga is a fictional character.",
+    #     "Joeri Adams has competed for Telenet-Fidea.",
+    #     "Regina Mart\u00ednez P\u00e9rez was born on October 28, 1963.",
+    #     "Don Featherstone was born in Worcester.",
+    #     "Julia Faye began her career as a child actress.",
+    #     "Craig Morton attended the University of California.",
+    #     "Alexandre Guilmant began studying music with his father.",
+    # ]
+    # knwoledges = [""] * 10
+    # results = qbuilder.runall(atoms, knwoledges)
+    # for i, result in enumerate(results):
+    #     query = result["query"]
+    #     atom = atoms[i]
+    #     response = result["response"]
+    #     print(f"Atom: {atom}")
+    #     print(f"Response: {response}")
+    #     print(f"Query: {query}")
+    #     print("-------"*10)
 
 
     print("Done.")
