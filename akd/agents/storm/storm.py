@@ -88,13 +88,7 @@ class StormAgent(BaseAgent):
         config = params.config or {}
         topic = params.topic
 
-        storm = (
-            self.storm_builder.compile(checkpointer=MemorySaver())
-            if config
-            else self.storm_builder.compile()
-        )
-
-        article_state = await storm.ainvoke({"topic": topic}, config)
+        article_state = await self.storm.ainvoke({"topic": topic}, config)
         article = article_state["article"]
         perspectives = article_state["editors"]
         return StormOutputSchema(article=article, perspectives=perspectives)
