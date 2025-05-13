@@ -41,6 +41,10 @@ class StormOutputSchema(BaseModel):
         ...,
         description="List of editors working on the article",
     )
+    interview_results: list = Field(
+        ...,
+        description="Interview results between editors"
+    )
 
 
 class StormAgent(BaseAgent):
@@ -91,4 +95,5 @@ class StormAgent(BaseAgent):
         article_state = await self.storm.ainvoke({"topic": topic}, config)
         article = article_state["article"]
         perspectives = article_state["editors"]
-        return StormOutputSchema(article=article, perspectives=perspectives)
+        interview_results = article_state['interview_results']
+        return StormOutputSchema(article=article, perspectives=perspectives, interview_results=interview_results)
