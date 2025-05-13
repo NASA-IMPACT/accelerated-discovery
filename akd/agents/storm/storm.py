@@ -50,6 +50,7 @@ class StormAgent(BaseAgent):
 
     def __init__(
         self,
+        set_hitl: Optional[bool] = False,
         config: Optional[StormSettings] = None,
     ) -> None:
         super().__init__(debug=False)
@@ -57,28 +58,30 @@ class StormAgent(BaseAgent):
         config = config or STORM_SETTINGS
         initialise_storm_config(config)
 
-        self.storm_builder = StateGraph(ResearchState)
+        storm_builder = StateGraph(ResearchState)
 
         nodes = [
             ("init_research", initialize_research),
-            # ("hitl_editors", hitl_editors),
+            ("hitl_editors", hitl_editors) if set_hitl else None,
             ("conduct_interviews", conduct_interviews),
             ("refine_outline", refine_outline),
             ("index_references", index_references),
             ("write_sections", write_sections),
             ("write_article", write_article),
         ]
+        nodes = [node for node in nodes if node is not None]
 
         for i in range(len(nodes)):
             name, node = nodes[i]
-            self.storm_builder.add_node(name, node, retry=RetryPolicy(max_attempts=3))
+            storm_builder.add_node(name, node, retry=RetryPolicy(max_attempts=3))
             if i > 0:
-                self.storm_builder.add_edge(nodes[i - 1][0], name)
+                storm_builder.add_edge(nodes[i - 1][0], name)
 
-        self.storm_builder.add_edge(START, nodes[0][0])
-        self.storm_builder.add_edge(nodes[-1][0], END)
-        # self.storm = builder_of_storm.compile(checkpointer=MemorySaver())
-        # self.storm = builder_of_storm.compile()
+
+        storm_builder.add_edge(START, nodes[0][0])
+        storm_builder.add_edge(nodes[-1][0], END)
+        self.storm = storm_builder.compile(checkpointer=MemorySaver())
+        
 
     async def arun(self, params: StormInputSchema) -> StormOutputSchema:
 

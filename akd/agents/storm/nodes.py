@@ -1,6 +1,7 @@
 from langgraph.graph import END, StateGraph, START
 from langgraph.pregel import RetryPolicy
 from langchain_core.documents import Document
+from langgraph.types import interrupt
 
 from .state import ResearchState, InterviewState
 from .tools import *
@@ -19,6 +20,18 @@ async def initialize_research(state: ResearchState):
         **state,
         "outline": outline,
         "editors": editors,
+    }
+
+
+def hitl_editors(state: ResearchState):
+    result = interrupt(
+        {
+            "task": "Review the generated perspectives and make any necessary edits.",
+            "editors": state["editors"]
+        }
+    )
+    return {
+        "editors": result["modified_editors"] 
     }
 
 
