@@ -34,7 +34,7 @@ from akd.tools.fact_reasoner.fm_factual.query_builder import QueryBuilder
 from akd.tools.fact_reasoner.fm_factual.search_api import SearchAPI
 
 COLLECTION_NAME = "wikipedia_en"
-DB_PATH = "/Users/jbarry/work_projects/nasa_contrib/accelerated-discovery/milvus"
+DB_PATH = "tmp/milvus"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 NEWLINES_RE = re.compile(r"\n{2,}")  # two or more "\n" characters
 
@@ -281,7 +281,8 @@ class ContextRetriever:
             # Create the Wikipedia retriever. Note that page content is capped
             # at 4000 chars. The metadata has a `title` and a `summary` of the page.
             self.langchain_retriever = WikipediaRetriever(
-                lang="en", top_k_results=top_k
+                lang="en",
+                top_k_results=top_k,
             )
         elif self.service_type == "google":
             self.google_retriever = SearchAPI(cache_dir=self.cache_dir)
@@ -318,7 +319,7 @@ class ContextRetriever:
             if self.db_remote:
                 if self.debug:
                     print(
-                        f"Retrieving {self.top_k} relevant documents for query: {text}"
+                        f"Retrieving {self.top_k} relevant documents for query: {text}",
                     )
                     print(f"Using chromadb")
 
@@ -342,7 +343,7 @@ class ContextRetriever:
             else:  # local
                 if self.debug:
                     print(
-                        f"Retrieving {self.top_k} relevant documents for query: {text}"
+                        f"Retrieving {self.top_k} relevant documents for query: {text}",
                     )
                     print(f"Using chromadb")
 
@@ -367,7 +368,7 @@ class ContextRetriever:
                 n = min(self.top_k, len(passages))
                 for i in range(n):
                     results.append(
-                        passages[i]
+                        passages[i],
                     )  # a passage is a dict with title and text as keys
 
         elif self.service_type == "milvusdb":
@@ -387,14 +388,14 @@ class ContextRetriever:
                 link = doc.metadata["url"]
                 doc_content = make_uniform(doc.page_content)
                 passages.append(
-                    dict(title=title, text=doc_content, snippet=summary, link=link)
+                    dict(title=title, text=doc_content, snippet=summary, link=link),
                 )
 
             # Extract the top_k passages
             n = min(self.top_k, len(passages))
             for i in range(n):
                 results.append(
-                    passages[i]
+                    passages[i],
                 )  # a passage is a dict with title and text as keys
 
             print("RESULTS")
@@ -415,14 +416,14 @@ class ContextRetriever:
                 link = doc.metadata["source"]
                 doc_content = make_uniform(doc.page_content)
                 passages.append(
-                    dict(title=title, text=doc_content, snippet=summary, link=link)
+                    dict(title=title, text=doc_content, snippet=summary, link=link),
                 )
 
             # Extract the top_k passages
             n = min(self.top_k, len(passages))
             for i in range(n):
                 results.append(
-                    passages[i]
+                    passages[i],
                 )  # a passage is a dict with title and text as keys
         elif self.service_type == "google":
             print(f"Retrieving {self.top_k} search results for: {text}")
@@ -499,7 +500,7 @@ class ContextRetriever:
                     cont_content += 1
 
                 passages.append(
-                    dict(title=title, text=doc_content, snippet=snippet, link=link)
+                    dict(title=title, text=doc_content, snippet=snippet, link=link),
                 )
 
             # in case we run out of links and we have to come back to the previous ones, whose content is empty
@@ -512,7 +513,7 @@ class ContextRetriever:
                     doc_content = ""
 
                     passages.append(
-                        dict(title=title, text=doc_content, snippet=snippet, link=link)
+                        dict(title=title, text=doc_content, snippet=snippet, link=link),
                     )
 
                     cont_content += 1
@@ -521,7 +522,7 @@ class ContextRetriever:
 
             for passage in passages:
                 results.append(
-                    passage
+                    passage,
                 )  # a passage is a dict with title and text as keys
 
         return results

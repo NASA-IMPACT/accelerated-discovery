@@ -25,13 +25,15 @@ class FactReasonerToolConfig(BaseToolConfig):
     collection_name: str
     k: int
     merlin_path: str
+    use_rits: bool = True
 
 
 class FactReasonerInputSchema(BaseIOSchema):
     """Schema for input of a tool for generating factuality scores."""
 
     response: str = Field(
-        ..., description="The response to be passed to the FactReasoner module."
+        ...,
+        description="The response to be passed to the FactReasoner module.",
     )
 
 
@@ -64,10 +66,18 @@ class FactReasonerTool(BaseTool):
             cache_dir=config.cache_dir,
             debug=debug,
         )
-        self.query_builder = QueryBuilder(model=config.gen_model, prompt_version="v1")
-        self.atom_extractor = AtomExtractor(config.gen_model)
-        self.atom_reviser = AtomReviser(config.gen_model)
-        self.nli_extractor = NLIExtractorOld(config.gen_model, prompt_version="v2")
+        self.query_builder = QueryBuilder(
+            model=config.gen_model,
+            prompt_version="v1",
+            use_rits=config.use_rits,
+        )
+        self.atom_extractor = AtomExtractor(config.gen_model, RITS=config.use_rits)
+        self.atom_reviser = AtomReviser(config.gen_model, RITS=config.use_rits)
+        self.nli_extractor = NLIExtractorOld(
+            config.gen_model,
+            prompt_version="v2",
+            RITS=config.use_rits,
+        )
 
         self.pipeline = FactReasoner(
             context_retriever=self.context_retriever,

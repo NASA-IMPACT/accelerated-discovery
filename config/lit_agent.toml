@@ -12,3 +12,19 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 timeout = 20
 max_content_length = 1000000
 debug = true
+
+[vectordb_search]
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+milvus_uri = "tmp/milvus/litagent.db"
+collection_name = "litagent_demo"
+drop_old = true
+k = 25
+
+[fact_reasoner]
+gen_model = "mixtral-8x7b-instruct"
+k = 5
+context_retriever_service_type = "google"
+merlin_path = "/Users/npantha/bin/merlin"
+db_path = "tmp/milvus/litagent.db"
+collection_name = "litagent_demo"
+cache_dir = "tmp/cache.db"
