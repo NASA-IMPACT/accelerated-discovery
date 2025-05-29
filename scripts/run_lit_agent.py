@@ -12,7 +12,7 @@ from akd.agents.extraction import (
 )
 from akd.agents.factory import create_query_agent
 from akd.agents.intents import IntentAgent
-from akd.agents.litsearch import LitAgent, LitAgentInputSchema
+from akd.agents.litsearch import LitAgent, LitAgentInputSchema, LitAgentOutputSchema
 from akd.configs.lit_config import get_lit_agent_settings
 from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
@@ -63,10 +63,13 @@ async def main(args):
 
     result = await lit_agent.arun(LitAgentInputSchema(query=args.query))
 
-    print(result[0].model_dump())
+    # print(result.results[0].model_dump())
 
     with open("test_lit_agent.json", "w") as f:
-        f.write(json.dumps([r.model_dump(mode="json") for r in result], indent=2))
+        f.write(
+            json.dumps([r.model_dump(mode="json") for r in result.results], indent=2)
+        )
+    return result
 
 
 if __name__ == "__main__":
