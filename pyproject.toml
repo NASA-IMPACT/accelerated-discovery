@@ -25,3 +25,13 @@ dependencies = [
     "requests>=2.32.3",
     "wikipedia>=1.4.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["akd", "scripts"]
+
+[dependency-groups]
+test = [
+    "deepeval>=2.9.7",
+    "pytest>=8.3.5",
+]
