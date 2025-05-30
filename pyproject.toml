@@ -32,6 +32,6 @@ include = ["akd", "scripts"]
 
 [dependency-groups]
 test = [
-    "deepeval>=2.9.7",
+    "deepeval>=3.0.2",
     "pytest>=8.3.5",
 ]
