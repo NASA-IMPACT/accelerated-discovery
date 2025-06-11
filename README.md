@@ -199,3 +199,59 @@ It is recommended that while you develop your CDK stack/CloudFormation template 
 --show-summary pass,fail \
 
 --type CFNtemplate
+
+
+## Local Setup
+### Setup virtual environment
+Setup virtual environment using pthon venv or conda and activate it
+
+```bash
+python3.12 -m venv .venv && .venv/bin/activate
+```
+
+OR
+
+```bash
+conda create --name akd_env python=3.12 && conda activate akd_env
+```
+
+
+### Install dependencies
+Install dependencies using poetry buy running
+
+`poetry install`
+
+### Setup env file
+Copy a make a copy of `.env.example` file as `.env` file and provide required fields
+
+### Setup local searxng instance (Optional)
+
+```bash
+mkdir mkdir -p temp/searxng
+cd temp
+export PORT=8080
+docker run --rm \
+             -d -p ${PORT}:8080 \
+             -v "${PWD}/searxng:/etc/searxng:z" \
+             -e "BASE_URL=http://localhost:$PORT/" \
+             -e "INSTANCE_NAME=my-instance" \
+             --name "searxng" \
+             searxng/searxng
+```
+When you run the container for the first time it will create configs for searxng in the provided directory.
+The default searxng config has disabled the json access for api endpoints. For enabling it 
+stop the container `docker stop searxng`
+
+open `./temp/searxng/settings.xml` and add `- json` under search> formats section (after `- html`).
+
+Run the docker run command again.
+
+### Install/configure playwright
+execute `playwright install`
+
+### Test installation
+To verify the setup run the lit agent script by passing a query.
+
+```python
+python scripts/run_lit_agent.py  --query "What are the environmental considerations for oil palm cultivation?"
+```

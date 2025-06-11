@@ -61,13 +61,14 @@ async def main(args):
 
     lit_agent.clear_history()
 
-    result = await lit_agent.arun(LitAgentInputSchema(query=args.query))
+    result = await lit_agent.arun(
+        LitAgentInputSchema(query=args.query, max_search_results=5)
+    )
+    print(result.model_dump())
 
-    print(result[0].model_dump())
-
-    with open("test_lit_agent.json", "w") as f:
-        f.write(json.dumps([r.model_dump(mode="json") for r in result], indent=2))
-
+    with open("./temp/test_lit_agent.json", "w") as f:
+        f.write(json.dumps(result.model_dump(mode="json")["results"], indent=2))
+        
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run LitAgent pipeline")
