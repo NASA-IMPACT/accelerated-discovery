@@ -4,6 +4,7 @@ import json
 
 import instructor
 import openai
+from loguru import logger
 
 from akd.agents._base import BaseAgentConfig
 from akd.agents.extraction import (
@@ -64,11 +65,11 @@ async def main(args):
     result = await lit_agent.arun(
         LitAgentInputSchema(query=args.query, max_search_results=5)
     )
-    print(result.model_dump())
+    logger.info(result.model_dump())
 
     with open("./temp/test_lit_agent.json", "w") as f:
         f.write(json.dumps(result.model_dump(mode="json")["results"], indent=2))
-        
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run LitAgent pipeline")

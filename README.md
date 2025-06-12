@@ -203,23 +203,18 @@ It is recommended that while you develop your CDK stack/CloudFormation template 
 
 ## Local Setup
 ### Setup virtual environment
-Setup virtual environment using pthon venv or conda and activate it
+Create a virtual environment using `uv` and activate the venv
 
 ```bash
-python3.12 -m venv .venv && .venv/bin/activate
+uv venv --python 3.12
+source .venv/bin/activate
 ```
-
-OR
-
-```bash
-conda create --name akd_env python=3.12 && conda activate akd_env
-```
-
 
 ### Install dependencies
-Install dependencies using poetry buy running
+Install dependencies using `uv` \
+`uv sync`
 
-`poetry install`
+[Or use `poetry install`]
 
 ### Setup env file
 Copy a make a copy of `.env.example` file as `.env` file and provide required fields
@@ -240,13 +235,15 @@ docker run --rm \
 ```
 When you run the container for the first time it will create configs for searxng in the provided directory.
 The default searxng config has disabled the json access for api endpoints. For enabling it 
-stop the container `docker stop searxng`
 
-open `./temp/searxng/settings.xml` and add `- json` under search> formats section (after `- html`).
+Stop the container `docker stop searxng` \
+Open `./temp/searxng/settings.xml` and add `- json` under search> formats section (after `- html`).
 
 Run the docker run command again.
 
 ### Install/configure playwright
+Playwright is used for web crawling.
+
 execute `playwright install`
 
 ### Test installation
@@ -255,3 +252,8 @@ To verify the setup run the lit agent script by passing a query.
 ```python
 python scripts/run_lit_agent.py  --query "What are the environmental considerations for oil palm cultivation?"
 ```
+
+### Usefull uv commands
+
+Ininitialize new project with `uv init` \
+Adding new packages `uv add <package_name>`
