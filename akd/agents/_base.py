@@ -12,7 +12,14 @@ from akd.configs.project import CONFIG
 from ..utils import AsyncRunMixin, LangchainToolMixin
 
 
-class BaseAgent(AsyncRunMixin, LangchainToolMixin, AtomicBaseAgent):
+class BaseAgent[
+    InputSchema: BaseIOSchema,
+    OutputSchema: BaseIOSchema,
+](
+    AsyncRunMixin,
+    LangchainToolMixin,
+    AtomicBaseAgent,
+):
     def __init__(
         self,
         config: Optional[BaseAgentConfig] = None,
@@ -20,7 +27,9 @@ class BaseAgent(AsyncRunMixin, LangchainToolMixin, AtomicBaseAgent):
     ) -> None:
         config = config or BaseAgentConfig(
             client=instructor.from_openai(
-                openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
+                openai.AsyncOpenAI(
+                    api_key=CONFIG.model_config_settings.api_keys.openai,
+                ),
             ),
             model=CONFIG.model_config_settings.model_name,
             temperature=0.0,
@@ -32,15 +41,22 @@ class BaseAgent(AsyncRunMixin, LangchainToolMixin, AtomicBaseAgent):
 
     @property
     def _is_async_client(self) -> bool:
-        return isinstance(self.client, instructor.client.AsyncInstructor)
+        return isinstance(
+            self.client,
+            instructor.client.AsyncInstructor,
+        )
 
-    async def get_response_async(self, response_model=None) -> BaseModel:
+    async def get_response_async(
+        self,
+        response_model=None,
+    ) -> BaseModel:
         """
         Obtains a response from the language model synchronously.
 
         Args:
             response_model (Type[BaseModel], optional):
-                The schema for the response data. If not set, self.output_schema is used.
+                The schema for the response data. If not set,
+                self.output_schema is used.
 
         Returns:
             Type[BaseModel]: The response from the language model.
@@ -64,17 +80,20 @@ class BaseAgent(AsyncRunMixin, LangchainToolMixin, AtomicBaseAgent):
 
         return response
 
-    async def arun(self, user_input: Optional[BaseIOSchema] = None) -> BaseIOSchema:
+    async def arun(
+        self,
+        user_input: Optional[InputSchema] = None,
+    ) -> OutputSchema:
         """
         Runs the chat agent with the given user input synchronously.
 
         Args:
-            user_input (Optional[BaseIOSchema]):
+            user_input (Optional[InputSchema]):
                 The input from the user.
                 If not provided, skips adding to memory.
 
         Returns:
-            BaseIOSchema: The response from the chat agent.
+            OutputSchema: The response from the chat agent.
         """
         if user_input:
             self.memory.initialize_turn()
@@ -82,10 +101,16 @@ class BaseAgent(AsyncRunMixin, LangchainToolMixin, AtomicBaseAgent):
             self.memory.add_message("user", user_input)
 
         if self._is_async_client:
-            response = await self.get_response_async(response_model=self.output_schema)
+            response = await self.get_response_async(
+                response_model=self.output_schema,
+            )
         else:
-            logger.warning("Using synchronous client for async run.")
-            response = self.get_response(response_model=self.output_schema)
+            logger.warning(
+                "Using synchronous client for async run.",
+            )
+            response = self.get_response(
+                response_model=self.output_schema,
+            )
         self.memory.add_message("assistant", response)
 
         return response

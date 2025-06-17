@@ -36,7 +36,7 @@ class QueryAgentOutputSchema(BaseIOSchema):
     )
 
 
-class QueryAgent(BaseAgent):
+class QueryAgent(BaseAgent[QueryAgentInputSchema, QueryAgentOutputSchema]):
     """
     Agent that generates search engine queries based on a given query.
     """
@@ -86,11 +86,11 @@ class FollowUpQueryAgentOutputSchema(BaseIOSchema):
         description="List of follow-up search queries based on the original content.",
     )
 
-    category: Optional[
-        Literal["general", "science", "research", "clarification"]
-    ] = Field(
-        default="general",
-        description="Category of the follow-up search queries.",
+    category: Optional[Literal["general", "science", "research", "clarification"]] = (
+        Field(
+            default="general",
+            description="Category of the follow-up search queries.",
+        )
     )
 
     reasoning: Optional[str] = Field(
@@ -106,7 +106,9 @@ class FollowUpQueryAgentOutputSchema(BaseIOSchema):
     )
 
 
-class FollowUpQueryAgent(BaseAgent):
+class FollowUpQueryAgent(
+    BaseAgent[FollowUpQueryAgentInputSchema, FollowUpQueryAgentOutputSchema],
+):
     """
     Agent that generates follow-up search engine queries based on original queries and content.
     """
