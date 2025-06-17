@@ -11,7 +11,11 @@ from atomic_agents.lib.base.base_tool import BaseToolConfig
 from akd.utils import AsyncRunMixin, LangchainToolMixin, get_event_loop
 
 
-class BaseTool(AtomicBaseTool, AsyncRunMixin, LangchainToolMixin):
+class BaseTool[InputSchema: BaseIOSchema, OutputSchema: BaseIOSchema](
+    AtomicBaseTool,
+    AsyncRunMixin,
+    LangchainToolMixin,
+):
     def __init__(
         self,
         config: Optional[BaseToolConfig] = None,
@@ -42,37 +46,37 @@ class BaseTool(AtomicBaseTool, AsyncRunMixin, LangchainToolMixin):
         raise NotImplementedError()
 
     @abstractmethod
-    async def arun(self, params: BaseIOSchema, **kwargs) -> BaseIOSchema:
+    async def arun(self, params: InputSchema, **kwargs) -> OutputSchema:
         """
         Executes the tool with the provided parameters in async.
 
         Args:
-            params (BaseIOSchema): Input parameters adhering to the input schema.
+            params (InputSchema): Input parameters adhering to the input schema.
 
         Returns:
-            BaseIOSchema: Output resulting from executing the tool, adhering to the output schema.
+            OutputSchema: Output resulting from executing the tool, adhering to the output schema.
 
         Raises:
             NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError("Subclasses should implement this method")
 
-    async def run_async(self, params: BaseIOSchema, **kwargs) -> BaseIOSchema:
+    async def run_async(self, params: InputSchema, **kwargs) -> OutputSchema:
         """
         Executes the tool with the provided parameters in async.
 
         Args:
-            params (BaseIOSchema): Input parameters adhering to the input schema.
+            params (InputSchema): Input parameters adhering to the input schema.
 
         Returns:
-            BaseIOSchema: Output resulting from executing the tool, adhering to the output schema.
+            OutputSchema: Output resulting from executing the tool, adhering to the output schema.
 
         Raises:
             NotImplementedError: If the method is not implemented by a subclass.
         """
         return await self.arun(params, **kwargs)
 
-    def run(self, params: BaseIOSchema, **kwargs) -> BaseIOSchema:
+    def run(self, params: InputSchema, **kwargs) -> OutputSchema:
         """
         Executes the tool with the provided parameters by running the async implementation.
 
@@ -80,10 +84,10 @@ class BaseTool(AtomicBaseTool, AsyncRunMixin, LangchainToolMixin):
         or uses the current event loop if it's already running.
 
         Args:
-            params (BaseIOSchema): Input parameters adhering to the input schema.
+            params (InputSchema): Input parameters adhering to the input schema.
 
         Returns:
-            BaseIOSchema: Output resulting from executing the tool, adhering to the output schema.
+            OutputSchema: Output resulting from executing the tool, adhering to the output schema.
         """
         try:
             # Check if there's a running event loop
