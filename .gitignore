@@ -17,6 +17,7 @@ temp/
 data/
 models/
 documents/
+__marimo__/
 .DS_Store
 .devcontainer
 
