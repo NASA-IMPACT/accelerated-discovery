@@ -2,20 +2,19 @@ from typing import List, Optional, Union
 
 import instructor
 import openai
-from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig
-from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
-from pydantic import create_model, BaseModel
+from pydantic import create_model, BaseModel, ConfigDict
 
 from akd.configs.project import CONFIG
 from akd.structures import ExtractionSchema, SingleEstimation
+from akd.nodes.system_prompt_generator import SystemPromptGenerator
 
 from .extraction import ExtractionInputSchema
 from .intents import IntentAgent
 from .query import QueryAgent
 
 
-def create_intent_agent(config: Optional[BaseAgentConfig] = None) -> IntentAgent:
-    config = config or BaseAgentConfig(
+def create_intent_agent(config: Optional[ConfigDict] = None) -> IntentAgent:
+    config = config or ConfigDict(
         client=instructor.from_openai(
             openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
         ),
@@ -36,8 +35,8 @@ def create_intent_agent(config: Optional[BaseAgentConfig] = None) -> IntentAgent
 
 def create_extraction_agent(
     extraction_output_schema: Union[ExtractionSchema, List[SingleEstimation]],
-    config: Optional[BaseAgentConfig] = None,
-) -> BaseAgent:
+    config: Optional[ConfigDict] = None,
+) -> BaseModel:
     """
     Dynamically build the agent based on the type
     of extraction schema provided.
@@ -49,12 +48,13 @@ def create_extraction_agent(
         __base__=BaseModel,
         __doc__="Extracted information from the research",
     )
-    return BaseAgent(
-        BaseAgentConfig(
+    return BaseModel(
+        ConfigDict(
             client=instructor.from_openai(
                 openai.OpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
             ),
             model=CONFIG.model_config_settings.model_name,
+            # TODO: Replace with LangGraph equivalent
             system_prompt_generator=SystemPromptGenerator(
                 background=[
                     (
@@ -89,12 +89,13 @@ def create_extraction_agent(
     )
 
 
-def create_query_agent(config: Optional[BaseAgentConfig] = None) -> QueryAgent:
-    config = config or BaseAgentConfig(
+def create_query_agent(config: Optional[ConfigDict] = None) -> QueryAgent:
+    config = config or ConfigDict(
         client=instructor.from_openai(
             openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
         ),
         model=CONFIG.model_config_settings.model_name,
+        # TODO: Replace with LangGraph equivalent
         system_prompt_generator=SystemPromptGenerator(
             background=[
                 (

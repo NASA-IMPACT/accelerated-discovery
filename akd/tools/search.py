@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
 from loguru import logger
-from pydantic import BaseModel, SecretStr, field_validator
+from pydantic import BaseModel, SecretStr, field_validator, ConfigDict
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
@@ -21,7 +21,7 @@ from akd.agents.query import (
 from akd.structures import SearchResultItem
 from akd.tools.relevancy import RelevancyChecker, RelevancyCheckerInputSchema
 
-from ._base import BaseTool, BaseToolConfig
+from ._base import BaseTool
 
 
 class SearchToolInputSchema(BaseModel):
@@ -86,7 +86,7 @@ class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
     pass
 
 
-class SearxNGSearchToolConfig(BaseToolConfig):
+class SearxNGSearchToolConfig(ConfigDict):
     base_url: HttpUrl = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
     max_results: int = os.getenv("SEARXNG_MAX_RESULTS", 10)
     engines: List[str] = os.getenv(
@@ -391,7 +391,7 @@ class SemanticScholarSearchToolOutputSchema(SearchToolOutputSchema):
     pass
 
 
-class SemanticScholarSearchToolConfig(BaseToolConfig):
+class SemanticScholarSearchToolConfig(ConfigDict):
     """Configuration for the Semantic Scholar Search Tool."""
 
     api_key: Optional[str] = Field(

@@ -1,7 +1,6 @@
 from abc import ABC
 from typing import Any, List, Union
 
-from atomic_agents.agents.base_agent import BaseAgent
 from loguru import logger
 from pydantic import Field, BaseModel
 

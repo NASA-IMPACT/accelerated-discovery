@@ -5,7 +5,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, ConfigDict
 
 # Local fm_factual modules (subtree path)
 from akd.tools.fact_reasoner.fm_factual.atom_extractor import AtomExtractor
@@ -15,10 +15,10 @@ from akd.tools.fact_reasoner.fm_factual.fact_reasoner import FactReasoner
 from akd.tools.fact_reasoner.fm_factual.nli_extractor import NLIExtractorOld
 from akd.tools.fact_reasoner.fm_factual.query_builder import QueryBuilder
 
-from ._base import BaseTool, BaseToolConfig
+from ._base import BaseTool
 
 
-class FactReasonerToolConfig(BaseToolConfig):
+class FactReasonerToolConfig(ConfigDict):
     gen_model: str
     context_retriever_service_type: str
     cache_dir: str

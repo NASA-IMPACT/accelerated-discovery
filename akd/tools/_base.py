@@ -4,34 +4,31 @@ import asyncio
 from abc import abstractmethod
 from typing import Optional
 
-from pydantic import BaseModel
-from atomic_agents.lib.base.base_tool import BaseTool as AtomicBaseTool
-from atomic_agents.lib.base.base_tool import BaseToolConfig
+from pydantic import BaseModel, ConfigDict
 
 from akd.utils import AsyncRunMixin, LangchainToolMixin, get_event_loop
 
 
 class BaseTool[InputSchema: BaseModel, OutputSchema: BaseModel](
-    AtomicBaseTool,
     AsyncRunMixin,
     LangchainToolMixin,
 ):
     def __init__(
         self,
-        config: Optional[BaseToolConfig] = None,
+        config: Optional[ConfigDict] = None,
         debug: bool = False,
     ) -> None:
         """
         Initializes the BaseTool with an optional configuration override.
 
         Args:
-            config (BaseToolConfig, optional):
+            config (ConfigDict, optional):
                 Configuration for the tool, including optional title
                 and description overrides.
             debug (bool, optional):
                 Boolean flag for debug mode.
         """
-        config = config or BaseToolConfig()
+        config = config or ConfigDict()
         self.config = config
         self.debug = bool(debug) or getattr(config, "debug", False)
         super().__init__(config)

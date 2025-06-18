@@ -5,9 +5,9 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger
-from pydantic import Field, HttpUrl, BaseModel
+from pydantic import Field, HttpUrl, BaseModel, ConfigDict
 
-from akd.tools._base import BaseTool, BaseToolConfig
+from akd.tools._base import BaseTool
 
 
 class ResolverInputSchema(BaseModel):
@@ -26,7 +26,7 @@ class ResolverOutputSchema(BaseModel):
     )
 
 
-class ArticleResolverConfig(BaseToolConfig):
+class ArticleResolverConfig(ConfigDict):
     """Configuration for the resolver"""
 
     model_config = {"arbitrary_types_allowed": True}

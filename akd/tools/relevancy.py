@@ -1,9 +1,8 @@
 import itertools
 from typing import List, Optional
 
-from atomic_agents.lib.base.base_tool import BaseToolConfig
 from loguru import logger
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, ConfigDict
 
 from akd.agents.relevancy import (
     RelevancyAgent,
@@ -49,10 +48,10 @@ class RelevancyCheckerOutputSchema(BaseModel):
     )
 
 
-class RelevancyCheckerConfig(BaseToolConfig):
+class RelevancyCheckerConfig(ConfigDict):
     """Configuration for the RelevancyChecker."""
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = {"extra": "allow"}
 
     debug: bool = Field(
         default=True,

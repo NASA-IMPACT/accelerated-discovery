@@ -1,8 +1,5 @@
 from typing import List, Optional
 
-import instructor
-import openai
-from atomic_agents.agents.base_agent import BaseAgentConfig
 from pydantic import Field, BaseModel
 
 from akd.configs.project import CONFIG

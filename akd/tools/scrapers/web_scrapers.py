@@ -9,12 +9,12 @@ import requests
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 from markdownify import markdownify
-from pydantic import Field, HttpUrl, BaseModel
+from pydantic import Field, HttpUrl, BaseModel, ConfigDict
 from readability import Document
 from requests import HTTPError, RequestException
 
 from akd.structures import SearchResultItem
-from akd.tools._base import BaseTool, BaseToolConfig
+from akd.tools._base import BaseTool
 
 
 class WebpageScraperToolInputSchema(BaseModel):
@@ -52,7 +52,7 @@ class WebpageScraperToolOutputSchema(BaseModel):
     )
 
 
-class WebpageScraperToolConfig(BaseToolConfig):
+class WebpageScraperToolConfig(ConfigDict):
     """Configuration for the WebpageScraperTool."""
 
     user_agent: str = Field(
