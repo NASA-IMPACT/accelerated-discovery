@@ -1,7 +1,6 @@
 from enum import Enum
 
-from atomic_agents.agents.base_agent import BaseIOSchema
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ._base import BaseAgent
 
@@ -12,13 +11,13 @@ class Intent(str, Enum):
     # DATA_DISCOVERY = "Data Discovery"
 
 
-class IntentInputSchema(BaseIOSchema):
+class IntentInputSchema(BaseModel):
     """Input schema for determining intent of the query"""
 
     query: str = Field(..., description="The user's latest query/message/question")
 
 
-class IntentOutputSchema(BaseIOSchema):
+class IntentOutputSchema(BaseModel):
     """Output schema represents the intent of the query"""
 
     intent: Intent = Field(..., description="The user's intent")

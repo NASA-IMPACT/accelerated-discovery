@@ -9,15 +9,15 @@ import requests
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 from markdownify import markdownify
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, BaseModel
 from readability import Document
 from requests import HTTPError, RequestException
 
 from akd.structures import SearchResultItem
-from akd.tools._base import BaseIOSchema, BaseTool, BaseToolConfig
+from akd.tools._base import BaseTool, BaseToolConfig
 
 
-class WebpageScraperToolInputSchema(BaseIOSchema):
+class WebpageScraperToolInputSchema(BaseModel):
     """
     Input schema for the WebpageScraperTool.
     """
@@ -39,7 +39,7 @@ class WebpageMetadata(SearchResultItem):
     )
 
 
-class WebpageScraperToolOutputSchema(BaseIOSchema):
+class WebpageScraperToolOutputSchema(BaseModel):
     """Schema for the output of the WebpageScraperTool."""
 
     content: str = Field(

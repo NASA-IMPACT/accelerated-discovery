@@ -3,7 +3,7 @@ from typing import Optional
 import instructor
 import openai
 from atomic_agents.agents.base_agent import BaseAgent as AtomicBaseAgent
-from atomic_agents.agents.base_agent import BaseAgentConfig, BaseIOSchema
+from atomic_agents.agents.base_agent import BaseAgentConfig
 from loguru import logger
 from pydantic import BaseModel
 
@@ -13,8 +13,8 @@ from ..utils import AsyncRunMixin, LangchainToolMixin
 
 
 class BaseAgent[
-    InputSchema: BaseIOSchema,
-    OutputSchema: BaseIOSchema,
+    InputSchema: BaseModel,
+    OutputSchema: BaseModel,
 ](
     AsyncRunMixin,
     LangchainToolMixin,

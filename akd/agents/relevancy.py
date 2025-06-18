@@ -2,8 +2,8 @@ from typing import List, Optional
 
 import instructor
 import openai
-from atomic_agents.agents.base_agent import BaseAgentConfig, BaseIOSchema
-from pydantic import Field
+from atomic_agents.agents.base_agent import BaseAgentConfig
+from pydantic import Field, BaseModel
 
 from akd.configs.project import CONFIG
 from akd.structures import RelevancyLabel
@@ -11,7 +11,7 @@ from akd.structures import RelevancyLabel
 from ._base import BaseAgent
 
 
-class RelevancyAgentInputSchema(BaseIOSchema):
+class RelevancyAgentInputSchema(BaseModel):
     """Input schema for relevancy agent"""
 
     query: str = Field(
@@ -24,7 +24,7 @@ class RelevancyAgentInputSchema(BaseIOSchema):
     )
 
 
-class RelevancyAgentOutputSchema(BaseIOSchema):
+class RelevancyAgentOutputSchema(BaseModel):
     """Output schema for relevancy agent"""
 
     label: RelevancyLabel = Field(

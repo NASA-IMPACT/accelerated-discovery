@@ -5,18 +5,18 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, BaseModel
 
-from akd.tools._base import BaseIOSchema, BaseTool, BaseToolConfig
+from akd.tools._base import BaseTool, BaseToolConfig
 
 
-class ResolverInputSchema(BaseIOSchema):
+class ResolverInputSchema(BaseModel):
     """Input schema for resolver"""
 
     url: HttpUrl = Field(..., description="Input url to resolve the article from")
 
 
-class ResolverOutputSchema(BaseIOSchema):
+class ResolverOutputSchema(BaseModel):
     """Output schema for resolver"""
 
     url: HttpUrl = Field(..., description="Resolved output url")

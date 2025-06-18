@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from atomic_agents.lib.base.base_tool import BaseToolConfig
 from loguru import logger
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 from akd.agents.relevancy import (
     RelevancyAgent,
@@ -12,7 +12,7 @@ from akd.agents.relevancy import (
 )
 from akd.structures import RelevancyLabel
 
-from ._base import BaseIOSchema, BaseTool
+from ._base import BaseTool
 
 
 class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
@@ -21,7 +21,7 @@ class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
     pass
 
 
-class _RelevancyCheckerSwappedInputSchema(BaseIOSchema):
+class _RelevancyCheckerSwappedInputSchema(BaseModel):
     """Schema with swapped field order"""
 
     content: str = Field(
@@ -34,7 +34,7 @@ class _RelevancyCheckerSwappedInputSchema(BaseIOSchema):
     )
 
 
-class RelevancyCheckerOutputSchema(BaseIOSchema):
+class RelevancyCheckerOutputSchema(BaseModel):
     """Output schema for the RelevancyChecker."""
 
     score: float = Field(

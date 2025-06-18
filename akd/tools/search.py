@@ -21,10 +21,10 @@ from akd.agents.query import (
 from akd.structures import SearchResultItem
 from akd.tools.relevancy import RelevancyChecker, RelevancyCheckerInputSchema
 
-from ._base import BaseIOSchema, BaseTool, BaseToolConfig
+from ._base import BaseTool, BaseToolConfig
 
 
-class SearchToolInputSchema(BaseIOSchema):
+class SearchToolInputSchema(BaseModel):
     """
     Schema for input to a tool for searching for information,
     news, references, and other content.
@@ -41,7 +41,7 @@ class SearchToolInputSchema(BaseIOSchema):
     )
 
 
-class SearchToolOutputSchema(BaseIOSchema):
+class SearchToolOutputSchema(BaseModel):
     """Schema for output of a tool for searching for information,
     news, references, and other content."""
 

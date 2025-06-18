@@ -2,9 +2,9 @@ from typing import List, Optional, Union
 
 import instructor
 import openai
-from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseIOSchema
+from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig
 from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
-from pydantic import create_model
+from pydantic import create_model, BaseModel
 
 from akd.configs.project import CONFIG
 from akd.structures import ExtractionSchema, SingleEstimation
@@ -46,7 +46,7 @@ def create_extraction_agent(
     _ExtractionOutputSchema = create_model(
         "_ExtractionOutputSchema",
         answer=(extraction_output_schema, "Answer from the extraction"),
-        __base__=BaseIOSchema,
+        __base__=BaseModel,
         __doc__="Extracted information from the research",
     )
     return BaseAgent(

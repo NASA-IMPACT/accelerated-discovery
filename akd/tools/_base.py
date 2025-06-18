@@ -4,14 +4,14 @@ import asyncio
 from abc import abstractmethod
 from typing import Optional
 
-from atomic_agents.agents.base_agent import BaseIOSchema
+from pydantic import BaseModel
 from atomic_agents.lib.base.base_tool import BaseTool as AtomicBaseTool
 from atomic_agents.lib.base.base_tool import BaseToolConfig
 
 from akd.utils import AsyncRunMixin, LangchainToolMixin, get_event_loop
 
 
-class BaseTool[InputSchema: BaseIOSchema, OutputSchema: BaseIOSchema](
+class BaseTool[InputSchema: BaseModel, OutputSchema: BaseModel](
     AtomicBaseTool,
     AsyncRunMixin,
     LangchainToolMixin,

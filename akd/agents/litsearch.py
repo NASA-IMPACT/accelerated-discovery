@@ -1,8 +1,7 @@
 from typing import List
 
-from atomic_agents.agents.base_agent import BaseIOSchema
 from loguru import logger
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 from akd.structures import ExtractionDTO
 from akd.tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
@@ -24,7 +23,7 @@ from .intents import IntentAgent
 from .query import QueryAgent, QueryAgentInputSchema
 
 
-class LitAgentInputSchema(BaseIOSchema):
+class LitAgentInputSchema(BaseModel):
     """
     Input schema for the LitAgent
     """
@@ -36,7 +35,7 @@ class LitAgentInputSchema(BaseIOSchema):
     )
 
 
-class LitAgentOutputSchema(BaseIOSchema):
+class LitAgentOutputSchema(BaseModel):
     """
     Output schema for the LitAgent
     """

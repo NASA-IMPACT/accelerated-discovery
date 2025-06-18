@@ -1,12 +1,11 @@
 from typing import List, Literal, Optional
 
-from atomic_agents.agents.base_agent import BaseIOSchema
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 from ._base import BaseAgent
 
 
-class QueryAgentInputSchema(BaseIOSchema):
+class QueryAgentInputSchema(BaseModel):
     """This is the input schema for the QueryAgent."""
 
     query: str = Field(
@@ -20,7 +19,7 @@ class QueryAgentInputSchema(BaseIOSchema):
     )
 
 
-class QueryAgentOutputSchema(BaseIOSchema):
+class QueryAgentOutputSchema(BaseModel):
     """
     Schema for output queries  for information, news,
     references, and other content.
@@ -48,7 +47,7 @@ class QueryAgent(BaseAgent[QueryAgentInputSchema, QueryAgentOutputSchema]):
 # --- follow up agent
 
 
-class FollowUpQueryAgentInputSchema(BaseIOSchema):
+class FollowUpQueryAgentInputSchema(BaseModel):
     """This is the input schema for the FollowUpQueryAgent."""
 
     original_queries: List[str] = Field(
@@ -74,7 +73,7 @@ class FollowUpQueryAgentInputSchema(BaseIOSchema):
     )
 
 
-class FollowUpQueryAgentOutputSchema(BaseIOSchema):
+class FollowUpQueryAgentOutputSchema(BaseModel):
     """
     Schema for output follow-up queries based on original queries and content.
     Returns a list of refined search queries that dig deeper into the topic
