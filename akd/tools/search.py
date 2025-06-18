@@ -6,11 +6,20 @@ from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
 from loguru import logger
-from pydantic import SecretStr, field_validator
+from pydantic import BaseModel, SecretStr, field_validator
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
+from akd.agents.query import (
+    FollowUpQueryAgent,
+    FollowUpQueryAgentInputSchema,
+    FollowUpQueryAgentOutputSchema,
+    QueryAgent,
+    QueryAgentInputSchema,
+    QueryAgentOutputSchema,
+)
 from akd.structures import SearchResultItem
+from akd.tools.relevancy import RelevancyChecker, RelevancyCheckerInputSchema
 
 from ._base import BaseIOSchema, BaseTool, BaseToolConfig
 
@@ -46,7 +55,7 @@ class SearchToolOutputSchema(BaseIOSchema):
     )
 
 
-class SearchTool(BaseTool):
+class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
     """
     Tool for performing searches on SearxNG based on the provided queries and category.
 
@@ -288,7 +297,7 @@ class SearxNGSearchTool(SearchTool):
 
         if self.debug and current_page > 1:
             logger.debug(
-                f"Fetched {len(all_results)} results across {current_page-1} pages for query: {query}",
+                f"Fetched {len(all_results)} results across {current_page - 1} pages for query: {query}",
             )
 
         return all_results
@@ -823,3 +832,271 @@ class SemanticScholarSearchTool(BaseTool):
             results=final_results,
             category=params.category,  # Pass through the requested category
         )
+
+
+class SimpleAgenticLitSearchTool(SearchTool):
+    class _StoppingCriteria(BaseModel):
+        stop_now: bool = Field(default=False)
+        reasoning_trace: str = Field(default="")
+
+    def __init__(
+        self,
+        search_tool: SearchTool,
+        relevancy_checker: RelevancyChecker,
+        query_agent: QueryAgent,
+        followup_query_agent: FollowUpQueryAgent,
+        cutoff_threshold: float = 0.75,
+        max_iteration: int = 5,
+        use_followup_after_iteration: int = 1,
+        debug: bool = False,
+    ) -> None:
+        super().__init__(debug=debug)
+        assert isinstance(search_tool, SearchTool), (
+            "search_tool must be an instance of `akd.tools.SearchTool`"
+        )
+        self.search_tool = search_tool
+        self.relevancy_checker = relevancy_checker
+        self.query_agent = query_agent
+        self.followup_query_agent = followup_query_agent
+        self.cutoff_threshold = cutoff_threshold
+        self.max_iteration = max_iteration
+        self.use_followup_after_iteration = use_followup_after_iteration
+
+    def _deduplicate_results(
+        self,
+        new_results: List[SearchResultItem],
+        existing_results: List[SearchResultItem],
+    ) -> List[SearchResultItem]:
+        """Remove duplicate results based on URL."""
+        existing_urls = {r.url for r in existing_results}
+        return [r for r in new_results if r.url not in existing_urls]
+
+    def _accumulate_content(self, results: List[SearchResultItem]) -> str:
+        content = ""
+        for result in results:
+            content += f"\nTitle: {result.title}\nContent: {result.content}\n"
+        return content.strip()
+
+    async def _should_stop(
+        self,
+        iteration: int,
+        query: str,
+        all_results: list,
+        current_results: list,
+        max_results: int,
+    ) -> "SimpleAgenticLitSearchTool._StoppingCriteria":
+        criteria = self._StoppingCriteria(
+            stop_now=False,
+            reasoning_trace=f"{iteration}/{self.max_iteration}",
+        )
+
+        if iteration >= self.max_iteration:
+            criteria.stop_now = True
+            criteria.reasoning_trace = (
+                f"Max iterations reached ({iteration}/{self.max_iteration})"
+            )
+
+        elif iteration > 0 and (not current_results):
+            criteria.stop_now = True
+            criteria.reasoning_trace = (
+                f"Current results for {iteration}/{self.max_iteration} empty."
+            )
+
+        # elif len(all_results) >= max_results:
+        #     criteria.stop_now = True
+        #     criteria.reasoning_trace = (
+        #         f"Target results reached ({len(all_results)}/{max_results})"
+        #     )
+        elif (context := self._accumulate_content(current_results)) and iteration > 0:
+            relevancy = await self.relevancy_checker.arun(
+                RelevancyCheckerInputSchema(content=context, query=query),
+            )
+            criteria.stop_now = relevancy.score >= self.cutoff_threshold
+            criteria.reasoning_trace = (
+                f"Relevancy threshold met at {iteration}/"
+                f"{self.max_iteration}. Reasoning traces | "
+                f"{relevancy.reasoning_steps}"
+            )
+        return criteria
+
+    async def _generate_queries(
+        self,
+        queries: List[str],
+        iteration: int,
+        num_queries: int = 3,
+        results: Optional[List[SearchResultItem]] = None,
+        accumulated_content: str = "",
+    ) -> List[str]:
+        """
+        Generate queries using either initial query agent or follow-up query agent
+        based on the iteration number.
+        """
+        if iteration <= self.use_followup_after_iteration:
+            # Use initial query generation for early iterations
+            return await self._generate_initial_queries(
+                queries=queries,
+                iteration=iteration,
+                num_queries=num_queries,
+                results=results,
+            )
+        else:
+            # Use follow-up query generation for later iterations
+            if accumulated_content:
+                logger.debug(
+                    f"Switching to follow-up query generation at iteration {iteration}",
+                )
+                return await self._generate_followup_queries(
+                    original_queries=queries,
+                    accumulated_content=accumulated_content,
+                    num_queries=num_queries,
+                )
+            else:
+                # Fallback to initial query generation if no content available
+                return await self._generate_initial_queries(
+                    queries=queries,
+                    iteration=iteration,
+                    num_queries=num_queries,
+                    results=results,
+                )
+
+    async def _generate_followup_queries(
+        self,
+        original_queries: List[str],
+        accumulated_content: str,
+        num_queries: int = 3,
+    ) -> List[str]:
+        """Generate follow-up queries using the followup_query_agent."""
+        try:
+            followup_input = FollowUpQueryAgentInputSchema(
+                original_queries=original_queries,
+                content=accumulated_content,
+                num_queries=num_queries,
+            )
+
+            followup_result: FollowUpQueryAgentOutputSchema = (
+                await self.followup_query_agent.arun(
+                    followup_input,
+                )
+            )
+
+            if self.debug:
+                logger.debug(
+                    f"Follow-up reasoning: {followup_result.reasoning}",
+                )
+                logger.debug(
+                    f"Identified gaps: {followup_result.original_query_gaps}",
+                )
+
+            return followup_result.followup_queries
+
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.warning(
+                f"Error generating follow-up queries. Error => {str(e)}",
+            )
+            return original_queries  # Fallback to original queries
+        return original_queries
+
+    async def _generate_initial_queries(
+        self,
+        queries: List[str],
+        iteration: int,
+        num_queries: int = 3,
+        results: Optional[List[SearchResultItem]] = None,
+    ) -> List[str]:
+        """Generate initial queries using the query_agent."""
+        context = ""
+        if results:
+            titles = [r.title for r in results]
+            context = f"Previous searches found: {', '.join(titles)}"
+
+        query_instruction = f"""
+        Iteration {iteration} queries : {queries}
+        Context/results so far: {context}
+        """.strip()
+
+        res = QueryAgentOutputSchema(queries=queries)
+        try:
+            res = await self.query_agent.arun(
+                QueryAgentInputSchema(
+                    num_queries=num_queries,
+                    query=query_instruction,
+                ),
+            )
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.warning(
+                f"Error generating initial queries. Error => {str(e)}",
+            )
+        return res.queries
+
+    async def arun(
+        self,
+        params: SearchToolInputSchema,
+        **kwargs: Any,
+    ) -> SearchToolOutputSchema:
+        desired_max_results = params.max_results
+
+        iteration = 0
+        all_results = []
+        current_results = []
+        content_so_far = ""
+
+        while not (
+            criteria := await self._should_stop(
+                iteration=iteration,
+                all_results=all_results,
+                current_results=current_results,
+                max_results=desired_max_results,
+                query=" AND ".join(params.queries),
+            )
+        ).stop_now:
+            logger.debug(f"Stopping Criteria :: {criteria}")
+            iteration += 1
+
+            remaining_needed = desired_max_results - len(all_results)
+            search_limit = min(remaining_needed, params.max_results)
+
+            current_queries = params.queries
+            if iteration > 0:
+                current_queries = await self._generate_queries(
+                    iteration=iteration,
+                    num_queries=3,
+                    queries=params.queries,
+                    results=all_results,
+                    accumulated_content=content_so_far,  # Pass accumulated content
+                )
+
+            logger.debug(
+                f"Generated queries (iteration {iteration}): {current_queries}",
+            )
+            search_input = SearchToolInputSchema(
+                queries=current_queries,
+                max_results=search_limit,
+                category=params.category,
+            )
+            search_result = await self.search_tool.arun(search_input)
+
+            current_results = self._deduplicate_results(
+                new_results=search_result.results,
+                existing_results=all_results,
+            )
+            all_results.extend(current_results)
+
+            # Update accumulated content after each iteration
+            new_content = self._accumulate_content(current_results)
+            if new_content:
+                content_so_far += "\n" + new_content if content_so_far else new_content
+
+            if self.debug:
+                logger.debug(
+                    f"Content accumulated so far (chars): {len(content_so_far)}",
+                )
+                logger.debug(
+                    f"Current iteration results: {len(current_results)}",
+                )
+
+        logger.debug(f"Final Stopping Criteria :: {criteria}")
+        return SearchToolOutputSchema(results=all_results, category=params.category)

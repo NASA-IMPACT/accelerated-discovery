@@ -199,3 +199,61 @@ It is recommended that while you develop your CDK stack/CloudFormation template 
 --show-summary pass,fail \
 
 --type CFNtemplate
+
+
+## Local Setup
+### Setup virtual environment
+Create a virtual environment using `uv` and activate the venv
+
+```bash
+uv venv --python 3.12
+source .venv/bin/activate
+```
+
+### Install dependencies
+Install dependencies using `uv` \
+`uv sync`
+
+[Or use `poetry install`]
+
+### Setup env file
+Copy a make a copy of `.env.example` file as `.env` file and provide required fields
+
+### Setup local searxng instance (Optional)
+
+```bash
+mkdir mkdir -p temp/searxng
+cd temp
+export PORT=8080
+docker run --rm \
+             -d -p ${PORT}:8080 \
+             -v "${PWD}/searxng:/etc/searxng:z" \
+             -e "BASE_URL=http://localhost:$PORT/" \
+             -e "INSTANCE_NAME=my-instance" \
+             --name "searxng" \
+             searxng/searxng
+```
+When you run the container for the first time it will create configs for searxng in the provided directory.
+The default searxng config has disabled the json access for api endpoints. For enabling it 
+
+Stop the container `docker stop searxng` \
+Open `./temp/searxng/settings.xml` and add `- json` under search> formats section (after `- html`).
+
+Run the docker run command again.
+
+### Install/configure playwright
+Playwright is used for web crawling.
+
+execute `playwright install`
+
+### Test installation
+To verify the setup run the lit agent script by passing a query.
+
+```python
+python scripts/run_lit_agent.py  --query "What are the environmental considerations for oil palm cultivation?"
+```
+
+### Usefull uv commands
+
+Ininitialize new project with `uv init` \
+Adding new packages `uv add <package_name>`
