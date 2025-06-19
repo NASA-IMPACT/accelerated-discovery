@@ -1,11 +1,10 @@
 from typing import Optional
 
-import openai
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.memory import ChatMessageHistory
 from langchain_openai import ChatOpenAI
-from loguru import logger
-from pydantic import BaseModel, ConfigDict
-from pydantic_settings import BaseSettings
 
+from pydantic import BaseModel, ConfigDict
 from akd.configs.project import CONFIG
 
 from ..utils import AsyncRunMixin, LangchainToolMixin
@@ -33,18 +32,31 @@ class BaseAgent[
         config: Optional[ConfigDict] = None,
         debug: bool = False,
     ) -> None:
-        config = config or ConfigDict(
-            client=ChatOpenAI(
-                    api_key=CONFIG.model_config_settings.api_keys.openai,
-                    model=CONFIG.model_config_settings.model_name,
-                    temperature=0.0,
-            ),
-            extra='allow'
+        client= ChatOpenAI(
+            api_key=CONFIG.model_config_settings.api_keys.openai,
+            model=CONFIG.model_config_settings.model_name,
+            temperature=0.0,
+            )
+        self.config = config or ConfigDict(
+            client=client,
+            extra="allow",
         )
         self.debug = debug
-        self.config = config
-        self.client = config['client']
-        # super().__init__(config)
+        self.client = client
+        self.memory = ChatMessageHistory()
+        self.system_prompt = ChatPromptTemplate.from_messages(
+                    [
+                        {"role": "system", "content": """\
+        IDENTITY and PURPOSE
+        This is a conversation with a helpful and friendly AI assistant.
+
+        OUTPUT INSTRUCTIONS
+        - Always respond using the proper JSON schema.
+        - Always use the available additional information and context to enhance the response.
+        """},
+                        MessagesPlaceholder(variable_name="memory"),
+                    ]
+                )
 
 
     async def get_response_async(
@@ -52,7 +64,7 @@ class BaseAgent[
         response_model=None,
     ) -> BaseModel:
         """
-        Obtains a response from the language model synchronously.
+        Obtains a response from the language model asynchronously.
 
         Args:
             response_model (Type[BaseModel], optional):
@@ -62,18 +74,10 @@ class BaseAgent[
         Returns:
             Type[BaseModel]: The response from the language model.
         """
-    
         response_model = response_model or self.output_schema
-        client = self.client.with_structured_output(response_model)
-        messages = [
-            {
-                "role": "system",
-                "content": self.system_prompt_generator.generate_prompt(),
-            },
-        ] + self.memory.get_history()
-
-        response = await client.ainvoke(
-            messages=messages
+        structured_client = self.client.with_structured_output(response_model)
+        response = await structured_client.ainvoke(
+            input=self.memory.messages
         )
 
         return response
@@ -83,7 +87,7 @@ class BaseAgent[
         user_input: Optional[InputSchema] = None,
     ) -> OutputSchema:
         """
-        Runs the chat agent with the given user input synchronously.
+        Runs the chat agent with the given user input asynchronously.
 
         Args:
             user_input (Optional[InputSchema]):
@@ -93,26 +97,14 @@ class BaseAgent[
         Returns:
             OutputSchema: The response from the chat agent.
         """
-        pass
-    
-        # TODO: Replace with node specific code, or LangGraph equivalent
 
-        # if user_input:
-        #     self.memory.initialize_turn()
-        #     self.current_user_input = user_input
-        #     self.memory.add_message("user", user_input)
+        if user_input:
+            self.memory.add_user_message(user_input.model_dump_json(exclude={"type"}))
 
-        # if self._is_async_client:
-        #     response = await self.get_response_async(
-        #         response_model=self.output_schema,
-        #     )
-        # else:
-        #     logger.warning(
-        #         "Using synchronous client for async run.",
-        #     )
-        #     response = self.get_response(
-        #         response_model=self.output_schema,
-        #     )
-        # self.memory.add_message("assistant", response)
+        response = await self.get_response_async(
+            response_model=self.output_schema,
+        )
 
-        # return response
+        self.memory.add_ai_message(response.model_dump_json(exclude={"type"}))
+
+        return response
