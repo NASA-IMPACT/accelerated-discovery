@@ -36,10 +36,9 @@ class BaseAgent[
         config = config or ConfigDict(
             client=ChatOpenAI(
                     api_key=CONFIG.model_config_settings.api_keys.openai,
-
+                    model=CONFIG.model_config_settings.model_name,
+                    temperature=0.0,
             ),
-            model=CONFIG.model_config_settings.model_name,
-            temperature=0.0,
             extra='allow'
         )
         self.debug = debug
@@ -47,12 +46,6 @@ class BaseAgent[
         self.client = config['client']
         # super().__init__(config)
 
-    # @property
-    # def _is_async_client(self) -> bool:
-    #     return isinstance(
-    #         self.client,
-    #         instructor.client.AsyncInstructor,
-    #     )
 
     async def get_response_async(
         self,
@@ -69,26 +62,21 @@ class BaseAgent[
         Returns:
             Type[BaseModel]: The response from the language model.
         """
-        pass
+    
+        response_model = response_model or self.output_schema
+        client = self.client.with_structured_output(response_model)
+        messages = [
+            {
+                "role": "system",
+                "content": self.system_prompt_generator.generate_prompt(),
+            },
+        ] + self.memory.get_history()
 
-        # TODO: Replace with node specific code, or LangGraph equivalent
-        # response_model = response_model or self.output_schema
+        response = await client.ainvoke(
+            messages=messages
+        )
 
-        # messages = [
-        #     {
-        #         "role": "system",
-        #         "content": self.system_prompt_generator.generate_prompt(),
-        #     },
-        # ] + self.memory.get_history()
-
-        # response = await self.client.chat.completions.create(
-        #     messages=messages,
-        #     model=self.model,
-        #     response_model=response_model,
-        #     **self.model_api_parameters,
-        # )
-
-        # return response
+        return response
 
     async def arun(
         self,

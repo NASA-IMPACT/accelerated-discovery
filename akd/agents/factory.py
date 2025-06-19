@@ -5,7 +5,7 @@ from pydantic import create_model, BaseModel, ConfigDict
 
 from akd.configs.project import CONFIG
 from akd.structures import ExtractionSchema, SingleEstimation
-from akd.nodes.system_prompt_generator import SystemPromptGenerator
+from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
 
 from .extraction import ExtractionInputSchema
 from .intents import IntentAgent
@@ -16,9 +16,9 @@ def create_intent_agent(config: Optional[ConfigDict] = None) -> IntentAgent:
     config = config or ConfigDict(
         client=ChatOpenAI(
                     api_key=CONFIG.model_config_settings.api_keys.openai,
-
-        ),
-        model=CONFIG.model_config_settings.model_name,
+                    model=CONFIG.model_config_settings.model_name,
+                    temperature=0.0,
+            ),
         system_prompt_generator=SystemPromptGenerator(
             background=[
                 ("You are an expert intent detector."),
@@ -52,9 +52,8 @@ def create_extraction_agent(
         ConfigDict(
             client=ChatOpenAI(
                     api_key=CONFIG.model_config_settings.api_keys.openai,
-
+                    model=CONFIG.model_config_settings.model_name,
             ),
-            model=CONFIG.model_config_settings.model_name,
             # TODO: Replace with LangGraph equivalent
             system_prompt_generator=SystemPromptGenerator(
                 background=[
@@ -94,9 +93,8 @@ def create_query_agent(config: Optional[ConfigDict] = None) -> QueryAgent:
     config = config or ConfigDict(
         client=ChatOpenAI(
                     api_key=CONFIG.model_config_settings.api_keys.openai,
-
+                    model=CONFIG.model_config_settings.model_name,
             ),
-        model=CONFIG.model_config_settings.model_name,
         # TODO: Replace with LangGraph equivalent
         system_prompt_generator=SystemPromptGenerator(
             background=[
