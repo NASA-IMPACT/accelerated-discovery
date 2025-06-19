@@ -1,7 +1,6 @@
 from typing import List, Optional, Union
 
-import instructor
-import openai
+from langchain_openai import ChatOpenAI
 from pydantic import create_model, BaseModel, ConfigDict
 
 from akd.configs.project import CONFIG
@@ -15,8 +14,9 @@ from .query import QueryAgent
 
 def create_intent_agent(config: Optional[ConfigDict] = None) -> IntentAgent:
     config = config or ConfigDict(
-        client=instructor.from_openai(
-            openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
+        client=ChatOpenAI(
+                    api_key=CONFIG.model_config_settings.api_keys.openai,
+
         ),
         model=CONFIG.model_config_settings.model_name,
         system_prompt_generator=SystemPromptGenerator(
@@ -50,8 +50,9 @@ def create_extraction_agent(
     )
     return BaseModel(
         ConfigDict(
-            client=instructor.from_openai(
-                openai.OpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
+            client=ChatOpenAI(
+                    api_key=CONFIG.model_config_settings.api_keys.openai,
+
             ),
             model=CONFIG.model_config_settings.model_name,
             # TODO: Replace with LangGraph equivalent
@@ -91,9 +92,10 @@ def create_extraction_agent(
 
 def create_query_agent(config: Optional[ConfigDict] = None) -> QueryAgent:
     config = config or ConfigDict(
-        client=instructor.from_openai(
-            openai.AsyncOpenAI(api_key=CONFIG.model_config_settings.api_keys.openai),
-        ),
+        client=ChatOpenAI(
+                    api_key=CONFIG.model_config_settings.api_keys.openai,
+
+            ),
         model=CONFIG.model_config_settings.model_name,
         # TODO: Replace with LangGraph equivalent
         system_prompt_generator=SystemPromptGenerator(

@@ -1,6 +1,5 @@
 from typing import Optional
 
-import instructor
 import openai
 from langchain_openai import ChatOpenAI
 from loguru import logger
@@ -48,12 +47,12 @@ class BaseAgent[
         self.client = config['client']
         # super().__init__(config)
 
-    @property
-    def _is_async_client(self) -> bool:
-        return isinstance(
-            self.client,
-            instructor.client.AsyncInstructor,
-        )
+    # @property
+    # def _is_async_client(self) -> bool:
+    #     return isinstance(
+    #         self.client,
+    #         instructor.client.AsyncInstructor,
+    #     )
 
     async def get_response_async(
         self,

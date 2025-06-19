@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import json
 
-import instructor
 import openai
 from loguru import logger
 from pydantic import ConfigDict
