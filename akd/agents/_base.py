@@ -5,7 +5,9 @@ from langchain.memory import ChatMessageHistory
 from langchain_openai import ChatOpenAI
 
 from pydantic import BaseModel, ConfigDict
+
 from akd.configs.project import CONFIG
+from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 
 from ..utils import AsyncRunMixin, LangchainToolMixin
 
@@ -40,23 +42,17 @@ class BaseAgent[
         self.config = config or ConfigDict(
             client=client,
             extra="allow",
+            system_prompt=ChatPromptTemplate.from_messages(
+                    [
+                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                        MessagesPlaceholder(variable_name="memory"),
+                    ]
+                )
         )
         self.debug = debug
         self.client = client
         self.memory = ChatMessageHistory()
-        self.system_prompt = ChatPromptTemplate.from_messages(
-                    [
-                        {"role": "system", "content": """\
-        IDENTITY and PURPOSE
-        This is a conversation with a helpful and friendly AI assistant.
-
-        OUTPUT INSTRUCTIONS
-        - Always respond using the proper JSON schema.
-        - Always use the available additional information and context to enhance the response.
-        """},
-                        MessagesPlaceholder(variable_name="memory"),
-                    ]
-                )
+        self.system_prompt = self.config['system_prompt'] 
 
 
     async def get_response_async(

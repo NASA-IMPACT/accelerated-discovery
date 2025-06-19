@@ -1,11 +1,12 @@
 from typing import List, Optional, Union
 
 from langchain_openai import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import create_model, BaseModel, ConfigDict
 
 from akd.configs.project import CONFIG
+from akd.configs.prompts import INTENT_SYSTEM_PROMPT, EXTRACTION_SYSTEM_PROMPT, QUERY_SYSTEM_PROMPT
 from akd.structures import ExtractionSchema, SingleEstimation
-from atomic_agents.lib.components.system_prompt_generator import SystemPromptGenerator
 
 from .extraction import ExtractionInputSchema
 from .intents import IntentAgent
@@ -19,16 +20,12 @@ def create_intent_agent(config: Optional[ConfigDict] = None) -> IntentAgent:
                     model=CONFIG.model_config_settings.model_name,
                     temperature=0.0,
             ),
-        system_prompt_generator=SystemPromptGenerator(
-            background=[
-                ("You are an expert intent detector."),
-            ],
-            output_instructions=[
-                "Estimation is when the data is used in a process to estimate numerically",
-                "Data discovery deals with queries asking for data explicitly",
-                "Example for Data Disoverery includes: Where do I find HLS data?",
-            ],
-        ),
+        system_prompt=ChatPromptTemplate.from_messages(
+                    [
+                        {"role": "system", "content": INTENT_SYSTEM_PROMPT},
+                        MessagesPlaceholder(variable_name="memory"),
+                    ]
+                ),
     )
     return IntentAgent(config)
 
@@ -54,35 +51,12 @@ def create_extraction_agent(
                     api_key=CONFIG.model_config_settings.api_keys.openai,
                     model=CONFIG.model_config_settings.model_name,
             ),
-            # TODO: Replace with LangGraph equivalent
-            system_prompt_generator=SystemPromptGenerator(
-                background=[
-                    (
-                        "You are an expert in scientific information extraction.",
-                        "Your goal is to accurately extract and summarize relevant "
-                        "information from academic literature while maintaining fidelity "
-                        "to the original sources.",
-                    ),
-                ],
-                steps=[
-                    "Identify patterns, contradictions, and "
-                    "gaps in the literature across different sources.",
-                    "Extract relevant information based on the given schema, "
-                    "ensuring clarity and completeness.",
-                    "Maintain structured and systematic extraction, "
-                    "focusing on key arguments, methodologies, findings, and supporting data.",
-                ],
-                output_instructions=[
-                    "Don't give anything that's not present in the content.",
-                    "Ensure extracted content remains faithful to original sources, "
-                    "avoiding extrapolation or misinterpretation.",
-                    "Provide structured summaries including key arguments, "
-                    "methodologies, findings, and limitations.",
-                    "Use a scientific tone, ensuring clarity, coherence, "
-                    "and proper citation handling.",
-                    "Avoid speculation, personal opinions, or unverifiable claims.",
-                ],
-            ),
+            system_prompt=ChatPromptTemplate.from_messages(
+                    [
+                        {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                        MessagesPlaceholder(variable_name="memory"),
+                    ]
+                ),
             input_schema=ExtractionInputSchema,
             output_schema=_ExtractionOutputSchema,
         ),
@@ -95,24 +69,11 @@ def create_query_agent(config: Optional[ConfigDict] = None) -> QueryAgent:
                     api_key=CONFIG.model_config_settings.api_keys.openai,
                     model=CONFIG.model_config_settings.model_name,
             ),
-        # TODO: Replace with LangGraph equivalent
-        system_prompt_generator=SystemPromptGenerator(
-            background=[
-                (
-                    "You are an expert scientific search engine query generator with a deep understanding of which"
-                    "queries will maximize the number of relevant results for science."
-                ),
-            ],
-            steps=[
-                "Analyze the given instruction to identify key concepts and aspects that need to be researched",
-                "For each aspect, craft a search query using appropriate search operators and syntax",
-                "Ensure queries cover different angles of the topic (technical, practical, comparative, etc.)",
-            ],
-            output_instructions=[
-                "Return exactly the requested number of queries",
-                "Format each query like a search engine query, not a natural language question",
-                "Each query should be a concise string of keywords and operators",
-            ],
-        ),
+        system_prompt=ChatPromptTemplate.from_messages(
+                    [
+                        {"role": "system", "content": QUERY_SYSTEM_PROMPT},
+                        MessagesPlaceholder(variable_name="memory"),
+                    ]
+                )
     )
     return QueryAgent(config)
