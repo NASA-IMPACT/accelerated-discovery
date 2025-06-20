@@ -160,3 +160,79 @@ class AbstractBase[
             OutSchema: The output from the agent after processing the input.
         """
         raise NotImplementedError()
+
+
+class UnrestrictedAbstractBase[
+    InSchema: InputSchema,
+    OutSchema: OutputSchema,
+](AsyncRunMixin, LangchainToolMixin, ABC):
+    """
+    Abstract base class for agents and tools that interact with a language model.
+    This class provides the basic structure for an agent or tool that can handle
+    asynchronous operations, manage memory, and utilize a language model
+    for generating responses based on user input.
+
+    This class does not enforce input and output schema types, allowing for more flexibility
+    in the types of parameters and outputs used.
+    It is intended for use cases where strict type checking is not required.
+    It is recommended to use this class only when necessary, as it bypasses the type safety
+    provided by the schema validation in the AbstractBase class.
+    """
+
+    def __init__(self, *args, debug: bool = False, **kwargs) -> None:
+        """
+        Initializes the BaseAgent with a language model client and memory.
+
+        Args:
+            debug (bool): If True, enables debug mode for additional logging.
+        """
+        self.debug = debug
+
+    async def arun(
+        self,
+        params: InSchema,
+        **kwargs,
+    ) -> OutSchema:
+        """
+        Runs the agent with the provided parameters asynchronously.
+        Args:
+            params (InSchema): The structured input parameters for the agent.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            OutSchema: The output from the agent after processing the input.
+        """
+
+        if not isinstance(params, BaseModel):
+            raise TypeError(
+                "params must be an instance of pydantic BaseModel",
+            )
+        if self.debug:
+            logger.debug(
+                f"Running {self.__class__.__name__} with params: {params.model_dump()}",
+            )
+        output = None
+        try:
+            output = await self._arun(params, **kwargs)
+            if not isinstance(output, BaseModel):
+                raise TypeError(
+                    "Output must be an instance of pydantic BaseModel",
+                )
+        except Exception as e:
+            logger.error(f"Error running {self.__class__.__name__}: {e}")
+            raise
+        return output
+
+    @abstractmethod
+    async def _arun(
+        self,
+        params: InSchema,
+        **kwargs,
+    ) -> OutSchema:
+        """Internal method to run the agent with the provided parameters asynchronously.
+        Args:
+            params (InSchema): The structured input parameters for the agent.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            OutSchema: The output from the agent after processing the input.
+        """
+        raise NotImplementedError()
