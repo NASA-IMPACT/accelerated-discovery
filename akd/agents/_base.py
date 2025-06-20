@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import abstractmethod
 from typing import Optional
 
 from langchain.memory import ChatMessageHistory
@@ -7,11 +8,9 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ConfigDict
 
-from akd._base import AbstractBase
+from akd._base import AbstractBase, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
-from akd.structures import InputSchema, OutputSchema
-from akd.utils import AsyncRunMixin, LangchainToolMixin
 
 
 class BaseAgent[
@@ -25,6 +24,24 @@ class BaseAgent[
     asynchronous operations, manage memory, and utilize a language model
     for generating responses based on user input.
     """
+
+    @abstractmethod
+    async def get_response_async(
+        self,
+        response_model: Optional[OutputSchema] = None,
+    ) -> OutputSchema:
+        """
+        Obtains a response from the language model asynchronously.
+
+        Args:
+            response_model (Optional[OutputSchema]):
+                The schema for the response data. If not set,
+                self.output_schema is used.
+
+        Returns:
+            OutputSchema: The response from the language model.
+        """
+        raise NotImplementedError("Subclasses must implement this method.")
 
     @classmethod
     def from_config(cls, config: BaseModel) -> BaseAgent:
@@ -53,12 +70,9 @@ class BaseAgent[
 
 
 class LangBaseAgent[
-    InputSchema: BaseModel,
-    OutputSchema: BaseModel,
-](
-    AsyncRunMixin,
-    LangchainToolMixin,
-):
+    InSchema: InputSchema,
+    OutSchema: OutputSchema,
+](BaseAgent):
     def __init__(
         self,
         config: Optional[ConfigDict] = None,
@@ -86,7 +100,7 @@ class LangBaseAgent[
 
     async def get_response_async(
         self,
-        response_model=None,
+        response_model: Optional[InSchema] = None,
     ) -> BaseModel:
         """
         Obtains a response from the language model asynchronously.

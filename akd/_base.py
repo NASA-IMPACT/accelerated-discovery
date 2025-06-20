@@ -1,10 +1,11 @@
 import inspect
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Type
+from typing import Any, Type, cast
 
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
+from akd.errors import SchemaValidationError
 from akd.utils import AsyncRunMixin, LangchainToolMixin
 
 
@@ -100,8 +101,8 @@ class AbstractBase[
     for generating responses based on user input.
     """
 
-    input_schema: Type[InputSchema]
-    output_schema: Type[OutputSchema]
+    input_schema: Type[InSchema]
+    output_schema: Type[OutSchema]
 
     def __init__(self, *args, debug: bool = False, **kwargs) -> None:
         """
@@ -111,6 +112,28 @@ class AbstractBase[
             debug (bool): If True, enables debug mode for additional logging.
         """
         self.debug = debug
+
+    def _validate_input(self, params: Any) -> InSchema:
+        """Validate and convert input parameters."""
+        if not isinstance(params, self.input_schema):
+            if isinstance(params, dict):
+                try:
+                    params = self.input_schema(**params)
+                except ValidationError as e:
+                    raise SchemaValidationError(f"Invalid input parameters: {e}") from e
+            else:
+                raise TypeError(
+                    f"params must be an instance of {self.input_schema.__name__}",
+                )
+        return params
+
+    def _validate_output(self, output: Any) -> OutSchema:
+        """Validate output against schema."""
+        if not isinstance(output, self.output_schema):
+            raise TypeError(
+                f"Output must be an instance of {self.output_schema.__name__}",
+            )
+        return output
 
     async def arun(
         self,
@@ -126,21 +149,15 @@ class AbstractBase[
             OutSchema: The output from the agent after processing the input.
         """
 
-        if self.input_schema and not isinstance(params, self.input_schema):
-            raise TypeError(
-                f"params must be an instance of {self.input_schema.__name__}",
-            )
+        params = self._validate_input(params)
         if self.debug:
             logger.debug(
-                f"Running {self.__class__.__name__} with params: {params.model_dump()}",
+                f"Running {self.__class__.__name__} with params: {params}",
             )
         output = None
         try:
             output = await self._arun(params, **kwargs)
-            if not isinstance(output, self.output_schema):
-                raise TypeError(
-                    f"Output must be an instance of {self.output_schema.__name__}",
-                )
+            output = self._validate_output(output)
         except Exception as e:
             logger.error(f"Error running {self.__class__.__name__}: {e}")
             raise
@@ -163,8 +180,8 @@ class AbstractBase[
 
 
 class UnrestrictedAbstractBase[
-    InSchema: InputSchema,
-    OutSchema: OutputSchema,
+    InSchema: BaseModel,
+    OutSchema: BaseModel,
 ](AsyncRunMixin, LangchainToolMixin, ABC):
     """
     Abstract base class for agents and tools that interact with a language model.
@@ -188,6 +205,18 @@ class UnrestrictedAbstractBase[
         """
         self.debug = debug
 
+    def _validate_input(self, params: Any) -> InSchema:
+        """Validate and convert input parameters."""
+        if not isinstance(params, BaseModel):
+            raise TypeError("params must be an instance of pydantic BaseModel")
+        return cast(InSchema, params)
+
+    def _validate_output(self, output: Any) -> OutSchema:
+        """Validate and convert input parameters."""
+        if not isinstance(output, BaseModel):
+            raise TypeError("output must be an instance of pydantic BaseModel")
+        return cast(OutSchema, output)
+
     async def arun(
         self,
         params: InSchema,
@@ -202,21 +231,15 @@ class UnrestrictedAbstractBase[
             OutSchema: The output from the agent after processing the input.
         """
 
-        if not isinstance(params, BaseModel):
-            raise TypeError(
-                "params must be an instance of pydantic BaseModel",
-            )
+        params = self._validate_input(params)
         if self.debug:
             logger.debug(
-                f"Running {self.__class__.__name__} with params: {params.model_dump()}",
+                f"Running {self.__class__.__name__} with params: {params}",
             )
         output = None
         try:
             output = await self._arun(params, **kwargs)
-            if not isinstance(output, BaseModel):
-                raise TypeError(
-                    "Output must be an instance of pydantic BaseModel",
-                )
+            output = self._validate_output(output)
         except Exception as e:
             logger.error(f"Error running {self.__class__.__name__}: {e}")
             raise
