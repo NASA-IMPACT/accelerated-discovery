@@ -6,7 +6,7 @@ from typing import Any, Optional
 from langchain.memory import ChatMessageHistory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
 from akd._base import AbstractBase, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
@@ -53,31 +53,6 @@ class BaseAgent[
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
-    @classmethod
-    def from_config(cls, config: BaseModel) -> BaseAgent:
-        """
-        Create an instance of the agent from a Pydantic configuration model.
-
-        Args:
-            config (BaseModel): Pydantic model containing initialization
-                parameters for the agent.
-
-        Returns:
-            Self: An instance of the agent class.
-        """
-        # Convert Pydantic model to dict and use as kwargs
-        config_dict = config.model_dump()
-
-        # Extract debug if it exists
-        debug = config_dict.pop("debug", False)
-
-        # Pass remaining config as kwargs
-        return cls(debug=debug, **config_dict)
-
-    # def __set_attrs_from_config(self):
-    #     for attr, value in self.config.model_dump().items():
-    #         setattr(self, attr, value)
-
 
 class LangBaseAgent[
     InSchema: InputSchema,
@@ -105,8 +80,12 @@ class LangBaseAgent[
         )
         self.debug = debug
         self.client = client
-        self.memory = ChatMessageHistory()
+        self._memory = ChatMessageHistory()
         self.system_prompt = self.config["system_prompt"]
+
+    @property
+    def memory(self) -> ChatMessageHistory:
+        return self._memory
 
     async def get_response_async(
         self,
@@ -131,7 +110,7 @@ class LangBaseAgent[
 
         return response
 
-    async def arun(
+    async def _arun(
         self,
         params: InSchema,
     ) -> OutSchema:

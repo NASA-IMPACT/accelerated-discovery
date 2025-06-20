@@ -66,7 +66,12 @@ class AbstractBaseMeta(ABCMeta):
         cls = super().__new__(mcs, name, bases, dct)
 
         # Skip validation for the base class itself
-        if name == "AbstractBase":
+        if name in [
+            "AbstractBase",
+            "UnrestrictedAbstractBase",
+            "BaseAgent",
+            "LangBaseAgent",
+        ]:
             return cls
 
         # Check if this class inherits from AbstractBase
