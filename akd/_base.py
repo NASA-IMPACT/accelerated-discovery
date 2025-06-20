@@ -1,12 +1,27 @@
+from __future__ import annotations
+
 import inspect
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Type, cast
 
 from loguru import logger
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, create_model
 
 from akd.errors import SchemaValidationError
 from akd.utils import AsyncRunMixin, LangchainToolMixin
+
+
+class BaseConfig(BaseModel):
+    """
+    Base configuration class for agents and tools.
+    This class can be extended to define specific configurations for agents or tools.
+    """
+
+    model_config = {
+        "extra": "forbid",  # Disallow extra fields
+    }
+
+    debug: bool = False  # Debug mode flag
 
 
 class IOSchema(BaseModel):
@@ -104,14 +119,72 @@ class AbstractBase[
     input_schema: Type[InSchema]
     output_schema: Type[OutSchema]
 
-    def __init__(self, *args, debug: bool = False, **kwargs) -> None:
+    config_schema: Type[BaseModel] | None = None
+
+    def __init__(
+        self,
+        config: BaseConfig | BaseModel | None = None,
+        debug: bool = False,
+        **kwargs,
+    ) -> None:
         """
         Initializes the BaseAgent with a language model client and memory.
 
         Args:
             debug (bool): If True, enables debug mode for additional logging.
+            config (BaseModel, optional): Configuration object containing all parameters
+            debug (bool): If True, enables debug mode for additional logging.
+            **kwargs: Additional keyword arguments (merged with config)
         """
         self.debug = debug
+        self.config = config
+        self._kwargs = kwargs
+        self._post_init()
+
+    def _post_init(self) -> None:
+        """
+        Post-initialization hook to perform any additional setup after
+        the instance has been initialized.
+        This can be overridden by subclasses for custom behavior.
+        """
+        self.__set_attrs_from_config()
+        for key, value in self._kwargs.items():
+            setattr(self, key, value)
+
+    def __set_attrs_from_config(self):
+        if self.config is None:
+            return
+        for attr, value in self.config.model_dump().items():
+            setattr(self, attr, value)
+
+    @classmethod
+    def from_config(cls, config: BaseModel) -> AbstractBase:
+        """
+        Create an instance from a Pydantic configuration model.
+        """
+        debug = getattr(config, "debug", False)
+        return cls(config=config, debug=debug)
+
+    @classmethod
+    def from_dict(cls, config_dict: dict[str, Any]) -> AbstractBase:
+        """Create instance from dict, with dynamic config model if needed."""
+        debug = config_dict.pop("debug", False)
+
+        # Use existing config_schema or create dynamic one
+        if cls.config_schema is None and config_dict:
+            fields = {k: (type(v), v) for k, v in config_dict.items() if v is not None}
+            cls.config_schema = create_model(
+                f"{cls.__name__}Config",
+                __base__=BaseConfig,
+                **fields,
+            )
+
+        config = (
+            cls.config_schema(**config_dict)
+            if cls.config_schema and config_dict
+            else None
+        )
+        return cls(config=config, debug=debug)
 
     def _validate_input(self, params: Any) -> InSchema:
         """Validate and convert input parameters."""
@@ -196,14 +269,72 @@ class UnrestrictedAbstractBase[
     provided by the schema validation in the AbstractBase class.
     """
 
-    def __init__(self, *args, debug: bool = False, **kwargs) -> None:
+    config_schema: Type[BaseModel] | None = None
+
+    def __init__(
+        self,
+        config: BaseConfig | BaseModel | None = None,
+        debug: bool = False,
+        **kwargs,
+    ) -> None:
         """
         Initializes the BaseAgent with a language model client and memory.
 
         Args:
             debug (bool): If True, enables debug mode for additional logging.
+            config (BaseModel, optional): Configuration object containing all parameters
+            debug (bool): If True, enables debug mode for additional logging.
+            **kwargs: Additional keyword arguments (merged with config)
         """
         self.debug = debug
+        self.config = config
+        self._kwargs = kwargs
+        self._post_init()
+
+    def _post_init(self) -> None:
+        """
+        Post-initialization hook to perform any additional setup after
+        the instance has been initialized.
+        This can be overridden by subclasses for custom behavior.
+        """
+        self.__set_attrs_from_config()
+        for key, value in self._kwargs.items():
+            setattr(self, key, value)
+
+    def __set_attrs_from_config(self):
+        if self.config is None:
+            return
+        for attr, value in self.config.model_dump().items():
+            setattr(self, attr, value)
+
+    @classmethod
+    def from_config(cls, config: BaseModel) -> UnrestrictedAbstractBase:
+        """
+        Create an instance from a Pydantic configuration model.
+        """
+        debug = getattr(config, "debug", False)
+        return cls(config=config, debug=debug)
+
+    @classmethod
+    def from_dict(cls, config_dict: dict[str, Any]) -> UnrestrictedAbstractBase:
+        """Create instance from dict, with dynamic config model if needed."""
+        debug = config_dict.pop("debug", False)
+
+        # Use existing config_schema or create dynamic one
+        if cls.config_schema is None and config_dict:
+            fields = {k: (type(v), v) for k, v in config_dict.items() if v is not None}
+            cls.config_schema = create_model(
+                f"{cls.__name__}Config",
+                __base__=BaseConfig,
+                **fields,
+            )
+
+        config = (
+            cls.config_schema(**config_dict)
+            if cls.config_schema and config_dict
+            else None
+        )
+        return cls(config=config, debug=debug)
 
     def _validate_input(self, params: Any) -> InSchema:
         """Validate and convert input parameters."""

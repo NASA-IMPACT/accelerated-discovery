@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 from langchain.memory import ChatMessageHistory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -24,6 +24,16 @@ class BaseAgent[
     asynchronous operations, manage memory, and utilize a language model
     for generating responses based on user input.
     """
+
+    @property
+    def memory(self) -> Any:
+        """
+        Returns the memory of the agent as a list of messages.
+
+        Returns:
+            list[Any | BaseModel]: The memory of the agent.
+        """
+        raise NotImplementedError("Attribute 'memory' not implemented.")
 
     @abstractmethod
     async def get_response_async(
@@ -100,8 +110,8 @@ class LangBaseAgent[
 
     async def get_response_async(
         self,
-        response_model: Optional[InSchema] = None,
-    ) -> BaseModel:
+        response_model: Optional[OutSchema] = None,
+    ) -> OutSchema:
         """
         Obtains a response from the language model asynchronously.
 
@@ -123,8 +133,8 @@ class LangBaseAgent[
 
     async def arun(
         self,
-        user_input: Optional[InputSchema] = None,
-    ) -> OutputSchema:
+        params: InSchema,
+    ) -> OutSchema:
         """
         Runs the chat agent with the given user input asynchronously.
 
@@ -137,8 +147,8 @@ class LangBaseAgent[
             OutputSchema: The response from the chat agent.
         """
 
-        if user_input:
-            self.memory.add_user_message(user_input.model_dump_json(exclude={"type"}))
+        if params:
+            self.memory.add_user_message(params.model_dump_json(exclude={"type"}))
 
         response = await self.get_response_async(
             response_model=self.output_schema,
