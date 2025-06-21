@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from langchain.memory import ChatMessageHistory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
-from pydantic import ConfigDict
 
-from akd._base import AbstractBase, InputSchema, OutputSchema
+from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+
+
+class BaseAgentConfig(BaseConfig):
+    """Configuration class for LangBaseAgent."""
+
+    api_key: Optional[str] = None
+    model_name: Optional[str] = None
+    temperature: float = 0.0
+    system_prompt: Optional[str] = None
 
 
 class BaseAgent[
@@ -25,10 +33,18 @@ class BaseAgent[
     for generating responses based on user input.
     """
 
+    config_schema = BaseAgentConfig
+
     @property
     def memory(self) -> Any:
         """
-        Returns the memory of the agent as a list of messages.
+        Returns the memory of the agent, implemented by subclasses.
+        This property should return the memory structure used by the agent,
+        which typically includes past messages or interactions.
+        Raises:
+            NotImplementedError: If the property is not implemented in a subclass.
+        Args:
+            None
 
         Returns:
             list[Any | BaseModel]: The memory of the agent.
@@ -38,7 +54,8 @@ class BaseAgent[
     @abstractmethod
     async def get_response_async(
         self,
-        response_model: Optional[OutputSchema] = None,
+        *args,
+        **kwargs,
     ) -> OutputSchema:
         """
         Obtains a response from the language model asynchronously.
@@ -58,30 +75,50 @@ class LangBaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
 ](BaseAgent):
+    """Base class for LangChain-based chat agents.
+    This class provides a foundation for agents that use LangChain's
+    ChatOpenAI client for generating responses based on user input.
+    It includes configuration options for the language model and memory management.
+
+    Note:
+        The object attributes (like `api_key`, `model_name` etc.) are dynamically set from the config.
+    """
+
     def __init__(
         self,
-        config: Optional[ConfigDict] = None,
+        config: BaseAgentConfig | None = None,
         debug: bool = False,
     ) -> None:
-        client = ChatOpenAI(
+        config = config or BaseAgentConfig(
             api_key=CONFIG.model_config_settings.api_keys.openai,
-            model=CONFIG.model_config_settings.model_name,
+            model_name=CONFIG.model_config_settings.model_name,
             temperature=0.0,
+            system_prompt=DEFAULT_SYSTEM_PROMPT,
+            debug=debug,
         )
-        self.config = config or ConfigDict(
-            client=client,
-            extra="allow",
-            system_prompt=ChatPromptTemplate.from_messages(
-                [
-                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    MessagesPlaceholder(variable_name="memory"),
-                ],
-            ),
+
+        super().__init__(config=config, debug=debug)
+
+        # Create the OpenAI client
+        self.client = ChatOpenAI(
+            api_key=self.api_key or CONFIG.model_config_settings.api_keys.openai,  # type: ignore
+            model=self.model_name or CONFIG.model_config_settings.model_name,  # type: ignore
+            temperature=self.temperature,  # type: ignore
         )
-        self.debug = debug
-        self.client = client
+
+        # Initialize memory
         self._memory = ChatMessageHistory()
-        self.system_prompt = self.config["system_prompt"]
+
+        # Create system prompt template
+        self.system_prompt = ChatPromptTemplate.from_messages(
+            [
+                {
+                    "role": "system",
+                    "content": self.system_prompt or DEFAULT_SYSTEM_PROMPT,
+                },
+                MessagesPlaceholder(variable_name="memory"),
+            ],
+        )
 
     @property
     def memory(self) -> ChatMessageHistory:
@@ -89,7 +126,7 @@ class LangBaseAgent[
 
     async def get_response_async(
         self,
-        response_model: Optional[OutSchema] = None,
+        response_model: type[OutputSchema] | None = None,
     ) -> OutSchema:
         """
         Obtains a response from the language model asynchronously.
@@ -108,11 +145,12 @@ class LangBaseAgent[
             input=self.memory.messages,
         )
 
-        return response
+        return cast(OutSchema, response)
 
     async def _arun(
         self,
         params: InSchema,
+        **kwargs,
     ) -> OutSchema:
         """
         Runs the chat agent with the given user input asynchronously.

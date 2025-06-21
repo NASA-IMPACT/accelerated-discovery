@@ -141,6 +141,7 @@ class AbstractBase[
             debug (bool): If True, enables debug mode for additional logging.
             **kwargs: Additional keyword arguments (merged with config)
         """
+        debug = getattr(config, "debug", False) or debug
         self.debug = debug
         self.config = config
         self._kwargs = kwargs
@@ -163,14 +164,6 @@ class AbstractBase[
             setattr(self, attr, value)
 
     @classmethod
-    def from_config(cls, config: BaseModel) -> AbstractBase:
-        """
-        Create an instance from a Pydantic configuration model.
-        """
-        debug = getattr(config, "debug", False)
-        return cls(config=config, debug=debug)
-
-    @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> AbstractBase:
         """Create instance from dict, with dynamic config model if needed."""
         debug = config_dict.pop("debug", False)
@@ -178,7 +171,7 @@ class AbstractBase[
         # Use existing config_schema or create dynamic one
         if cls.config_schema is None and config_dict:
             fields = {k: (type(v), v) for k, v in config_dict.items() if v is not None}
-            cls.config_schema = create_model(
+            cls.config_schema = create_model(  # type: ignore[call-arg]
                 f"{cls.__name__}Config",
                 __base__=BaseConfig,
                 **fields,
@@ -291,6 +284,7 @@ class UnrestrictedAbstractBase[
             debug (bool): If True, enables debug mode for additional logging.
             **kwargs: Additional keyword arguments (merged with config)
         """
+        debug = getattr(config, "debug", False) or debug
         self.debug = debug
         self.config = config
         self._kwargs = kwargs
@@ -311,14 +305,6 @@ class UnrestrictedAbstractBase[
             return
         for attr, value in self.config.model_dump().items():
             setattr(self, attr, value)
-
-    @classmethod
-    def from_config(cls, config: BaseModel) -> UnrestrictedAbstractBase:
-        """
-        Create an instance from a Pydantic configuration model.
-        """
-        debug = getattr(config, "debug", False)
-        return cls(config=config, debug=debug)
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> UnrestrictedAbstractBase:
