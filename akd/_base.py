@@ -71,6 +71,7 @@ class AbstractBaseMeta(ABCMeta):
             "UnrestrictedAbstractBase",
             "BaseAgent",
             "LangBaseAgent",
+            "InstructorBaseAgent",
         ]:
             return cls
 

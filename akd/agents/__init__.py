@@ -1,4 +1,3 @@
-# noqa
-from ._base import BaseAgent, BaseAgentConfig, LangBaseAgent
+from ._base import BaseAgent, BaseAgentConfig, InstructorBaseAgent, LangBaseAgent
 
-__all__ = ["BaseAgent", "BaseAgentConfig", "LangBaseAgent"]
+__all__ = ["BaseAgent", "BaseAgentConfig", "InstructorBaseAgent", "LangBaseAgent"]
