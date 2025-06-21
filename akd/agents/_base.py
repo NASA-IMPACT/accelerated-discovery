@@ -54,6 +54,9 @@ class BaseAgent[
         """
         raise NotImplementedError("Attribute 'memory' not implemented.")
 
+    def reset_memory(self) -> None:
+        pass
+
     @abstractmethod
     async def get_response_async(
         self,
@@ -126,6 +129,13 @@ class LangBaseAgent[
     @property
     def memory(self) -> ChatMessageHistory:
         return self._memory
+
+    def reset_memory(self) -> None:
+        """
+        Resets the memory of the agent.
+        This method clears the chat message history, effectively resetting the agent's memory.
+        """
+        self.memory.clear()
 
     async def get_response_async(
         self,
@@ -216,6 +226,13 @@ class InstructorBaseAgent[
     @property
     def memory(self) -> list[dict[str, str]]:
         return self._memory
+
+    def reset_memory(self) -> None:
+        """
+        Resets the memory of the agent.
+        This method clears the chat message history, effectively resetting the agent's memory.
+        """
+        self.memory.clear()
 
     def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
         """Create a model that's compatible with instructor but avoids IOSchema validation."""

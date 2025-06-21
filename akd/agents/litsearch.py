@@ -1,8 +1,10 @@
 from typing import List
 
 from loguru import logger
-from pydantic import Field, BaseModel
+from pydantic import Field
 
+from akd._base import InputSchema, OutputSchema
+from akd.agents import BaseAgent
 from akd.structures import ExtractionDTO
 from akd.tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
 from akd.tools.scrapers.web_scrapers import (
@@ -13,7 +15,6 @@ from akd.tools.scrapers.web_scrapers import (
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
 
-from ._base import BaseAgent
 from .extraction import (
     EstimationExtractionAgent,
     ExtractionInputSchema,
@@ -23,7 +24,7 @@ from .intents import IntentAgent
 from .query import QueryAgent, QueryAgentInputSchema
 
 
-class LitAgentInputSchema(BaseModel):
+class LitAgentInputSchema(InputSchema):
     """
     Input schema for the LitAgent
     """
@@ -35,7 +36,7 @@ class LitAgentInputSchema(BaseModel):
     )
 
 
-class LitAgentOutputSchema(BaseModel):
+class LitAgentOutputSchema(OutputSchema):
     """
     Output schema for the LitAgent
     """
@@ -74,7 +75,11 @@ class LitAgent(BaseAgent):
         self.n_queries = n_queries
         super().__init__(debug=debug)
 
-    async def arun(self, params: LitAgentInputSchema) -> LitAgentOutputSchema:
+    async def _arun(
+        self,
+        params: LitAgentInputSchema,
+        **kwargs,
+    ) -> LitAgentOutputSchema:
         # intent_output = self.intent_agent.run(IntentInputSchema(query=params.query))
         # logger.debug(f"query={params.query} | intent={intent_output.intent}")
 
@@ -115,7 +120,7 @@ class LitAgent(BaseAgent):
                 scraped_content = await self.web_scraper.arun(
                     WebpageScraperToolInputSchema(url=url),
                 )
-            except:
+            except Exception:
                 logger.warning("Fallback to search result content, not webpage")
                 scraped_content = WebpageScraperToolOutputSchema(
                     content=result.content,
@@ -142,7 +147,7 @@ class LitAgent(BaseAgent):
                     results.append(content)
             except KeyboardInterrupt:
                 break
-            except:
+            except Exception:
                 continue
         return LitAgentOutputSchema(results=results)
 
@@ -150,8 +155,3 @@ class LitAgent(BaseAgent):
         logger.warning("Clearing history for all the agents")
         self.query_agent.reset_memory()
         self.intent_agent.reset_memory()
-        try:
-            self.query_agent.get_context_provider("scraped_content").content_items = []
-            self.intent_agent.get_context_provider("scraped_content").content_items = []
-        except:
-            pass

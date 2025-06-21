@@ -6,10 +6,11 @@ from typing import Any, Dict, List, Literal, Optional
 
 import aiohttp
 from loguru import logger
-from pydantic import BaseModel, SecretStr, field_validator, ConfigDict
+from pydantic import BaseModel, SecretStr, field_validator
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
+from akd._base import InputSchema, OutputSchema
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -19,12 +20,11 @@ from akd.agents.query import (
     QueryAgentOutputSchema,
 )
 from akd.structures import SearchResultItem
+from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.relevancy import RelevancyChecker, RelevancyCheckerInputSchema
 
-from ._base import BaseTool
 
-
-class SearchToolInputSchema(BaseModel):
+class SearchToolInputSchema(InputSchema):
     """
     Schema for input to a tool for searching for information,
     news, references, and other content.
@@ -41,7 +41,7 @@ class SearchToolInputSchema(BaseModel):
     )
 
 
-class SearchToolOutputSchema(BaseModel):
+class SearchToolOutputSchema(OutputSchema):
     """Schema for output of a tool for searching for information,
     news, references, and other content."""
 
@@ -86,7 +86,7 @@ class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
     pass
 
 
-class SearxNGSearchToolConfig(ConfigDict):
+class SearxNGSearchToolConfig(BaseToolConfig):
     base_url: HttpUrl = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
     max_results: int = os.getenv("SEARXNG_MAX_RESULTS", 10)
     engines: List[str] = os.getenv(
@@ -113,9 +113,11 @@ class SearxNGSearchTool(SearchTool):
     input_schema = SearxNGSearchToolInputSchema
     output_schema = SearxNGSearchToolOutputSchema
 
+    config_schema = SearxNGSearchToolConfig
+
     def __init__(
         self,
-        config: Optional[SearxNGSearchToolConfig] = None,
+        config: SearxNGSearchToolConfig | None = None,
         debug: bool = False,
     ):
         """
@@ -302,10 +304,11 @@ class SearxNGSearchTool(SearchTool):
 
         return all_results
 
-    async def arun(
+    async def _arun(
         self,
         params: SearxNGSearchToolInputSchema,
         max_results: Optional[int] = None,
+        **kwargs,
     ) -> SearxNGSearchToolOutputSchema:
         """
         Runs the SearxNGTool asynchronously with the given parameters.
@@ -391,7 +394,7 @@ class SemanticScholarSearchToolOutputSchema(SearchToolOutputSchema):
     pass
 
 
-class SemanticScholarSearchToolConfig(ConfigDict):
+class SemanticScholarSearchToolConfig(BaseToolConfig):
     """Configuration for the Semantic Scholar Search Tool."""
 
     api_key: Optional[str] = Field(
@@ -439,35 +442,20 @@ class SemanticScholarSearchToolConfig(ConfigDict):
         return SecretStr(v) if v else None
 
 
-class SemanticScholarSearchTool(BaseTool):
+class SemanticScholarSearchTool(
+    BaseTool[
+        SemanticScholarSearchToolInputSchema,
+        SemanticScholarSearchToolOutputSchema,
+    ],
+):
     """
     Tool for performing searches on Semantic Scholar based on provided queries.
     """
 
     input_schema = SemanticScholarSearchToolInputSchema
     output_schema = SemanticScholarSearchToolOutputSchema
-    config: SemanticScholarSearchToolConfig
 
-    def __init__(
-        self,
-        config: Optional[SemanticScholarSearchToolConfig] = None,
-        debug: bool = False,
-    ):
-        """
-        Initializes the SemanticScholarSearchTool.
-
-        Args:
-            config (SemanticScholarSearchToolConfig): Configuration for the tool.
-            debug (bool): Enable debug logging.
-        """
-        config = config or SemanticScholarSearchToolConfig()
-        super().__init__(config=config, debug=debug)
-
-        # Ensure specific config type
-        if not isinstance(self.config, SemanticScholarSearchToolConfig):
-            raise TypeError(
-                "Configuration must be of type SemanticScholarSearchToolConfig",
-            )
+    config_schema = SemanticScholarSearchToolConfig
 
     @classmethod
     def from_params(
@@ -766,10 +754,11 @@ class SemanticScholarSearchTool(BaseTool):
 
         return final_results
 
-    async def arun(
+    async def _arun(
         self,
         params: SemanticScholarSearchToolInputSchema,
         max_results: Optional[int] = None,
+        **kwargs,
     ) -> SemanticScholarSearchToolOutputSchema:
         """
         Runs the SemanticScholarSearchTool asynchronously.
@@ -835,6 +824,9 @@ class SemanticScholarSearchTool(BaseTool):
 
 
 class SimpleAgenticLitSearchTool(SearchTool):
+    input_schema = SearchToolInputSchema
+    output_schema = SearchToolOutputSchema
+
     class _StoppingCriteria(BaseModel):
         stop_now: bool = Field(default=False)
         reasoning_trace: str = Field(default="")
@@ -851,9 +843,10 @@ class SimpleAgenticLitSearchTool(SearchTool):
         debug: bool = False,
     ) -> None:
         super().__init__(debug=debug)
-        assert isinstance(search_tool, SearchTool), (
-            "search_tool must be an instance of `akd.tools.SearchTool`"
-        )
+        if not isinstance(search_tool, SearchTool):
+            raise TypeError(
+                "search_tool must be an instance of `akd.tools.search.SearchTool`",
+            )
         self.search_tool = search_tool
         self.relevancy_checker = relevancy_checker
         self.query_agent = query_agent
@@ -1032,7 +1025,7 @@ class SimpleAgenticLitSearchTool(SearchTool):
             )
         return res.queries
 
-    async def arun(
+    async def _arun(
         self,
         params: SearchToolInputSchema,
         **kwargs: Any,
@@ -1077,7 +1070,9 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 max_results=search_limit,
                 category=params.category,
             )
-            search_result = await self.search_tool.arun(search_input)
+            search_result = await self.search_tool.arun(
+                self.search_tool.input_schema(**search_input.model_dump()),
+            )
 
             current_results = self._deduplicate_results(
                 new_results=search_result.results,

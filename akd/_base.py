@@ -72,6 +72,7 @@ class AbstractBaseMeta(ABCMeta):
             "BaseAgent",
             "LangBaseAgent",
             "InstructorBaseAgent",
+            "BaseTool",
         ]:
             return cls
 
@@ -142,6 +143,11 @@ class AbstractBase[
             debug (bool): If True, enables debug mode for additional logging.
             **kwargs: Additional keyword arguments (merged with config)
         """
+        config = (
+            config
+            or (self.config_schema() if self.config_schema else None)
+            or BaseConfig()
+        )
         debug = getattr(config, "debug", False) or debug
         self.debug = debug
         self.config = config

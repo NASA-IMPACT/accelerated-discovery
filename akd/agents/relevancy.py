@@ -1,14 +1,13 @@
-from typing import List, Optional
+from typing import List
 
-from pydantic import Field, BaseModel
+from pydantic import Field
 
-from akd.configs.project import CONFIG
+from akd._base import InputSchema, OutputSchema
+from akd.agents import InstructorBaseAgent
 from akd.structures import RelevancyLabel
 
-from ._base import BaseAgent
 
-
-class RelevancyAgentInputSchema(BaseModel):
+class RelevancyAgentInputSchema(InputSchema):
     """Input schema for relevancy agent"""
 
     query: str = Field(
@@ -21,24 +20,25 @@ class RelevancyAgentInputSchema(BaseModel):
     )
 
 
-class RelevancyAgentOutputSchema(BaseModel):
+class RelevancyAgentOutputSchema(OutputSchema):
     """Output schema for relevancy agent"""
 
     label: RelevancyLabel = Field(
         ...,
         description=(
-            "The label indicating the relevance between " "the query and the content."
+            "The label indicating the relevance between the query and the content."
         ),
     )
     reasoning_steps: List[str] = Field(
         ...,
         description=(
-            "Very concise/step-by-step reasoning steps leading to the "
-            "relevance check."
+            "Very concise/step-by-step reasoning steps leading to the relevance check."
         ),
     )
 
 
-class RelevancyAgent(BaseAgent):
+class RelevancyAgent(
+    InstructorBaseAgent[RelevancyAgentInputSchema, RelevancyAgentOutputSchema],
+):
     input_schema = RelevancyAgentInputSchema
     output_schema = RelevancyAgentOutputSchema

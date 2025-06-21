@@ -1,17 +1,17 @@
 import itertools
-from typing import List, Optional
+from typing import List
 
 from loguru import logger
-from pydantic import Field, BaseModel, ConfigDict
+from pydantic import Field
 
+from akd._base import OutputSchema
 from akd.agents.relevancy import (
     RelevancyAgent,
     RelevancyAgentInputSchema,
     RelevancyAgentOutputSchema,
 )
 from akd.structures import RelevancyLabel
-
-from ._base import BaseTool
+from akd.tools._base import BaseTool, BaseToolConfig
 
 
 class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
@@ -20,20 +20,7 @@ class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
     pass
 
 
-class _RelevancyCheckerSwappedInputSchema(BaseModel):
-    """Schema with swapped field order"""
-
-    content: str = Field(
-        ...,
-        description="The content to check for relevance.",
-    )
-    query: str = Field(
-        ...,
-        description="The query to check for relevance.",
-    )
-
-
-class RelevancyCheckerOutputSchema(BaseModel):
+class RelevancyCheckerOutputSchema(OutputSchema):
     """Output schema for the RelevancyChecker."""
 
     score: float = Field(
@@ -48,7 +35,7 @@ class RelevancyCheckerOutputSchema(BaseModel):
     )
 
 
-class RelevancyCheckerConfig(ConfigDict):
+class RelevancyCheckerConfig(BaseToolConfig):
     """Configuration for the RelevancyChecker."""
 
     model_config = {"extra": "allow"}
@@ -58,58 +45,56 @@ class RelevancyCheckerConfig(ConfigDict):
         description="Boolean flag for debug mode",
     )
     n_iter: int = Field(
-        default=2,
+        default=1,
         description="Number of iterations for the relevancy check.",
     )
     swapping: bool = Field(
-        default=True,
+        default=False,
         description="Boolean flag for swapping query and content.",
     )
-    agent: RelevancyAgent = Field(
-        default_factory=RelevancyAgent,
-        description="Relevancy agent to use for the check.",
-    )
 
 
-class RelevancyChecker(BaseTool):
+class RelevancyChecker(
+    BaseTool[RelevancyCheckerInputSchema, RelevancyCheckerOutputSchema],
+):
     input_schema = RelevancyCheckerInputSchema
     output_schema = RelevancyCheckerOutputSchema
 
+    config_schema = RelevancyCheckerConfig
+
     def __init__(
         self,
-        config: Optional[RelevancyCheckerConfig] = None,
+        config: RelevancyCheckerConfig | None = None,
+        agent: RelevancyAgent | None = None,
         debug: bool = False,
     ) -> None:
-        config = config or RelevancyCheckerConfig()
-        super().__init__(config, debug)
+        super().__init__(config=config, debug=debug)
+        self.agent = agent or RelevancyAgent()
+        self._input_schema = self.agent.input_schema
 
-    async def arun(
+    async def _arun(
         self,
-        param: RelevancyCheckerInputSchema,
+        params: RelevancyCheckerInputSchema,
+        **kwargs,
     ) -> RelevancyCheckerOutputSchema:
-        logger.info(f"Running relevancy check for query: {param.query}")
-        outputs = await self._run(param, n_iter=self.config.n_iter)
-        if self.config.swapping:
-            logger.info(f"Running swapping pass. Query and Content swapped")
-            param_swapped = _RelevancyCheckerSwappedInputSchema(
-                content=param.content,
-                query=param.query,
-            )
-            outputs.extend(await self._run(param_swapped, n_iter=self.config.n_iter))
+        logger.info(f"Running relevancy check for query: {params.query}")
+        outputs = await self._run_agent(params, n_iter=self.n_iter)
         return await self._ensemble(outputs)
 
-    async def _run(
+    async def _run_agent(
         self,
-        param: RelevancyCheckerInputSchema,
+        params: RelevancyCheckerInputSchema,
         n_iter: int = 3,
     ) -> List[RelevancyAgentOutputSchema]:
         outputs = []
+        if self.debug:
+            logger.debug(f"Type of params: {type(params)}")
         for i in range(n_iter):
-            output = self.config.agent.run(param)
+            output = await self.agent.arun(params)
             if self.debug:
-                logger.debug(f"Relevancy check {i+1}: {output}")
+                logger.debug(f"Relevancy check {i + 1}: {output}")
             outputs.append(output)
-            self.config.agent.reset_memory()
+            self.agent.reset_memory()
         return outputs
 
     async def _ensemble(
