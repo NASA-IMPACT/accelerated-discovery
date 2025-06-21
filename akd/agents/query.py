@@ -1,11 +1,12 @@
 from typing import List, Literal, Optional
 
-from pydantic import Field, BaseModel
+from pydantic import Field
 
-from ._base import BaseAgent
+from akd._base import InputSchema, OutputSchema
+from akd.agents import InstructorBaseAgent
 
 
-class QueryAgentInputSchema(BaseModel):
+class QueryAgentInputSchema(InputSchema):
     """This is the input schema for the QueryAgent."""
 
     query: str = Field(
@@ -19,7 +20,7 @@ class QueryAgentInputSchema(BaseModel):
     )
 
 
-class QueryAgentOutputSchema(BaseModel):
+class QueryAgentOutputSchema(OutputSchema):
     """
     Schema for output queries  for information, news,
     references, and other content.
@@ -35,7 +36,7 @@ class QueryAgentOutputSchema(BaseModel):
     )
 
 
-class QueryAgent(BaseAgent[QueryAgentInputSchema, QueryAgentOutputSchema]):
+class QueryAgent(InstructorBaseAgent[QueryAgentInputSchema, QueryAgentOutputSchema]):
     """
     Agent that generates search engine queries based on a given query.
     """
@@ -47,7 +48,7 @@ class QueryAgent(BaseAgent[QueryAgentInputSchema, QueryAgentOutputSchema]):
 # --- follow up agent
 
 
-class FollowUpQueryAgentInputSchema(BaseModel):
+class FollowUpQueryAgentInputSchema(InputSchema):
     """This is the input schema for the FollowUpQueryAgent."""
 
     original_queries: List[str] = Field(
@@ -73,7 +74,7 @@ class FollowUpQueryAgentInputSchema(BaseModel):
     )
 
 
-class FollowUpQueryAgentOutputSchema(BaseModel):
+class FollowUpQueryAgentOutputSchema(OutputSchema):
     """
     Schema for output follow-up queries based on original queries and content.
     Returns a list of refined search queries that dig deeper into the topic
@@ -106,7 +107,7 @@ class FollowUpQueryAgentOutputSchema(BaseModel):
 
 
 class FollowUpQueryAgent(
-    BaseAgent[FollowUpQueryAgentInputSchema, FollowUpQueryAgentOutputSchema],
+    InstructorBaseAgent[FollowUpQueryAgentInputSchema, FollowUpQueryAgentOutputSchema],
 ):
     """
     Agent that generates follow-up search engine queries based on original queries and content.
