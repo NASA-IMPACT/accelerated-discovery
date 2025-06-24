@@ -424,7 +424,7 @@ class SimpleWebScraper(WebScraperToolBase):
         )
 
         return WebpageScraperToolOutputSchema(
-            content=markdown_content,
+            content=markdown_content.strip(),
             metadata=metadata,
         )
 
@@ -457,6 +457,6 @@ class Crawl4AIWebScraper(WebScraperToolBase):
         )
 
         return WebpageScraperToolOutputSchema(
-            content=crawl_result.markdown,
+            content=crawl_result.markdown.strip(),
             metadata=metadata,
         )
