@@ -24,9 +24,20 @@ dependencies = [
     "readability-lxml>=0.8.1",
     "requests>=2.32.3",
     "wikipedia>=1.4.0",
+    "fastapi (>=0.115.12,<0.116.0)",
+    "uvicorn (>=0.34.3,<0.35.0)",
+    "websockets (>=15.0.1,<16.0.0)",
+    "langchain-openai (>=0.3.24,<0.4.0)",
 ]
 
 [tool.poetry]
 packages = [
     { include = "akd"},
 ]
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+pytest = "^8.4.1"
+pytest-asyncio = "^1.0.0"
+pre-commit = "^4.2.0"
+isort = "^6.0.1"
+ruff = "^0.12.0"

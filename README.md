@@ -61,7 +61,7 @@ Refer to the [notebooks](notebooks) for examples.
 ```
 akd/                    # Core framework
 ├── agents/            # Specialized research agents
-├── nodes/             # NodeTemplate implementations  
+├── nodes/             # NodeTemplate implementations
 ├── tools/             # Research tools and scrapers
 └── configs/           # Configuration management
 
