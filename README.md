@@ -52,9 +52,9 @@ Refer to the [notebooks](notebooks) for examples.
 
 - **Deep Attribution**: Every claim traceable to specific source material
 - **Conflict Detection**: Actively identifies contradictory evidence
-- **Shareable Workflows**: Complete research graphs that others can inspect and extend
-- **Quality Guardrails**: Input/output validation at every node
-- **Scientific Coverage**: Multi-agent approach to comprehensive literature review
+- **Shareable Workflows**: Complete research (execution) graphs that others can inspect and extend, not just summarized end products.
+- **Scientific Guardrails**: Guardrails that go beyond the generic LLM literature, that explicity designed to support scientific research.
+- **Stateful Execution**: The workflow maintains a persistent, stateful context of the research journey, enabling a branching, reversible and iterative process that supports a researcher's natural methodology rather than imposing a rigid, automated sequence that current agentic systems embrace.
 
 ## Project Structure
 
@@ -71,7 +71,7 @@ scripts/               # Utility scripts
 
 ## Contributing
 
-This is an open, community-driven framework. See our [design philosophy](docs/design_philosophy.md) for development guidelines that prioritize human control, scientific integrity, and transparent collaboration.
+This is an open, community-driven framework. See our [design philosophy](docs/design_philosophy.md) for development and design guidelines.
 
 ## License
 
