@@ -1,6 +1,6 @@
 # Accelerated Discovery Framework
 
-A **human-centric AI research assistant** for scientific discovery that empowers researchers while maintaining scientific integrity, transparency, and reproducibility.
+A **human-centric MAS Framework** for scientific discovery that empowers researchers while maintaining scientific integrity, transparency, and reproducibility.
 
 ## Core Philosophy
 
