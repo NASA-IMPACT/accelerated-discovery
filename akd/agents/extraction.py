@@ -1,14 +1,13 @@
 from abc import ABC
 from typing import Any, List, Union
 
-from atomic_agents.agents.base_agent import BaseAgent, BaseIOSchema
 from loguru import logger
-from pydantic import Field
+from pydantic import BaseModel, Field
 
+from akd.agents import InstructorBaseAgent
 from akd.structures import ExtractionSchema, SingleEstimation
 from akd.utils import AsyncRunMixin
 
-from ._base import BaseAgent
 from .intents import Intent
 
 
@@ -40,7 +39,7 @@ class IntentBasedExtractionSchemaMapper(ExtractionSchemaMapper):
         return res
 
 
-class ExtractionInputSchema(BaseIOSchema):
+class ExtractionInputSchema(BaseModel):
     """Information Extraction input schema"""
 
     query: str = Field(..., description="Query that is used for answering/extraction")
@@ -50,7 +49,7 @@ class ExtractionInputSchema(BaseIOSchema):
     )
 
 
-class EstimationExtractionOutputSchema(BaseIOSchema):
+class EstimationExtractionOutputSchema(BaseModel):
     """Estimation Extraction output schema"""
 
     estimations: List[SingleEstimation] = Field(
@@ -59,6 +58,6 @@ class EstimationExtractionOutputSchema(BaseIOSchema):
     )
 
 
-class EstimationExtractionAgent(BaseAgent):
+class EstimationExtractionAgent(InstructorBaseAgent):
     input_schema = ExtractionInputSchema
     output_schema = EstimationExtractionOutputSchema

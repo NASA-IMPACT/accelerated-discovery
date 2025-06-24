@@ -3,12 +3,12 @@ from typing import List, Optional
 
 from pydantic import Field
 
+from akd._base import InputSchema, OutputSchema
+from akd.agents import InstructorBaseAgent
 from akd.structures import RelevancyLabel
 
-from ._base import BaseAgent, BaseIOSchema
 
-
-class RelevancyAgentInputSchema(BaseIOSchema):
+class RelevancyAgentInputSchema(InputSchema):
     """Input schema for relevancy agent"""
 
     query: str = Field(
@@ -21,7 +21,7 @@ class RelevancyAgentInputSchema(BaseIOSchema):
     )
 
 
-class RelevancyAgentOutputSchema(BaseIOSchema):
+class RelevancyAgentOutputSchema(OutputSchema):
     """Output schema for relevancy agent"""
 
     label: RelevancyLabel = Field(
@@ -38,7 +38,9 @@ class RelevancyAgentOutputSchema(BaseIOSchema):
     )
 
 
-class RelevancyAgent(BaseAgent[RelevancyAgentInputSchema, RelevancyAgentOutputSchema]):
+class RelevancyAgent(
+    InstructorBaseAgent[RelevancyAgentInputSchema, RelevancyAgentOutputSchema],
+):
     input_schema = RelevancyAgentInputSchema
     output_schema = RelevancyAgentOutputSchema
 
@@ -85,7 +87,7 @@ class ScopeRelevanceLabel(str, Enum):
     OUT_OF_SCOPE = "out_of_scope"
 
 
-class MultiRubricRelevancyInputSchema(BaseIOSchema):
+class MultiRubricRelevancyInputSchema(InputSchema):
     """Input schema for multi-rubric relevancy agent"""
 
     query: str = Field(..., description="The query to check for relevance.")
@@ -99,7 +101,7 @@ class MultiRubricRelevancyInputSchema(BaseIOSchema):
     )
 
 
-class MultiRubricRelevancyOutputSchema(BaseIOSchema):
+class MultiRubricRelevancyOutputSchema(OutputSchema):
     """Output schema for multi-rubric relevancy agent"""
 
     # Individual rubric assessments
@@ -140,6 +142,11 @@ class MultiRubricRelevancyOutputSchema(BaseIOSchema):
     )
 
 
-class MultiRubricRelevancyAgent(BaseAgent):
+class MultiRubricRelevancyAgent(
+    InstructorBaseAgent[
+        MultiRubricRelevancyInputSchema,
+        MultiRubricRelevancyOutputSchema,
+    ],
+):
     input_schema = MultiRubricRelevancyInputSchema
     output_schema = MultiRubricRelevancyOutputSchema
