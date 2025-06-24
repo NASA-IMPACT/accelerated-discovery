@@ -1,3 +1,4 @@
+import json
 import subprocess
 import time
 
@@ -23,10 +24,18 @@ def uvicorn_server():
 
 
 @pytest.mark.asyncio
-async def test_websocket_echo():
-    async with websockets.connect("ws://localhost:8999/ws") as websocket:
+async def test_websocket():
+    """
+        Test the websocket connection for the graph. 
+        This is a simple test to ensure that the websocket is working.
+    """
+    async with websockets.connect("ws://localhost:8999/ws?thread_id=34") as websocket:
         message = "What is the weather in London?"
-        await websocket.send(message)
+        jsonData = {
+            "thread_id": 34,
+            "message": message
+        }
+        await websocket.send(json.dumps(jsonData))
         #response = await websocket.recv()
         received_messages = []
         async for msg in websocket:
@@ -34,5 +43,26 @@ async def test_websocket_echo():
                 break
             received_messages.append(msg)
 
-        #print(received_messages)
         assert "sunny" in received_messages[-1].lower()
+        
+
+@pytest.mark.asyncio
+async def test_memory():
+    """
+        Test that the agent/graph can restore/remember details from the last conversation.
+    """
+    async with websockets.connect("ws://localhost:8999/ws?thread_id=34") as websocket:
+        message = "In which country this place is?"
+        jsonData = {
+            "thread_id": 34,
+            "message": message
+        }
+        await websocket.send(json.dumps(jsonData))
+        #response = await websocket.recv()
+        received_messages = []
+        async for msg in websocket:
+            if msg == "##END##":  # Stop when END is received
+                break
+            received_messages.append(msg)
+        
+        assert "england" in received_messages[-1].lower() or "united kingdom" in received_messages[-1].lower()
