@@ -116,7 +116,7 @@ class LangBaseAgent[
         self._memory = ChatMessageHistory()
 
         # Create system prompt template
-        self.system_prompt = ChatPromptTemplate.from_messages(
+        self.prompt_template = ChatPromptTemplate.from_messages(
             [
                 {
                     "role": "system",
@@ -154,9 +154,13 @@ class LangBaseAgent[
         """
         response_model = response_model or self.output_schema
         structured_client = self.client.with_structured_output(response_model)
-        response = await structured_client.ainvoke(
-            input=self.memory.messages,
+
+        # Format messages using the prompt template
+        formatted_messages = self.prompt_template.format_messages(
+            memory=self.memory.messages
         )
+
+        response = await structured_client.ainvoke(formatted_messages)
 
         return cast(OutSchema, response)
 
