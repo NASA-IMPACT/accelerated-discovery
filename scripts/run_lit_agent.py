@@ -67,8 +67,6 @@ async def main(args):
     )
     logger.info(result.model_dump())
 
-    # print(result.results[0].model_dump())
-
     with open("test_lit_agent.json", "w") as f:
         f.write(
             json.dumps([r.model_dump(mode="json") for r in result.results], indent=2)

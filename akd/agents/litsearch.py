@@ -1,4 +1,5 @@
 from typing import List
+import json
 
 from atomic_agents.agents.base_agent import BaseIOSchema
 from loguru import logger
@@ -13,6 +14,7 @@ from akd.tools.scrapers.web_scrapers import (
     WebScraperToolBase,
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
+from akd.tools.evaluator.base_evaluator import LLMEvaluator, LLMEvaluatorInput
 
 from ._base import BaseAgent
 from .extraction import (
@@ -138,9 +140,30 @@ class LitAgent(BaseAgent):
                     ExtractionInputSchema(query=query, content=content.result),
                 )
                 logger.debug(f"Source={content.source} | Answer={answer}")
-                if answer:
-                    content.result = answer
-                    results.append(content)
+
+                custom_metric = {
+                    "name": "Extraction Evaluation",
+                    "criteria": "Evaluate wether or not the answer correctly extracts and summarizes the content, in a way that is relevant to the input query",
+                }
+
+                evaluator = LLMEvaluator(custom_metrics=[custom_metric])
+
+                if not answer:
+                    continue
+
+                evaluation = await evaluator.arun(
+                    LLMEvaluatorInput(
+                        input=params.query,
+                        output=json.dumps(
+                            {"answer": answer, "content": content.result}
+                        ),
+                    ),
+                )
+
+                print(f"Evaluation for {content.source}: {evaluation}")
+
+                content.result = answer
+                results.append(content)
             except KeyboardInterrupt:
                 break
             except:
