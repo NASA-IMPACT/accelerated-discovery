@@ -5,7 +5,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from pydantic import Field
+from pydantic import Field, BaseModel, ConfigDict
 
 # Local fm_factual modules (subtree path)
 from akd.tools.fact_reasoner.fm_factual.atom_extractor import AtomExtractor
@@ -15,10 +15,10 @@ from akd.tools.fact_reasoner.fm_factual.fact_reasoner import FactReasoner
 from akd.tools.fact_reasoner.fm_factual.nli_extractor import NLIExtractorOld
 from akd.tools.fact_reasoner.fm_factual.query_builder import QueryBuilder
 
-from ._base import BaseIOSchema, BaseTool, BaseToolConfig
+from ._base import BaseTool
 
 
-class FactReasonerToolConfig(BaseToolConfig):
+class FactReasonerToolConfig(ConfigDict):
     gen_model: str
     context_retriever_service_type: str
     cache_dir: str
@@ -27,7 +27,7 @@ class FactReasonerToolConfig(BaseToolConfig):
     merlin_path: str
 
 
-class FactReasonerInputSchema(BaseIOSchema):
+class FactReasonerInputSchema(BaseModel):
     """Schema for input of a tool for generating factuality scores."""
 
     response: str = Field(
@@ -35,7 +35,7 @@ class FactReasonerInputSchema(BaseIOSchema):
     )
 
 
-class FactReasonerOutputSchema(BaseIOSchema):
+class FactReasonerOutputSchema(BaseModel):
     """Schema for output of a tool for generating factuality scores."""
 
     results: Dict[str, Any] = Field(..., description="FactReasoner result dictionary.")

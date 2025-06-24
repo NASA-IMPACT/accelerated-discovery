@@ -6,7 +6,7 @@ from pydantic import BaseModel, create_model
 from akd.structures import CallableSpec
 from akd.utils import AsyncRunMixin
 
-from ._base import BaseIOSchema, BaseTool
+from ._base import BaseTool
 
 
 def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
@@ -58,13 +58,13 @@ def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
     input_schema = create_model(
         f"{func_name}InputSchema",
         **fields,
-        __base__=BaseIOSchema,
+        __base__=BaseModel,
         __doc__=f"Input Schema for {func_name}",
     )
     output_schema = create_model(
         f"{func_name}OutputSchema",
         result=(return_type, ...),
-        __base__=BaseIOSchema,
+        __base__=BaseModel,
         __doc__=f"Output Schema for {func_name}",
     )
 

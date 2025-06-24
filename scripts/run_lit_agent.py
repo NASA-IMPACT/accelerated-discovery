@@ -2,11 +2,11 @@ import argparse
 import asyncio
 import json
 
-import instructor
 import openai
 from loguru import logger
+from pydantic import ConfigDict
+from langchain_openai import ChatOpenAI
 
-from akd.agents._base import BaseAgentConfig
 from akd.agents.extraction import (
     EstimationExtractionAgent,
     IntentBasedExtractionSchemaMapper,
@@ -43,7 +43,7 @@ async def main(args):
     )
 
     intent_agent = IntentAgent(
-        config=BaseAgentConfig(client=instructor.from_openai(openai.AsyncOpenAI())),
+        config=ConfigDict(client=ChatOpenAI()),
     )
 
     query_agent = create_query_agent()
