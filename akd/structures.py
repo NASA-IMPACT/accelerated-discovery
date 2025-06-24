@@ -5,7 +5,7 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
 from pydantic import BaseModel, Field, HttpUrl, computed_field
 
 try:
-    import langchain_core
+    import langchain_core  # noqa: F401
 
     LANGCHAIN_CORE_INSTALLED = True
 except ImportError:
@@ -98,8 +98,8 @@ class ResearchData(BaseModel):
     # source: str = Field(..., description="Source for the literature research")
     data_url: Optional[HttpUrl] = Field(
         None,
-        description="URL to download data that the research references/uses. "
-        "If not available, leave empty/None",
+        description="A valid URL to download data that the research references/uses. "
+        "If not available, leave empty/None. No need to provide fake url like example.com",
     )
 
 

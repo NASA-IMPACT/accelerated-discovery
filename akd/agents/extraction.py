@@ -2,12 +2,12 @@ from abc import ABC
 from typing import Any, List, Union
 
 from loguru import logger
-from pydantic import Field, BaseModel
+from pydantic import BaseModel, Field
 
+from akd.agents import InstructorBaseAgent
 from akd.structures import ExtractionSchema, SingleEstimation
 from akd.utils import AsyncRunMixin
 
-from ._base import BaseAgent
 from .intents import Intent
 
 
@@ -58,6 +58,6 @@ class EstimationExtractionOutputSchema(BaseModel):
     )
 
 
-class EstimationExtractionAgent(BaseAgent):
+class EstimationExtractionAgent(InstructorBaseAgent):
     input_schema = ExtractionInputSchema
     output_schema = EstimationExtractionOutputSchema
