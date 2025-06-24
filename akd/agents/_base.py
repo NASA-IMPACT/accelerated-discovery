@@ -5,8 +5,8 @@ from typing import Any, Optional, cast
 
 import instructor
 import openai
-from langchain.memory import ChatMessageHistory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
