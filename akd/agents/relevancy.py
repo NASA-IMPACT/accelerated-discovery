@@ -8,10 +8,6 @@ from akd.agents import InstructorBaseAgent
 from akd.structures import RelevancyLabel
 
 
-from pydantic import Field
-
-from akd.structures import RelevancyLabel
-
 class RelevancyAgentInputSchema(InputSchema):
     """Input schema for relevancy agent"""
 
@@ -91,7 +87,7 @@ class ScopeRelevanceLabel(str, Enum):
     OUT_OF_SCOPE = "out_of_scope"
 
 
-class MultiRubricRelevancyInputSchema(BaseIOSchema):
+class MultiRubricRelevancyInputSchema(InputSchema):
     """Input schema for multi-rubric relevancy agent"""
 
     query: str = Field(..., description="The query to check for relevance.")
@@ -105,7 +101,7 @@ class MultiRubricRelevancyInputSchema(BaseIOSchema):
     )
 
 
-class MultiRubricRelevancyOutputSchema(BaseIOSchema):
+class MultiRubricRelevancyOutputSchema(OutputSchema):
     """Output schema for multi-rubric relevancy agent"""
 
     # Individual rubric assessments
@@ -146,6 +142,11 @@ class MultiRubricRelevancyOutputSchema(BaseIOSchema):
     )
 
 
-class MultiRubricRelevancyAgent(InstructorBaseAgent[MultiRubricRelevancyInputSchema, MultiRubricRelevancyOutputSchema]):
+class MultiRubricRelevancyAgent(
+    InstructorBaseAgent[
+        MultiRubricRelevancyInputSchema,
+        MultiRubricRelevancyOutputSchema,
+    ],
+):
     input_schema = MultiRubricRelevancyInputSchema
     output_schema = MultiRubricRelevancyOutputSchema
