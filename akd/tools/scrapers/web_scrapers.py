@@ -1,23 +1,21 @@
-import asyncio
 import json
 import re
-from abc import abstractmethod
 from typing import List, Optional
-from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 from markdownify import markdownify
-from pydantic import Field, HttpUrl, BaseModel, ConfigDict
+from pydantic import Field, HttpUrl
 from readability import Document
 from requests import HTTPError, RequestException
 
+from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
-from akd.tools._base import BaseTool
+from akd.tools import BaseTool, BaseToolConfig
 
 
-class WebpageScraperToolInputSchema(BaseModel):
+class WebpageScraperToolInputSchema(InputSchema):
     """
     Input schema for the WebpageScraperTool.
     """
@@ -39,7 +37,7 @@ class WebpageMetadata(SearchResultItem):
     )
 
 
-class WebpageScraperToolOutputSchema(BaseModel):
+class WebpageScraperToolOutputSchema(OutputSchema):
     """Schema for the output of the WebpageScraperTool."""
 
     content: str = Field(
@@ -52,7 +50,7 @@ class WebpageScraperToolOutputSchema(BaseModel):
     )
 
 
-class WebpageScraperToolConfig(ConfigDict):
+class WebpageScraperToolConfig(BaseToolConfig):
     """Configuration for the WebpageScraperTool."""
 
     user_agent: str = Field(
@@ -81,23 +79,7 @@ class WebpageScraperToolConfig(ConfigDict):
 class WebScraperToolBase(BaseTool):
     input_schema = WebpageScraperToolInputSchema
     output_schema = WebpageScraperToolOutputSchema
-
-    def __init__(
-        self,
-        config: Optional[WebpageScraperToolConfig] = None,
-        debug: bool = False,
-    ) -> None:
-        """
-        Initializes the WebpageScraperTool.
-
-        Args:
-            config (WebpageScraperToolConfig): Configuration for the tool.
-        """
-        config = config or WebpageScraperToolConfig()
-        super().__init__(config, debug)
-        self.user_agent = config.user_agent
-        self.timeout = config.timeout
-        self.max_content_length = config.max_content_length
+    config_schema = WebpageScraperToolConfig
 
     async def _extract_author(self, soup: BeautifulSoup) -> Optional[str]:
         """
@@ -155,7 +137,7 @@ class WebScraperToolBase(BaseTool):
         Returns:
             WebpageMetadata: The extracted metadata.
         """
-        domain = urlparse(url).netloc
+        # domain = urlparse(url).netloc
 
         metadata = {
             "query": url,
@@ -213,7 +195,7 @@ class WebScraperToolBase(BaseTool):
                         )
                     if "keywords" in schema_data:
                         metadata["keywords"] = (
-                            metadata["keywords"] or scheme_data["keywords"]
+                            metadata["keywords"] or schema_data["keywords"]
                         )
             except (json.JSONDecodeError, AttributeError):
                 pass
@@ -259,7 +241,7 @@ class WebScraperToolBase(BaseTool):
             if metadata["publication_date"]:
                 citation_parts.append(metadata["publication_date"][:4])  # Just the year
             if metadata["doi"]:
-                citation_parts.append(f'DOI: {metadata["doi"]}')
+                citation_parts.append(f"DOI: {metadata['doi']}")
 
             if citation_parts:
                 metadata["citation"] = ". ".join(citation_parts)
@@ -394,7 +376,7 @@ class SimpleWebScraper(WebScraperToolBase):
 
         return str(main_content) if main_content else str(soup)
 
-    async def arun(
+    async def _arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
@@ -452,9 +434,10 @@ class Crawl4AIWebScraper(WebScraperToolBase):
         async with AsyncWebCrawler() as crawler:
             return await crawler.arun(url=url)
 
-    async def arun(
+    async def _arun(
         self,
         params: WebpageScraperToolInputSchema,
+        **kwargs,
     ) -> WebpageScraperToolOutputSchema:
         """
         Async version of the run method.
