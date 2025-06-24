@@ -194,8 +194,8 @@ class LangBaseAgent[
 
 
 class InstructorBaseAgent[
-    InSchema: BaseModel,
-    OutSchema: BaseModel,
+    InSchema: InputSchema,
+    OutSchema: OutputSchema,
 ](BaseAgent):
     """Base class for instructor-based chat agents.
     Note:
