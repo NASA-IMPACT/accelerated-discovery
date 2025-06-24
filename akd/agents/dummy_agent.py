@@ -2,7 +2,7 @@
 
 import json
 import os
-from typing import Annotated, cast, Any
+from typing import Annotated, cast
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
@@ -14,10 +14,13 @@ from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 load_dotenv()
+
+
 class State(TypedDict):
     # Messages have the type "list". The add_messages function in the annotation defines how this state key should be updated.
     # In this case it appends messages to the list, rather than overwriting them)
     messages: Annotated[list, add_messages]
+
 
 llm = init_chat_model(os.environ["FAST_LLM"])
 
@@ -34,6 +37,9 @@ llm_with_tools = llm.bind_tools(tools)
 
 
 def get_graph_builder():
+    """
+    Dummy agent graph builder used to test websocket connections
+    """
     graph_builder = StateGraph(State)
 
     def chatbot(state: State):
@@ -61,7 +67,7 @@ def get_graph_builder():
                         content=json.dumps(tool_result),
                         name=tool_call["name"],
                         tool_call_id=tool_call["id"],
-                    )
+                    ),
                 )
             return {"messages": outputs}
 
@@ -76,14 +82,14 @@ def get_graph_builder():
         has tool calls. Otherwise, route to the end.
         """
         if isinstance(state, list):
-            state_list:list = cast(list,state)
-            msg:BaseMessage = state_list[-1]
+            state_list: list = cast(list, state)
+            msg: BaseMessage = state_list[-1]
         elif messages := state.get("messages", []):
-            msg:BaseMessage = messages[-1]
+            msg: BaseMessage = messages[-1]
         else:
             raise ValueError(f"No messages found in input state to tool_edge: {state}")
-        if isinstance(msg , AIMessage):
-            msg = cast(AIMessage,msg)
+        if isinstance(msg, AIMessage):
+            msg = cast(AIMessage, msg)
             if hasattr(msg, "tool_calls") and len(msg.tool_calls) > 0:
                 return "tools"
         return END

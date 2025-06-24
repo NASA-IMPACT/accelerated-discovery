@@ -1,6 +1,6 @@
 **Usage Guide for the UAH IMPACT Repository Template**
 
-The repository-template repository serves as a baseline for establishing a new repository for projects at IMPACT. It employs Gitflow principles, infrastructure as code via AWS CDK, short lived credentials using AWS IAM Identity Center and OIDC, rule enforcement through CloudFormation Guard, and a CI/CD pipeline with GitHub Actions. The goal with this repository is to standardize deployments across IMPACT making it easier to onboard new members to a project, review project documentation, and trace AWS resources. 
+The repository-template repository serves as a baseline for establishing a new repository for projects at IMPACT. It employs Gitflow principles, infrastructure as code via AWS CDK, short lived credentials using AWS IAM Identity Center and OIDC, rule enforcement through CloudFormation Guard, and a CI/CD pipeline with GitHub Actions. The goal with this repository is to standardize deployments across IMPACT making it easier to onboard new members to a project, review project documentation, and trace AWS resources.
 
 AWS restrictions and policies are as follows: All resources must be tagged with a “project” tag with the name of the project and “contact” with the email of someone who can be reached with questions about the resource. Beyond this there are no additional restrictions aside from those added by the separate permission sets outlined in the ‘UAH IMPACT Roles’
 
@@ -20,7 +20,7 @@ This sets the environment based on the current branch and is used throughout the
 
 This step checks your CloudFormation template to make sure that the resources created by your CDK stack are in compliance with IMPACT rules. This is accomplished using CloudFormation Guard and a centrally managed rules file. If you would like to independently test your CloudFormation template please view “Checking CloudFormation templates locally” below.. This step is designed to catch any incompliant resources before they are deployed in the UAH AWS environment. Skipping this step with non-compliant resources will still trigger the service control and tagging policies in the UAH environment.
 
-Currently the requirements are very simple: Tag all resources with a “project” tag with the name of the project and “contact” with the email of someone who can be reached with questions about the resource. This can be managed by tagging the resources individually in CDK or more easily by using Tags.of in the app.py file as shown below. This will tag all resources created by the stack with the tags you define. 
+Currently the requirements are very simple: Tag all resources with a “project” tag with the name of the project and “contact” with the email of someone who can be reached with questions about the resource. This can be managed by tagging the resources individually in CDK or more easily by using Tags.of in the app.py file as shown below. This will tag all resources created by the stack with the tags you define.
 
 ![alt_text](images/image1.png "image_tooltip")
 
@@ -101,7 +101,7 @@ Make sure the following options are selected
 
 This repository is built around using AWS’s IAC solution, CDK (for those unfamiliar with CDK see AWS CDK Workshop: [https://cdkworkshop.com/](https://cdkworkshop.com/)). **Note that the UAH AWS Organization accounts are already bootstrapped and ready to work with CDK v2 so you will not need to perform that step.**
 
-Once your branch protections are set up you can begin setting up the necessary directories for CDK. It is recommended that you make a separate directory for this and run “cdk init sample-app --language=&lt;cdk compatible language of choice>” 
+Once your branch protections are set up you can begin setting up the necessary directories for CDK. It is recommended that you make a separate directory for this and run “cdk init sample-app --language=&lt;cdk compatible language of choice>”
 
 **Populating the github environments**
 
@@ -163,20 +163,20 @@ The UAH IMPACT AWS Organizations have been pre-configured with the following rol
 * admin-oidc
     * This role has administrative rights and is intended to be used with the development branch and environment for testing purposes.
     * This is a very open role and should be used cautiously.
-    * [https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) 
+    * [https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html)
 * mcp-tenantDeveloper-oidc
     * This role mirrors the permissions boundaries of the MCP LOC 30 environment and is intended to be used with the staging branch and environment to test that the application can be deployed in the MCP LOC 30 environment.
-    * See here for the current restrictions: [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp-tenantDeveloper.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp-tenantDeveloper.json) 
+    * See here for the current restrictions: [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp-tenantDeveloper.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp-tenantDeveloper.json)
 * mcp-tenantOperator-oidc
     * This role mirrors the permissions boundaries of the MCP LOC 40 environment which includes additional permissions from the LOC 30 environment and is intended to be used with the staging branch and environment to test that the application can be deployed in the MCP LOC 40 environment.
-    * See here for the current restrictions: [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp_tenantOperator-APIG.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp_tenantOperator-APIG.json) 
+    * See here for the current restrictions: [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp_tenantOperator-APIG.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp_tenantOperator-APIG.json)
 * smce-ProjectAdmins-oidc
     * This role has Admin permissions that are only restricted by the permission sets in the SMCE environment and is intended to be used with the staging branch and environment to test that your application can be deployed in the SMCE environment.
     * The following 4 permission sets limit the permissions of the Admin role:
         * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Disable_Non-US_Regions.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Disable_Non-US_Regions.json)
         * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_MFA_ForceEnable.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_MFA_ForceEnable.json)
         * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_PreserveRestrictions.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_PreserveRestrictions.json)
-        * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Training_S3ReadAccess.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Training_S3ReadAccess.json) 
+        * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Training_S3ReadAccess.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Training_S3ReadAccess.json)
 * smce-ProjectPowerUsers-oidc
     * This role is similar to the pervious SMCE role but instead is granted PowerUser permissions that are then restricted by the same 4 permission sets as the smce Admin role above
 
@@ -234,7 +234,7 @@ docker run --rm \
              searxng/searxng
 ```
 When you run the container for the first time it will create configs for searxng in the provided directory.
-The default searxng config has disabled the json access for api endpoints. For enabling it 
+The default searxng config has disabled the json access for api endpoints. For enabling it
 
 Stop the container `docker stop searxng` \
 Open `./temp/searxng/settings.xml` and add `- json` under search> formats section (after `- html`).
@@ -253,7 +253,9 @@ To verify the setup run the lit agent script by passing a query.
 python scripts/run_lit_agent.py  --query "What are the environmental considerations for oil palm cultivation?"
 ```
 
-### Usefull uv commands
+### Usefull commands
 
 Ininitialize new project with `uv init` \
 Adding new packages `uv add <package_name>`
+
+To install pre-commit hooks `pre-commit install`
