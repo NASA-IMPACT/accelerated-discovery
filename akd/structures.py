@@ -158,3 +158,33 @@ GuardrailType = Union[BaseTool, Callable, Coroutine]
 # A callable or a tuple of callable and input key mapping
 AnyCallable = Union[BaseTool, BaseAgent, Callable[..., Any]]
 CallableSpec = Union[AnyCallable, Tuple[AnyCallable, Dict[str, str]]]
+
+
+class SubSection(BaseModel):
+    title: str = Field(..., title="Title of the sub-section")
+    content: str = Field(..., title="Content of the subsection as a string")
+
+
+class Section(BaseModel):
+    title: str = Field(..., title="Title of the section")
+    content: Optional[str] = Field(..., title="Content of the section as a string")
+    subsections: Optional[list[SubSection]] = Field(..., title="List of optional subsections pertaining to the section")
+
+
+class Paper(BaseModel):
+    title: str = Field(..., title="Title of the paper")
+    abstract: Optional[str] = Field(..., title="Abstract of the paper if present")
+    authors: Optional[list] = Field(..., title="List of authors")
+    year: Optional[int] = Field(..., title="Year of publication")
+    sections: Optional[List[Section]] = Field(..., title="Sections present in the paper")
+    citations: Optional[list] = Field(..., title="List of citations")
+    references: Optional[list] = Field(..., title="List of references used in the paper")
+    figures: Optional[list] = Field(..., title="List of figures present in the paper")
+    tables: Optional[list] = Field(..., title="List of tables present in the paper")
+    referenceCount: Optional[int] = Field(..., title="Reference count")
+    citationCount: Optional[int] = Field(..., title="Citation count")
+    doi: Optional[str] = Field(..., title="Paper's DOI")
+    paperId: Optional[str] = Field(..., title="Semantic Scholar Paper ID")
+    arxivId: Optional[str] = Field(..., title="ArxivID for access to PDF")
+    openAccessPdf: Optional[dict] = Field(..., title="Open access availability of the PDF via Semantic Scholar")
+    section_titles: Optional[list] = Field(..., title="List of section titles")
