@@ -148,11 +148,10 @@ class AbstractBase[
             or (self.config_schema() if self.config_schema else None)
             or BaseConfig()
         )
-        debug = getattr(config, "debug", False) or debug
-        self.debug = debug
         self.config = config
         self._kwargs = kwargs
         self._post_init()
+        self.debug = getattr(config, "debug", False) or debug
 
     def _post_init(self) -> None:
         """

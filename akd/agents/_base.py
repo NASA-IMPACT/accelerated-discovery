@@ -98,7 +98,7 @@ class LangBaseAgent[
         config = config or BaseAgentConfig(
             api_key=CONFIG.model_config_settings.api_keys.openai,
             model_name=CONFIG.model_config_settings.model_name,
-            temperature=0.0,
+            temperature=CONFIG.model_config_settings.temperature,
             system_prompt=DEFAULT_SYSTEM_PROMPT,
             debug=debug,
         )
@@ -157,7 +157,7 @@ class LangBaseAgent[
 
         # Format messages using the prompt template
         formatted_messages = self.prompt_template.format_messages(
-            memory=self.memory.messages
+            memory=self.memory.messages,
         )
 
         response = await structured_client.ainvoke(formatted_messages)
@@ -210,7 +210,7 @@ class InstructorBaseAgent[
         config = config or BaseAgentConfig(
             api_key=CONFIG.model_config_settings.api_keys.openai,
             model_name=CONFIG.model_config_settings.model_name,
-            temperature=0.0,
+            temperature=CONFIG.model_config_settings.temperature,
             system_prompt=DEFAULT_SYSTEM_PROMPT,
             debug=debug,
         )
