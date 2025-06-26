@@ -15,7 +15,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from akd.structures import SearchResultItem
-from akd.tools.source_validator import create_journal_validator
+from akd.tools.source_validator import create_source_validator
 
 
 def create_test_search_results():
@@ -71,7 +71,7 @@ async def test_journal_validator():
     print("=" * 50)
 
     # Create validator instance
-    validator = create_journal_validator(debug=True)
+    validator = create_source_validator(debug=True)
 
     # Create test search results
     test_results = create_test_search_results()
@@ -141,7 +141,7 @@ async def test_doi_extraction():
     print("=" * 50)
 
     # Create validator to access DOI extraction
-    validator = create_journal_validator()
+    validator = create_source_validator()
 
     # Test URLs with different DOI formats
     test_urls = [
