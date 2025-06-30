@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import aiohttp
@@ -18,7 +17,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
+from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
+from akd.utils import get_akd_root
 
 if TYPE_CHECKING:
     pass
@@ -39,25 +40,30 @@ class ValidationResult(BaseModel):
     """Schema for validation result."""
 
     source_info: Optional[SourceInfo] = Field(
-        None, description="Source information from CrossRef"
+        None,
+        description="Source information from CrossRef",
     )
     is_whitelisted: bool = Field(..., description="Whether source is in whitelist")
     whitelist_category: Optional[str] = Field(
-        None, description="Category from whitelist (e.g., ES, Bio, etc.)"
+        None,
+        description="Category from whitelist (e.g., ES, Bio, etc.)",
     )
     validation_errors: List[str] = Field(
-        default_factory=list, description="List of validation errors"
+        default_factory=list,
+        description="List of validation errors",
     )
     confidence_score: float = Field(
-        ..., description="Confidence in validation (0.0-1.0)"
+        ...,
+        description="Confidence in validation (0.0-1.0)",
     )
 
 
 class SourceValidatorInputSchema(InputSchema):
     """Input schema for source validation tool."""
 
-    search_results: List[Any] = Field(
-        ..., description="List of search results to validate"
+    search_results: List[SearchResultItem] = Field(
+        ...,
+        description="List of search results to validate",
     )
     whitelist_file_path: Optional[str] = Field(
         None,
@@ -69,7 +75,8 @@ class SourceValidatorOutputSchema(OutputSchema):
     """Output schema for source validation tool."""
 
     validated_results: List[ValidationResult] = Field(
-        ..., description="List of validation results"
+        ...,
+        description="List of validation results",
     )
     summary: Dict[str, Any] = Field(..., description="Summary statistics of validation")
 
@@ -82,13 +89,18 @@ class SourceValidatorConfig(BaseToolConfig):
         description="Base URL for CrossRef API",
     )
     whitelist_file_path: Optional[str] = Field(
-        default=None, description="Path to source whitelist JSON file"
+        default_factory=lambda: str(
+            get_akd_root() / "docs" / "pubs_whitelist.json",
+        ),
+        description="Path to source whitelist JSON file",
     )
     timeout_seconds: int = Field(
-        default=30, description="Timeout for API requests in seconds"
+        default=30,
+        description="Timeout for API requests in seconds",
     )
     max_concurrent_requests: int = Field(
-        default=10, description="Maximum number of concurrent API requests"
+        default=10,
+        description="Maximum number of concurrent API requests",
     )
     user_agent: str = Field(
         default="SourceValidator/1.0",
@@ -98,7 +110,7 @@ class SourceValidatorConfig(BaseToolConfig):
 
 
 class SourceValidator(
-    BaseTool[SourceValidatorInputSchema, SourceValidatorOutputSchema]
+    BaseTool[SourceValidatorInputSchema, SourceValidatorOutputSchema],
 ):
     """
     Tool for validating research sources against a source whitelist.
@@ -115,7 +127,9 @@ class SourceValidator(
     config_schema = SourceValidatorConfig
 
     def __init__(
-        self, config: Optional[SourceValidatorConfig] = None, debug: bool = False
+        self,
+        config: Optional[SourceValidatorConfig] = None,
+        debug: bool = False,
     ):
         """Initialize the source validator tool."""
         config = config or SourceValidatorConfig()
@@ -140,12 +154,10 @@ class SourceValidator(
 
     def _load_whitelist(self) -> Dict[str, Any]:
         """Load source whitelist from JSON file."""
-        whitelist_path = self.config.whitelist_file_path
-        if not whitelist_path:
-            # Default path relative to the project
-            whitelist_path = (
-                Path(__file__).parent.parent.parent / "docs" / "pubs_whitelist.json"
-            )
+        whitelist_path = (
+            self.config.whitelist_file_path
+            or get_akd_root() / "docs" / "pubs_whitelist.json"
+        )
 
         try:
             with open(whitelist_path, "r", encoding="utf-8") as f:
@@ -153,7 +165,7 @@ class SourceValidator(
 
             if self.debug:
                 logger.info(
-                    f"Loaded whitelist with {len(whitelist_data.get('data', {}))} categories"
+                    f"Loaded whitelist with {len(whitelist_data.get('data', {}))} categories",
                 )
 
             return whitelist_data
@@ -187,7 +199,9 @@ class SourceValidator(
         return None
 
     async def _fetch_crossref_metadata(
-        self, session: aiohttp.ClientSession, doi: str
+        self,
+        session: aiohttp.ClientSession,
+        doi: str,
     ) -> Optional[Dict[str, Any]]:
         """
         Fetch source metadata from CrossRef API.
@@ -217,7 +231,7 @@ class SourceValidator(
                     return None
                 else:
                     logger.warning(
-                        f"CrossRef API error {response.status} for DOI: {doi}"
+                        f"CrossRef API error {response.status} for DOI: {doi}",
                     )
                     return None
 
@@ -229,7 +243,10 @@ class SourceValidator(
             return None
 
     def _parse_crossref_response(
-        self, data: Dict[str, Any], doi: str, original_url: str
+        self,
+        data: Dict[str, Any],
+        doi: str,
+        original_url: str,
     ) -> SourceInfo:
         """
         Parse CrossRef API response into SourceInfo.
@@ -283,7 +300,8 @@ class SourceValidator(
         )
 
     def _validate_against_whitelist(
-        self, source_info: SourceInfo
+        self,
+        source_info: SourceInfo,
     ) -> tuple[bool, Optional[str], float]:
         """
         Validate source against whitelist.
@@ -298,7 +316,6 @@ class SourceValidator(
             return False, None, 0.0
 
         source_title = source_info.title.lower().strip()
-        source_issns = set(source_info.issn or [])
 
         # Search through all categories in whitelist
         for category_name, category_data in self._whitelist["data"].items():
@@ -332,14 +349,16 @@ class SourceValidator(
         return False, None, 0.0
 
     async def _validate_single_result(
-        self, session: aiohttp.ClientSession, result: Any
+        self,
+        session: aiohttp.ClientSession,
+        result: Any,
     ) -> ValidationResult:
         """Validate a single search result."""
         validation_errors = []
 
         # Extract DOI
         doi = getattr(result, "doi", None) or self._extract_doi_from_url(
-            str(result.url)
+            str(result.url),
         )
         if not doi and hasattr(result, "pdf_url") and result.pdf_url:
             doi = self._extract_doi_from_url(str(result.pdf_url))
@@ -359,7 +378,7 @@ class SourceValidator(
 
         if not crossref_data:
             validation_errors.append(
-                f"Failed to fetch metadata from CrossRef for DOI: {doi}"
+                f"Failed to fetch metadata from CrossRef for DOI: {doi}",
             )
             return ValidationResult(
                 source_info=None,
@@ -374,7 +393,7 @@ class SourceValidator(
 
         # Validate against whitelist
         is_whitelisted, category, confidence = self._validate_against_whitelist(
-            source_info
+            source_info,
         )
 
         return ValidationResult(
@@ -386,7 +405,9 @@ class SourceValidator(
         )
 
     async def _arun(
-        self, params: SourceValidatorInputSchema, **kwargs
+        self,
+        params: SourceValidatorInputSchema,
+        **kwargs,
     ) -> SourceValidatorOutputSchema:
         """
         Run the source validation tool.
@@ -409,7 +430,8 @@ class SourceValidator(
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
 
         async with aiohttp.ClientSession(
-            connector=connector, timeout=timeout
+            connector=connector,
+            timeout=timeout,
         ) as session:
             # Process results concurrently but with limited concurrency
             import asyncio
@@ -440,7 +462,7 @@ class SourceValidator(
                             whitelist_category=None,
                             validation_errors=[f"Validation error: {str(result)}"],
                             confidence_score=0.0,
-                        )
+                        ),
                     )
                 else:
                     final_results.append(result)
@@ -478,7 +500,8 @@ class SourceValidator(
             logger.info(f"Validation summary: {summary}")
 
         return SourceValidatorOutputSchema(
-            validated_results=validated_results, summary=summary
+            validated_results=validated_results,
+            summary=summary,
         )
 
 
