@@ -1,12 +1,13 @@
 import asyncio
 from abc import abstractmethod
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 try:
     from langchain_core.tools.structured import StructuredTool
 
     LANGCHAIN_CORE_INSTALLED = True
-except:
+except Exception:
     LANGCHAIN_CORE_INSTALLED = False
 
 
@@ -110,3 +111,10 @@ class LangchainToolMixin:
             description=description,
             args_schema=self.input_schema,
         )
+
+
+def get_akd_root() -> Path:
+    """
+    Returns the root directory of the AKD project.
+    """
+    return Path(__file__).parent.parent.resolve()
