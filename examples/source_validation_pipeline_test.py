@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Example script demonstrating the journal validation pipeline.
+Example script demonstrating the source validation pipeline.
 
 This example shows how to:
 1. Search for research papers using SearxNG and Semantic Scholar
 2. Extract DOIs from the search results
-3. Validate journals against a controlled whitelist using CrossRef API
+3. Validate sources against a controlled whitelist using CrossRef API
 4. Generate validation reports
 
 Usage:
-    python examples/journal_validation_pipeline.py
+    python examples/source_validation_test.py
 """
 
 import asyncio
@@ -23,7 +23,7 @@ sys.path.insert(0, str(project_root))
 
 from akd.structures import SearchResultItem
 from akd.tools.factory import create_default_search_tool
-from akd.tools.source_validator import create_journal_validator
+from akd.tools.source_validator import create_source_validator
 
 # Import SemanticScholarSearchTool separately since it's not in factory
 try:
@@ -77,8 +77,8 @@ class JournalValidationPipeline:
             print(f"Warning: Could not initialize Semantic Scholar tool: {e}")
             self.semantic_scholar_tool = None
 
-        # Initialize journal validator
-        self.journal_validator = create_journal_validator(debug=debug)
+        # Initialize source validator
+        self.source_validator = create_source_validator(debug=debug)
 
     async def search_multiple_sources(
         self, queries: List[str], max_results_per_query: int = 5
@@ -158,7 +158,7 @@ class JournalValidationPipeline:
         """
         validation_input = {"search_results": search_results}
 
-        validation_results = await self.journal_validator.arun(validation_input)
+        validation_results = await self.source_validator.arun(validation_input)
 
         return {
             "results": validation_results.validated_results,
@@ -208,15 +208,15 @@ class JournalValidationPipeline:
                 print("   Status: ⚠️ NOT WHITELISTED")
                 print(f"   Confidence: {result.confidence_score:.2f}")
 
-            if result.journal_info:
-                ji = result.journal_info
-                print(f"   Journal: {ji.title}")
-                print(f"   Publisher: {ji.publisher or 'Unknown'}")
-                print(f"   DOI: {ji.doi}")
-                print(f"   Open Access: {ji.is_open_access or 'Unknown'}")
-                print(f"   Original URL: {ji.url}")
-                if ji.issn:
-                    print(f"   ISSN: {', '.join(ji.issn)}")
+            if result.source_info:
+                si = result.source_info
+                print(f"   Source: {si.title}")
+                print(f"   Publisher: {si.publisher or 'Unknown'}")
+                print(f"   DOI: {si.doi}")
+                print(f"   Open Access: {si.is_open_access or 'Unknown'}")
+                print(f"   Original URL: {si.url}")
+                if si.issn:
+                    print(f"   ISSN: {', '.join(si.issn)}")
 
         print("\n" + "=" * 80)
 
@@ -466,12 +466,12 @@ class EnhancedJournalValidationPipeline(JournalValidationPipeline):
             return search_result.doi
 
         if hasattr(search_result, "url"):
-            doi = self.journal_validator._extract_doi_from_url(str(search_result.url))
+            doi = self.source_validator._extract_doi_from_url(str(search_result.url))
             if doi:
                 return doi
 
         if hasattr(search_result, "pdf_url") and search_result.pdf_url:
-            doi = self.journal_validator._extract_doi_from_url(
+            doi = self.source_validator._extract_doi_from_url(
                 str(search_result.pdf_url)
             )
             if doi:
@@ -520,7 +520,7 @@ class EnhancedJournalValidationPipeline(JournalValidationPipeline):
 
         # Use standard validation with enhanced results
         validation_input = {"search_results": enhanced_results}
-        validation_results = await self.journal_validator.arun(validation_input)
+        validation_results = await self.source_validator.arun(validation_input)
 
         return {
             "results": validation_results.validated_results,
@@ -660,7 +660,7 @@ async def demo_enhanced_doi_resolution():
     # Show DOI resolution statistics
     total_cases = len(test_cases)
     resolved_cases = sum(
-        1 for result in validation_data["results"] if result.journal_info
+        1 for result in validation_data["results"] if result.source_info
     )
 
     print("\nDOI RESOLUTION STATISTICS:")
