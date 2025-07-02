@@ -4,7 +4,7 @@ from akd.agents.factory import create_multi_rubric_relevancy_agent
 from akd.agents.relevancy import MultiRubricRelevancyAgent
 from akd.tools.relevancy import EnhancedRelevancyCheckerConfig, RubricWeights
 
-from .scrapers.composite import CompositeWebScraper, ResearchArticleResolver
+from .scrapers.composite import CompositeScraper, ResearchArticleResolver
 from .scrapers.pdf_scrapers import SimplePDFScraper
 from .scrapers.resolvers import (
     ADSResolver,
@@ -20,6 +20,11 @@ from .scrapers.web_scrapers import (
     WebScraperToolBase,
 )
 from .search import SearchTool, SearxNGSearchTool, SearxNGSearchToolConfig
+from .source_validator import (
+    SourceValidator,
+    SourceValidatorConfig,
+    create_source_validator,
+)
 
 
 def create_default_scraper(
@@ -28,7 +33,7 @@ def create_default_scraper(
 ) -> WebScraperToolBase:
     config = config or WebpageScraperToolConfig()
     config.debug = debug
-    return CompositeWebScraper(
+    return CompositeScraper(
         SimpleWebScraper(config),
         Crawl4AIWebScraper(config),
         SimplePDFScraper(config),
@@ -52,6 +57,33 @@ def create_default_article_resolver(
         ArxivResolver(config),
         IdentityResolver(config),
     )
+
+
+def create_default_source_validator(
+    config: Optional[SourceValidatorConfig] = None,
+    whitelist_file_path: Optional[str] = None,
+    max_concurrent_requests: int = 10,
+    debug: bool = False,
+) -> SourceValidator:
+    """
+    Create a source validator with default parameters.
+
+    Args:
+        config: Optional SourceValidatorConfig. If provided, other parameters are ignored.
+        whitelist_file_path: Path to source whitelist JSON file. If None, uses default path in akd/docs/pubs_whitelist.json.
+        max_concurrent_requests: Maximum number of concurrent API requests.
+        debug: Enable debug logging.
+
+    Returns:
+        Configured SourceValidator instance.
+    """
+    if config is None:
+        return create_source_validator(
+            whitelist_file_path=whitelist_file_path,
+            max_concurrent_requests=max_concurrent_requests,
+            debug=debug,
+        )
+    return SourceValidator(config, debug=debug)
 
 
 def create_strict_literature_config_for_relevancy(
