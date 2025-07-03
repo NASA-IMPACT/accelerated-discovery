@@ -54,7 +54,7 @@ async def test_granite_guardian_tool_with_fake_search_results():
     assert isinstance(output.risk_results, list)
     assert len(output.risk_results) == 2
     assert all(
-        "harm_label" in item or "skipped" in item for item in output.risk_results
+        "risk_label" in item or "skipped" in item for item in output.risk_results
     )
 
 

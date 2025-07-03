@@ -128,8 +128,8 @@ class GraniteGuardianTool(
             result = chat(model=self.model, messages=messages)
             label = result["message"]["content"].strip().lower()
             return {
-                "harm_label": label,
-                "is_harmful": label == "yes",
+                "risk_label": label,
+                "is_risky": label == "yes",
                 "raw_response": result,
             }
         except Exception as e:
@@ -172,8 +172,8 @@ class GraniteGuardianTool(
                     "index": idx,
                     "query": item.query,
                     "snippet": item.content[:100],
-                    "harm_label": res.get("harm_label"),
-                    "is_harmful": res.get("is_harmful"),
+                    "risk_label": res.get("risk_label"),
+                    "is_risky": res.get("is_risky"),
                     "raw_response": res.get("raw_response"),
                 },
             )
