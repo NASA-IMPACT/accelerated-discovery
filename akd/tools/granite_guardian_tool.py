@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -7,6 +8,23 @@ from pydantic.fields import Field
 from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.search import SearchResultItem, SearchToolOutputSchema
+
+
+class RiskDefinition(Enum):
+    """
+    Enumeration of possible risk definitions defined in Granite Guardian.
+    """
+
+    HARM = "harm"
+    SOCIAL_BIAS = "social_bias"
+    PROFANITY = "profanity"
+    SEXUAL_CONTENT = "sexual_content"
+    UNETHICAL_BEHAVIOR = "unethical_behavior"
+    VIOLENCE = "violence"
+    JAILBREAK = "jailbreak"
+    GROUNDEDNESS = "groundedness"
+    RELEVANCE = "relevance"
+    ANSWER_RELEVANCE = "answer_relevance"
 
 
 class GraniteGuardianInputSchema(InputSchema):
@@ -21,7 +39,7 @@ class GraniteGuardianInputSchema(InputSchema):
         description="Search result outputs for batch risk analysis.",
     )
     risk_type: Optional[str] = Field(
-        "answer_relevance",
+        default=RiskDefinition.ANSWER_RELEVANCE,
         description="Type of risk check to apply.",
     )
 
@@ -43,7 +61,10 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     """
 
     model: str = "granite3-guardian"
-    default_risk_type: str = "answer_relevance"
+    default_risk_type: RiskDefinition = Field(
+        default=RiskDefinition.ANSWER_RELEVANCE,
+        description="Default risk check",
+    )
 
 
 class GraniteGuardianTool(
@@ -77,20 +98,12 @@ class GraniteGuardianTool(
         super().__init__(config, debug)
         self.model = config.model
         self.default_risk_type = config.default_risk_type
-        if self.default_risk_type not in self.allowed_risk_definitions:
-            raise ValueError(
-                f"Risk check type '{self.default_risk_type}' is not supported. Allowed values are: {self.allowed_risk_definitions}",
-            )
 
     async def _arun(
         self,
         params: GraniteGuardianInputSchema,
     ) -> GraniteGuardianOutputSchema:
         risk_type = params.risk_type or self.default_risk_type
-        if risk_type not in self.allowed_risk_definitions:
-            raise ValueError(
-                f"Risk check type '{risk_type}' is not supported. Allowed values are: {self.allowed_risk_definitions}",
-            )
 
         self._set_risk_definition(risk_type)
 

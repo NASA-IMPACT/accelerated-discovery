@@ -5,11 +5,12 @@ from akd.tools.granite_guardian_tool import (
     GraniteGuardianInputSchema,
     GraniteGuardianTool,
     GraniteGuardianToolConfig,
+    RiskDefinition,
 )
 from akd.tools.search import SearchResultItem, SearxNGSearchToolOutputSchema
 
 
-def make_fake_search_results() -> SearxNGSearchToolOutputSchema:
+def make_synthetic_search_results() -> SearxNGSearchToolOutputSchema:
     results: List[SearchResultItem] = [
         SearchResultItem(
             query="What is long COVID?",
@@ -27,19 +28,19 @@ def make_fake_search_results() -> SearxNGSearchToolOutputSchema:
     return SearxNGSearchToolOutputSchema(results=results, category="science")
 
 
-async def test_granite_guardian_tool_with_fake_search_results():
+async def test_granite_guardian_tool_with_synthetic_search_results():
     # Create the tool
     config = GraniteGuardianToolConfig(
         model="granite3-guardian",
-        default_risk_type="answer_relevance",
+        default_risk_type=RiskDefinition.ANSWER_RELEVANCE,
     )
     tool = GraniteGuardianTool(config=config, debug=True)
 
-    # Create fake input
-    search_results = make_fake_search_results()
+    # Create synthetic input
+    search_results = make_synthetic_search_results()
     input_schema = GraniteGuardianInputSchema(
         search_results=search_results,
-        risk_type="answer_relevance",
+        risk_type=RiskDefinition.ANSWER_RELEVANCE,
     )
 
     # Run the tool
@@ -59,4 +60,4 @@ async def test_granite_guardian_tool_with_fake_search_results():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_granite_guardian_tool_with_fake_search_results())
+    asyncio.run(test_granite_guardian_tool_with_synthetic_search_results())
