@@ -76,19 +76,6 @@ class GraniteGuardianTool(
     output_schema = GraniteGuardianOutputSchema
     config_schema = GraniteGuardianToolConfig
 
-    allowed_risk_definitions = [
-        "harm",
-        "social_bias",
-        "profanity",
-        "sexual_content",
-        "unethical_behavior",
-        "violence",
-        "jailbreak",
-        "groundedness",
-        "relevance",
-        "answer_relevance",
-    ]
-
     def __init__(
         self,
         config: GraniteGuardianToolConfig | None = None,
