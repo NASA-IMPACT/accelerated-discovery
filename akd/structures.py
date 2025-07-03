@@ -199,7 +199,7 @@ class ToolSearchResult(BaseModel):
     )
     args: Optional[Dict[str, Any]] = Field(
         None,
-        description="Arguments extracted when tool is found",
+        description="Input arguments extracted when tool is found",
     )
     result: Optional[Any] = Field(
         None,
