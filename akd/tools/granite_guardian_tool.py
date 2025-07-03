@@ -6,7 +6,7 @@ from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
-from akd.tools.search import SearchResultItem, SearxNGSearchToolOutputSchema
+from akd.tools.search import SearchResultItem, SearchToolOutputSchema
 
 
 class GraniteGuardianInputSchema(InputSchema):
@@ -16,7 +16,7 @@ class GraniteGuardianInputSchema(InputSchema):
 
     query: Optional[str] = Field(None, description="Query text to evaluate.")
     response: Optional[str] = Field(None, description="Assistant/model response.")
-    search_results: Optional[SearxNGSearchToolOutputSchema] = Field(
+    search_results: Optional[SearchToolOutputSchema] = Field(
         None,
         description="Search result outputs for batch risk analysis.",
     )
