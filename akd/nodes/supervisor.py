@@ -202,14 +202,14 @@ class LLMSupervisor(BaseSupervisor):
                             result = msg.content
 
                         pending_tool_calls[tool_call_id].result = result
-                    except Exception as e:
+                    except Exception:
                         # Handle parsing errors
                         pending_tool_calls[tool_call_id].result = msg.content
 
         return results
 
 
-class ReactLLMSupervisor(LLMSupervisor):
+class ReActLLMSupervisor(LLMSupervisor):
     """
     ReAct pattern based supervisor
     """
@@ -227,7 +227,7 @@ class ManualSupervisor(BaseSupervisor):
     pass
 
 
-class DummyLLMSupervisor(ReactLLMSupervisor):
+class DummyLLMSupervisor(ReActLLMSupervisor):
     """
     Dummy LLM based supervisor using ReAct
     """
