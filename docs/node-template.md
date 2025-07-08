@@ -6,9 +6,9 @@ Each node should adhere to a structured design that includes:
 - A well-defined state (pydantic types / base model with accessible keys)
   - Node State
   - Global State
-- Input/Ooutput guardrails for validation
+- Input/Output guardrails for validation
   - Input Guardrails will validate the input to the node
-  - Output guardrails wil lvalidate the output from the node supervisor
+  - Output guardrails will validate the output from the node supervisor
 - A node supervisor (which runs the core logic, and could be custom logic or LLM-based agent)
   - A supervisor that only has visibility over the node’s tool subset
 - A subset of tools accessible within the node
