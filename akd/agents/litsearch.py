@@ -132,6 +132,14 @@ class LitAgent(BaseAgent):
             )
             contents.append(ExtractionDTO(source=str(url), result=content))
 
+        custom_metric = {
+            "name": "Extraction Evaluation",
+            "criteria": "Evaluate wether or not the answer correctly extracts and summarizes the content, in a way that is relevant to the input query",
+        }
+
+        evaluator = LLMEvaluator(custom_metrics=[custom_metric])
+        logger.info(f"EVALUATOR: {evaluator}")
+
         results = []
         for content in contents:
             self.extraction_agent.reset_memory()
@@ -140,15 +148,12 @@ class LitAgent(BaseAgent):
                     ExtractionInputSchema(query=query, content=content.result),
                 )
                 logger.debug(f"Source={content.source} | Answer={answer}")
-
-                custom_metric = {
-                    "name": "Extraction Evaluation",
-                    "criteria": "Evaluate wether or not the answer correctly extracts and summarizes the content, in a way that is relevant to the input query",
-                }
-
-                evaluator = LLMEvaluator(custom_metrics=[custom_metric])
+                logger.debug("PINGPONG")
 
                 if not answer:
+                    logger.warning(
+                        f"No answer extracted for content from {content.source}, skipping evaluation."
+                    )
                     continue
 
                 evaluation = await evaluator.arun(
@@ -161,12 +166,18 @@ class LitAgent(BaseAgent):
                 )
 
                 print(f"Evaluation for {content.source}: {evaluation}")
+                if evaluation.score < 0.5:
+                    logger.warning(
+                        f"Low evaluation score ({evaluation.score}) for content from {content.source}, skipping."
+                    )
+                    continue
 
                 content.result = answer
                 results.append(content)
             except KeyboardInterrupt:
                 break
-            except:
+            except Exception as e:
+                logger.warning(f"Error processing content from {content.source}: {e}")
                 continue
         return LitAgentOutputSchema(results=results)
 

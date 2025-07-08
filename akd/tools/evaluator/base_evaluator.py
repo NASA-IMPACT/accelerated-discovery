@@ -71,7 +71,7 @@ class LLMEvaluator(BaseTool):
             else [usefulness, faithfulness, completeness, accuracy, timeliness]
         )
 
-    async def arun(self, params: LLMEvaluatorInput) -> List[LLMEvaluatorOutput]:
+    async def arun(self, params: LLMEvaluatorInput) -> LLMEvaluatorOutput:
         """ """
         test_case = LLMTestCase(input=params.input_query, actual_output=params.output)
 
