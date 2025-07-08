@@ -48,49 +48,56 @@ This is a **human-centric Multi-Agent System (MAS) framework** for scientific di
 - **Multi-Agent RAG**: Literature, Data, Code search agents, Gap agents, conflict agents
 
 #### NodeTemplate Architecture
-All functional components MUST implement the `NodeTemplate` class (`akd/nodes/templates.py`):
+All functional components MUST implement the `AbstractNodeTemplate` class (`akd/nodes/templates.py`):
 
 ```python
 class NodeTemplate:
     - State: Well-defined, typed dictionary for node's internal memory
     - Input Guardrails: Validation functions executed on input state
+    - Output Guardrails: Validation functions on node output
     - Node Supervisor: LLM agent or custom logic for internal orchestration
     - Tool Subset: Explicit list of permitted tools (principle of least privilege)
-    - Global Tools: Mandatory tools executed consistently across all nodes
-    - Output Guardrails: Validation functions on node output
 ```
 
 The core logic remains framework-agnostic and can be wrapped for different orchestration engines:
 ```python
-# Framework-agnostic definition
-node_logic = NodeTemplate(...)
+from akd import NodeTemplate
 
-# Framework-specific wrapper
-langgraph_node = node_logic.to_langgraph_node()
+node_t = NodeTemplate(
+    supervisor=ReActLLMSupervisor(...)  # LLM-based or custom logic
+    input_guardrails=[],  # Input validation rules
+    output_guardrails=[],  # Output validation rules
+)
+
+node_lg = node.as_langgraph_node(...)
 ```
+
+See `docs/node-template.md` for full details on node templates.
 
 ### Core Components
 
 #### Base Classes (`akd/_base.py`)
 - `AbstractBase`: Foundation for all agents and tools with schema validation
 - `UnrestrictedAbstractBase`: Flexible version without strict schema enforcement
-- `IOSchema`: Base for input/output schemas with required docstrings
+- `InputSchema`: Base for input schemas with required docstrings
+- `OutputSchema`: Base for output schemas with required docstrings
+- [Alternatively, `IOSchema`: Base for input/output schemas with required docstrings]
 
 #### Agent System (`akd/agents/`)
 - `BaseAgent`: Abstract base for all agents
 - `LangBaseAgent`: LangChain-based agents with ChatOpenAI integration
 - `InstructorBaseAgent`: Instructor-based agents for structured outputs
-- Specialized agents: `extraction.py`, `litsearch.py`, `query.py`, `relevancy.py`
+- Specialized agents: `akd.agents.extraction.EstimationExtractionAgent`, `akd.agents.query.QueryAgent`, `akd.agents.FollowUpQueryAgent`, `akd.agents.litsearch.py`
 
 #### Node System (`akd/nodes/`)
-- `templates.py`: `NodeTemplate` implementations for workflow components
+- `templates.py`: `AbstractNodeTemplate` implementations for workflow components for node template
 - `supervisor.py`: Various supervisor types (LLM, ReAct, Manual)
 - `states.py`: State management (GlobalState, NodeTemplateState, SupervisorState)
 
 #### Tool System (`akd/tools/`)
 - `_base.py`: `BaseTool` foundation
 - `scrapers/`: Web and PDF content extraction
-- `search.py`: Search functionality
+- `search.py`: Search functionality (consists of `SearxNGSearchTool`, `SemanticScholarSearchTool`)
 - `relevancy.py`: Content relevance checking
 - `source_validator.py`: Source validation
 
@@ -132,12 +139,16 @@ The framework implements deep guardrails for scientific trust:
 ## Development Guidelines
 
 ### Adding New Components
-1. **Always use NodeTemplate** for functional components
+1. **Always use BaseAgent or Base Tool** for functional agents and tools
+    - Each tool/agent component has 4 parts to it for implementation:
+        - Input Schema (inherited from `akd._base.InputSchema`)
+        - Output Schema (inherited from `akd._base.OutputSChema)
+        - Config schema (for tool `akd.tools._base.BaseToolConfig`, and for agent `akd.agents._base.BaseAgentConfig`)
+        - Implementation of `_arun` method that takes in input schema and gives out output schema.
 2. **Implement schema validation** with proper input/output schemas
-3. **Add comprehensive guardrails** at input/output levels
-4. **Maintain clear attribution** for all sources
-5. **Design for transparency** - every step should be inspectable
-6. **Enable reproducibility** through complete state capture
+3. **Maintain clear attribution** for all sources
+4. **Design for transparency** - every step should be inspectable
+5. **Enable reproducibility** through complete state capture
 
 ### Configuration Management
 - Global configuration in `akd/configs/project.py`
