@@ -9,7 +9,7 @@ from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import BaseModel
 
-from akd.structures import Tool
+from akd.common_types import ToolType as Tool
 from akd.utils import AsyncRunMixin
 
 from .states import GlobalState, SupervisorState, ToolSearchResult
@@ -214,9 +214,74 @@ class ReActLLMSupervisor(LLMSupervisor):
     ReAct pattern based supervisor
     """
 
-    def __init__(self, llm_client: Any, tools: List[Tool] = None, debug: bool = False):
+    def __init__(
+        self,
+        llm_client: Any,
+        tools: List[Tool] = None,
+        debug: bool = False,
+        system_message: str = None,
+    ):
         super().__init__(llm_client=llm_client, tools=tools, debug=debug)
-        self.graph = create_react_agent(self.llm_client, tools=self.tools)
+        self.system_message = system_message
+        self.graph = create_react_agent(
+            self.llm_client,
+            tools=self.tools,
+            state_modifier=system_message,
+        )
+
+    async def arun(
+        self,
+        state: SupervisorState,
+        global_state: Optional[GlobalState] = None,
+        **kwargs,
+    ) -> SupervisorState:
+        query = (
+            state.inputs.get("query", "")
+            or state.inputs.get("question", "")
+            or state.inputs.get("input", "")
+        )
+        if not query:
+            raise ValueError(
+                "State must provide an 'inputs' field with a 'query' or 'question'.",
+            )
+        execution_state = state.model_copy()
+
+        # message update
+        messages = state.messages.copy()
+        messages.append(HumanMessage(content=query))
+
+        # Update the state object with new messages
+        updated_state = SupervisorState(
+            messages=messages,
+            inputs=state.inputs,
+            output=state.output,
+            tool_calls=state.tool_calls,
+            steps=state.steps,
+        )
+
+        # Invoke the graph with the updated state
+        result = await self.graph.ainvoke(updated_state)
+
+        # Get updated messages from result (assuming result is also a SupervisorState or dict)
+        result_messages = (
+            getattr(result, "messages", messages)
+            if isinstance(result, BaseModel)
+            else result.get("messages", messages)
+        )
+
+        # Update execution state
+        execution_state.messages = result_messages
+        execution_state.tool_calls = self._convert_tool_messages(result_messages)
+
+        if execution_state.tool_calls and len(execution_state.tool_calls) > 0:
+            execution_state.output = {"result": execution_state.tool_calls[-1].result}
+
+        for tc in execution_state.tool_calls:
+            if tc.result and isinstance(tc.result, dict):
+                execution_state.steps.update(tc.result)
+
+        self.update_state(execution_state)
+        return execution_state
 
 
 class ManualSupervisor(BaseSupervisor):

@@ -6,25 +6,11 @@ This module contains core data models, schemas, and type definitions
 organized into logical sections for better maintainability.
 """
 
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Coroutine,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
-
-try:
-    from typing import TypeAlias  # Python 3.10+
-except ImportError:
-    from typing_extensions import TypeAlias
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, computed_field
 
+# from akd.common_types import ToolType
 from akd.configs.project import CONFIG
 
 # Import guards for optional dependencies
@@ -35,19 +21,6 @@ try:
 except ImportError:
     LANGCHAIN_CORE_INSTALLED = False
 
-if TYPE_CHECKING or LANGCHAIN_CORE_INSTALLED:
-    try:
-        from langchain_core.messages import BaseMessage
-        from langchain_core.tools.structured import StructuredTool
-    except ImportError:
-        BaseMessage = BaseModel
-        StructuredTool = None
-else:
-    BaseMessage = BaseModel
-    StructuredTool = None
-
-from .agents._base import BaseAgent
-from .tools._base import BaseTool
 
 # =============================================================================
 # Search and Data Models
@@ -193,10 +166,11 @@ class ToolSearchResult(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    tool: Optional["Tool"] = Field(
+    tool: Optional[Any] = Field(
         None,
         description="Tool found during search",
-    )
+    )  # Should be ToolType, but circular import issues
+    # tool: Optional["ToolType"] = Field(...)
     args: Optional[Dict[str, Any]] = Field(
         None,
         description="Input arguments extracted when tool is found",
@@ -215,31 +189,6 @@ class ToolSearchResult(BaseModel):
 
 
 # =============================================================================
-# Type Definitions
-# =============================================================================
-
-# Tool types - conditional based on langchain availability
-if TYPE_CHECKING:
-    # For type checking, include all possible types
-    from langchain_core.tools.structured import StructuredTool as _StructuredTool
-
-    Tool: TypeAlias = Union[BaseTool, BaseAgent, _StructuredTool]
-else:
-    # At runtime, check what's actually available
-    if LANGCHAIN_CORE_INSTALLED and StructuredTool is not None:
-        Tool: TypeAlias = Union[BaseTool, BaseAgent, "StructuredTool"]  # type: ignore
-    else:
-        Tool: TypeAlias = Union[BaseTool, BaseAgent]
-
-# Guardrail types
-GuardrailType: TypeAlias = Union[BaseTool, Callable, Coroutine]
-
-# Callable specifications
-AnyCallable: TypeAlias = Union[BaseTool, BaseAgent, Callable[..., Any]]
-CallableSpec: TypeAlias = Union[AnyCallable, Tuple[AnyCallable, Dict[str, str]]]
-
-
-# =============================================================================
 # Exports
 # =============================================================================
 
@@ -253,9 +202,4 @@ __all__ = [
     "ExtractionDTO",
     # Tool Models
     "ToolSearchResult",
-    # Type Definitions
-    "Tool",
-    "GuardrailType",
-    "AnyCallable",
-    "CallableSpec",
 ]
