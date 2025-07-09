@@ -41,8 +41,6 @@ async def github_search_test():
         max_results=10
     )
 
-    print(search_input)
-
     print("Running the search...")
     output = await tool._arun(search_input)
 
