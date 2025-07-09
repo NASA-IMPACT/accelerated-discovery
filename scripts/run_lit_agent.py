@@ -15,7 +15,7 @@ from akd.agents.factory import create_query_agent
 from akd.agents.intents import IntentAgent
 from akd.agents.litsearch import LitAgent, LitAgentInputSchema, LitAgentOutputSchema
 from akd.configs.lit_config import get_lit_agent_settings
-from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
+from akd.tools.scrapers.composite import CompositeScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
 from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
 from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
@@ -29,7 +29,7 @@ async def main(args):
 
     search_tool = SearxNGSearchTool(config=search_config)
 
-    scraper = CompositeWebScraper(
+    scraper = CompositeScraper(
         SimpleWebScraper(scraper_config),
         Crawl4AIWebScraper(scraper_config),
         SimplePDFScraper(scraper_config),
@@ -65,7 +65,7 @@ async def main(args):
     result = await lit_agent.arun(
         LitAgentInputSchema(query=args.query, max_search_results=5)
     )
-    logger.info(result.model_dump())
+    logger.info(f"Lit agent results: {result.model_dump()}")
 
     with open("test_lit_agent.json", "w") as f:
         f.write(

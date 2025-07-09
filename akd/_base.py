@@ -166,7 +166,15 @@ class AbstractBase[
     def __set_attrs_from_config(self):
         if self.config is None:
             return
-        for attr, value in self.config.model_dump().items():
+
+        # Convert BaseConfig to dict if it's a BaseModel
+        config = (
+            self.config.model_dump()
+            if isinstance(self.config, BaseConfig)
+            else self.config
+        )
+
+        for attr, value in config.items():
             setattr(self, attr, value)
 
     @classmethod

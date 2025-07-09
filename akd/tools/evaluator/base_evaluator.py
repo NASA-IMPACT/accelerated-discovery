@@ -21,7 +21,7 @@ class LLMEvaluatorInput(BaseToolConfig):
     reference: Optional[str] = None
 
 
-class SinlgeEvaluationOutput(BaseToolConfig):
+class SingleEvaluationOutput(BaseToolConfig):
     score: float
     reason: str
     metric: str
@@ -29,8 +29,9 @@ class SinlgeEvaluationOutput(BaseToolConfig):
 
 class LLMEvaluatorOutput(BaseToolConfig):
 
-    score: Dict[str, Any] = {}
-    evalautions: List[SinlgeEvaluationOutput]
+    score: float
+    evaluations: List[SingleEvaluationOutput]
+    success: bool
 
     # Add any additional fields needed for the output schema
 
@@ -45,7 +46,7 @@ class LLMEvaluator(BaseTool):
     Loads criteria from a JSON file and exposes an evaluate method for integration.
     """
 
-    def __init__(self, custom_metrics: List[Dict] = []):
+    def __init__(self, custom_metrics: List[Dict] = [], threshold: float = 0.5):
         """ """
 
         # add stock metrics
@@ -71,17 +72,22 @@ class LLMEvaluator(BaseTool):
             else [usefulness, faithfulness, completeness, accuracy, timeliness]
         )
 
-    async def arun(self, params: LLMEvaluatorInput) -> LLMEvaluatorOutput:
+        self.threshold = threshold
+
+    async def _arun(self, params: LLMEvaluatorInput) -> LLMEvaluatorOutput:
         """ """
-        test_case = LLMTestCase(input=params.input_query, actual_output=params.output)
+        test_case = LLMTestCase(input=params.input, actual_output=params.output)
 
         for metric in self.metrics:
             metric.measure(test_case)
 
+        avg_score = sum(metric.score for metric in self.metrics) / len(self.metrics)
+
         return LLMEvaluatorOutput(
-            score=sum(metric.score for metric in self.metrics) / len(self.metrics),
+            score=avg_score,
+            success=avg_score >= self.threshold,
             evaluations=[
-                SinlgeEvaluationOutput(
+                SingleEvaluationOutput(
                     score=metric.score, reason=metric.reason, metric=metric.name
                 )
                 for metric in self.metrics

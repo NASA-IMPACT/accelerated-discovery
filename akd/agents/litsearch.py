@@ -77,6 +77,14 @@ class LitAgent(BaseAgent):
         self.n_queries = n_queries
         super().__init__(debug=debug)
 
+    # get_response_async is required by the BaseAgent interface,
+    # but it seems that the LitAgent runtime logic is all implemented in _arun.
+    # Therefore, we can leave this method unimplemented or raise NotImplementedError.
+    # TODO: Migrate the logic from _arun to get_response_async, and have
+    # _arun call get_response_async.
+    async def get_response_async(self, *args, **kwargs):
+        pass
+
     async def _arun(
         self,
         params: LitAgentInputSchema,
@@ -136,14 +144,6 @@ class LitAgent(BaseAgent):
             )
             contents.append(ExtractionDTO(source=str(url), result=content))
 
-        custom_metric = {
-            "name": "Extraction Evaluation",
-            "criteria": "Evaluate wether or not the answer correctly extracts and summarizes the content, in a way that is relevant to the input query",
-        }
-
-        evaluator = LLMEvaluator(custom_metrics=[custom_metric])
-        logger.info(f"EVALUATOR: {evaluator}")
-
         results = []
         for content in contents:
             self.extraction_agent.reset_memory()
@@ -152,27 +152,10 @@ class LitAgent(BaseAgent):
                     ExtractionInputSchema(query=query, content=content.result),
                 )
                 logger.debug(f"Source={content.source} | Answer={answer}")
-                logger.debug("PINGPONG")
 
                 if not answer:
                     logger.warning(
-                        f"No answer extracted for content from {content.source}, skipping evaluation."
-                    )
-                    continue
-
-                evaluation = await evaluator.arun(
-                    LLMEvaluatorInput(
-                        input=params.query,
-                        output=json.dumps(
-                            {"answer": answer, "content": content.result}
-                        ),
-                    ),
-                )
-
-                print(f"Evaluation for {content.source}: {evaluation}")
-                if evaluation.score < 0.5:
-                    logger.warning(
-                        f"Low evaluation score ({evaluation.score}) for content from {content.source}, skipping."
+                        f"No answer extracted for content from {content.source}."
                     )
                     continue
 
@@ -183,7 +166,41 @@ class LitAgent(BaseAgent):
             except Exception as e:
                 logger.warning(f"Error processing content from {content.source}: {e}")
                 continue
-        return LitAgentOutputSchema(results=results)
+
+        extraction_quality_metric = {
+            "name": "Extraction Evaluation",
+            "criteria": "Evaluate wether or not the answer correctly extracts and summarizes the content, in a way that is relevant to the input query",
+        }
+
+        extraction_evaluator = LLMEvaluator(
+            custom_metrics=[extraction_quality_metric], threshold=0.5
+        )
+        evaluator = LLMEvaluator(threshold=5.0)
+
+        _results = []
+        for content in results:
+            evaluator_input = LLMEvaluatorInput(
+                input=params.query, output=json.dumps(content.result.model_dump())
+            )
+
+            extraction_evaluation = await extraction_evaluator._arun(evaluator_input)
+
+            if not extraction_evaluation.success:
+                logger.warning(
+                    f"Low extraction evaluation score ({extraction_evaluation.score}) for content from {content.source}, skipping."
+                )
+                continue
+
+            evaluation = await evaluator._arun(evaluator_input)
+
+            if not evaluation.success:
+                logger.warning(
+                    f"Low evaluation score ({evaluation.score}) for content from {content.source}, skipping."
+                )
+                continue
+            _results.append(content)
+
+        return LitAgentOutputSchema(results=_results)
 
     def clear_history(self) -> None:
         logger.warning("Clearing history for all the agents")
