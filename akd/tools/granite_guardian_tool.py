@@ -65,6 +65,10 @@ class GraniteGuardianToolConfig(BaseToolConfig):
         default=RiskDefinition.ANSWER_RELEVANCE,
         description="Default risk check",
     )
+    snippet_n_chars: int = Field(
+        100,
+        description="Number of characters to truncate the snippet to.",
+    )
 
 
 class GraniteGuardianTool(
@@ -85,6 +89,7 @@ class GraniteGuardianTool(
         super().__init__(config, debug)
         self.model = config.model
         self.default_risk_type = config.default_risk_type
+        self.snippet_n_chars = config.snippet_n_chars
 
     async def _arun(
         self,
@@ -171,7 +176,7 @@ class GraniteGuardianTool(
                 {
                     "index": idx,
                     "query": item.query,
-                    "snippet": item.content[:100],
+                    "snippet": item.content[: self.snippet_n_chars],
                     "risk_label": res.get("risk_label"),
                     "is_risky": res.get("is_risky"),
                     "raw_response": res.get("raw_response"),
