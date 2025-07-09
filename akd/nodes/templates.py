@@ -4,7 +4,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from loguru import logger
 
-from akd.structures import CallableSpec
+from akd.common_types import CallableSpec
 from akd.tools.utils import ToolRunner
 from akd.utils import AsyncRunMixin, LangchainToolMixin
 

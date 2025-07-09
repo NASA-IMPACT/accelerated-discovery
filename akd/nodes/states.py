@@ -1,38 +1,14 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
-from akd.structures import Tool
+from akd.structures import ToolSearchResult
 from akd.utils import LANGCHAIN_CORE_INSTALLED
 
-if LANGCHAIN_CORE_INSTALLED:
+if TYPE_CHECKING or LANGCHAIN_CORE_INSTALLED:
     from langchain_core.messages import BaseMessage
 else:
     BaseMessage = BaseModel
-
-
-class ToolSearchResult(BaseModel):
-    """
-    Hold the tool search result
-    """
-
-    tool: Optional[Tool] = Field(
-        ...,
-        description="Tool found during search",
-    )
-    args: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="When tool is found, what arguments extracted?",
-    )
-    result: Optional[Any] = Field(
-        default=None,
-        description="When tool is executed, set this field",
-    )
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    @property
-    def name(self) -> str:
-        return getattr(self.tool, "name", self.tool.__class__.__name__)
 
 
 class NodeState(BaseModel):

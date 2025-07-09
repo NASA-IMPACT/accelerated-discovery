@@ -9,7 +9,7 @@ from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import BaseModel
 
-from akd.structures import Tool
+from akd.common_types import ToolType as Tool
 from akd.utils import AsyncRunMixin
 
 from .states import GlobalState, SupervisorState, ToolSearchResult
@@ -21,7 +21,7 @@ class BaseSupervisor(ABC, AsyncRunMixin):
     def __init__(
         self,
         name: Optional[str] = None,
-        tools: List[Tool] = None,
+        tools: Tool | None = None,
         state: Optional[SupervisorState] = None,
         debug: bool = False,
     ):
@@ -120,7 +120,7 @@ class LLMSupervisor(BaseSupervisor):
     A supervisor that uses an LLM to handle tool calls.
     """
 
-    def __init__(self, llm_client: Any, tools: List[Tool] = None, debug: bool = False):
+    def __init__(self, llm_client: Any, tools: Tool | None = None, debug: bool = False):
         super().__init__(tools=tools, debug=debug)
         self.tools = self._convert_tools_for_binding(self.tools)
         self.llm_client = llm_client.bind_tools(self.tools)
@@ -214,7 +214,7 @@ class ReActLLMSupervisor(LLMSupervisor):
     ReAct pattern based supervisor
     """
 
-    def __init__(self, llm_client: Any, tools: List[Tool] = None, debug: bool = False):
+    def __init__(self, llm_client: Any, tools: Tool | None = None, debug: bool = False):
         super().__init__(llm_client=llm_client, tools=tools, debug=debug)
         self.graph = create_react_agent(self.llm_client, tools=self.tools)
 
