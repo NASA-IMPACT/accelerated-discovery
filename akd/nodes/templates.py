@@ -125,8 +125,15 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
             # 2) run the node’s logic (guardrails → supervisor → guardrails → write‐back)
             ns = await self.arun(gs)
             # 3) return the (mutated) NodeState as mapping with its id
-            return {key: ns}
+            # return {key: ns}
+            # return gs
+            return {
+                "node_states": {
+                    self.node_id: ns,
+                },
+            }
 
+        # _node_fn.__name__ = f"node_{key}"
         return _node_fn
 
 
@@ -155,7 +162,7 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
         )
 
         # 4) write back into the global state, in place
-        global_state.node_states[node_id] = node_state
+        # global_state.node_states[node_id] = node_state
 
         # 5) return the updated per-node state
         return node_state
