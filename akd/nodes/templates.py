@@ -8,7 +8,7 @@ from akd.common_types import CallableSpec
 from akd.tools.utils import ToolRunner
 from akd.utils import AsyncRunMixin, LangchainToolMixin
 
-from .states import GlobalState, NodeTemplateState
+from .states import GlobalState, NodeState
 from .supervisor import BaseSupervisor
 
 
@@ -26,27 +26,48 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
 
     def __init__(
         self,
-        supervisor: BaseSupervisor,
-        input_guardrails: List[CallableSpec],
-        output_guardrails: List[CallableSpec],
+        supervisor: BaseSupervisor | None = None,
+        input_guardrails: List[CallableSpec] | None = None,
+        output_guardrails: List[CallableSpec] | None = None,
         node_id: Optional[str] = None,
         tool_runner: Optional[ToolRunner] = None,
         debug: bool = False,
     ) -> None:
-        assert isinstance(
-            supervisor,
-            BaseSupervisor,
-        ), "supervisor must be an instance of BaseSupervisor"
+        if supervisor is not None:
+            assert isinstance(
+                supervisor,
+                BaseSupervisor,
+            ), "supervisor must be an instance of BaseSupervisor"
         self.supervisor = supervisor
-        self.input_guardrails = input_guardrails
-        self.output_guardrails = output_guardrails
+        self.input_guardrails = input_guardrails or []
+        self.output_guardrails = output_guardrails or []
         self.debug = bool(debug)
         self.node_id = node_id or str(uuid.uuid4().hex)
         self.tool_runner = tool_runner or ToolRunner(debug=debug)
 
     @abstractmethod
-    async def arun(self, state: GlobalState) -> NodeTemplateState:
+    async def arun(self, state: GlobalState) -> NodeState:
         """Run the node with the given state."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def _execute(
+        self,
+        node_state: NodeState,
+        global_state: GlobalState,
+    ) -> NodeState:
+        """Execute the core logic of the node.
+
+        This method should be implemented by subclasses to define the specific
+        execution logic for the node. It runs between input and output guardrails.
+
+        Args:
+            node_state: The current state of the node
+            global_state: The global system state
+
+        Returns:
+            Updated node state after execution
+        """
         raise NotImplementedError()
 
     async def _apply_guardrails(
@@ -97,23 +118,23 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
 
         key = key or self.node_id
 
-        async def _node_fn(gs: GlobalState) -> Dict[str, NodeTemplateState]:
+        async def _node_fn(gs: GlobalState) -> Dict[str, NodeState]:
             # 1) make sure this node has its local state slice
             if self.node_id not in gs.node_states:
-                gs.node_states[self.node_id] = NodeTemplateState()
+                gs.node_states[self.node_id] = NodeState()
             # 2) run the node’s logic (guardrails → supervisor → guardrails → write‐back)
             ns = await self.arun(gs)
-            # 3) return the (mutated) NodeTemplateState as mapping with its id
+            # 3) return the (mutated) NodeState as mapping with its id
             return {key: ns}
 
         return _node_fn
 
 
 class DefaultNodeTemplate(AbstractNodeTemplate):
-    async def arun(self, global_state: GlobalState) -> NodeTemplateState:
+    async def arun(self, global_state: GlobalState) -> NodeState:
         # 0) grab or create this node’s local state slice
         node_id = self.node_id
-        node_state = global_state.node_states.get(node_id, NodeTemplateState())
+        node_state = global_state.node_states.get(node_id, NodeState())
 
         if self.debug:
             logger.debug(f"[Node {node_id}] node_state={node_state}")
@@ -124,28 +145,51 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
             node_state.inputs.copy(),
         )
 
-        # 2) merge validated inputs into the supervisor_state
-        node_state.supervisor_state.inputs.update(node_state.inputs)
+        # 2) execute core logic (either through supervisor or custom _execute method)
+        node_state = await self._execute(node_state, global_state)
 
-        # 3) call the supervisor with its slice of state
-        sup_out = await self.supervisor.arun(
-            node_state.supervisor_state,
-            global_state=global_state,
-        )
-
-        #    copy back supervisor outputs & messages into node_state
-        node_state.supervisor_state = sup_out
-        node_state.output = sup_out.output
-        node_state.messages += sup_out.messages
-
-        # 4) run output guardrails against that output
+        # 3) run output guardrails against that output
         node_state.output_guardrails = await self._apply_guardrails(
             self.output_guardrails,
-            node_state.output.copy(),
+            node_state.outputs.copy(),
         )
 
-        # 5) write back into the global state, in place
+        # 4) write back into the global state, in place
         global_state.node_states[node_id] = node_state
 
-        # 6) return the updated per-node state
+        # 5) return the updated per-node state
+        return node_state
+
+    async def _execute(
+        self,
+        node_state: NodeState,
+        global_state: GlobalState,
+    ) -> NodeState:
+        """Default execution logic using supervisor if available."""
+        if self.supervisor is not None:
+            # Create a temporary supervisor state from node state
+            temp_supervisor_state = NodeState(
+                messages=node_state.messages.copy(),
+                inputs=node_state.inputs.copy(),
+                outputs=node_state.outputs.copy(),
+                tool_calls=node_state.tool_calls.copy(),
+                steps=node_state.steps.copy(),
+            )
+
+            # Run supervisor
+            sup_out = await self.supervisor.arun(
+                temp_supervisor_state,
+                global_state=global_state,
+            )
+
+            # Copy back supervisor outputs & messages into node_state
+            node_state.messages += sup_out.messages
+            node_state.outputs.update(sup_out.outputs)
+            node_state.tool_calls.extend(sup_out.tool_calls)
+            node_state.steps.update(sup_out.steps)
+        else:
+            raise NotImplementedError(
+                "No supervisor provided, and _execute method not implemented.",
+            )
+
         return node_state

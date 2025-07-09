@@ -12,26 +12,27 @@ else:
 
 
 class NodeState(BaseModel):
-    """Fields common to all node-like states."""
+    """Unified state class for all node operations.
 
+    This class combines fields from the previous NodeState, SupervisorState, and NodeTemplateState
+    to provide a single, unified state structure. Supervisor fields are optional and only used
+    when a supervisor is present in the node template.
+    """
+
+    # Core node fields
     messages: List[Union[BaseMessage, Dict[str, Any]]] = Field(
         default_factory=list,
     )
     inputs: Dict[str, Any] = Field(default_factory=dict)
-    output: Dict[str, Any] = Field(default_factory=dict)
+    outputs: Dict[str, Any] = Field(default_factory=dict)
 
-
-class SupervisorState(NodeState):
-    """Extra fields that only the Supervisor cares about."""
-
-    tool_calls: List[ToolSearchResult] = Field(default_factory=list)
-    steps: Dict[str, Any] = Field(default_factory=dict)
-
-
-class NodeTemplateState(NodeState):
-    supervisor_state: SupervisorState = Field(default_factory=SupervisorState)
+    # Guardrail results
     input_guardrails: Dict[str, Any] = Field(default_factory=dict)
     output_guardrails: Dict[str, Any] = Field(default_factory=dict)
+
+    # Optional supervisor fields (only used when supervisor is present)
+    tool_calls: List[ToolSearchResult] = Field(default_factory=list)
+    steps: Dict[str, Any] = Field(default_factory=dict)
 
 
 class GlobalState(NodeState):
@@ -39,4 +40,11 @@ class GlobalState(NodeState):
     Global state of the system.
     """
 
-    node_states: Dict[str, NodeTemplateState] = Field(default_factory=dict)
+    planner_state: Any = Field(default=None)  # temporary placeholder for planner state
+    node_states: Dict[str, NodeState] = Field(default_factory=dict)
+
+
+# Backward compatibility aliases
+# These will be removed in a future version
+SupervisorState = NodeState
+NodeTemplateState = NodeState

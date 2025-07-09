@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from akd.common_types import ToolType as Tool
 from akd.utils import AsyncRunMixin
 
-from .states import GlobalState, SupervisorState, ToolSearchResult
+from .states import GlobalState, NodeState, ToolSearchResult
 
 
 class BaseSupervisor(ABC, AsyncRunMixin):
@@ -22,13 +22,13 @@ class BaseSupervisor(ABC, AsyncRunMixin):
         self,
         name: Optional[str] = None,
         tools: Tool | None = None,
-        state: Optional[SupervisorState] = None,
+        state: Optional[NodeState] = None,
         debug: bool = False,
     ):
         self.tools = tools or []
         self.debug = bool(debug)
         self.name = name or f"{self.__classname__}({str(uuid.uuid4().hex)[:5]})"
-        self.state = state or SupervisorState()
+        self.state = state or NodeState()
 
     @property
     def __classname__(self) -> str:
@@ -71,15 +71,15 @@ class BaseSupervisor(ABC, AsyncRunMixin):
     def get_tool(self, tools: List[Tool], query: str) -> ToolSearchResult:
         return self.get_tool_by_name(tools, query)
 
-    def update_state(self, updates: SupervisorState) -> SupervisorState:
+    def update_state(self, updates: NodeState) -> NodeState:
         """
-        Update the supervisor's state with values from another SupervisorState.
+        Update the supervisor's state with values from another NodeState.
 
         Args:
-            updates: A SupervisorState object containing the updates to apply
+            updates: A NodeState object containing the updates to apply
 
         Returns:
-            The updated SupervisorState
+            The updated NodeState
         """
         # Update messages
         self.state.messages = (
@@ -91,8 +91,8 @@ class BaseSupervisor(ABC, AsyncRunMixin):
             self.state.inputs = updates.inputs.copy()
 
         # Update output
-        if updates.output:
-            self.state.output = updates.output.copy()
+        if updates.outputs:
+            self.state.outputs = updates.outputs.copy()
 
         # Update tool_calls - append new ones or replace entirely
         if updates.tool_calls:
@@ -108,10 +108,10 @@ class BaseSupervisor(ABC, AsyncRunMixin):
     @abstractmethod
     async def arun(
         self,
-        state: SupervisorState,
+        state: NodeState,
         global_state: Optional[GlobalState] = None,
         **kwargs,
-    ) -> SupervisorState:
+    ) -> NodeState:
         raise NotImplementedError("Subclass should implement this.")
 
 
@@ -234,10 +234,10 @@ class DummyLLMSupervisor(ReActLLMSupervisor):
 
     async def arun(
         self,
-        state: SupervisorState,
+        state: NodeState,
         global_state: Optional[GlobalState] = None,
         **kwargs,
-    ) -> SupervisorState:
+    ) -> NodeState:
         query = (
             state.inputs.get("query", "")
             or state.inputs.get("question", "")
@@ -254,10 +254,10 @@ class DummyLLMSupervisor(ReActLLMSupervisor):
         messages.append(HumanMessage(content=query))
 
         # Update the state object with new messages
-        updated_state = SupervisorState(
+        updated_state = NodeState(
             messages=messages,
             inputs=state.inputs,
-            output=state.output,
+            outputs=state.outputs,
             tool_calls=state.tool_calls,
             steps=state.steps,
         )
@@ -265,7 +265,7 @@ class DummyLLMSupervisor(ReActLLMSupervisor):
         # Invoke the graph with the updated state
         result = await self.graph.ainvoke(updated_state)
 
-        # Get updated messages from result (assuming result is also a SupervisorState or dict)
+        # Get updated messages from result (assuming result is also a NodeState or dict)
         result_messages = (
             getattr(result, "messages", messages)
             if isinstance(result, BaseModel)
@@ -277,7 +277,7 @@ class DummyLLMSupervisor(ReActLLMSupervisor):
         execution_state.tool_calls = self._convert_tool_messages(result_messages)
 
         if execution_state.tool_calls and len(execution_state.tool_calls) > 0:
-            execution_state.output = {"result": execution_state.tool_calls[-1].result}
+            execution_state.outputs = {"result": execution_state.tool_calls[-1].result}
 
         for tc in execution_state.tool_calls:
             execution_state.steps.update(tc.result)
