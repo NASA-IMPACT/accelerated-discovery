@@ -1,9 +1,10 @@
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+import tiktoken
 from loguru import logger
 from ollama import chat
-from pydantic.fields import Field
+from pydantic.fields import Field, computed_field
 
 from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
@@ -63,8 +64,20 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     model: str = "granite3-guardian"
     default_risk_type: RiskDefinition = Field(
         default=RiskDefinition.ANSWER_RELEVANCE,
-        description="Default risk check",
+        description="Default risk check.",
     )
+    max_tokens: int = Field(
+        4096,
+        description="The maximum number of tokens to include in the snippet.",
+    )
+    context_buffer: int = Field(
+        256,
+        description="Reserved number of tokens to ensure that the snippet doesn not exceed the maximum token limit.",
+    )
+
+    @computed_field
+    def tokens_to_use(self) -> int:
+        return self.max_tokens - self.context_buffer
 
 
 class GraniteGuardianTool(
@@ -81,10 +94,11 @@ class GraniteGuardianTool(
         config: GraniteGuardianToolConfig | None = None,
         debug: bool = False,
     ):
-        config = config or GraniteGuardianToolConfig()
-        super().__init__(config, debug)
-        self.model = config.model
-        self.default_risk_type = config.default_risk_type
+        self.config = config or GraniteGuardianToolConfig()
+        super().__init__(self.config, debug)
+        self.model = self.config.model
+        self.default_risk_type = self.config.default_risk_type
+        self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     async def _arun(
         self,
@@ -167,11 +181,17 @@ class GraniteGuardianTool(
                 {"role": "assistant", "content": item.content},
             ]
             res = self._call_guardian(messages)
+            snippet_content = f"Title: {item.title}\n\n{item.content}"
+            tokens = self.tokenizer.encode(snippet_content)
+            max_tokens = self.config.tokens_to_use
+            if len(tokens) > max_tokens:
+                truncated_tokens = tokens[:max_tokens]
+                snippet_content = self.tokenizer.decode(truncated_tokens) + "..."
             outputs.append(
                 {
                     "index": idx,
                     "query": item.query,
-                    "snippet": item.content[:100],
+                    "snippet": snippet_content,
                     "risk_label": res.get("risk_label"),
                     "is_risky": res.get("is_risky"),
                     "raw_response": res.get("raw_response"),
