@@ -31,6 +31,7 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
         output_guardrails: List[CallableSpec] | None = None,
         node_id: Optional[str] = None,
         tool_runner: Optional[ToolRunner] = None,
+        mutation: bool = False,
         debug: bool = False,
     ) -> None:
         if supervisor is not None:
@@ -44,6 +45,7 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
         self.debug = bool(debug)
         self.node_id = node_id or str(uuid.uuid4().hex)
         self.tool_runner = tool_runner or ToolRunner(debug=debug)
+        self.mutation = mutation
 
     @abstractmethod
     async def arun(self, state: GlobalState) -> NodeState:
@@ -119,14 +121,10 @@ class AbstractNodeTemplate(ABC, AsyncRunMixin, LangchainToolMixin):
         key = key or self.node_id
 
         async def _node_fn(gs: GlobalState) -> Dict[str, NodeState]:
-            # 1) make sure this node has its local state slice
-            if self.node_id not in gs.node_states:
-                gs.node_states[self.node_id] = NodeState()
-            # 2) run the node’s logic (guardrails → supervisor → guardrails → write‐back)
             ns = await self.arun(gs)
-            # 3) return the (mutated) NodeState as mapping with its id
-            # return {key: ns}
-            # return gs
+            # return {key: ns} -> return per-node partial state
+            # return gs # return full global state -> not recommended
+            # return partial state based on global key
             return {
                 "node_states": {
                     self.node_id: ns,
@@ -142,6 +140,12 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
         # 0) grab or create this node’s local state slice
         node_id = self.node_id
         node_state = global_state.node_states.get(node_id, NodeState())
+
+        # If mutation is not enabled, we create a copy of the node state
+        # to avoid modifying the original state in place.
+        # This is useful for testing or when we want to keep the original state intact.
+        if not self.mutation:
+            node_state = node_state.model_copy(deep=True)
 
         if self.debug:
             logger.debug(f"[Node {node_id}] node_state={node_state}")
@@ -162,7 +166,8 @@ class DefaultNodeTemplate(AbstractNodeTemplate):
         )
 
         # 4) write back into the global state, in place
-        # global_state.node_states[node_id] = node_state
+        if self.mutation:
+            global_state.node_states[node_id] = node_state
 
         # 5) return the updated per-node state
         return node_state

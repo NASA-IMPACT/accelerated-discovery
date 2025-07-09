@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Union
 
 from pydantic import BaseModel, Field
 
@@ -35,13 +35,30 @@ class NodeState(BaseModel):
     steps: Dict[str, Any] = Field(default_factory=dict)
 
 
+def merge_node_states(
+    existing: Dict[str, NodeState],
+    update: Dict[str, NodeState],
+) -> Dict[str, NodeState]:
+    """Custom reducer to merge node_states updates."""
+    if existing is None:
+        return update
+
+    # Create a copy and update with new values
+    merged = existing.copy()
+    merged.update(update)
+    return merged
+
+
 class GlobalState(NodeState):
     """
     Global state of the system.
     """
 
     planner_state: Any = Field(default=None)  # temporary placeholder for planner state
-    node_states: Dict[str, NodeState] = Field(default_factory=dict)
+    # node_states: Dict[str, NodeState] = Field(default_factory=dict)
+    node_states: Annotated[Dict[str, NodeState], merge_node_states] = Field(
+        default_factory=dict,
+    )
 
 
 # Backward compatibility aliases
