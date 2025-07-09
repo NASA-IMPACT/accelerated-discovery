@@ -3,6 +3,7 @@ from typing import Any, Callable, Coroutine, Dict, Optional, Union
 
 from pydantic import BaseModel, create_model
 
+from akd._base import InputSchema, OutputSchema
 from akd.common_types import CallableSpec
 from akd.utils import AsyncRunMixin
 
@@ -55,20 +56,23 @@ def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
     return_type = func.__annotations__.get("return", Any)
     func_name = to_camel_case(func.__name__)
 
-    input_schema = create_model(
+    _input_schema = create_model(
         f"{func_name}InputSchema",
         **fields,
-        __base__=BaseModel,
+        __base__=InputSchema,
         __doc__=f"Input Schema for {func_name}",
     )
-    output_schema = create_model(
+    _output_schema = create_model(
         f"{func_name}OutputSchema",
         result=(return_type, ...),
-        __base__=BaseModel,
+        __base__=OutputSchema,
         __doc__=f"Output Schema for {func_name}",
     )
 
     class FunctionTool(BaseTool):
+        input_schema = _input_schema
+        output_schema = _output_schema
+
         def __init__(self) -> None:
             super().__init__()
             self._func = func
@@ -131,7 +135,7 @@ def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
             # Construct the input schema from kwargs
             return self._construct_input_schema(kwargs)
 
-        async def arun(self, *args, **kwargs) -> Any:
+        async def _arun(self, *args, **kwargs) -> Any:
             """
             Asynchronous execution that supports both sync and async underlying functions.
             It constructs the input model from the provided arguments, calls the function,
@@ -152,8 +156,8 @@ def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
                 raise ValueError(f"Error in function execution: {e}")
 
     # Assign the schemas as class attributes so they're available inside the class.
-    FunctionTool.input_schema = input_schema
-    FunctionTool.output_schema = output_schema
+    # FunctionTool.input_schema = _input_schema
+    # FunctionTool.output_schema = _output_schema
 
     # Create an instance of the tool.
     FunctionTool.__name__ = f"{func_name}Tool"
