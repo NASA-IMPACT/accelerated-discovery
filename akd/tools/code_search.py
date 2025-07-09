@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from loguru import logger
 from pydantic import BaseModel
 from pydantic.fields import Field
+from pydantic.networks import HttpUrl
 import os
 import gdown
 import pandas as pd
@@ -14,6 +15,7 @@ from akd.tools._base import BaseTool, BaseToolConfig
 
 from akd.tools.gcd.embeddings import Embedder
 from akd.tools.gcd.vectorizer import RepoFinder
+from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig, SearxNGSearchToolInputSchema, SearxNGSearchToolOutputSchema
 
 class CodeSearchToolInputSchema(InputSchema):
     """
@@ -47,6 +49,9 @@ class CodeSearchToolConfig(BaseToolConfig):
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     debug: bool = False
 
+"""
+Tool for performing semantic code search for local code repositories. 
+"""
 class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchOutputSchema]):
     """
     Tool for performing semantic code search. 
@@ -128,3 +133,110 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchOutputSchema]
         ]
         
         return self.output_schema(results=formatted_results)
+    
+"""
+Tool for performing targeted searches on GitHub using SearxNG.
+This tool is a wrapper around SearxNGSearchTool.
+"""
+class GitHubSearchTool(SearxNGSearchTool):
+    """
+    A specialized search tool for GitHub, using SearxNG as the backend.
+
+    This tool is a wrapper around the general SearxNGSearchTool, but is
+    hardcoded to search only the 'github' engine and the 'technology' category.
+    """
+
+    def __init__(
+        self,
+        config: SearxNGSearchToolConfig | None = None,
+        debug: bool = False,
+    ):
+        """
+        Initializes the GitHubSearchTool.
+
+        This constructor enforces the 'github' engine for all searches.
+
+        Args:
+            config (SearxNGSearchToolConfig):
+                Configuration for the tool. The `engines` property will
+                be overridden.
+            debug (bool): Enable debug logging.
+        """
+        config = config or SearxNGSearchToolConfig()
+
+        # Hardcode the configuration for GitHub searching
+        config.engines = ["github"]
+        # Optional: Give the tool a more specific default title/description
+        config.title = "GitHub Search"
+        config.description = (
+            "Tool for performing targeted searches on GitHub "
+            "for code, repositories, and issues."
+        )
+
+        super().__init__(config, debug)
+
+    @classmethod
+    def from_params(
+        cls,
+        base_url: Optional[HttpUrl] = "http://localhost:8080",
+        max_results: int = 10,
+        # engines parameter is omitted as it's hardcoded
+        max_pages: int = 5,
+        results_per_page: int = 10,
+        score_cutoff: float = 0.1,
+        debug: bool = False,
+    ) -> "GitHubSearchTool":
+        """
+        Creates a GitHubSearchTool instance from individual parameters,
+        enforcing the 'github' engine.
+        """
+        base_url = base_url or os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
+        config = SearxNGSearchToolConfig(
+            base_url=base_url,
+            max_results=max_results,
+            # Enforce the specific engine for this tool
+            engines=["github"],
+            max_pages=max_pages,
+            results_per_page=results_per_page,
+            score_cutoff=score_cutoff,
+            debug=debug,
+            title="GitHub Search",
+            description="Performs a targeted search on GitHub.",
+        )
+        return cls(config, debug)
+
+    async def _arun(
+        self,
+        params: SearxNGSearchToolInputSchema,
+        max_results: Optional[int] = None,
+        **kwargs,
+    ) -> SearxNGSearchToolOutputSchema:
+        """
+        Runs the search tool, forcing the search category to 'technology'.
+
+        This method intercepts the input parameters, sets the category,
+        and then calls the parent class's `_arun` method to perform the
+        actual search.
+
+        Args:
+            params (SearxNGSearchToolInputSchema):
+                The input parameters for the tool. The 'category' field
+                will be ignored and overridden.
+            max_results (Optional[int]):
+                The maximum number of search results to return.
+
+        Returns:
+            SearxNGSearchToolOutputSchema:
+                The output of the tool, adhering to the output schema.
+        """
+        # Hardcode the category to 'technology' for every call
+        params.category = "technology"
+
+        if self.debug:
+            logger.debug(
+                f"GitHubSearchTool: Forcing category to '{params.category}' "
+                f"and engines to {self.config.engines}"
+            )
+
+        # Call the parent's _arun method with the modified parameters
+        return await super()._arun(params=params, max_results=max_results, **kwargs)
