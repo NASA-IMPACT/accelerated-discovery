@@ -3,7 +3,7 @@ from typing import Any, Callable, Coroutine, Dict, Optional, Union
 
 from pydantic import BaseModel, create_model
 
-from akd.structures import CallableSpec
+from akd.common_types import CallableSpec
 from akd.utils import AsyncRunMixin
 
 from ._base import BaseTool
