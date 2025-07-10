@@ -24,7 +24,7 @@ dependencies = [
     "readability-lxml>=0.8.1",
     "requests>=2.32.3",
     "wikipedia>=1.4.0",
-    "langchain-openai==0.3.27", 
+    "langchain-openai>=0.3.27",
     
 ]
 
