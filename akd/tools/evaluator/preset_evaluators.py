@@ -1,8 +1,6 @@
 from deepeval.metrics.dag import (
     DeepAcyclicGraph,
-    TaskNode,
     BinaryJudgementNode,
-    NonBinaryJudgementNode,
     VerdictNode,
 )
 from deepeval.metrics import DAGMetric

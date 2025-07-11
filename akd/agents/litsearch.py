@@ -15,7 +15,11 @@ from akd.tools.scrapers.web_scrapers import (
     WebScraperToolBase,
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
-from akd.tools.evaluator.base_evaluator import LLMEvaluator, LLMEvaluatorInput
+from akd.tools.evaluator.base_evaluator import (
+    LLMEvaluator,
+    LLMEvaluatorInputSchema,
+    LLMEvaluatorConfig,
+)
 
 from .extraction import (
     EstimationExtractionAgent,
@@ -171,15 +175,23 @@ class LitAgent(BaseAgent):
             "name": "Extraction Evaluation",
             "criteria": "Evaluate wether or not the answer correctly extracts and summarizes the content, in a way that is relevant to the input query",
         }
-
-        extraction_evaluator = LLMEvaluator(
-            custom_metrics=[extraction_quality_metric], threshold=0.5
+        extraction_structure_metric = {
+            "name": "Extraction Structure Evaluation",
+            "criteria": "Does the content includes a title and an abstract?",
+        }
+        extraction_evaluator_config = LLMEvaluatorConfig(
+            custom_metrics=[extraction_quality_metric, extraction_structure_metric],
+            threshold=0.5,
         )
-        evaluator = LLMEvaluator(threshold=5.0)
+        extraction_evaluator = LLMEvaluator(
+            config=extraction_evaluator_config, debug=self.debug
+        )
+        evaluator_config = LLMEvaluatorConfig(threshold=5.0)
+        evaluator = LLMEvaluator(config=evaluator_config, debug=self.debug)
 
         _results = []
         for content in results:
-            evaluator_input = LLMEvaluatorInput(
+            evaluator_input = LLMEvaluatorInputSchema(
                 input=params.query, output=json.dumps(content.result.model_dump())
             )
 
