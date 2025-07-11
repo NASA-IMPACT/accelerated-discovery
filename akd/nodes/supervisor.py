@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 
 from akd._base import AbstractBase, BaseConfig
 from akd.common_types import ToolType as Tool
+from akd.structures import ToolSearchResult
 
-from .states import NodeState, ToolSearchResult
+from .states import NodeState
 
 
 class BaseSupervisorConfig(BaseConfig):

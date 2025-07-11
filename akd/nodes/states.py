@@ -1,8 +1,7 @@
-from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Annotated, Any, Dict, List
 
 from pydantic import BaseModel, Field
 
-from akd.structures import ToolSearchResult
 from akd.utils import LANGCHAIN_CORE_INSTALLED
 
 if TYPE_CHECKING or LANGCHAIN_CORE_INSTALLED:
@@ -19,8 +18,10 @@ class NodeState(BaseModel):
     when a supervisor is present in the node template.
     """
 
+    model_config = {"arbitrary_types_allowed": True}
+
     # Core node fields
-    messages: List[Union[BaseMessage, Dict[str, Any]]] = Field(
+    messages: List[Dict[str, Any]] = Field(
         default_factory=list,
     )
     inputs: Dict[str, Any] = Field(default_factory=dict)
@@ -31,7 +32,6 @@ class NodeState(BaseModel):
     output_guardrails: Dict[str, Any] = Field(default_factory=dict)
 
     # Optional supervisor fields (only used when supervisor is present)
-    tool_calls: List[ToolSearchResult] = Field(default_factory=list)
     steps: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -54,7 +54,6 @@ class GlobalState(NodeState):
     Global state of the system.
     """
 
-    planner_state: Any = Field(default=None)  # temporary placeholder for planner state
     # node_states: Dict[str, NodeState] = Field(default_factory=dict)
     node_states: Annotated[Dict[str, NodeState], merge_node_states] = Field(
         default_factory=dict,
