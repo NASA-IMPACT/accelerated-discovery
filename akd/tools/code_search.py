@@ -18,15 +18,14 @@ from akd.tools.misc import Embedder, HttpUrlAdapter
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig, SearxNGSearchToolInputSchema, SearxNGSearchToolOutputSchema
 
 from akd.structures import SearchResultItem
-from akd.tools.search import SearchToolOutputSchema
+from akd.tools.search import SearchToolInputSchema, SearchToolOutputSchema
 from akd.utils import get_akd_root
 
-class LocalRepoCodeSearchToolInputSchema(InputSchema):
+class LocalRepoCodeSearchToolInputSchema(SearchToolInputSchema):
     """
     Input schema for the repository search tool.
     """
 
-    queries: List[str] = Field(..., description="A list of search queries for finding repositories")
     top_k: int = Field(
         10,
         description="The maximum number of repository results to return.",
