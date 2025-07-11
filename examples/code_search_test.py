@@ -6,16 +6,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 from akd.tools.search import SearxNGSearchToolConfig, SearxNGSearchToolInputSchema
-from akd.tools.code_search import CodeSearchTool, CodeSearchToolConfig, CodeSearchToolInputSchema, GitHubSearchTool
+from akd.tools.code_search import LocalRepoCodeSearchTool, LocalRepoCodeSearchToolConfig, LocalRepoCodeSearchToolInputSchema, GitHubCodeSearchTool
 
 # Code Search Tool
-async def code_search_test():
+async def local_repo_search_test():
     """An async function to run the tool."""
     print("Initializing the tool...")
-    cfg = CodeSearchToolConfig()
-    tool = CodeSearchTool(config=cfg)
+    cfg = LocalRepoCodeSearchToolConfig()
+    tool = LocalRepoCodeSearchTool(config=cfg)
 
-    search_input = CodeSearchToolInputSchema(
+    search_input = LocalRepoCodeSearchToolInputSchema(
         queries=["landslide nepal"], 
         top_k=5
     )
@@ -34,7 +34,7 @@ async def github_search_test():
     """An async function to run the tool."""
     print("Initializing the tool...")
     cfg = SearxNGSearchToolConfig(score_cutoff=0.1)
-    tool = GitHubSearchTool(config=cfg)
+    tool = GitHubCodeSearchTool(config=cfg)
 
     search_input = SearxNGSearchToolInputSchema(
         queries=["landslide nepal"], 
@@ -51,6 +51,9 @@ async def github_search_test():
         print("-"*100)
 
 if __name__ == "__main__":
+    print("Running local repo search test...")
+    asyncio.run(local_repo_search_test())
+    print("Running GitHub search test...")
     asyncio.run(github_search_test())
 
 

@@ -3,21 +3,25 @@ from __future__ import annotations
 from typing import List, Optional
 
 from loguru import logger
-from pydantic import BaseModel
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 import os
 import gdown
 import pandas as pd
+import numpy as np
+from scipy.spatial.distance import cdist
 
-from akd._base import InputSchema, OutputSchema
+from akd._base import InputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
 
-from akd.tools.gcd.embeddings import Embedder
-from akd.tools.gcd.vectorizer import RepoFinder
+from akd.tools.misc import Embedder, HttpUrlAdapter
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig, SearxNGSearchToolInputSchema, SearxNGSearchToolOutputSchema
 
-class CodeSearchToolInputSchema(InputSchema):
+from akd.structures import SearchResultItem
+from akd.tools.search import SearchToolOutputSchema
+from akd.utils import get_akd_root
+
+class LocalRepoCodeSearchToolInputSchema(InputSchema):
     """
     Input schema for the repository search tool.
     """
@@ -28,56 +32,39 @@ class CodeSearchToolInputSchema(InputSchema):
         description="The maximum number of repository results to return.",
     )
 
-class CodeSearchResultItem(BaseModel):
-    """Schema for a single repository search result item."""
-    url: str = Field(..., description="The URL of the found repository.")
-    content: str = Field(
-        ...,
-        description="A snippet of content or description from the repository.",
-    )
-
-class CodeSearchOutputSchema(OutputSchema):
-    """Output schema for the repository search tool."""
-    results: List[CodeSearchResultItem] = Field(
-        ...,
-        description="A list of repository search result items aggregated from all queries.",
-    )
-
-class CodeSearchToolConfig(BaseToolConfig):
+class LocalRepoCodeSearchToolConfig(BaseToolConfig):
     """Configuration for the repository search tool."""
-    data_file: str = os.getenv("CODE_SEARCH_DATA_FILE", ".code_data/repositories_with_embeddings.csv") # TODO: Replace with SDE API in future.
+    data_file: str = str(get_akd_root() / "docs" / "repositories_with_embeddings.csv") # TODO: Replace with SDE API in future.
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     debug: bool = False
 
 """
 Tool for performing semantic code search for local code repositories. 
 """
-class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchOutputSchema]):
+class LocalRepoCodeSearchTool(BaseTool[LocalRepoCodeSearchToolInputSchema, SearchToolOutputSchema]):
     """
     Tool for performing semantic code search. 
     It automatically downloads the necessary data file if it's not found locally.
     """
-    input_schema = CodeSearchToolInputSchema
-    output_schema = CodeSearchOutputSchema
-    config_schema = CodeSearchToolConfig
+    input_schema = LocalRepoCodeSearchToolInputSchema
+    output_schema = SearchToolOutputSchema
+    config_schema = LocalRepoCodeSearchToolConfig
 
-    def __init__(self, config: CodeSearchToolConfig | None = None, debug: bool = False):
+    def __init__(self, config: LocalRepoCodeSearchToolConfig | None = None, debug: bool = False):
         """
         Initializes the tool. If the data file is not found, it will be
         downloaded from Google Drive before loading the models.
         """
         config = config or self.config_schema()
         super().__init__(config, debug)
-        self.repo_finder = None
 
         try:
             logger.info("Initializing CodeSearchTool...")
             self._ensure_data_file_exists() # Check for and download the data file
 
             logger.info("Loading data and embedding model...")
-            repo_data = pd.read_csv(self.config.data_file)
-            embedder = Embedder(self.config.embedding_model_name)
-            self.repo_finder = RepoFinder(embedder=embedder, data=repo_data, debug=self.debug)
+            self.repo_data = pd.read_csv(self.config.data_file)
+            self.embedder = Embedder(self.config.embedding_model_name)
 
             logger.info("CodeSearchTool initialization complete.")
         except Exception as e:
@@ -104,30 +91,93 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchOutputSchema]
         else:
             logger.info(f"Data file already exists at '{data_file_path}'.")
 
-    async def _arun(self, params: CodeSearchToolInputSchema, **kwargs) -> CodeSearchOutputSchema:
+    def find_repo(
+        self,
+        query: str,
+        top_k: int = 25,
+        embeddings_column: str = "embeddings",
+        debug: bool = False,
+    ) -> list[dict]:
+        """
+        Perform similarity search against cached embeddings using vectorized computation. # noqa
+
+        Args:
+            query: Search query
+            top_k: Number of top results to return
+
+        Returns:
+            List of dictionaries with top results and similarity scores
+        """
+        if self.repo_data is None:
+            raise ValueError("No data loaded. Call load_data() first.")
+
+        if embeddings_column not in self.repo_data.columns:
+            raise ValueError(
+                "No embeddings found. Run generate_embeddings() first.",
+            )
+
+        # Get query embedding
+        query_embedding = self.embedder.embed_texts([query])
+        if debug:
+            logger.debug(f"Query embedding shape: {query_embedding.shape}")
+
+        # Parse embeddings if they are in string format
+        if self.repo_data[embeddings_column].dtype == "object":
+            self.repo_data[embeddings_column] = self.repo_data[embeddings_column].apply(self.embedder._parse_embedding)
+
+        # Stack all embeddings into a matrix
+        embeddings_matrix = np.vstack(
+            self.repo_data[embeddings_column].tolist(),
+        )
+        if debug:
+            logger.debug(
+                f"Embeddings matrix shape: {embeddings_matrix.shape}",
+            )
+       
+        # Compute cosine distances using cdist (more efficient)
+        # cdist with 'cosine' gives cosine distance (1 - cosine_similarity)
+        cosine_distances = cdist(
+            query_embedding.reshape(1, -1),
+            embeddings_matrix,
+            metric="cosine",
+        )[0]  # Extract the single row
+
+        # Convert cosine distances to similarity scores (0-1 range)
+        similarities = np.clip(1 - cosine_distances, 0, 1)
+
+        # Get top-k results
+        top_indices = np.argsort(similarities)[::-1][:top_k]
+
+        results = self.repo_data.iloc[top_indices].copy()
+        results["score"] = similarities[top_indices]
+
+        return results.reset_index(drop=True).to_dict("records")
+
+    async def _arun(self, params: LocalRepoCodeSearchToolInputSchema, **kwargs) -> SearchToolOutputSchema:
         """
         Runs the in-memory code search for a list of queries.
         """
-        if not self.repo_finder:
-            logger.error("Cannot perform search because the tool is not initialized.")
-            return self.output_schema(results=[])
-
         all_results_data = []
         for query in params.queries:
             if self.debug:
                 logger.debug(f"Searching for query: '{query}' with top_k={params.top_k}")
             
             try:
-                results = self.repo_finder.find_repo(query=query, top_k=params.top_k)
+                results = self.find_repo(query=query, 
+                                         top_k=params.top_k, 
+                                         embeddings_column="embeddings", 
+                                         debug=self.debug)
                 if results:
                     all_results_data.extend(results)
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
         
         formatted_results = [
-            CodeSearchResultItem(
-                url=result.get('URL'),
-                content=result.get('text')
+            SearchResultItem(
+                title="GitHub Repository",
+                url=HttpUrlAdapter.validate_python(result.get('URL')),
+                content=result.get('text'),
+                query=query,
             )
             for result in all_results_data
         ]
@@ -138,7 +188,7 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchOutputSchema]
 Tool for performing targeted searches on GitHub using SearxNG.
 This tool is a wrapper around SearxNGSearchTool.
 """
-class GitHubSearchTool(SearxNGSearchTool):
+class GitHubCodeSearchTool(SearxNGSearchTool):
     """
     A specialized search tool for GitHub, using SearxNG as the backend.
 
@@ -185,7 +235,7 @@ class GitHubSearchTool(SearxNGSearchTool):
         results_per_page: int = 10,
         score_cutoff: float = 0.1,
         debug: bool = False,
-    ) -> "GitHubSearchTool":
+    ) -> "GitHubCodeSearchTool":
         """
         Creates a GitHubSearchTool instance from individual parameters,
         enforcing the 'github' engine.

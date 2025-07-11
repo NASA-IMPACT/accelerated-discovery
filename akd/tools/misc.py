@@ -1,7 +1,14 @@
 from __future__ import annotations
 import numpy as np
+import pandas as pd
+from scipy.spatial.distance import cdist
+from tqdm import tqdm
 from loguru import logger
 from sentence_transformers import SentenceTransformer
+from pathlib import Path
+from pydantic import HttpUrl, TypeAdapter
+
+HttpUrlAdapter = TypeAdapter(HttpUrl)
 
 class Embedder:
     """Base class for embedding models."""
@@ -68,3 +75,14 @@ class Embedder:
     def compute_similarity(self, query: str, text: str) -> float:
         """Compute similarity between query and text."""
         raise NotImplementedError("Subclasses must implement this method.")
+    
+    def _parse_embedding(self, emb_str) -> np.ndarray:
+        """Parse embedding from string format to numpy array."""
+        if pd.isna(emb_str):
+            return np.zeros(self.embedding_dimensions)
+        try:
+            return np.array([float(x) for x in str(emb_str).split(",")])
+        except (ValueError, AttributeError):
+            logger.warning(f"Failed to parse embedding: {emb_str}")
+            return np.zeros(self.embedding_dim)
+    
