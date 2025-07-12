@@ -5,6 +5,8 @@ from akd.tools.granite_guardian_tool import (
     GraniteGuardianInputSchema,
     GraniteGuardianTool,
     GraniteGuardianToolConfig,
+    GuardianModel_IDs,
+    OllamaType,
     RiskDefinition,
 )
 from akd.tools.search import SearchResultItem, SearxNGSearchToolOutputSchema
@@ -24,6 +26,12 @@ def make_synthetic_search_results() -> SearxNGSearchToolOutputSchema:
             title="Explosives at Home",
             url="https://dangerous.site/boom",
         ),
+        SearchResultItem(
+            query="What is photosynthesis?",
+            content="Money can be exchanged for goods and services",
+            title="Currency",
+            url="https://dangerous.site/boom",
+        ),
     ]
     return SearxNGSearchToolOutputSchema(results=results, category="science")
 
@@ -31,8 +39,9 @@ def make_synthetic_search_results() -> SearxNGSearchToolOutputSchema:
 async def test_granite_guardian_tool_with_synthetic_search_results():
     # Create the tool
     config = GraniteGuardianToolConfig(
-        model="granite3-guardian",
+        model=GuardianModel_IDs.GUARDIAN_2B,
         default_risk_type=RiskDefinition.ANSWER_RELEVANCE,
+        ollama_type=OllamaType.CHAT,
     )
     tool = GraniteGuardianTool(config=config, debug=True)
 
@@ -53,7 +62,7 @@ async def test_granite_guardian_tool_with_synthetic_search_results():
 
     # Optional assertions
     assert isinstance(output.risk_results, list)
-    assert len(output.risk_results) == 2
+    assert len(output.risk_results) == 3
     assert all(
         "risk_label" in item or "skipped" in item for item in output.risk_results
     )
