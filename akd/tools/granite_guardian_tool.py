@@ -31,7 +31,7 @@ class RiskDefinition(Enum):
     ANSWER_RELEVANCE = "answer_relevance"
 
 
-class GuardianModelIDs(Enum):
+class GuardianModelID(Enum):
     """
     Enumeration of Granite Guardian models
     """
@@ -91,8 +91,8 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     Configuration for Granite Guardian Tool.
     """
 
-    model: GuardianModelIDs = Field(
-        default=GuardianModelIDs.GUARDIAN_8B,
+    model: GuardianModelID = Field(
+        default=GuardianModelID.GUARDIAN_8B,
         description="Granite Guardian model to use.",
     )
     ollama_type: OllamaType = Field(
