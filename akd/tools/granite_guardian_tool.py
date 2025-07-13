@@ -5,7 +5,9 @@ from typing import Any, Dict, List, Optional
 import requests
 from loguru import logger
 from ollama import chat
+from pydantic import model_validator
 from pydantic.fields import Field
+from typing_extensions import Self
 
 from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
@@ -62,6 +64,15 @@ class GraniteGuardianInputSchema(InputSchema):
         default=RiskDefinition.ANSWER_RELEVANCE,
         description="Type of risk check to apply.",
     )
+
+    @model_validator(mode="after")
+    def check_mutually_exclusive_fields(self) -> Self:
+        if self.search_results:
+            if self.query or self.response:
+                raise ValueError(
+                    "If 'search_results' are provided, 'query' and 'response' must not be provided.",
+                )
+        return self
 
 
 class GraniteGuardianOutputSchema(OutputSchema):
