@@ -5,7 +5,7 @@ from akd.tools.granite_guardian_tool import (
     GraniteGuardianInputSchema,
     GraniteGuardianTool,
     GraniteGuardianToolConfig,
-    GuardianModel_IDs,
+    GuardianModelIDs,
     OllamaType,
     RiskDefinition,
 )
@@ -39,7 +39,7 @@ def make_synthetic_search_results() -> SearxNGSearchToolOutputSchema:
 async def test_granite_guardian_tool_with_synthetic_search_results():
     # Create the tool
     config = GraniteGuardianToolConfig(
-        model=GuardianModel_IDs.GUARDIAN_2B,
+        model=GuardianModelIDs.GUARDIAN_2B,
         default_risk_type=RiskDefinition.ANSWER_RELEVANCE,
         ollama_type=OllamaType.CHAT,
     )
