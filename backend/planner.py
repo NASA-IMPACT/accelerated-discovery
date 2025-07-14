@@ -2,22 +2,24 @@
 Simple planner module that creates a StateGraph with NodeTemplate nodes.
 """
 
+import os
 import sys
 from pathlib import Path
+from typing import Optional
+
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph
 
 # Add parent directory to path to import AKD modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-import os
-from dotenv import load_dotenv
-from langgraph.graph import StateGraph, END
-from langchain_openai import ChatOpenAI
 from akd.nodes.states import GlobalState
-from akd.nodes.templates import DefaultNodeTemplate
-from akd.nodes.supervisor import DummyLLMSupervisor, SupervisorState
 from akd.nodes.states import GlobalState as AKDGlobalState
-from typing import Optional
-from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig
+from akd.nodes.supervisor import DummyLLMSupervisor, SupervisorState
+from akd.nodes.templates import DefaultNodeTemplate
+from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig, SearxNGSearchToolInputSchema
+
 
 # Load environment variables from .env file in parent directory
 env_path = Path(__file__).parent.parent / ".env"
@@ -26,7 +28,7 @@ load_dotenv(env_path)
 
 class SearchNodeSupervisor(DummyLLMSupervisor):
     """
-    A custom supervisor specifically for the search node that properly handles search results.
+    A custom supervisor that calls the search tool.
     """
     
     async def arun(
@@ -35,7 +37,7 @@ class SearchNodeSupervisor(DummyLLMSupervisor):
         global_state: Optional[AKDGlobalState] = None,
         **kwargs,
     ) -> SupervisorState:
-        # Get the query from inputs
+        # Get query with fallback options like the older code
         query = (
             state.inputs.get("query", "")
             or state.inputs.get("question", "")
@@ -47,63 +49,34 @@ class SearchNodeSupervisor(DummyLLMSupervisor):
                 "State must provide an 'inputs' field with a 'query' or 'question'.",
             )
         
-        # For now, let's create a simpler flow that directly calls the search tool
         execution_state = state.model_copy()
         
         try:
-            # Get the search tool
+            # Check if we have tools
             if self.tools and len(self.tools) > 0:
                 search_tool = self.tools[0]
                 
-                # Call the search tool directly, similar to test_search_tool.py
-                from akd.tools.search import SearxNGSearchToolInputSchema
+
                 
-                # Create proper input schema
-                tool_input = SearxNGSearchToolInputSchema(
-                    queries=[query],
-                    category="science",
-                    max_results=10
-                )
+                # Use the supervisor's arun_tool method which handles converted tools properly
+                tool_params = {
+                    "queries": [query],
+                    "category": "science",
+                    "max_results": 10
+                }
                 
-                # Call the tool directly
-                result = await search_tool.arun(tool_input)
+                # Add debug print to see what's happening
+                print(f"DEBUG: About to call search tool with query: {query}")
+                print(f"DEBUG: Tool type: {type(search_tool)}")
                 
-                # Process the search results
-                # The result is a SearxNGSearchToolOutputSchema object
-                if result and hasattr(result, 'results'):
-                    results_list = result.results
-                    
-                    if results_list:
-                        # Extract relevant information from search results
-                        search_results = []
-                        for item in results_list[:5]:  # Limit to top 5 results
-                            # The items are SearchResultItem objects
-                            search_results.append({
-                                "title": getattr(item, 'title', 'No title'),
-                                "url": getattr(item, 'url', ''),
-                                "content": (getattr(item, 'content', '')[:200] + "...") if getattr(item, 'content', None) else ''
-                            })
-                        
-                        execution_state.output = {
-                            "query": query,
-                            "results": search_results,
-                            "status": "success",
-                            "total_results": len(results_list)
-                        }
-                    else:
-                        execution_state.output = {
-                            "query": query,
-                            "results": [],
-                            "status": "no_results",
-                            "message": "No search results found"
-                        }
-                else:
-                    execution_state.output = {
-                        "query": query,
-                        "results": [],
-                        "status": "no_results",
-                        "message": "No search results found"
-                    }
+                result = await self.arun_tool(search_tool, tool_params)
+                
+                print(f"DEBUG: Result received, type: {type(result)}")
+                
+                execution_state.output = {
+                    "query": query,
+                    "results": result.results if hasattr(result, 'results') else []
+                }
             else:
                 execution_state.output = {
                     "query": query,
@@ -112,16 +85,14 @@ class SearchNodeSupervisor(DummyLLMSupervisor):
                 }
                 
         except Exception as e:
-            # Handle any errors gracefully
+            print(f"DEBUG: Exception in arun: {type(e).__name__}: {str(e)}")
             execution_state.output = {
                 "query": query,
                 "status": "error",
                 "error": str(e)
             }
         
-        # Clear steps to avoid any update issues
         execution_state.steps = {}
-        
         self.update_state(execution_state)
         return execution_state
 
