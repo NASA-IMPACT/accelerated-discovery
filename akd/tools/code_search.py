@@ -1,82 +1,150 @@
 from __future__ import annotations
 
-from typing import List, Optional
+import os
+from typing import Optional
 
+import numpy as np
+import pandas as pd
 from loguru import logger
+from pydantic import ValidationError
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
-import os
-import pandas as pd
-import numpy as np
 from scipy.spatial.distance import cdist
 
-from akd.tools._base import BaseTool, BaseToolConfig
-
-from akd.tools.misc import Embedder, HttpUrlAdapter
-from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig, SearxNGSearchToolInputSchema, SearxNGSearchToolOutputSchema
-
+from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
-from akd.tools.search import SearchToolInputSchema, SearchToolOutputSchema
+from akd.tools._base import BaseTool, BaseToolConfig
+from akd.tools.misc import Embedder, HttpUrlAdapter
+from akd.tools.search import (
+    SearchToolInputSchema,
+    SearchToolOutputSchema,
+    SearxNGSearchTool,
+    SearxNGSearchToolConfig,
+)
 from akd.utils import get_akd_root, google_drive_downloader
 
 """
 Define abstract base classes for code search tools.
 """
+
+
 class CodeSearchToolInputSchema(SearchToolInputSchema):
     """
     Input schema for the code search tool.
     """
+
     pass
+
 
 class CodeSearchToolOutputSchema(SearchToolOutputSchema):
     """
     Output schema for the code search tool.
     """
+
     pass
+
 
 class CodeSearchToolConfig(BaseToolConfig):
     """Configuration for the code search tool."""
+
     pass
-    
+
+
 class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSchema]):
     """
     Abstract base class for all code search tools.
     """
+
     input_schema = CodeSearchToolInputSchema
     output_schema = CodeSearchToolOutputSchema
     config_schema = CodeSearchToolConfig
 
-"""
-Tool for performing semantic code search for local code repositories. 
-"""
+    def _validate_input(
+        self,
+        params: CodeSearchToolInputSchema | SearchToolInputSchema | dict,
+    ) -> CodeSearchToolInputSchema:
+        """Validate and convert input parameters."""
+        if isinstance(params, self.input_schema):
+            return params
+
+        if isinstance(params, dict):
+            try:
+                params = self.input_schema(**params)
+            except ValidationError as e:
+                raise SchemaValidationError(f"Invalid input parameters: {e}") from e
+        # convert searxng input schema to code search input schema internally
+        elif isinstance(params, SearchToolInputSchema):
+            if self.debug:
+                logger.warning(
+                    f"Converting SearxNGSearchToolInputSchema to {self.input_schema.__name__}",
+                )
+            params = self.input_schema(**params.model_dump())
+        else:
+            raise TypeError(
+                f"params must be an instance of {self.input_schema.__name__}",
+            )
+        return params
+
+    def _validate_output(
+        self,
+        output: CodeSearchToolOutputSchema | SearchToolOutputSchema,
+    ) -> CodeSearchToolOutputSchema:
+        """Validate output against schema."""
+        if isinstance(output, self.output_schema):
+            return output
+        if isinstance(output, SearchToolOutputSchema):
+            if self.debug:
+                logger.warning(
+                    f"Converting SearchToolOutputSchema to {self.output_schema.__name__}",
+                )
+            output = self.output_schema(**output.model_dump())
+        if not isinstance(output, self.output_schema):
+            raise TypeError(
+                f"Output must be an instance of {self.output_schema.__name__}",
+            )
+        return output
+
+
 class LocalRepoCodeSearchToolInputSchema(CodeSearchToolInputSchema):
     """
     Input schema for the local repository code search tool.
     """
+
     top_k: int = Field(
         10,
         description="The maximum number of repository results to return.",
     )
 
+
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
     Configuration for the local repository code search tool.
     """
-    data_file: str = str(get_akd_root() / "docs" / "repositories_with_embeddings.csv") 
-    google_drive_file_id: str = os.getenv("CODE_SEARCH_FILE_ID", "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O")
+
+    data_file: str = str(get_akd_root() / "docs" / "repositories_with_embeddings.csv")
+    google_drive_file_id: str = os.getenv(
+        "CODE_SEARCH_FILE_ID",
+        "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O",
+    )
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     debug: bool = False
 
+
 class LocalRepoCodeSearchTool(CodeSearchTool):
     """
-    Tool for performing semantic code search. 
+    Tool for performing semantic code search.
     It automatically downloads the necessary data file if it's not found locally.
     """
+
     input_schema = LocalRepoCodeSearchToolInputSchema
     output_schema = CodeSearchToolOutputSchema
     config_schema = LocalRepoCodeSearchToolConfig
 
-    def __init__(self, config: LocalRepoCodeSearchToolConfig | None = None, debug: bool = False):
+    def __init__(
+        self,
+        config: LocalRepoCodeSearchToolConfig | None = None,
+        debug: bool = False,
+    ):
         """
         Initializes the tool. If the data file is not found, it will be
         downloaded from Google Drive before loading the models.
@@ -86,7 +154,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         try:
             logger.info("Initializing CodeSearchTool...")
-            self._ensure_data_file_exists() # Check for and download the data file
+            self._ensure_data_file_exists()  # Check for and download the data file
 
             logger.info("Loading data and embedding model...")
             self.repo_data = pd.read_csv(self.config.data_file)
@@ -98,18 +166,18 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
     def _ensure_data_file_exists(self):
         """
-        Checks if the data file exists and downloads it if it does not. 
+        Checks if the data file exists and downloads it if it does not.
         Will be replaced with SDE API in future.
         """
         data_file_path = self.config.data_file
         if not os.path.exists(data_file_path):
             logger.warning(f"Data file not found at '{data_file_path}'. Downloading...")
-            
+
             # Ensure the target directory exists
             data_dir = os.path.dirname(data_file_path)
             if data_dir:
                 os.makedirs(data_dir, exist_ok=True)
-            
+
             # Download from Google Drive
             file_id = self.config.google_drive_file_id
             google_drive_downloader(file_id, data_file_path, quiet=False)
@@ -148,7 +216,9 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         # Parse embeddings if they are in string format
         if self.repo_data[embeddings_column].dtype == "object":
-            self.repo_data[embeddings_column] = self.repo_data[embeddings_column].apply(self.embedder._parse_embedding)
+            self.repo_data[embeddings_column] = self.repo_data[embeddings_column].apply(
+                self.embedder._parse_embedding,
+            )
 
         # Stack all embeddings into a matrix
         embeddings_matrix = np.vstack(
@@ -158,7 +228,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             logger.debug(
                 f"Embeddings matrix shape: {embeddings_matrix.shape}",
             )
-       
+
         # Compute cosine distances using cdist (more efficient)
         # cdist with 'cosine' gives cosine distance (1 - cosine_similarity)
         cosine_distances = cdist(
@@ -178,41 +248,52 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         return results.reset_index(drop=True).to_dict("records")
 
-    async def _arun(self, params: CodeSearchToolInputSchema, **kwargs) -> CodeSearchToolOutputSchema:
+    async def _arun(
+        self,
+        params: CodeSearchToolInputSchema,
+        **kwargs,
+    ) -> CodeSearchToolOutputSchema:
         """
         Runs the in-memory code search for a list of queries.
         """
         all_results_data = []
         for query in params.queries:
             if self.debug:
-                logger.debug(f"Searching for query: '{query}' with top_k={params.top_k}")
-            
+                logger.debug(
+                    f"Searching for query: '{query}' with top_k={params.top_k}",
+                )
+
             try:
-                results = self.find_repo(query=query, 
-                                         top_k=params.top_k, 
-                                         embeddings_column="embeddings", 
-                                         debug=self.debug)
+                results = self.find_repo(
+                    query=query,
+                    top_k=params.top_k,
+                    embeddings_column="embeddings",
+                    debug=self.debug,
+                )
                 if results:
                     all_results_data.extend(results)
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
-        
+
         formatted_results = [
             SearchResultItem(
                 title="GitHub Repository",
-                url=HttpUrlAdapter.validate_python(result.get('URL')),
-                content=result.get('text'),
+                url=HttpUrlAdapter.validate_python(result.get("URL")),
+                content=result.get("text"),
                 query=query,
             )
             for result in all_results_data
         ]
-        
+
         return self.output_schema(results=formatted_results)
-    
+
+
 """
 Tool for performing targeted searches on GitHub using SearxNG.
 This tool is a wrapper around SearxNGSearchTool.
 """
+
+
 class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
     """
     A specialized search tool for GitHub, using SearxNG as the backend.
@@ -265,7 +346,9 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
         Creates a GitHubSearchTool instance from individual parameters,
         enforcing the 'github' engine.
         """
-        base_url = base_url or HttpUrlAdapter.validate_python(os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"))
+        base_url = base_url or HttpUrlAdapter.validate_python(
+            os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"),
+        )
         config = SearxNGSearchToolConfig(
             base_url=base_url,
             max_results=max_results,
@@ -282,10 +365,10 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
 
     async def _arun(
         self,
-        params: SearxNGSearchToolInputSchema,
+        params: CodeSearchToolInputSchema,
         max_results: Optional[int] = None,
         **kwargs,
-    ) -> SearxNGSearchToolOutputSchema:
+    ) -> CodeSearchToolOutputSchema:
         """
         Runs the search tool, forcing the search category to 'technology'.
 
@@ -310,7 +393,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
         if self.debug:
             logger.debug(
                 f"GitHubSearchTool: Forcing category to '{params.category}' "
-                f"and engines to {self.config.engines}"
+                f"and engines to {self.config.engines}",
             )
 
         # Call the parent's _arun method with the modified parameters
