@@ -50,6 +50,7 @@ Refer to the [notebooks](notebooks) for examples.
 
 ## Key Features
 
+
 - **Deep Attribution**: claims traceable to specific source material, down to the sentences that were combined to make the claim (via factreasoner).
 - **Conflict Detection**: Actively identifies contradictory evidence
 - **Shareable Workflows**: Complete research (execution) graphs that others can inspect and extend, not just summarized end products.
