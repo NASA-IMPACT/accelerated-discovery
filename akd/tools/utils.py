@@ -1,6 +1,7 @@
 import inspect
 from typing import Any, Callable, Coroutine, Dict, Optional, Union
 
+from loguru import logger
 from pydantic import BaseModel, create_model
 
 from akd._base import InputSchema, OutputSchema
@@ -206,7 +207,13 @@ class ToolRunner(AsyncRunMixin):
         schema = tool.input_schema
         fields = list(schema.model_fields)
         kwargs: Dict[str, Any] = {}
+
+        if isinstance(data, BaseModel):
+            # If data is already a BaseModel, use its model_dump
+            data = data.model_dump()
         # single-field fallback
+        if self.debug:
+            logger.debug(f"Mapping: {mapping}, Fields: {fields}, Data: {data}")
         if len(fields) == 1 and len(data) == 1:
             kwargs[fields[0]] = next(iter(data.values()))
         else:
@@ -214,6 +221,8 @@ class ToolRunner(AsyncRunMixin):
                 key = mapping.get(param, param)
                 if key in data:
                     kwargs[param] = data[key]
+        if self.debug:
+            logger.debug(f"Mapped kwargs: {kwargs} for tool: {tool.__class__.__name__}")
         return schema(**kwargs)
 
     async def arun(self, spec: CallableSpec, data: Dict[str, Any]) -> Any:

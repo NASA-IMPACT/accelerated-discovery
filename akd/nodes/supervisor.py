@@ -1,34 +1,52 @@
 import json
 import uuid
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.tools.structured import StructuredTool
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from akd._base import AbstractBase, BaseConfig
 from akd.common_types import ToolType as Tool
-from akd.utils import AsyncRunMixin
+from akd.structures import ToolSearchResult
 
-from .states import GlobalState, SupervisorState, ToolSearchResult
+from .states import NodeState
 
 
-class BaseSupervisor(ABC, AsyncRunMixin):
+class BaseSupervisorConfig(BaseConfig):
+    """Configuration for BaseSupervisor."""
+
+    name: Optional[str] = None
+    tools: List[Any] = Field(default_factory=list)
+    mutation: bool = False
+    state: Optional[NodeState] = None
+
+
+class BaseSupervisor(AbstractBase[NodeState, NodeState]):
     """Base class for node supervisors."""
 
-    def __init__(
-        self,
-        name: Optional[str] = None,
-        tools: Tool | None = None,
-        state: Optional[SupervisorState] = None,
-        debug: bool = False,
-    ):
-        self.tools = tools or []
-        self.debug = bool(debug)
-        self.name = name or f"{self.__classname__}({str(uuid.uuid4().hex)[:5]})"
-        self.state = state or SupervisorState()
+    input_schema = NodeState
+    output_schema = NodeState
+    config_schema = BaseSupervisorConfig
+
+    def _post_init(self) -> None:
+        super()._post_init()
+        # Set default name if not provided
+        if not hasattr(self, "name") or self.name is None:
+            self.name = f"{self.__classname__}({str(uuid.uuid4().hex)[:5]})"
+        # Ensure tools is a list
+        if not hasattr(self, "tools"):
+            self.tools = []
+        elif not isinstance(self.tools, list):
+            self.tools = [self.tools] if self.tools else []
+        # Initialize state if provided
+        if hasattr(self, "state") and self.state:
+            self._initial_state = self.state
+        else:
+            self._initial_state = NodeState()
 
     @property
     def __classname__(self) -> str:
@@ -71,48 +89,56 @@ class BaseSupervisor(ABC, AsyncRunMixin):
     def get_tool(self, tools: List[Tool], query: str) -> ToolSearchResult:
         return self.get_tool_by_name(tools, query)
 
-    def update_state(self, updates: SupervisorState) -> SupervisorState:
+    def _merge_state(self, base_state: NodeState, updates: NodeState) -> NodeState:
         """
-        Update the supervisor's state with values from another SupervisorState.
+        Create a new NodeState by merging updates into base state.
 
         Args:
-            updates: A SupervisorState object containing the updates to apply
+            base_state: The base state to merge into
+            updates: A NodeState object containing the updates to apply
 
         Returns:
-            The updated SupervisorState
+            A new NodeState with merged values
         """
+        # Create new state from base
+        new_state = base_state.model_copy(deep=True)
+
         # Update messages
-        self.state.messages = (
-            updates.messages.copy() if updates.messages else self.state.messages
-        )
+        if updates.messages:
+            new_state.messages = updates.messages.copy()
 
         # Update inputs
         if updates.inputs:
-            self.state.inputs = updates.inputs.copy()
+            new_state.inputs = updates.inputs.copy()
 
-        # Update output
-        if updates.output:
-            self.state.output = updates.output.copy()
+        # Update outputs
+        if updates.outputs:
+            new_state.outputs = updates.outputs.copy()
 
-        # Update tool_calls - append new ones or replace entirely
+        # Update tool_calls
         if updates.tool_calls:
-            self.state.tool_calls = updates.tool_calls.copy()
+            new_state.tool_calls = updates.tool_calls.copy()
 
         # Update steps - merge new steps with existing
         if updates.steps:
             for key, value in updates.steps.items():
-                self.state.steps[key] = value
+                new_state.steps[key] = value
 
-        return self.state
+        return new_state
 
     @abstractmethod
-    async def arun(
+    async def _arun(
         self,
-        state: SupervisorState,
-        global_state: Optional[GlobalState] = None,
+        state: NodeState,
         **kwargs,
-    ) -> SupervisorState:
+    ) -> NodeState:
         raise NotImplementedError("Subclass should implement this.")
+
+
+class LLMSupervisorConfig(BaseSupervisorConfig):
+    """Configuration for LLMSupervisor."""
+
+    llm_client: Any
 
 
 class LLMSupervisor(BaseSupervisor):
@@ -120,10 +146,13 @@ class LLMSupervisor(BaseSupervisor):
     A supervisor that uses an LLM to handle tool calls.
     """
 
-    def __init__(self, llm_client: Any, tools: Tool | None = None, debug: bool = False):
-        super().__init__(tools=tools, debug=debug)
-        self.tools = self._convert_tools_for_binding(self.tools)
-        self.llm_client = llm_client.bind_tools(self.tools)
+    config_schema = LLMSupervisorConfig
+
+    def _post_init(self) -> None:
+        super()._post_init()
+        if hasattr(self, "llm_client"):
+            self.tools = self._convert_tools_for_binding(self.tools)
+            self.llm_client = self.llm_client.bind_tools(self.tools)
 
     @staticmethod
     def _convert_tools_for_binding(tools: List[Tool]) -> List[StructuredTool]:
@@ -214,73 +243,13 @@ class ReActLLMSupervisor(LLMSupervisor):
     ReAct pattern based supervisor
     """
 
-    def __init__(self, llm_client: Any, tools: Tool | None = None, debug: bool = False):
-        super().__init__(llm_client=llm_client, tools=tools, debug=debug)
-        self.graph = create_react_agent(self.llm_client, tools=self.tools)
+    def _post_init(self) -> None:
+        super()._post_init()
+        if hasattr(self, "llm_client"):
+            self.graph = create_react_agent(self.llm_client, tools=self.tools)
 
 
 class ManualSupervisor(BaseSupervisor):
     """
     Manual type with custom rules
     """
-
-    pass
-
-
-class DummyLLMSupervisor(ReActLLMSupervisor):
-    """
-    Dummy LLM based supervisor using ReAct
-    """
-
-    async def arun(
-        self,
-        state: SupervisorState,
-        global_state: Optional[GlobalState] = None,
-        **kwargs,
-    ) -> SupervisorState:
-        query = (
-            state.inputs.get("query", "")
-            or state.inputs.get("question", "")
-            or state.inputs.get("input", "")
-        )
-        if not query:
-            raise ValueError(
-                "State must provide an 'inputs' field with a 'query' or 'question'.",
-            )
-        execution_state = state.model_copy()
-
-        # message update
-        messages = state.messages.copy()
-        messages.append(HumanMessage(content=query))
-
-        # Update the state object with new messages
-        updated_state = SupervisorState(
-            messages=messages,
-            inputs=state.inputs,
-            output=state.output,
-            tool_calls=state.tool_calls,
-            steps=state.steps,
-        )
-
-        # Invoke the graph with the updated state
-        result = await self.graph.ainvoke(updated_state)
-
-        # Get updated messages from result (assuming result is also a SupervisorState or dict)
-        result_messages = (
-            getattr(result, "messages", messages)
-            if isinstance(result, BaseModel)
-            else result.get("messages", messages)
-        )
-
-        # Update execution state
-        execution_state.messages = result_messages
-        execution_state.tool_calls = self._convert_tool_messages(result_messages)
-
-        if execution_state.tool_calls and len(execution_state.tool_calls) > 0:
-            execution_state.output = {"result": execution_state.tool_calls[-1].result}
-
-        for tc in execution_state.tool_calls:
-            execution_state.steps.update(tc.result)
-
-        self.update_state(execution_state)
-        return execution_state
