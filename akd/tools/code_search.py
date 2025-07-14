@@ -6,8 +6,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from loguru import logger
-from pydantic import ValidationError
-from pydantic.fields import Field
+from pydantic import ValidationError, computed_field
 from pydantic.networks import HttpUrl
 from scipy.spatial.distance import cdist
 
@@ -22,10 +21,6 @@ from akd.tools.search import (
     SearxNGSearchToolConfig,
 )
 from akd.utils import get_akd_root, google_drive_downloader
-
-"""
-Define abstract base classes for code search tools.
-"""
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
@@ -110,10 +105,10 @@ class LocalRepoCodeSearchToolInputSchema(CodeSearchToolInputSchema):
     Input schema for the local repository code search tool.
     """
 
-    top_k: int = Field(
-        10,
-        description="The maximum number of repository results to return.",
-    )
+    @computed_field
+    def top_k(self) -> int:
+        """Returns the number of top results to return."""
+        return self.max_results
 
 
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
