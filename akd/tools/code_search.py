@@ -6,12 +6,10 @@ from loguru import logger
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 import os
-import gdown
 import pandas as pd
 import numpy as np
 from scipy.spatial.distance import cdist
 
-from akd._base import InputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
 
 from akd.tools.misc import Embedder, HttpUrlAdapter
@@ -19,34 +17,63 @@ from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig, SearxNG
 
 from akd.structures import SearchResultItem
 from akd.tools.search import SearchToolInputSchema, SearchToolOutputSchema
-from akd.utils import get_akd_root
+from akd.utils import get_akd_root, google_drive_downloader
 
-class LocalRepoCodeSearchToolInputSchema(SearchToolInputSchema):
+"""
+Define abstract base classes for code search tools.
+"""
+class CodeSearchToolInputSchema(SearchToolInputSchema):
     """
-    Input schema for the repository search tool.
+    Input schema for the code search tool.
     """
+    pass
 
+class CodeSearchToolOutputSchema(SearchToolOutputSchema):
+    """
+    Output schema for the code search tool.
+    """
+    pass
+
+class CodeSearchToolConfig(BaseToolConfig):
+    """Configuration for the code search tool."""
+    pass
+    
+class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSchema]):
+    """
+    Abstract base class for all code search tools.
+    """
+    input_schema = CodeSearchToolInputSchema
+    output_schema = CodeSearchToolOutputSchema
+    config_schema = CodeSearchToolConfig
+
+"""
+Tool for performing semantic code search for local code repositories. 
+"""
+class LocalRepoCodeSearchToolInputSchema(CodeSearchToolInputSchema):
+    """
+    Input schema for the local repository code search tool.
+    """
     top_k: int = Field(
         10,
         description="The maximum number of repository results to return.",
     )
 
-class LocalRepoCodeSearchToolConfig(BaseToolConfig):
-    """Configuration for the repository search tool."""
-    data_file: str = str(get_akd_root() / "docs" / "repositories_with_embeddings.csv") # TODO: Replace with SDE API in future.
+class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
+    """
+    Configuration for the local repository code search tool.
+    """
+    data_file: str = str(get_akd_root() / "docs" / "repositories_with_embeddings.csv") 
+    google_drive_file_id: str = os.getenv("CODE_SEARCH_FILE_ID", "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O")
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     debug: bool = False
 
-"""
-Tool for performing semantic code search for local code repositories. 
-"""
-class LocalRepoCodeSearchTool(BaseTool[LocalRepoCodeSearchToolInputSchema, SearchToolOutputSchema]):
+class LocalRepoCodeSearchTool(CodeSearchTool):
     """
     Tool for performing semantic code search. 
     It automatically downloads the necessary data file if it's not found locally.
     """
     input_schema = LocalRepoCodeSearchToolInputSchema
-    output_schema = SearchToolOutputSchema
+    output_schema = CodeSearchToolOutputSchema
     config_schema = LocalRepoCodeSearchToolConfig
 
     def __init__(self, config: LocalRepoCodeSearchToolConfig | None = None, debug: bool = False):
@@ -84,9 +111,8 @@ class LocalRepoCodeSearchTool(BaseTool[LocalRepoCodeSearchToolInputSchema, Searc
                 os.makedirs(data_dir, exist_ok=True)
             
             # Download from Google Drive
-            file_id = "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O"
-            gdown.download(f"https://drive.google.com/uc?id={file_id}", data_file_path, quiet=False)
-            logger.info(f"Data file downloaded successfully to '{data_file_path}'.")
+            file_id = self.config.google_drive_file_id
+            google_drive_downloader(file_id, data_file_path, quiet=False)
         else:
             logger.info(f"Data file already exists at '{data_file_path}'.")
 
@@ -152,7 +178,7 @@ class LocalRepoCodeSearchTool(BaseTool[LocalRepoCodeSearchToolInputSchema, Searc
 
         return results.reset_index(drop=True).to_dict("records")
 
-    async def _arun(self, params: LocalRepoCodeSearchToolInputSchema, **kwargs) -> SearchToolOutputSchema:
+    async def _arun(self, params: CodeSearchToolInputSchema, **kwargs) -> CodeSearchToolOutputSchema:
         """
         Runs the in-memory code search for a list of queries.
         """
@@ -187,7 +213,7 @@ class LocalRepoCodeSearchTool(BaseTool[LocalRepoCodeSearchToolInputSchema, Searc
 Tool for performing targeted searches on GitHub using SearxNG.
 This tool is a wrapper around SearxNGSearchTool.
 """
-class GitHubCodeSearchTool(SearxNGSearchTool):
+class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
     """
     A specialized search tool for GitHub, using SearxNG as the backend.
 
@@ -227,7 +253,7 @@ class GitHubCodeSearchTool(SearxNGSearchTool):
     @classmethod
     def from_params(
         cls,
-        base_url: Optional[HttpUrl] = "http://localhost:8080",
+        base_url: Optional[HttpUrl] = None,
         max_results: int = 10,
         # engines parameter is omitted as it's hardcoded
         max_pages: int = 5,
@@ -239,7 +265,7 @@ class GitHubCodeSearchTool(SearxNGSearchTool):
         Creates a GitHubSearchTool instance from individual parameters,
         enforcing the 'github' engine.
         """
-        base_url = base_url or os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
+        base_url = base_url or HttpUrlAdapter.validate_python(os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"))
         config = SearxNGSearchToolConfig(
             base_url=base_url,
             max_results=max_results,
