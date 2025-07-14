@@ -5,6 +5,7 @@ from typing import List, Optional
 from loguru import logger
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
+from pydantic import computed_field
 import os
 import pandas as pd
 import numpy as np
@@ -53,10 +54,10 @@ class LocalRepoCodeSearchToolInputSchema(CodeSearchToolInputSchema):
     """
     Input schema for the local repository code search tool.
     """
-    top_k: int = Field(
-        10,
-        description="The maximum number of repository results to return.",
-    )
+    @computed_field
+    @property
+    def top_k(self) -> int:
+        return self.max_results
 
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
@@ -110,9 +111,13 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             if data_dir:
                 os.makedirs(data_dir, exist_ok=True)
             
+            if self.debug:
+                logger.debug(f"Downloading data file from Google Drive (file_id={self.config.google_drive_file_id})...")
             # Download from Google Drive
             file_id = self.config.google_drive_file_id
             google_drive_downloader(file_id, data_file_path, quiet=False)
+            if self.debug:
+                logger.debug("Download complete.")
         else:
             logger.info(f"Data file already exists at '{data_file_path}'.")
 
