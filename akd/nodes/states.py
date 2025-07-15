@@ -34,6 +34,9 @@ class NodeState(BaseModel):
     # Optional supervisor fields (only used when supervisor is present)
     steps: Dict[str, Any] = Field(default_factory=dict)
 
+    # TODO: fix serialization issues
+    # tool_calls: List[ToolSearchResult] = Field(default_factory=list)
+
 
 def merge_node_states(
     existing: Dict[str, NodeState],

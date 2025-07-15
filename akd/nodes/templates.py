@@ -208,7 +208,6 @@ class SupervisedNodeTemplate(AbstractNodeTemplate):
             messages=node_state.messages.copy(),
             inputs=node_state.inputs.copy(),
             outputs=node_state.outputs.copy(),
-            tool_calls=node_state.tool_calls.copy(),
             steps=node_state.steps.copy(),
         )
 
@@ -221,7 +220,14 @@ class SupervisedNodeTemplate(AbstractNodeTemplate):
         # Copy back supervisor outputs & messages into node_state
         node_state.messages += sup_out.messages
         node_state.outputs.update(sup_out.outputs)
-        node_state.tool_calls.extend(sup_out.tool_calls)
+
+        # sanity check for tool calls
+        # default: Node State does not have tool_calls because of serialization issues
+        # run only if the state has it
+        # TODO: fix serialization issues
+        if hasattr(node_state, "tool_calls") and hasattr(sup_out, "tool_calls"):
+            node_state.tool_calls.extend(sup_out.tool_calls)
+
         node_state.steps.update(sup_out.steps)
 
         return node_state

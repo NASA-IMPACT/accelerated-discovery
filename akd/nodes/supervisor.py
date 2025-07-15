@@ -150,9 +150,9 @@ class LLMSupervisor(BaseSupervisor):
 
     def _post_init(self) -> None:
         super()._post_init()
-        if hasattr(self, "llm_client"):
+        if hasattr(self.config, "llm_client"):
             self.tools = self._convert_tools_for_binding(self.tools)
-            self.llm_client = self.llm_client.bind_tools(self.tools)
+            self.llm_client = self.config.llm_client.bind_tools(self.tools)
 
     @staticmethod
     def _convert_tools_for_binding(tools: List[Tool]) -> List[StructuredTool]:

@@ -29,6 +29,17 @@ class AKDSerializer(JsonPlusSerializer):
             return {k: self._convert_pydantic_to_dict(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple)):
             return [self._convert_pydantic_to_dict(item) for item in obj]
+        # elif isinstance(obj, NodeState):
+        #     # Convert NodeState to a dictionary
+        #     return {
+        #         "messages": obj.messages,
+        #         "inputs": obj.inputs,
+        #         "outputs": obj.outputs,
+        #         "input_guardrails": obj.input_guardrails,
+        #         "output_guardrails": obj.output_guardrails,
+        #         "steps": obj.steps,
+        #         "tool_calls": [tool_call.model_dump(mode="json") for tool_call in obj.tool_calls],
+        #     }
         else:
             return obj
 
