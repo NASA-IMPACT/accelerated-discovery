@@ -166,6 +166,7 @@ class ToolSearchResult(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    # causes serialization issues as arbitrary type
     tool: Optional[Any] = Field(
         None,
         description="Tool found during search",
