@@ -5,96 +5,60 @@ Simple planner module that creates a StateGraph with NodeTemplate nodes.
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
 # Add parent directory to path to import AKD modules
 sys.path.append(str(Path(__file__).parent.parent))
 
-from akd.nodes.states import GlobalState
-from akd.nodes.states import GlobalState as AKDGlobalState
-from akd.nodes.supervisor import DummyLLMSupervisor, SupervisorState
-from akd.nodes.templates import DefaultNodeTemplate
-from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig, SearxNGSearchToolInputSchema
-
+from akd.nodes.states import GlobalState, NodeState
+from akd.nodes.supervisor import BaseSupervisor
+from akd.nodes.templates import SupervisedNodeTemplate
+from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig
 
 # Load environment variables from .env file in parent directory
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 
-class SearchNodeSupervisor(DummyLLMSupervisor):
+class SearchNodeSupervisor(BaseSupervisor):
     """
     A custom supervisor that calls the search tool.
     """
     
-    async def arun(
+    async def _arun(
         self,
-        state: SupervisorState,
-        global_state: Optional[AKDGlobalState] = None,
+        state: NodeState,
         **kwargs,
-    ) -> SupervisorState:
-        # Get query with fallback options like the older code
-        query = (
-            state.inputs.get("query", "")
-            or state.inputs.get("question", "")
-            or state.inputs.get("input", "")
-        )
+    ) -> NodeState:
+        # Get query from inputs
+        query = state.inputs.get("query", "")
         
         if not query:
-            raise ValueError(
-                "State must provide an 'inputs' field with a 'query' or 'question'.",
+            raise ValueError("State must provide an 'inputs' field with a 'query'.")
+        
+        # Get the search tool
+        if self.tools:
+            search_tool = self.tools[0]
+            
+            # Create input for the tool
+            tool_input = search_tool.input_schema(
+                queries=[query],
+                category="science",
+                max_results=10
             )
+            
+            # Call the tool
+            result = await search_tool.arun(tool_input)
+            
+            # Store results in outputs
+            state.outputs["search_results"] = result.model_dump()
+            state.outputs["query"] = query
+        else:
+            state.outputs["error"] = "No search tool available"
         
-        execution_state = state.model_copy()
-        
-        try:
-            # Check if we have tools
-            if self.tools and len(self.tools) > 0:
-                search_tool = self.tools[0]
-                
-
-                
-                # Use the supervisor's arun_tool method which handles converted tools properly
-                tool_params = {
-                    "queries": [query],
-                    "category": "science",
-                    "max_results": 10
-                }
-                
-                # Add debug print to see what's happening
-                print(f"DEBUG: About to call search tool with query: {query}")
-                print(f"DEBUG: Tool type: {type(search_tool)}")
-                
-                result = await self.arun_tool(search_tool, tool_params)
-                
-                print(f"DEBUG: Result received, type: {type(result)}")
-                
-                execution_state.output = {
-                    "query": query,
-                    "results": result.results if hasattr(result, 'results') else []
-                }
-            else:
-                execution_state.output = {
-                    "query": query,
-                    "status": "error",
-                    "error": "No search tool available"
-                }
-                
-        except Exception as e:
-            print(f"DEBUG: Exception in arun: {type(e).__name__}: {str(e)}")
-            execution_state.output = {
-                "query": query,
-                "status": "error",
-                "error": str(e)
-            }
-        
-        execution_state.steps = {}
-        self.update_state(execution_state)
-        return execution_state
+        return state
 
 
 def create_planner_graph() -> StateGraph:
@@ -120,18 +84,14 @@ def create_planner_graph() -> StateGraph:
     return graph
 
 
-def create_search_node() -> DefaultNodeTemplate:
+def create_search_node() -> SupervisedNodeTemplate:
     """
     Create a single node that uses SearxNGSearchTool for web searching.
     
     Returns:
-        DefaultNodeTemplate configured with SearxNG search capabilities
+        SupervisedNodeTemplate configured with SearxNG search capabilities
     """
     # Create the search tool with configuration
-    # It will use environment variables by default:
-    # SEARXNG_BASE_URL (default: http://localhost:8080)
-    # SEARXNG_MAX_RESULTS (default: 10)
-    # SEARXNG_ENGINES (default: google,arxiv,google_scholar)
     searxng_config = SearxNGSearchToolConfig(
         base_url=os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"),
         max_results=int(os.getenv("SEARXNG_MAX_RESULTS", 10)),
@@ -139,36 +99,20 @@ def create_search_node() -> DefaultNodeTemplate:
     )
     searxng_tool = SearxNGSearchTool(config=searxng_config)
     
-    # Create LLM client
-    # Get API key from environment (now loaded from .env file)
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "OPENAI_API_KEY is not set. "
-            "Please add it to the .env file in the project root directory: "
-            f"{env_path}"
-        )
-    
-    llm_client = ChatOpenAI(
-        api_key=api_key,
-        model="gpt-4o-mini",
-        temperature=0.0
-    )
-    
-    # Use SearchNodeSupervisor that properly handles search tool results
+    # Create supervisor with the search tool
     search_supervisor = SearchNodeSupervisor(
-        llm_client=llm_client,
         tools=[searxng_tool],
         debug=False
     )
     
-    # Create the node using DefaultNodeTemplate (concrete implementation)
-    search_node = DefaultNodeTemplate(
+    # Create the node using SupervisedNodeTemplate
+    search_node = SupervisedNodeTemplate(
         supervisor=search_supervisor,
         input_guardrails=[],
         output_guardrails=[],
         node_id="search_node",
-        debug=False
+        debug=False,
+        mutation=True  # Allow state mutation
     )
     
     return search_node

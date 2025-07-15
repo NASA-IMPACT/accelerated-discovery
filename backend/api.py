@@ -86,17 +86,31 @@ async def execute_graph(request: ExecuteRequest):
     if request.workflow_id not in compiled_graphs:
         raise HTTPException(status_code=404, detail=f"Graph not found for workflow_id: {request.workflow_id}")
     
-    compiled_graph = compiled_graphs[request.workflow_id]
-    workflow_state = GlobalState(**request.state)
-    config = {"configurable": {"thread_id": request.workflow_id}}
-    
-    result = await compiled_graph.ainvoke(workflow_state, config)
-    
-    return {
-        "status": "success",
-        "result": result.model_dump(),
-        "workflow_id": request.workflow_id
-    }
+    try:
+        compiled_graph = compiled_graphs[request.workflow_id]
+        workflow_state = GlobalState(**request.state)
+        config = {"configurable": {"thread_id": request.workflow_id}}
+        
+        result = await compiled_graph.ainvoke(workflow_state, config)
+        
+        # Handle different result formats
+        if hasattr(result, 'model_dump'):
+            result_dict = result.model_dump()
+        elif isinstance(result, dict):
+            result_dict = result
+        else:
+            result_dict = {"data": str(result)}
+        
+        return {
+            "status": "success",
+            "result": result_dict,
+            "workflow_id": request.workflow_id
+        }
+    except Exception as e:
+        import traceback
+        print(f"ERROR in execute_graph: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

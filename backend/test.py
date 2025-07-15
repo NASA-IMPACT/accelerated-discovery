@@ -28,20 +28,13 @@ async def test_execute_api(client: httpx.AsyncClient, base_url: str, workflow_id
     
     initial_state = {
         "inputs": {},
-        "output": {},
+        "outputs": {},
         "messages": [],
         "node_states": {
             "search_node": {
                 "inputs": {"query": query},
-                "output": {},
+                "outputs": {},
                 "messages": [],
-                "supervisor_state": {
-                    "inputs": {"query": query},
-                    "output": {},
-                    "messages": [],
-                    "tool_calls": [],
-                    "steps": {}
-                },
                 "input_guardrails": {},
                 "output_guardrails": {}
             }
@@ -55,7 +48,7 @@ async def test_execute_api(client: httpx.AsyncClient, base_url: str, workflow_id
     print(f"Status: {response.status_code}")
     result = response.json()
     
-    search_node_output = result.get("result", {}).get("node_states", {}).get("search_node", {}).get("output", {})
+    search_node_output = result.get("result", {}).get("node_states", {}).get("search_node", {}).get("outputs", {})
     print(f"Search results: {search_node_output}")
 
 
