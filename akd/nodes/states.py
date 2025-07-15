@@ -61,9 +61,3 @@ class GlobalState(NodeState):
     node_states: Annotated[Dict[str, NodeState], merge_node_states] = Field(
         default_factory=dict,
     )
-
-
-# Backward compatibility aliases
-# These will be removed in a future version
-SupervisorState = NodeState
-NodeTemplateState = NodeState
