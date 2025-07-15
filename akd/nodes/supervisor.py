@@ -115,9 +115,9 @@ class BaseSupervisor(AbstractBase[NodeState, NodeState]):
         if updates.outputs:
             new_state.outputs = updates.outputs.copy()
 
-        # Update tool_calls
-        if updates.tool_calls:
-            new_state.tool_calls = updates.tool_calls.copy()
+        # # Update tool_calls
+        # if updates.tool_calls:
+        #     new_state.tool_calls = updates.tool_calls.copy()
 
         # Update steps - merge new steps with existing
         if updates.steps:
