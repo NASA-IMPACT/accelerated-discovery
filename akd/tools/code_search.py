@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from typing import Optional
+import requests
+import json
 
 import numpy as np
 import pandas as pd
@@ -85,6 +87,7 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
         output: CodeSearchToolOutputSchema | SearchToolOutputSchema,
     ) -> CodeSearchToolOutputSchema:
         """Validate output against schema."""
+
         if isinstance(output, self.output_schema):
             return output
         if isinstance(output, SearchToolOutputSchema):
@@ -144,6 +147,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         Initializes the tool. If the data file is not found, it will be
         downloaded from Google Drive before loading the models.
         """
+
         config = config or self.config_schema()
         super().__init__(config, debug)
 
@@ -164,6 +168,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         Checks if the data file exists and downloads it if it does not.
         Will be replaced with SDE API in future.
         """
+
         data_file_path = self.config.data_file
         if not os.path.exists(data_file_path):
             logger.warning(f"Data file not found at '{data_file_path}'. Downloading...")
@@ -196,6 +201,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         Returns:
             List of dictionaries with top results and similarity scores
         """
+
         if self.repo_data is None:
             raise ValueError("No data loaded. Call load_data() first.")
 
@@ -251,6 +257,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         """
         Runs the in-memory code search for a list of queries.
         """
+
         all_results_data = []
         for query in params.queries:
             if self.debug:
@@ -281,12 +288,6 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         ]
 
         return self.output_schema(results=formatted_results)
-
-
-"""
-Tool for performing targeted searches on GitHub using SearxNG.
-This tool is a wrapper around SearxNGSearchTool.
-"""
 
 
 class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
@@ -341,6 +342,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
         Creates a GitHubSearchTool instance from individual parameters,
         enforcing the 'github' engine.
         """
+
         base_url = base_url or HttpUrlAdapter.validate_python(
             os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"),
         )
@@ -382,6 +384,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
             SearxNGSearchToolOutputSchema:
                 The output of the tool, adhering to the output schema.
         """
+
         # Hardcode the category to 'technology' for every call
         params.category = "technology"
 
@@ -393,3 +396,97 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
 
         # Call the parent's _arun method with the modified parameters
         return await super()._arun(params=params, max_results=max_results, **kwargs)
+
+
+class SDECodeSearchToolConfig(CodeSearchToolConfig):
+    """
+    Configuration for the SDE code search tool.
+    """
+    
+    base_url: str = os.getenv("SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search")  
+    page_size: int = 10
+    max_pages: int = 1
+    debug: bool = True
+
+
+class SDECodeSearchTool(CodeSearchTool):
+    """
+    Tool for code search using SDE API.
+    """
+
+    input_schema = CodeSearchToolInputSchema
+    output_schema = CodeSearchToolOutputSchema
+    config_schema = SDECodeSearchToolConfig
+
+    def __init__(
+        self,
+        config: SDECodeSearchToolConfig | None = None,
+        debug: bool = False,
+    ):
+        """
+        Initializes the SDECodeSearchTool.
+        """
+
+        self.headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        self.base_url = config.base_url 
+        self.page_size = config.page_size
+        self.max_pages = config.max_pages
+        self.debug = config.debug
+        super().__init__(config, debug)
+
+    def sde_search(self, page: int, query: str):
+        """
+        Search for code using SDE REST API.
+        """
+
+        payload = {
+            "filters": {},
+            "page": page,
+            "pageSize": self.page_size,
+            "search_term": query
+        }
+        if self.debug:  
+            logger.debug(f"Payload: {payload}")
+        response = requests.post(self.base_url, headers=self.headers, data=json.dumps(payload))
+        if self.debug:
+            logger.debug(f"Response: {response.json()}")
+        return response.json()["documents"]
+
+    async def _arun(
+        self,
+        params: CodeSearchToolInputSchema,
+        **kwargs,
+    ) -> CodeSearchToolOutputSchema:
+        """
+        Run the SDE code search tool.
+        """
+
+        all_results_data = []
+        for query in params.queries:
+            if self.debug:
+                logger.debug(f"Searching for query: '{query}' with top_k={params.max_results}")
+
+            try:
+                for page in range(self.max_pages):
+                    results = self.sde_search(page=page, query=query)
+                    if results:
+                        all_results_data.extend(results)
+                    else:
+                        break
+                all_results_data = all_results_data[:params.max_results]
+            except Exception as e:
+                logger.error(f"Error during search for query '{query}': {e}")
+
+        formatted_results = [
+            SearchResultItem(
+                title="SDE Code Search",
+                url=HttpUrlAdapter.validate_python(result["readme_url"]),
+                content=result["full_text"],
+                query=query,
+            )
+            for result in all_results_data
+        ]
+        return self.output_schema(results=formatted_results)
