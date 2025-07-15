@@ -27,7 +27,7 @@ dependencies = [
     "requests>=2.32.3",
     "wikipedia>=1.4.0",
     "langchain-openai>=0.3.27",
-    
+    "pytest-asyncio>=1.0.0",
 ]
 
 [tool.poetry]
