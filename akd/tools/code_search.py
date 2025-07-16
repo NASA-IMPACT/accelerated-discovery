@@ -124,7 +124,7 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
 
             # If key not found anywhere, return a default value that will sort last
             # Using float('inf') for numerical sorting or empty string for string sorting
-            return float("inf")
+            return float("-inf")
 
         try:
             # Sort in descending order (highest score first)
