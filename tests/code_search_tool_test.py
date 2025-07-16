@@ -2,11 +2,13 @@ import sys
 import os
 import pytest
 import requests
+import numpy as np
 
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
+from akd.tools.misc import Embedder
 from akd.tools.search import SearxNGSearchToolConfig, SearxNGSearchToolInputSchema
 from akd.tools.code_search import (
     CodeSearchToolInputSchema,
@@ -101,6 +103,16 @@ def test_google_drive_link():
 
     response = requests.head(url, allow_redirects=True)
     assert response.status_code == 200
+
+
+def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
+    texts = ["flood prediction", "earthquake classification"]
+    embeddings = embedder.embed_texts(texts)
+    
+    assert isinstance(embeddings, np.ndarray)
+    assert embeddings.shape[0] == 2
+    assert embeddings.shape[1] == embedder.get_embedding_dimensions()
+    assert not np.isnan(embeddings).any()
 
 
 
