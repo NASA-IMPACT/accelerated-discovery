@@ -292,7 +292,7 @@ class DoclingPDFScraper(WebScraperToolBase):
 
     def _parse_html(html_content: str) -> str:
         """
-        Parses html content from a docling document into a string
+        Parses html content from a docling document exported to HTML into a string
 
         Args:
             path: HTML content as a string
@@ -370,21 +370,14 @@ class DoclingPDFScraper(WebScraperToolBase):
             WebpageScraperToolOutputSchema with content and metadata
         """
         path = str(params.url)
-        pdf_path = str(params.url)
         if not self._is_pdf(path):
             raise RuntimeError(f"{path} is not a valid pdf.")
-        temp_file = None
         try:
-            # Handle URL vs local file path
-            if self._is_url(path):
-                pdf_path, temp_file = await self._download_pdf_from_url(path)
-            markdown_content, metadata = await self._process_pdf(pdf_path)
+            markdown_content, metadata = await self._process_pdf(path)
             metadata.url = metadata.pdf_url = path
             return WebpageScraperToolOutputSchema(
                 content=markdown_content,
                 metadata=metadata,
-            )
-        finally:
-            # Clean up the temporary file if it exists
-            if temp_file and os.path.exists(temp_file.name):
-                os.unlink(temp_file.name)
+                )
+        except Exception as e:
+            raise RuntimeError(f"Error extracting text from PDF: {e}")
