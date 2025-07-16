@@ -47,7 +47,7 @@ class GraphStructure(BaseModel):
     edges: list[tuple[str, str]]
 
 
-@app.post("/api/plan")
+@app.post("/api/workflow/plan")
 async def create_plan(request: ChatRequest):
     """
     Accept chat message and return graph structure.
@@ -96,7 +96,7 @@ class ResumeRequest(BaseModel):
     start_node: str  # Node to start execution from
 
 
-@app.post("/api/execute")
+@app.post("/api/workflow/execute")
 async def execute_graph(request: ExecuteRequest):
     """Execute a previously created graph with given state."""
     if request.workflow_id not in compiled_graphs:
@@ -129,7 +129,7 @@ async def execute_graph(request: ExecuteRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/resume")
+@app.post("/api/workflow/resume")
 async def resume_graph(request: ResumeRequest):
     """
     Resume execution of a workflow from a specific node.
@@ -142,33 +142,16 @@ async def resume_graph(request: ResumeRequest):
         compiled_graph = compiled_graphs[request.workflow_id]
         workflow_state = GlobalState(**request.state)
         
-        # Configure to resume from specific node
-        config = {
-            "configurable": {
-                "thread_id": request.workflow_id,
-                "checkpoint_ns": request.start_node  # This tells LangGraph where to resume from
-            }
-        }
+        # Base config for this workflow
+        config = {"configurable": {"thread_id": request.workflow_id}}
         
-        # Get the graph and update it to start from the specified node
-        # We need to get the underlying graph to modify entry point
-        from planner import create_full_workflow_graph, create_simple_search_graph
+        # Use LangGraph's update_state to create a checkpoint with our state
+        # This allows us to resume from where we set the state
+        updated_config = compiled_graph.update_state(config, workflow_state.model_dump())
         
-        # Determine which graph type based on nodes in state
-        nodes_in_state = list(workflow_state.node_states.keys())
-        if "report_generation" in nodes_in_state:
-            graph = create_full_workflow_graph()
-        else:
-            graph = create_simple_search_graph()
-        
-        # Override the entry point to start from specified node
-        graph.set_entry_point(request.start_node)
-        
-        # Recompile with the same memory/checkpointer
-        resumed_graph = graph.compile(checkpointer=memory)
-        
-        # Execute from the resume point
-        result = await resumed_graph.ainvoke(workflow_state, config)
+        # Now invoke from this checkpoint - the graph will continue from where the state indicates
+        # LangGraph will automatically determine which nodes have been executed based on the state
+        result = await compiled_graph.ainvoke(None, config=updated_config)
         
         # Handle different result formats
         if hasattr(result, 'model_dump'):
@@ -191,7 +174,7 @@ async def resume_graph(request: ResumeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/workflows")
+@app.get("/api/workflow/list")
 async def list_workflows():
     """List all stored workflows."""
     return {

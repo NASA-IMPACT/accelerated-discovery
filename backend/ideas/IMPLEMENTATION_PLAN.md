@@ -311,7 +311,7 @@ class WorkflowWebSocketManager:
 - `PUT /api/v1/workflows/{id}` - Update workflow
 - `DELETE /api/v1/workflows/{id}` - Delete workflow
 - `POST /api/v1/workflows/{id}/execute` - Execute workflow step
-- `POST /api/v1/workflows/{id}/interrupt` - Handle interruption
+- `POST /api/v1/workflows/{id}/interrupt` - Handle insterruption
 - `GET /api/v1/workflows/{id}/export` - Export workflow
 - `POST /api/v1/workflows/fork` - Fork workflow
 

@@ -14,7 +14,7 @@ async def test_simple_workflow(client: httpx.AsyncClient, base_url: str):
     # 1. Create plan
     print("\n1. Creating simple plan...")
     response = await client.post(
-        f"{base_url}/api/plan",
+        f"{base_url}/api/workflow/plan",
         json={"message": "What is the impact of climate change on coral reefs?", "workflow_type": "simple"}
     )
     print(f"Status: {response.status_code}")
@@ -43,7 +43,7 @@ async def test_simple_workflow(client: httpx.AsyncClient, base_url: str):
     }
     
     response = await client.post(
-        f"{base_url}/api/execute",
+        f"{base_url}/api/workflow/execute",
         json={"state": initial_state, "workflow_id": workflow_id}
     )
     print(f"Execute Status: {response.status_code}")
@@ -72,7 +72,7 @@ async def test_full_workflow(client: httpx.AsyncClient, base_url: str):
     # 1. Create plan
     print("\n1. Creating full workflow plan...")
     response = await client.post(
-        f"{base_url}/api/plan",
+        f"{base_url}/api/workflow/plan",
         json={"message": "Research on machine learning for climate modeling", "workflow_type": "full"}
     )
     print(f"Status: {response.status_code}")
@@ -117,7 +117,7 @@ async def test_full_workflow(client: httpx.AsyncClient, base_url: str):
     }
     
     response = await client.post(
-        f"{base_url}/api/execute",
+        f"{base_url}/api/workflow/execute",
         json={"state": initial_state, "workflow_id": workflow_id}
     )
     print(f"Execute Status: {response.status_code}")
@@ -149,7 +149,7 @@ async def test_resume_workflow(client: httpx.AsyncClient, base_url: str, workflo
     resume_state = previous_state["result"]
     
     response = await client.post(
-        f"{base_url}/api/resume",
+        f"{base_url}/api/workflow/resume",
         json={
             "state": resume_state,
             "workflow_id": workflow_id,
@@ -173,7 +173,7 @@ async def test_list_workflows(client: httpx.AsyncClient, base_url: str):
     """Test listing all workflows."""
     print("\n\n=== Testing List Workflows ===")
     
-    response = await client.get(f"{base_url}/api/workflows")
+    response = await client.get(f"{base_url}/api/workflow/list")
     print(f"Status: {response.status_code}")
     if response.status_code == 200:
         data = response.json()
