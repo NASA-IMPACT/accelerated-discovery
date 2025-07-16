@@ -184,11 +184,73 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         else:
             logger.info(f"Data file already exists at '{data_file_path}'.")
 
+    def generate_embeddings(
+        self,
+        text_column: str = "text",
+        embeddings_column: str = "embeddings",
+        force_regenerate: bool = False,
+        batch_size: int = 32,
+    ) -> None:
+        """
+        Generate embeddings for a given text column if not already present.
+
+        Args:
+            text_column: Name of the column containing text to embed
+            embeddings_column: Name of the column to store embeddings
+            force_regenerate: If True, regenerate embeddings even if column exists
+            batch_size: Size of batches for embedding generation
+        """
+        # Check if embeddings already exist
+        if embeddings_column in self.repo_data.columns and not force_regenerate:
+            logger.info(
+                f"Embeddings column '{embeddings_column}' already exists. Skipping generation."
+            )
+            return
+
+        logger.info(
+            f"Generating embeddings for {len(self.repo_data)} texts in batches of {batch_size}..."
+        )
+
+        # Get texts to embed
+        texts = self.repo_data[text_column].fillna("").astype(str).tolist()
+
+        # Process in batches
+        embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+        for i in range(0, len(texts), batch_size):
+            batch_index = i // batch_size + 1
+            logger.debug(f"Processing batch {batch_index}/{total_batches}")
+
+            batch_texts = texts[i : i + batch_size]
+            batch_embeddings = self.embedder.embed_texts(
+                batch_texts,
+                batch_size=batch_size,
+            )
+            embeddings.extend(batch_embeddings)
+
+        # Store embeddings in memory
+        self.repo_data[embeddings_column] = embeddings
+        logger.info("Embeddings generation completed.")
+
+        # Prepare data for saving
+        save_data = self.repo_data.copy()
+
+        # Convert numpy arrays to string representation for CSV storage
+        save_data[embeddings_column] = save_data[embeddings_column].apply(
+            lambda x: ",".join(map(str, x)) if isinstance(x, np.ndarray) else x,
+        )
+
+        # Persist to disk
+        save_data.to_csv(self.config.data_file, index=False)
+        logger.info(f"Saved updated data with embeddings to {self.config.data_file}")
+        self.repo_data = save_data
+
     def find_repo(
         self,
         query: str,
         top_k: int = 25,
         embeddings_column: str = "embeddings",
+        text_column: str = "text",
         debug: bool = False,
     ) -> list[dict]:
         """
@@ -203,11 +265,17 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         """
 
         if self.repo_data is None:
-            raise ValueError("No data loaded. Call load_data() first.")
+            raise ValueError("No data loaded. Check if the data file exists.")
 
         if embeddings_column not in self.repo_data.columns:
-            raise ValueError(
-                "No embeddings found. Run generate_embeddings() first.",
+            logger.warning(
+                f"No embeddings found in column '{embeddings_column}'. Generating them now..."
+            )
+            self.generate_embeddings(
+                text_column=text_column,
+                embeddings_column=embeddings_column,
+                force_regenerate=False,
+                batch_size=32,
             )
 
         # Get query embedding
@@ -216,12 +284,16 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             logger.debug(f"Query embedding shape: {query_embedding.shape}")
 
         # Parse embeddings if they are in string format
+        if debug:
+            logger.debug(f"Embeddings column dtype: {self.repo_data[embeddings_column].dtype}")
         if self.repo_data[embeddings_column].dtype == "object":
             self.repo_data[embeddings_column] = self.repo_data[embeddings_column].apply(
                 self.embedder._parse_embedding,
             )
 
         # Stack all embeddings into a matrix
+        if debug:
+            logger.debug(f"Embeddings column: {self.repo_data[embeddings_column].head()}")
         embeddings_matrix = np.vstack(
             self.repo_data[embeddings_column].tolist(),
         )
