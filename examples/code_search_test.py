@@ -27,7 +27,7 @@ async def local_repo_search_test():
 
     search_input = LocalRepoCodeSearchToolInputSchema(
         queries=["landslide nepal"], 
-        top_k=5
+        max_results=5
     )
 
     print("Running the search...")
@@ -72,7 +72,7 @@ async def sde_search_test():
 
     search_input = CodeSearchToolInputSchema(
         queries=["landslide nepal"], 
-        max_results=10
+        max_results=5
     )
 
     print("Running the search...")

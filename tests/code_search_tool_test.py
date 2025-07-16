@@ -1,6 +1,7 @@
 import sys
 import os
 import pytest
+import requests
 
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,8 +53,13 @@ def sde_tool():
 async def test_local_repo_search(local_tool):
     input_params = LocalRepoCodeSearchToolInputSchema(
         queries=["landslide nepal"],
-        top_k=3,
+        max_results=3,
     )
+    # Input structure validation
+    assert input_params.queries == ["landslide nepal"]
+    assert input_params.max_results == 3
+
+    # Output structure validation
     output = await local_tool._arun(input_params)
     validate_output_structure(output)
 
@@ -62,8 +68,13 @@ async def test_local_repo_search(local_tool):
 async def test_github_code_search(github_tool):
     input_params = CodeSearchToolInputSchema(
         queries=["flood detection"],
-        max_results=5,
+        max_results=10,
     )
+    # Input structure validation
+    assert input_params.queries == ["flood detection"]
+    assert input_params.max_results == 10
+
+    # Output structure validation
     output = await github_tool._arun(input_params)
     validate_output_structure(output)
 
@@ -74,10 +85,22 @@ async def test_sde_code_search(sde_tool):
         queries=["weather prediction"],
         max_results=5,
     )
+    # Input structure validation
+    assert input_params.queries == ["weather prediction"]
+    assert input_params.max_results == 5
+
+    # Output structure validation
     output = await sde_tool._arun(input_params)
     validate_output_structure(output)
 
 
+def test_google_drive_link():
+    config = LocalRepoCodeSearchToolConfig()
+    file_id = config.google_drive_file_id
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    response = requests.head(url, allow_redirects=True)
+    assert response.status_code == 200
 
 
 
