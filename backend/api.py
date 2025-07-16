@@ -17,7 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from akd.nodes.states import GlobalState, NodeTemplateState
 from akd.serializers import AKDSerializer
-from planner import create_planner_graph, create_simple_plan, create_full_plan
+from planner import  create_simple_plan, create_full_plan
 
 # Create FastAPI app
 app = FastAPI(title="AKD Simple Backend")

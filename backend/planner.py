@@ -280,11 +280,3 @@ def create_full_plan() -> StateGraph:
     
     return graph
 
-
-# Backward compatibility - keep the original function name
-def create_planner_graph() -> StateGraph:
-    """
-    Create a simple StateGraph with a search node using SearxNG.
-    This is kept for backward compatibility.
-    """
-    return create_simple_plan()
