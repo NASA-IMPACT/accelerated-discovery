@@ -7,9 +7,13 @@ progressively tries more sophisticated mapping strategies until successful
 transformation is achieved. It is designed to be used in multi-agent workflows.
 """
 
+import hashlib
+import json
 from abc import abstractmethod
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Type
 
+from langchain_openai import ChatOpenAI
 from loguru import logger
 from pydantic import BaseModel, Field
 
