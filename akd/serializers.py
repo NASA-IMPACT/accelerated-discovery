@@ -6,6 +6,7 @@ to handle Pydantic models and other complex objects properly.
 
 from typing import Any
 
+import numpy as np
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from pydantic import BaseModel
 from pydantic.networks import HttpUrl
@@ -25,6 +26,9 @@ class AKDSerializer(JsonPlusSerializer):
             return obj.model_dump(mode="json")
         elif isinstance(obj, HttpUrl):
             return str(obj)
+        elif isinstance(obj, np.ndarray):
+            # Convert NumPy arrays to lists for JSON serialization
+            return obj.tolist()
         elif isinstance(obj, dict):
             return {k: self._convert_pydantic_to_dict(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple)):

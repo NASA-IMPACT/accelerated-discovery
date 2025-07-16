@@ -157,6 +157,7 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
         "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O",
     )
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
+    remove_embedding_column: bool = True
     debug: bool = False
 
 
@@ -219,6 +220,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         query: str,
         top_k: int = 25,
         embeddings_column: str = "embeddings",
+        remove_embedding_column: bool = True,
         debug: bool = False,
     ) -> list[dict]:
         """
@@ -275,6 +277,10 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         results = self.repo_data.iloc[top_indices].copy()
         results["score"] = similarities[top_indices]
+        results["score"] = results["score"].astype(float)
+
+        if remove_embedding_column:
+            results = results.drop(columns=[embeddings_column])
 
         return results.reset_index(drop=True).to_dict("records")
 
@@ -298,6 +304,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                     query=query,
                     top_k=params.top_k,
                     embeddings_column="embeddings",
+                    remove_embedding_column=self.remove_embedding_column,
                     debug=self.debug,
                 )
                 if results:
