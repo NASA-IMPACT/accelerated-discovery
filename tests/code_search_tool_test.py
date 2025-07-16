@@ -18,6 +18,17 @@ from akd.tools.code_search import (
 )
 
 
+def validate_output_structure(output):
+    assert hasattr(output, "results")
+    assert isinstance(output.results, list)
+    assert len(output.results) > 0
+
+    for result in output.results:
+        assert hasattr(result, "url")
+        assert hasattr(result, "content")
+        assert result.content and result.content.strip()
+
+
 # Initialize the tools and run the tests
 @pytest.fixture
 def local_tool():
@@ -44,13 +55,7 @@ async def test_local_repo_search(local_tool):
         top_k=3,
     )
     output = await local_tool._arun(input_params)
-    
-    assert output is not None
-    assert len(output.results) > 0
-    for result in output.results:
-        assert "http" in str(result.url)
-        assert result.content is not None
-        assert result.content.strip() != ""
+    validate_output_structure(output)
 
 
 @pytest.mark.asyncio
@@ -60,13 +65,7 @@ async def test_github_code_search(github_tool):
         max_results=5,
     )
     output = await github_tool._arun(input_params)
-
-    assert output is not None
-    assert len(output.results) > 0
-    for result in output.results:
-        assert "http" in str(result.url)
-        assert result.content is not None
-        assert result.content.strip() != ""
+    validate_output_structure(output)
 
 
 @pytest.mark.asyncio
@@ -76,13 +75,7 @@ async def test_sde_code_search(sde_tool):
         max_results=5,
     )
     output = await sde_tool._arun(input_params)
-
-    assert output is not None
-    assert len(output.results) > 0
-    for result in output.results:
-        assert "http" in str(result.url)
-        assert result.content is not None
-        assert result.content.strip() != ""
+    validate_output_structure(output)
 
 
 

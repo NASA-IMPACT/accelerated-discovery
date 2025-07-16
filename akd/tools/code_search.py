@@ -406,7 +406,7 @@ class SDECodeSearchToolConfig(CodeSearchToolConfig):
     base_url: str = os.getenv("SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search")  
     page_size: int = 10
     max_pages: int = 1
-    debug: bool = True
+    debug: bool = False
 
 
 class SDECodeSearchTool(CodeSearchTool):
