@@ -17,7 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from akd.nodes.states import GlobalState, NodeTemplateState
 from akd.serializers import AKDSerializer
-from planner import create_planner_graph, create_simple_search_graph, create_full_workflow_graph
+from planner import create_planner_graph, create_simple_plan, create_full_plan
 
 # Create FastAPI app
 app = FastAPI(title="AKD Simple Backend")
@@ -55,9 +55,9 @@ async def create_plan(request: ChatRequest):
     """
     # Create the appropriate graph based on workflow type
     if request.workflow_type == "full":
-        graph = create_full_workflow_graph()
+        graph = create_full_plan()
     else:
-        graph = create_simple_search_graph()
+        graph = create_simple_plan()
     
     # Get graph structure
     nodes = list(graph.nodes.keys())

@@ -210,7 +210,7 @@ class ReportGenerationNode(AbstractNodeTemplate):
         return node_state
 
 
-def create_simple_search_graph() -> StateGraph:
+def create_simple_plan() -> StateGraph:
     """
     Create a simple StateGraph with just a literature search node.
     
@@ -237,7 +237,7 @@ def create_simple_search_graph() -> StateGraph:
     return graph
 
 
-def create_full_workflow_graph() -> StateGraph:
+def create_full_plan() -> StateGraph:
     """
     Create a complete workflow with multiple nodes:
     lit_search -> code_search -> report_generation -> END
@@ -287,4 +287,4 @@ def create_planner_graph() -> StateGraph:
     Create a simple StateGraph with a search node using SearxNG.
     This is kept for backward compatibility.
     """
-    return create_simple_search_graph()
+    return create_simple_plan()
