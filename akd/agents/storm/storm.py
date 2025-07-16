@@ -1,20 +1,30 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel import RetryPolicy
-from pydantic import BaseModel, Field, computed_field
+from pydantic import Field, computed_field
 
-from akd.agents._base import BaseAgent
+from akd._base import InputSchema, OutputSchema
+from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.configs.storm_config import STORM_SETTINGS, StormSettings
 
 from .config import initialise_storm_config
-from .nodes import *
+from .nodes import (
+    conduct_interviews,
+    hitl_editors,
+    index_references,
+    initialize_research,
+    refine_outline,
+    write_article,
+    write_sections,
+)
 from .state import ResearchState
+from .utils.outline_utils import Perspectives
 
 
-class StormInputSchema(BaseModel):
+class StormInputSchema(InputSchema):
     """Input schema for storm agent"""
 
-    config: Optional[dict] = Field(
+    config: dict | None = Field(
         None,
         description="The configuration dict to track the state of the storm agent.",
     )
@@ -30,7 +40,7 @@ class StormInputSchema(BaseModel):
         return self.query
 
 
-class StormOutputSchema(BaseModel):
+class StormOutputSchema(OutputSchema):
     """Output schema for storm agent"""
 
     article: str = Field(
@@ -43,30 +53,42 @@ class StormOutputSchema(BaseModel):
     )
     interview_results: list = Field(
         ...,
-        description="Interview results between editors"
+        description="Interview results between editors",
+    )
+
+
+class StormAgentConfig(BaseAgentConfig):
+    """Configuration for Storm Agent"""
+
+    hitl: bool = Field(
+        False,
+        description="Whether to set the agent in HITL mode.",
+    )
+
+    storm_settings: StormSettings | None = Field(
+        default_factory=lambda: STORM_SETTINGS,
+        description="The configuration for the storm agent.",
     )
 
 
 class StormAgent(BaseAgent):
-
     input_schema = StormInputSchema
     output_schema = StormOutputSchema
+    config_schema = StormAgentConfig
 
-    def __init__(
+    def _post_init(
         self,
-        set_hitl: Optional[bool] = False,
-        config: Optional[StormSettings] = None,
     ) -> None:
-        super().__init__(debug=False)
-        # Set this configuration
-        config = config or STORM_SETTINGS
-        initialise_storm_config(config)
+        super()._post_init()
+
+        storm_settings = self.config.storm_settings or STORM_SETTINGS
+        initialise_storm_config(storm_settings)
 
         storm_builder = StateGraph(ResearchState)
 
         nodes = [
             ("init_research", initialize_research),
-            ("hitl_editors", hitl_editors) if set_hitl else None,
+            ("hitl_editors", hitl_editors) if self.hitl else None,
             ("conduct_interviews", conduct_interviews),
             ("refine_outline", refine_outline),
             ("index_references", index_references),
@@ -81,19 +103,38 @@ class StormAgent(BaseAgent):
             if i > 0:
                 storm_builder.add_edge(nodes[i - 1][0], name)
 
-
         storm_builder.add_edge(START, nodes[0][0])
         storm_builder.add_edge(nodes[-1][0], END)
         self.storm = storm_builder.compile(checkpointer=MemorySaver())
-        
 
-    async def arun(self, params: StormInputSchema) -> StormOutputSchema:
+    async def get_response_async(
+        self,
+        params: StormInputSchema,
+        **kwargs,
+    ) -> StormOutputSchema:
+        """
+        Obtains a response from the language model asynchronously.
 
+        Args:
+            response_model (Optional[OutputSchema]):
+                The schema for the response data. If not set,
+                self.output_schema is used.
+
+        Returns:
+            OutputSchema: The response from the language model.
+        """
         config = params.config or {}
         topic = params.topic
 
         article_state = await self.storm.ainvoke({"topic": topic}, config)
         article = article_state["article"]
         perspectives = article_state["editors"]
-        interview_results = article_state['interview_results']
-        return StormOutputSchema(article=article, perspectives=perspectives, interview_results=interview_results)
+        interview_results = article_state["interview_results"]
+        return StormOutputSchema(
+            article=article,
+            perspectives=perspectives,
+            interview_results=interview_results,
+        )
+
+    async def _arun(self, params: StormInputSchema, **kwargs) -> StormOutputSchema:
+        return await self.get_response_async(params, **kwargs)
