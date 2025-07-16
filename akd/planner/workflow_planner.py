@@ -1,5 +1,5 @@
 """
-Refactored LLM-based Workflow Planner for AKD Research Tasks
+LLM-based Workflow Planner for AKD Research Tasks
 
 This module provides intelligent workflow planning using reasoning LLMs with
 improved architecture, caching, and error handling.
@@ -197,7 +197,7 @@ Focus on creating an efficient, scientifically sound workflow that maximizes the
 
     async def _execute(self, params: WorkflowPlanningInput) -> WorkflowPlanOutput:
         """Generate workflow plan using LLM reasoning"""
-        
+
         # Check cache first
         cache_key = self._create_cache_key(params)
         cached_result = self.cache.get(cache_key)
@@ -238,7 +238,7 @@ Focus on creating an efficient, scientifically sound workflow that maximizes the
                 alternative_plans=enhanced_plan.get("alternative_plans", []),
                 planning_metadata=enhanced_plan.get("planning_metadata", {}),
             )
-            
+
             # Cache the result
             self.cache.set(cache_key, output)
             self.services.metrics["plans_generated"] += 1
@@ -255,7 +255,7 @@ Focus on creating an efficient, scientifically sound workflow that maximizes the
                 alternative_plans=[],
                 planning_metadata={"fallback_used": True, "error": str(e)},
             )
-            
+
             # Cache fallback result too
             self.cache.set(cache_key, output)
             return output
@@ -306,10 +306,14 @@ Agent: {agent["agent_name"]}
                 )
                 if closest_agent:
                     node["agent_name"] = closest_agent
-                    raw_plan["reasoning_trace"] += f"\nNote: Replaced '{node['agent_name']}' with '{closest_agent}'"
+                    raw_plan["reasoning_trace"] += (
+                        f"\nNote: Replaced '{node['agent_name']}' with '{closest_agent}'"
+                    )
                 else:
                     # Remove invalid node
-                    raw_plan["reasoning_trace"] += f"\nWarning: Removed invalid agent '{node['agent_name']}'"
+                    raw_plan["reasoning_trace"] += (
+                        f"\nWarning: Removed invalid agent '{node['agent_name']}'"
+                    )
 
         # Add automatic data mapping hints
         enhanced_plan = await self._add_data_mapping_hints(raw_plan, params)
@@ -319,7 +323,9 @@ Agent: {agent["agent_name"]}
 
         return enhanced_plan
 
-    def _find_closest_agent(self, requested_agent: str, available_agents: set) -> Optional[str]:
+    def _find_closest_agent(
+        self, requested_agent: str, available_agents: set
+    ) -> Optional[str]:
         """Find the closest matching agent name"""
 
         # Use registry for better matching
@@ -479,17 +485,17 @@ Agent: {agent["agent_name"]}
                 "search": 2,
                 "extraction": 3,
                 "analysis": 4,
-                "validation": 5
+                "validation": 5,
             }
 
             # Sort agents by priority
             sorted_agents = sorted(
                 params.available_agents[:3],  # Limit to 3 agents
                 key=lambda x: min(
-                    agent_priorities.get(keyword, 99) 
+                    agent_priorities.get(keyword, 99)
                     for keyword in agent_priorities.keys()
                     if keyword in x.get("agent_name", "").lower()
-                )
+                ),
             )
 
             for i, agent in enumerate(sorted_agents):
@@ -531,7 +537,7 @@ Agent: {agent["agent_name"]}
         self, params: WorkflowPlanningInput, num_alternatives: int = 2
     ) -> List[Dict[str, Any]]:
         """Generate alternative workflow plans using batch processing"""
-        
+
         # Create batch requests for parallel processing
         batch_requests = []
         for i in range(num_alternatives):
@@ -545,11 +551,13 @@ Agent: {agent["agent_name"]}
                 available_agents=params.available_agents,
                 context=params.context,
             )
-            
-            agent_info = self._format_agent_information(modified_params.available_agents)
+
+            agent_info = self._format_agent_information(
+                modified_params.available_agents
+            )
             requirements_str = json.dumps(modified_params.requirements, indent=2)
             context_str = json.dumps(modified_params.context, indent=2)
-            
+
             formatted_prompt = self.planning_prompt.format_prompt(
                 research_query=modified_params.research_query,
                 available_agents=agent_info,
@@ -557,10 +565,10 @@ Agent: {agent["agent_name"]}
                 context=context_str,
             )
             batch_requests.append(formatted_prompt.to_messages())
-        
+
         # Process alternatives in parallel
         results = await self.services.llm_service.invoke_batch(batch_requests)
-        
+
         alternatives = []
         for result in results:
             if not isinstance(result, Exception):
@@ -569,20 +577,22 @@ Agent: {agent["agent_name"]}
                     alternatives.append(enhanced_plan["workflow_plan"])
                 except Exception:
                     continue
-        
+
         return alternatives
 
     def _create_cache_key(self, params: WorkflowPlanningInput) -> str:
         """Create cache key for workflow planning parameters"""
         import hashlib
-        
+
         key_data = {
             "query": params.research_query,
             "requirements": params.requirements or {},
-            "agents": [agent.get("agent_name", "") for agent in (params.available_agents or [])],
-            "context": params.context or {}
+            "agents": [
+                agent.get("agent_name", "") for agent in (params.available_agents or [])
+            ],
+            "context": params.context or {},
         }
-        
+
         key_string = json.dumps(key_data, sort_keys=True)
         return hashlib.md5(key_string.encode()).hexdigest()
 
@@ -595,5 +605,5 @@ Agent: {agent["agent_name"]}
         return {
             "cache_size": len(self.cache._cache),
             "max_size": self.cache.max_size,
-            "ttl_seconds": self.cache.ttl_seconds
+            "ttl_seconds": self.cache.ttl_seconds,
         }
