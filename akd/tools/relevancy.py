@@ -1,10 +1,10 @@
 import itertools
 from typing import List, Optional, Self
 
-from atomic_agents.lib.base.base_tool import BaseToolConfig
 from loguru import logger
 from pydantic import BaseModel, Field, model_validator
 
+from akd._base import InputSchema, OutputSchema
 from akd.agents.relevancy import (
     ContentDepthLabel,
     EvidenceQualityLabel,
@@ -16,12 +16,11 @@ from akd.agents.relevancy import (
     RelevancyAgent,
     RelevancyAgentInputSchema,
     RelevancyAgentOutputSchema,
+    RelevancyLabel,
     ScopeRelevanceLabel,
     TopicAlignmentLabel,
 )
-from akd.structures import RelevancyLabel
-
-from ._base import BaseIOSchema, BaseTool
+from akd.tools._base import BaseTool, BaseToolConfig
 
 
 class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
@@ -30,20 +29,7 @@ class RelevancyCheckerInputSchema(RelevancyAgentInputSchema):
     pass
 
 
-class _RelevancyCheckerSwappedInputSchema(BaseIOSchema):
-    """Schema with swapped field order"""
-
-    content: str = Field(
-        ...,
-        description="The content to check for relevance.",
-    )
-    query: str = Field(
-        ...,
-        description="The query to check for relevance.",
-    )
-
-
-class RelevancyCheckerOutputSchema(BaseIOSchema):
+class RelevancyCheckerOutputSchema(OutputSchema):
     """Output schema for the RelevancyChecker."""
 
     score: float = Field(
@@ -61,65 +47,63 @@ class RelevancyCheckerOutputSchema(BaseIOSchema):
 class RelevancyCheckerConfig(BaseToolConfig):
     """Configuration for the RelevancyChecker."""
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = {"extra": "allow"}
 
     debug: bool = Field(
         default=True,
         description="Boolean flag for debug mode",
     )
     n_iter: int = Field(
-        default=2,
+        default=1,
         description="Number of iterations for the relevancy check.",
     )
     swapping: bool = Field(
-        default=True,
+        default=False,
         description="Boolean flag for swapping query and content.",
     )
-    agent: RelevancyAgent = Field(
-        default_factory=RelevancyAgent,
-        description="Relevancy agent to use for the check.",
-    )
 
 
-class RelevancyChecker(BaseTool):
+class RelevancyChecker(
+    BaseTool[RelevancyCheckerInputSchema, RelevancyCheckerOutputSchema],
+):
     input_schema = RelevancyCheckerInputSchema
     output_schema = RelevancyCheckerOutputSchema
 
+    config_schema = RelevancyCheckerConfig
+
     def __init__(
         self,
-        config: Optional[RelevancyCheckerConfig] = None,
+        config: RelevancyCheckerConfig | None = None,
+        agent: RelevancyAgent | None = None,
         debug: bool = False,
     ) -> None:
-        config = config or RelevancyCheckerConfig()
-        super().__init__(config, debug)
+        super().__init__(config=config, debug=debug)
+        self.agent = agent or RelevancyAgent()
+        self._input_schema = self.agent.input_schema
 
-    async def arun(
+    async def _arun(
         self,
         params: RelevancyCheckerInputSchema,
+        **kwargs,
     ) -> RelevancyCheckerOutputSchema:
         logger.info(f"Running relevancy check for query: {params.query}")
-        outputs = await self._run(params, n_iter=self.config.n_iter)
-        if self.config.swapping:
-            logger.info("Running swapping pass. Query and Content swapped")
-            param_swapped = _RelevancyCheckerSwappedInputSchema(
-                content=params.content,
-                query=params.query,
-            )
-            outputs.extend(await self._run(param_swapped, n_iter=self.config.n_iter))
+        outputs = await self._run_agent(params, n_iter=self.n_iter)
         return await self._ensemble(outputs)
 
-    async def _run(
+    async def _run_agent(
         self,
         params: RelevancyCheckerInputSchema,
         n_iter: int = 3,
     ) -> List[RelevancyAgentOutputSchema]:
         outputs = []
+        if self.debug:
+            logger.debug(f"Type of params: {type(params)}")
         for i in range(n_iter):
-            output = self.config.agent.run(params)
+            output = await self.agent.arun(params)
             if self.debug:
                 logger.debug(f"Relevancy check {i + 1}: {output}")
             outputs.append(output)
-            self.config.agent.reset_memory()
+            self.agent.reset_memory()
         return outputs
 
     async def _ensemble(
@@ -264,7 +248,7 @@ class EnhancedRelevancyCheckerConfig(BaseToolConfig):
         description="Boolean flag for debug mode",
     )
     n_iter: int = Field(
-        default=2,
+        default=1,
         description="Number of iterations for the relevancy check",
     )
     swapping: bool = Field(
@@ -286,13 +270,9 @@ class EnhancedRelevancyCheckerConfig(BaseToolConfig):
         ge=0.0,
         le=1.0,
     )
-    agent: MultiRubricRelevancyAgent = Field(
-        default_factory=MultiRubricRelevancyAgent,
-        description="Multi-rubric relevancy agent",
-    )
 
 
-class EnhancedRelevancyCheckerOutputSchema(BaseIOSchema):
+class EnhancedRelevancyCheckerOutputSchema(OutputSchema):
     """Output schema for the Enhanced RelevancyChecker."""
 
     score: float = Field(
@@ -327,7 +307,9 @@ class EnhancedRelevancyChecker(
     input_schema = MultiRubricRelevancyInputSchema
     output_schema = EnhancedRelevancyCheckerOutputSchema
 
-    class _MultiRubricRelevancyInputSchema(BaseIOSchema):
+    config_schema = EnhancedRelevancyCheckerConfig
+
+    class _MultiRubricRelevancyInputSchema(InputSchema):
         """Input schema for multi-rubric relevancy agent"""
 
         query: str = Field(
@@ -346,50 +328,52 @@ class EnhancedRelevancyChecker(
     def __init__(
         self,
         config: Optional[EnhancedRelevancyCheckerConfig] = None,
+        agent: Optional[MultiRubricRelevancyAgent] = None,
         debug: bool = False,
     ) -> None:
-        config = config or EnhancedRelevancyCheckerConfig()
+        config = config or self.config_schema()
         super().__init__(config, debug)
+        self.agent = agent or MultiRubricRelevancyAgent()
 
-    async def arun(
+    async def _arun(
         self,
-        param: MultiRubricRelevancyInputSchema,
+        params: MultiRubricRelevancyInputSchema,
     ) -> EnhancedRelevancyCheckerOutputSchema:
         logger.info(
-            f"Running enhanced relevancy check for query: {param.query}",
+            f"Running enhanced relevancy check for query: {params.query}",
         )
 
         # Run multiple iterations
-        outputs = await self._run(param, n_iter=self.config.n_iter)
+        outputs = await self._run(params, n_iter=self.config.n_iter)
 
         # Optional swapping pass
-        if self.config.swapping:
-            logger.info("Running swapping pass - Query and Content swapped")
-            param_swapped = self._MultiRubricRelevancyInputSchema(
-                content=param.content,
-                query=param.query,
-                domain_context=param.domain_context,
-            )
-            swapped_outputs = await self._run(
-                param_swapped,
-                n_iter=self.config.n_iter,
-            )
-            outputs.extend(swapped_outputs)
+        # if self.config.swapping:
+        #     logger.info("Running swapping pass - Query and Content swapped")
+        #     params_swapped = self._MultiRubricRelevancyInputSchema(
+        #         content=params.content,
+        #         query=params.query,
+        #         domain_context=params.domain_context,
+        #     )
+        #     swapped_outputs = await self._run(
+        #         params_swapped,
+        #         n_iter=self.config.n_iter,
+        #     )
+        #     outputs.extend(swapped_outputs)
 
         return await self._ensemble_with_rubrics(outputs)
 
     async def _run(
         self,
-        param: MultiRubricRelevancyInputSchema,
+        params: MultiRubricRelevancyInputSchema,
         n_iter: int = 3,
     ) -> List[MultiRubricRelevancyOutputSchema]:
         outputs = []
         for i in range(n_iter):
-            output = self.config.agent.run(param)
+            output = await self.agent.arun(params)
             if self.debug:
                 logger.debug(f"Multi-rubric relevancy check {i + 1}: {output}")
             outputs.append(output)
-            self.config.agent.reset_memory()
+            self.agent.reset_memory()
         return outputs
 
     def _calculate_rubric_score(

@@ -10,6 +10,7 @@ from pydantic import BaseModel, SecretStr, field_validator
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
+from akd._base import InputSchema, OutputSchema
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -19,12 +20,11 @@ from akd.agents.query import (
     QueryAgentOutputSchema,
 )
 from akd.structures import SearchResultItem
-from akd.tools.relevancy import RelevancyChecker, RelevancyCheckerInputSchema
+from akd.tools._base import BaseTool, BaseToolConfig
+from akd.tools.relevancy import EnhancedRelevancyChecker
 
-from ._base import BaseIOSchema, BaseTool, BaseToolConfig
 
-
-class SearchToolInputSchema(BaseIOSchema):
+class SearchToolInputSchema(InputSchema):
     """
     Schema for input to a tool for searching for information,
     news, references, and other content.
@@ -41,7 +41,7 @@ class SearchToolInputSchema(BaseIOSchema):
     )
 
 
-class SearchToolOutputSchema(BaseIOSchema):
+class SearchToolOutputSchema(OutputSchema):
     """Schema for output of a tool for searching for information,
     news, references, and other content."""
 
@@ -113,9 +113,11 @@ class SearxNGSearchTool(SearchTool):
     input_schema = SearxNGSearchToolInputSchema
     output_schema = SearxNGSearchToolOutputSchema
 
+    config_schema = SearxNGSearchToolConfig
+
     def __init__(
         self,
-        config: Optional[SearxNGSearchToolConfig] = None,
+        config: SearxNGSearchToolConfig | None = None,
         debug: bool = False,
     ):
         """
@@ -302,10 +304,11 @@ class SearxNGSearchTool(SearchTool):
 
         return all_results
 
-    async def arun(
+    async def _arun(
         self,
         params: SearxNGSearchToolInputSchema,
         max_results: Optional[int] = None,
+        **kwargs,
     ) -> SearxNGSearchToolOutputSchema:
         """
         Runs the SearxNGTool asynchronously with the given parameters.
@@ -432,42 +435,27 @@ class SemanticScholarSearchToolConfig(BaseToolConfig):
     @field_validator("api_key", mode="before")
     @classmethod
     def validate_api_key(cls, v):
-        if v is None:
-            logger.warning(
-                "Semantic Scholar API key not provided. Rate limits may apply.",
-            )
-        return SecretStr(v) if v else None
+        if not v:
+            logger.warning("Semantic Scholar API key not provided. Rate limits may apply.")
+            return None
+        if isinstance(v, SecretStr):
+            return v.get_secret_value()
+        return v  
 
-
-class SemanticScholarSearchTool(BaseTool):
+class SemanticScholarSearchTool(
+    BaseTool[
+        SemanticScholarSearchToolInputSchema,
+        SemanticScholarSearchToolOutputSchema,
+    ],
+):
     """
     Tool for performing searches on Semantic Scholar based on provided queries.
     """
 
     input_schema = SemanticScholarSearchToolInputSchema
     output_schema = SemanticScholarSearchToolOutputSchema
-    config: SemanticScholarSearchToolConfig
 
-    def __init__(
-        self,
-        config: Optional[SemanticScholarSearchToolConfig] = None,
-        debug: bool = False,
-    ):
-        """
-        Initializes the SemanticScholarSearchTool.
-
-        Args:
-            config (SemanticScholarSearchToolConfig): Configuration for the tool.
-            debug (bool): Enable debug logging.
-        """
-        config = config or SemanticScholarSearchToolConfig()
-        super().__init__(config=config, debug=debug)
-
-        # Ensure specific config type
-        if not isinstance(self.config, SemanticScholarSearchToolConfig):
-            raise TypeError(
-                "Configuration must be of type SemanticScholarSearchToolConfig",
-            )
+    config_schema = SemanticScholarSearchToolConfig
 
     @classmethod
     def from_params(
@@ -766,10 +754,11 @@ class SemanticScholarSearchTool(BaseTool):
 
         return final_results
 
-    async def arun(
+    async def _arun(
         self,
         params: SemanticScholarSearchToolInputSchema,
         max_results: Optional[int] = None,
+        **kwargs,
     ) -> SemanticScholarSearchToolOutputSchema:
         """
         Runs the SemanticScholarSearchTool asynchronously.
@@ -834,33 +823,60 @@ class SemanticScholarSearchTool(BaseTool):
         )
 
 
+class SimpleAgenticLitSearchToolConfig(BaseToolConfig):
+    """
+    Configuration for the SimpleAgenticLitSearchTool.
+    This tool combines a search tool, relevancy checker, and query agents
+    to perform iterative literature searches.
+    """
+
+    cutoff_threshold: float = Field(
+        default=0.75,
+        description="Relevancy score threshold to stop searching.",
+    )
+    max_iteration: int = Field(
+        default=5,
+        description="Maximum number of iterations to perform.",
+    )
+    max_results_per_iteration: int = Field(
+        default=10,
+        description="Maximum number of results to return per iteration.",
+    )
+    use_followup_after_iteration: int = Field(
+        default=1,
+        description="Use follow-up query agent after this many iterations.",
+    )
+    debug: bool = Field(
+        default=False,
+        description="Enable debug logging.",
+    )
+
+
 class SimpleAgenticLitSearchTool(SearchTool):
+    input_schema = SearchToolInputSchema
+    output_schema = SearchToolOutputSchema
+
+    config_schema = SimpleAgenticLitSearchToolConfig
+
     class _StoppingCriteria(BaseModel):
         stop_now: bool = Field(default=False)
         reasoning_trace: str = Field(default="")
 
     def __init__(
         self,
-        search_tool: SearchTool,
-        relevancy_checker: RelevancyChecker,
-        query_agent: QueryAgent,
-        followup_query_agent: FollowUpQueryAgent,
-        cutoff_threshold: float = 0.75,
-        max_iteration: int = 5,
-        use_followup_after_iteration: int = 1,
+        config: SimpleAgenticLitSearchToolConfig | None = None,
+        search_tool: SearchTool | None = None,
+        relevancy_checker: EnhancedRelevancyChecker | None = None,
+        query_agent: QueryAgent | None = None,
+        followup_query_agent: FollowUpQueryAgent | None = None,
         debug: bool = False,
     ) -> None:
-        super().__init__(debug=debug)
-        assert isinstance(search_tool, SearchTool), (
-            "search_tool must be an instance of `akd.tools.SearchTool`"
-        )
-        self.search_tool = search_tool
-        self.relevancy_checker = relevancy_checker
-        self.query_agent = query_agent
-        self.followup_query_agent = followup_query_agent
-        self.cutoff_threshold = cutoff_threshold
-        self.max_iteration = max_iteration
-        self.use_followup_after_iteration = use_followup_after_iteration
+        config = config or SimpleAgenticLitSearchToolConfig(debug=debug)
+        super().__init__(config=config, debug=debug)
+        self.search_tool = search_tool or SearxNGSearchTool()
+        self.relevancy_checker = relevancy_checker or EnhancedRelevancyChecker()
+        self.query_agent = query_agent or QueryAgent()
+        self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
 
     def _deduplicate_results(
         self,
@@ -909,8 +925,12 @@ class SimpleAgenticLitSearchTool(SearchTool):
         #     )
         elif (context := self._accumulate_content(current_results)) and iteration > 0:
             relevancy = await self.relevancy_checker.arun(
-                RelevancyCheckerInputSchema(content=context, query=query),
+                self.relevancy_checker.input_schema(content=context, query=query),
             )
+            if self.debug:
+                logger.debug(
+                    f"Relevancy for iteration {iteration}: {relevancy}",
+                )
             criteria.stop_now = relevancy.score >= self.cutoff_threshold
             criteria.reasoning_trace = (
                 f"Relevancy threshold met at {iteration}/"
@@ -1032,7 +1052,7 @@ class SimpleAgenticLitSearchTool(SearchTool):
             )
         return res.queries
 
-    async def arun(
+    async def _arun(
         self,
         params: SearchToolInputSchema,
         **kwargs: Any,
@@ -1077,7 +1097,9 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 max_results=search_limit,
                 category=params.category,
             )
-            search_result = await self.search_tool.arun(search_input)
+            search_result = await self.search_tool.arun(
+                self.search_tool.input_schema(**search_input.model_dump()),
+            )
 
             current_results = self._deduplicate_results(
                 new_results=search_result.results,

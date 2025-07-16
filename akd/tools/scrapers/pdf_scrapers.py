@@ -84,6 +84,9 @@ class SimplePDFScraper(WebScraperToolBase):
     and converting it to markdown format.
     """
 
+    input_schema: PDFScraperToolInputSchema
+    output_schema: WebpageScraperToolOutputSchema
+
     async def _fetch_pdf_text(self, pdf_path: str) -> str:
         """
         Extracts text from a PDF file using PyMuPDF (fitz).
@@ -94,7 +97,7 @@ class SimplePDFScraper(WebScraperToolBase):
 
             if not text.strip():
                 raise ValueError(
-                    "Extracted text is empty." "The PDF may be scanned or image-based.",
+                    "Extracted text is empty.The PDF may be scanned or image-based.",
                 )
 
             return text
@@ -147,7 +150,7 @@ class SimplePDFScraper(WebScraperToolBase):
         res = True
         try:
             _ = HttpUrl(val)
-        except:
+        except Exception:
             res = False
         return res
 
@@ -216,7 +219,7 @@ class SimplePDFScraper(WebScraperToolBase):
 
         return markdown_content, metadata
 
-    async def arun(
+    async def _arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:

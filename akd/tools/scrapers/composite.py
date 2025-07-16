@@ -1,5 +1,3 @@
-from typing import Union
-
 from loguru import logger
 from pydantic import HttpUrl
 
@@ -12,16 +10,18 @@ from .web_scrapers import (
 )
 
 
-class CompositeWebScraper(WebScraperToolBase):
+class CompositeScraper(WebScraperToolBase):
+    """Composite web scraper that runs multiple scrapers in sequence."""
+
     def __init__(
         self,
         *scrapers: WebScraperToolBase,
         debug: bool = False,
     ) -> None:
-        self.debug = bool(debug)
+        super().__init__(debug=debug)
         self.scrapers = scrapers
 
-    async def arun(
+    async def _arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
@@ -37,12 +37,11 @@ class CompositeWebScraper(WebScraperToolBase):
             try:
                 if self.debug:
                     logger.debug(
-                        f"Running scraper={scraper.__class__.__name__} "
-                        f"for {params}",
+                        f"Running scraper={scraper.__class__.__name__} for {params}",
                     )
 
                 result = await scraper.arun(params)
-                if result:
+                if result.content.strip():
                     break
             except Exception as e:
                 logger.error(
@@ -53,10 +52,14 @@ class CompositeWebScraper(WebScraperToolBase):
 
 
 class ResearchArticleResolver(BaseArticleResolver):
-    def __init__(self, *resolvers: BaseArticleResolver):
+    def __init__(self, *resolvers: BaseArticleResolver, debug: bool = False) -> None:
+        super().__init__(debug=debug)
         self.resolvers = resolvers
 
-    async def resolve(self, url: Union[str, HttpUrl]) -> ResolverOutputSchema:
+    async def validate_url(self, url: HttpUrl | str) -> bool:
+        return super().validate_url(url)
+
+    async def resolve(self, url: str | HttpUrl) -> ResolverOutputSchema:
         original_url = str(url)
         rname = self.__class__.__name__
         output = ResolverOutputSchema(
@@ -72,11 +75,15 @@ class ResearchArticleResolver(BaseArticleResolver):
                     raise ValueError("Resolver failure")
                 if output.url:
                     break
-            except:
+            except Exception:
                 logger.error(f"Error using resolver={rname}")
         return output
 
-    async def arun(self, params: ResolverInputSchema) -> ResolverOutputSchema:
+    async def _arun(
+        self,
+        params: ResolverInputSchema,
+        **kwargs,
+    ) -> ResolverOutputSchema:
         output = await self.resolve(params.url)
         if not output.url:
             output.url = params.url

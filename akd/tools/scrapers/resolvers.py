@@ -7,16 +7,17 @@ from bs4 import BeautifulSoup
 from loguru import logger
 from pydantic import Field, HttpUrl
 
-from akd.tools._base import BaseIOSchema, BaseTool, BaseToolConfig
+from akd._base import InputSchema, OutputSchema
+from akd.tools import BaseTool, BaseToolConfig
 
 
-class ResolverInputSchema(BaseIOSchema):
+class ResolverInputSchema(InputSchema):
     """Input schema for resolver"""
 
     url: HttpUrl = Field(..., description="Input url to resolve the article from")
 
 
-class ResolverOutputSchema(BaseIOSchema):
+class ResolverOutputSchema(OutputSchema):
     """Output schema for resolver"""
 
     url: HttpUrl = Field(..., description="Resolved output url")
@@ -52,34 +53,7 @@ class BaseArticleResolver(BaseTool):
 
     input_schema = ResolverInputSchema
     output_schema = ResolverOutputSchema
-
-    def __init__(
-        self,
-        config: Optional[ArticleResolverConfig] = None,
-        debug: bool = False,
-    ):
-        config = config or ArticleResolverConfig()
-        super().__init__(config, debug)
-        self.session = config.session
-        self.user_agent = config.user_agent
-        self.debug = config.debug
-
-    @classmethod
-    def from_params(
-        cls,
-        session=None,
-        user_agent: Optional[str] = None,
-        debug: Optional[bool] = None,
-    ):
-        """Initialize the resolver with an optional session."""
-        return cls(
-            BaseArticleResolverConfig(
-                session=session,
-                user_agent=user_agent,
-                debug=debug,
-            ),
-            debug=debug,
-        )
+    config_schema = ArticleResolverConfig
 
     @property
     def headers(self) -> dict:
@@ -88,16 +62,21 @@ class BaseArticleResolver(BaseTool):
         }
 
     @abstractmethod
-    async def resolve(self, url: Union[str, HttpUrl]) -> str:
+    async def resolve(self, url: str | HttpUrl) -> str:
         """Resolve a URL to its DOI or full-text link."""
         raise NotImplementedError("Subclasses must implement this method")
 
     @abstractmethod
-    def validate_url(self, url: Union[str, HttpUrl]) -> bool:
+    def validate_url(self, url: HttpUrl | str) -> bool:
         """Check if this resolver can handle the given URL."""
         raise NotImplementedError("Subclasses must implement this method")
 
-    async def arun(self, params: ResolverInputSchema) -> ResolverOutputSchema:
+    async def _arun(
+        self,
+        params: ResolverInputSchema,
+        **kwargs,
+    ) -> ResolverOutputSchema:
+        self.validate_url(params.url)
         return ResolverOutputSchema(
             url=await self.resolve(params.url),
             resolver=self.__class__.__name__,
@@ -105,19 +84,22 @@ class BaseArticleResolver(BaseTool):
 
 
 class IdentityResolver(BaseArticleResolver):
-    def resolve(self, url: Union[str, HttpUrl]) -> str:
+    def validate_url(self, url: Union[str, HttpUrl]) -> bool:
+        return True
+
+    async def resolve(self, url: Union[str, HttpUrl]) -> str:
         return str(url)
 
 
 class ArxivResolver(BaseArticleResolver):
-    async def validate_url(self, url):
-        if "arxiv.org" not in url:
-            raise RuntimeError(f"Not a valid arxiv url")
+    def validate_url(self, url: HttpUrl | str):
+        if "arxiv.org" not in str(url):
+            raise RuntimeError("Not a valid arxiv url")
         return True
 
-    async def resolve(self, url: Union[str, HttpUrl]) -> str:
+    async def resolve(self, url: HttpUrl | str) -> str:
         url = str(url)
-        await self.validate_url(url)
+        self.validate_url(url)
         paper_id = url.split("/")[-1]
         return f"https://arxiv.org/pdf/{paper_id}.pdf"
 
@@ -127,11 +109,11 @@ class ADSResolver(BaseArticleResolver):
 
     def validate_url(self, url):
         """Check if this URL is from NASA ADS."""
-        if "adsabs.harvard.edu" not in url:
-            raise RuntimeError(f"Not a valid ADS URL")
+        if "adsabs.harvard.edu" not in str(url):
+            raise RuntimeError("Not a valid ADS URL")
         return True
 
-    def resolve(self, url):
+    async def resolve(self, url: str | HttpUrl) -> str | None:
         """
         Resolve a NASA ADS URL to its DOI or direct PDF link.
 
