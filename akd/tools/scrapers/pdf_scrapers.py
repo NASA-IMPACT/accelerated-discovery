@@ -356,7 +356,7 @@ class DoclingPDFScraper(WebScraperToolBase):
         return markdown_content, metadata
     
 
-    async def arun(
+    async def _arun(
         self,
         params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
