@@ -272,10 +272,11 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         formatted_results = [
             SearchResultItem(
-                title="GitHub Repository",
-                url=HttpUrlAdapter.validate_python(result.get("URL")),
-                content=result.get("text"),
+                title=f"GitHub Repository for {query}",
+                url=HttpUrlAdapter.validate_python(result.pop("URL", "")),
+                content=result.pop("text", ""),
                 query=query,
+                extra=result,
             )
             for result in all_results_data
         ]
