@@ -99,6 +99,41 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
             )
         return output
 
+    def _sort_results(
+        self,
+        results: list[SearchResultItem],
+        sort_by: str = "score",
+    ) -> list[SearchResultItem]:
+        """
+        Sort results by the specified key. First checks for the key directly in the dict,
+        then checks in the 'extra' field if it exists. Returns unsorted if key not found.
+        """
+
+        def __get_sort_key(result):
+            # First check if sort_by key exists directly in the dict
+            if sort_by in result:
+                return result[sort_by]
+
+            # Then check if 'extra' field exists and contains the sort_by key
+            if (
+                "extra" in result
+                and isinstance(result["extra"], dict)
+                and sort_by in result["extra"]
+            ):
+                return result["extra"][sort_by]
+
+            # If key not found anywhere, return a default value that will sort last
+            # Using float('inf') for numerical sorting or empty string for string sorting
+            return float("inf")
+
+        try:
+            # Sort in descending order (highest score first)
+            # Change reverse=False if you want ascending order
+            return sorted(results, key=__get_sort_key, reverse=True)
+        except TypeError:
+            # If sorting fails (mixed types), return as is
+            return results
+
 
 class LocalRepoCodeSearchToolInputSchema(CodeSearchToolInputSchema):
     """
@@ -242,41 +277,6 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         results["score"] = similarities[top_indices]
 
         return results.reset_index(drop=True).to_dict("records")
-
-    def _sort_results(
-        self,
-        results: list[SearchResultItem],
-        sort_by: str = "score",
-    ) -> list[SearchResultItem]:
-        """
-        Sort results by the specified key. First checks for the key directly in the dict,
-        then checks in the 'extra' field if it exists. Returns unsorted if key not found.
-        """
-
-        def __get_sort_key(result):
-            # First check if sort_by key exists directly in the dict
-            if sort_by in result:
-                return result[sort_by]
-
-            # Then check if 'extra' field exists and contains the sort_by key
-            if (
-                "extra" in result
-                and isinstance(result["extra"], dict)
-                and sort_by in result["extra"]
-            ):
-                return result["extra"][sort_by]
-
-            # If key not found anywhere, return a default value that will sort last
-            # Using float('inf') for numerical sorting or empty string for string sorting
-            return float("inf")
-
-        try:
-            # Sort in descending order (highest score first)
-            # Change reverse=False if you want ascending order
-            return sorted(results, key=__get_sort_key, reverse=True)
-        except TypeError:
-            # If sorting fails (mixed types), return as is
-            return results
 
     async def _arun(
         self,
