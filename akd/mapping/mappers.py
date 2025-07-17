@@ -677,12 +677,29 @@ class WaterfallMapper(AbstractBase[MapperInput, MapperOutput]):
         super().__init__(config=config or MapperConfig())
 
         # Initialize mapping strategies
-        self.direct_mapper = DirectFieldMapper(self.config)
-        self.semantic_mapper = SemanticFieldMapper(self.config)
-        self.llm_mapper = LLMFallbackMapper(self.config)
+        if mappers:
+            self.mappers = list(mappers)
+        else:
+            self.mappers = self._create_default_mappers()
 
         # Cache for performance
         self._cache: Dict[str, MapperOutput] = {}
+
+    def _create_default_mappers(self) -> List[BaseMappingStrategy]:
+        """Create default mappers based on configuration flags."""
+        mappers = []
+
+        # Create strategy tuples with their enable flags
+        strategies = [
+            (DirectFieldMapper, self.config.enable_direct_matching),
+            (SemanticFieldMapper, self.config.enable_semantic_matching),
+            (LLMFallbackMapper, self.config.enable_llm_fallback),
+        ]
+
+        # Only instantiate enabled strategies
+        for mapper_class, is_enabled in strategies:
+            if is_enabled:
+                mappers.append(mapper_class(self.config))
 
         return mappers
 
@@ -709,19 +726,15 @@ class WaterfallMapper(AbstractBase[MapperInput, MapperOutput]):
                 return cached_result
 
         # Progressive strategy application
-        strategies = [
-            ("direct", self.direct_mapper, self.enable_direct_matching),
-            ("semantic", self.semantic_mapper, self.enable_semantic_matching),
-            ("llm_fallback", self.llm_mapper, self.enable_llm_fallback),
-        ]
-
         last_result = None
 
-        for strategy_name, mapper, enabled in strategies:
-            if not enabled or mapper.is_disabled:
+        for mapper in self.mappers:
+            # Skip disabled mappers (circuit breaker)
+            if mapper.is_disabled:
                 continue
 
             try:
+                strategy_name = mapper.__class__.__name__
                 if self.debug:
                     logger.debug(f"Trying mapping strategy: {strategy_name}")
 
@@ -743,6 +756,7 @@ class WaterfallMapper(AbstractBase[MapperInput, MapperOutput]):
                 last_result = result
 
             except Exception as e:
+                strategy_name = mapper.__class__.__name__
                 logger.warning(f"Strategy {strategy_name} failed: {e}")
                 continue
 
