@@ -138,7 +138,7 @@ TARGET: QueryInput with fields: query (str), context (str)
 ### Basic Agent-to-Agent Mapping
 
 ```python
-from akd.mapping.mappers import WaterfallMapper, MappingInput
+from akd.mapping.mappers import WaterfallMapper, MapperInput
 from akd.agents.query import QueryAgentOutputSchema
 from akd.agents.litsearch import LitAgentInputSchema
 
@@ -152,7 +152,7 @@ query_output = QueryAgentOutputSchema(
 )
 
 # Map to next agent input
-result = await mapper.arun(MappingInput(
+result = await mapper.arun(MapperInput(
     source_model=query_output,
     target_schema=LitAgentInputSchema,
     mapping_hints={"queries": "query"}  # Use first query
@@ -174,7 +174,7 @@ async def query_to_literature_node(state: PlannerState) -> PlannerState:
     query_output = QueryAgentOutputSchema(**query_output_data)
     
     # Transform to literature agent input
-    mapping_result = await mapper.arun(MappingInput(
+    mapping_result = await mapper.arun(MapperInput(
         source_model=query_output,
         target_schema=LitAgentInputSchema
     ))
@@ -231,7 +231,7 @@ mapper = WaterfallMapper(config=config)
 
 ```python
 try:
-    result = await mapper.arun(MappingInput(
+    result = await mapper.arun(MapperInput(
         source_model=complex_output,
         target_schema=TargetSchema
     ))
@@ -311,7 +311,7 @@ class MyCustomAgent(BaseAgent):
         return MyOutputSchema(...)
 
 # Automatically works with mapper
-mapper_result = await mapper.arun(MappingInput(
+mapper_result = await mapper.arun(MapperInput(
     source_model=other_agent_output,
     target_schema=MyInputSchema
 ))
@@ -337,7 +337,7 @@ mapper.semantic_mapper.semantic_groups["result"] = [
 ### Mapping Hints for Complex Transformations
 
 ```python
-result = await mapper.arun(MappingInput(
+result = await mapper.arun(MapperInput(
     source_model=complex_output,
     target_schema=TargetSchema,
     mapping_hints={
@@ -352,7 +352,7 @@ result = await mapper.arun(MappingInput(
 
 ```python
 async def mapping_with_approval(source_model, target_schema):
-    result = await mapper.arun(MappingInput(
+    result = await mapper.arun(MapperInput(
         source_model=source_model,
         target_schema=target_schema
     ))
@@ -367,7 +367,7 @@ async def mapping_with_approval(source_model, target_schema):
         
         if approval.provide_hints:
             # Retry with human-provided hints
-            result = await mapper.arun(MappingInput(
+            result = await mapper.arun(MapperInput(
                 source_model=source_model,
                 target_schema=target_schema,
                 mapping_hints=approval.mapping_hints
