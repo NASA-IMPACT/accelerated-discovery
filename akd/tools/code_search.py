@@ -158,6 +158,8 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     )
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     remove_embedding_column: bool = True
+    text_column: str = "text"
+    embeddings_column: str = "embeddings"
     debug: bool = False
 
 
@@ -180,6 +182,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         Initializes the tool. If the data file is not found, it will be
         downloaded from Google Drive before loading the models.
         """
+
         config = config or self.config_schema()
         super().__init__(config, debug)
 
@@ -191,6 +194,34 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             self.repo_data = pd.read_csv(self.config.data_file)
             self.embedder = Embedder(self.config.embedding_model_name)
 
+            if self.config.embeddings_column not in self.repo_data.columns:
+                logger.warning(
+                    f"No embeddings found in column '{self.config.embeddings_column}'. Generating them now..."
+                )
+                self.generate_embeddings(
+                    force_regenerate=False,
+                    batch_size=32,
+                )
+
+            # Parse embeddings if they are in string format
+            if self.debug:
+                logger.debug(f"Embeddings column dtype: {self.repo_data[self.config.embeddings_column].dtype}")
+            if self.repo_data[self.config.embeddings_column].dtype == "object":
+                self.repo_data[self.config.embeddings_column] = self.repo_data[self.config.embeddings_column].apply(
+                    self.embedder._parse_embedding,
+                )
+
+            # Stack all embeddings into a matrix
+            if self.debug:
+                logger.debug(f"Embeddings column: {self.repo_data[self.config.embeddings_column].head()}")
+            self.embeddings_matrix = np.vstack(
+                self.repo_data[self.config.embeddings_column].tolist(),
+            )
+            if self.debug:
+                logger.debug(
+                    f"Embeddings matrix shape: {self.embeddings_matrix.shape}",
+                )
+
             logger.info("CodeSearchTool initialization complete.")
         except Exception as e:
             logger.error(f"Error during CodeSearchTool initialization: {e}")
@@ -200,6 +231,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         Checks if the data file exists and downloads it if it does not.
         Will be replaced with SDE API in future.
         """
+
         data_file_path = self.config.data_file
         if not os.path.exists(data_file_path):
             logger.warning(f"Data file not found at '{data_file_path}'. Downloading...")
@@ -215,13 +247,70 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         else:
             logger.info(f"Data file already exists at '{data_file_path}'.")
 
+    def generate_embeddings(
+        self,
+        force_regenerate: bool = False,
+        batch_size: int = 32,
+    ) -> None:
+        """
+        Generate embeddings for a given text column if not already present.
+
+        Args:
+            text_column: Name of the column containing text to embed
+            embeddings_column: Name of the column to store embeddings
+            force_regenerate: If True, regenerate embeddings even if column exists
+            batch_size: Size of batches for embedding generation
+        """
+        # Check if embeddings already exist
+        if self.config.embeddings_column in self.repo_data.columns and not force_regenerate:
+            logger.info(
+                f"Embeddings column '{self.config.embeddings_column}' already exists. Skipping generation."
+            )
+            return
+
+        logger.info(
+            f"Generating embeddings for {len(self.repo_data)} texts in batches of {batch_size}..."
+        )
+
+        # Get texts to embed
+        texts = self.repo_data[self.config.text_column].fillna("").astype(str).tolist()
+
+        # Process in batches
+        embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+        for i in range(0, len(texts), batch_size):
+            batch_index = i // batch_size + 1
+            logger.debug(f"Processing batch {batch_index}/{total_batches}")
+
+            batch_texts = texts[i : i + batch_size]
+            batch_embeddings = self.embedder.embed_texts(
+                batch_texts,
+                batch_size=batch_size,
+            )
+            embeddings.extend(batch_embeddings)
+
+        # Store embeddings in memory
+        self.repo_data[self.config.embeddings_column] = embeddings
+        logger.info("Embeddings generation completed.")
+
+        # Prepare data for saving
+        save_data = self.repo_data.copy()
+
+        # Convert numpy arrays to string representation for CSV storage
+        save_data[self.config.embeddings_column] = save_data[self.config.embeddings_column].apply(
+            lambda x: ",".join(map(str, x)) if isinstance(x, np.ndarray) else x,
+        )
+
+        # Persist to disk
+        save_data.to_csv(self.config.data_file, index=False)
+        logger.info(f"Saved updated data with embeddings to {self.config.data_file}")
+        self.repo_data = save_data
+
     def find_repo(
         self,
         query: str,
         top_k: int = 25,
-        embeddings_column: str = "embeddings",
         remove_embedding_column: bool = True,
-        debug: bool = False,
     ) -> list[dict]:
         """
         Perform similarity search against cached embeddings using vectorized computation. # noqa
@@ -233,39 +322,20 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         Returns:
             List of dictionaries with top results and similarity scores
         """
-        if self.repo_data is None:
-            raise ValueError("No data loaded. Call load_data() first.")
 
-        if embeddings_column not in self.repo_data.columns:
-            raise ValueError(
-                "No embeddings found. Run generate_embeddings() first.",
-            )
+        if self.repo_data is None:
+            raise ValueError("No data loaded. Check if the data file exists.")
 
         # Get query embedding
         query_embedding = self.embedder.embed_texts([query])
-        if debug:
+        if self.debug:
             logger.debug(f"Query embedding shape: {query_embedding.shape}")
-
-        # Parse embeddings if they are in string format
-        if self.repo_data[embeddings_column].dtype == "object":
-            self.repo_data[embeddings_column] = self.repo_data[embeddings_column].apply(
-                self.embedder._parse_embedding,
-            )
-
-        # Stack all embeddings into a matrix
-        embeddings_matrix = np.vstack(
-            self.repo_data[embeddings_column].tolist(),
-        )
-        if debug:
-            logger.debug(
-                f"Embeddings matrix shape: {embeddings_matrix.shape}",
-            )
 
         # Compute cosine distances using cdist (more efficient)
         # cdist with 'cosine' gives cosine distance (1 - cosine_similarity)
         cosine_distances = cdist(
             query_embedding.reshape(1, -1),
-            embeddings_matrix,
+            self.embeddings_matrix,
             metric="cosine",
         )[0]  # Extract the single row
 
@@ -280,7 +350,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         results["score"] = results["score"].astype(float)
 
         if remove_embedding_column:
-            results = results.drop(columns=[embeddings_column])
+            results = results.drop(columns=[self.config.embeddings_column])
 
         return results.reset_index(drop=True).to_dict("records")
 
@@ -292,6 +362,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         """
         Runs the in-memory code search for a list of queries.
         """
+
         all_results_data = []
         for query in params.queries:
             if self.debug:
@@ -303,9 +374,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 results = self.find_repo(
                     query=query,
                     top_k=params.top_k,
-                    embeddings_column="embeddings",
-                    remove_embedding_column=self.remove_embedding_column,
-                    debug=self.debug,
+                    remove_embedding_column=self.config.remove_embedding_column
                 )
                 if results:
                     all_results_data.extend(results)
@@ -331,12 +400,6 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             logger.error(f"Error sorting repo list by score: {e}")
 
         return self.output_schema(results=formatted_results, category="technology")
-
-
-"""
-Tool for performing targeted searches on GitHub using SearxNG.
-This tool is a wrapper around SearxNGSearchTool.
-"""
 
 
 class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
