@@ -7,7 +7,10 @@ progressively tries more sophisticated mapping strategies until successful
 transformation is achieved. It is designed to be used in multi-agent workflows.
 """
 
+import hashlib
+import json
 from abc import abstractmethod
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Type
 
 from langchain_openai import (
@@ -94,7 +97,7 @@ class MapperInput(InputSchema):
     target_schema: Type[BaseModel] = Field(
         description="Target schema class for type-aware mapping"
     )
-    mapping_hints: Optional[Dict[str, str]] = Field(
+    mapping_hints: dict[str, str] | None = Field(
         None, description="Optional field mapping hints (source_field -> target_field)"
     )
 
@@ -143,6 +146,7 @@ class BaseMappingStrategy(AbstractBase[MapperInput, MapperOutput]):
     def __init__(self, config: Optional[MapperConfig] = None):
         super().__init__(config=config or MapperConfig())
         self.failure_count = 0
+        # Circuit breaker flag to disable strategy after repeated failures
         self.is_disabled = False
         self.serializer = AKDSerializer()
 
@@ -635,9 +639,6 @@ class LLMFallbackMapper(BaseMappingStrategy):
         self, parsed_data: Dict[str, Any], target_schema: Type[BaseModel]
     ) -> float:
         """Estimate confidence in the LLM transformation."""
-
-        if not target_schema:
-            return 0.5
 
         target_fields = set(self._get_schema_fields(target_schema))
         parsed_fields = set(parsed_data.keys())
