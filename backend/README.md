@@ -80,6 +80,8 @@ python api.py
 
 The server will start at `http://localhost:8000`
 
+**Note**: A LangServe implementation (`api-langserve.py`) is also available but requires additional configuration for proper checkpointing with LangGraph.
+
 ### 6. Run Tests
 
 In a new terminal (with the API server running):
@@ -90,7 +92,9 @@ python test_apis.py
 
 ## API Endpoints
 
-### Workflow Management
+### FastAPI Endpoints (api.py)
+
+#### Workflow Management
 
 - **POST** `/api/workflow/plan` - Create a workflow plan
   ```json
