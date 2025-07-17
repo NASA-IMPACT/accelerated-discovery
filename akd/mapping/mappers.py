@@ -10,11 +10,15 @@ transformation is achieved. It is designed to be used in multi-agent workflows.
 from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Type
 
+from langchain_openai import (
+    ChatOpenAI,
+)  # TODO: implement liteLLM interface and replace this
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import get_project_settings
+from akd.configs.prompts import LLM_TRANSFORMATION_PROMPT
 from akd.serializers import AKDSerializer
 
 
@@ -584,29 +588,14 @@ class LLMFallbackMapper(BaseMappingStrategy):
         if mapping_hints:
             hints_text = f"\nMapping hints: {json.dumps(mapping_hints, indent=2)}"
 
-        prompt = f"""
-Transform the following source data into the target schema format.
-
-SOURCE DATA:
-{json.dumps(source_data, indent=2)}
-
-TARGET SCHEMA: {schema_info["name"]}
-Description: {schema_info["description"]}
-Required fields: {", ".join(target_fields)}
-{hints_text}
-
-INSTRUCTIONS:
-1. Extract relevant information from the source data
-2. Map it to the target schema fields as best as possible
-3. Use intelligent inference for missing but derivable fields
-4. Return ONLY valid JSON matching the target schema
-5. If a field cannot be determined, omit it or use null
-6. Be conservative but creative in your mappings
-
-Return only the JSON object, no additional text:
-"""
-
-        return prompt
+        # Use the prompt template from config with str.format
+        return LLM_TRANSFORMATION_PROMPT.format(
+            source_data=json.dumps(source_data, indent=2),
+            schema_name=target_schema.__name__,
+            schema_description=schema_description,
+            target_fields=", ".join(target_fields),
+            mapping_hints=hints_text,
+        )
 
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON from LLM response with fallback handling."""
