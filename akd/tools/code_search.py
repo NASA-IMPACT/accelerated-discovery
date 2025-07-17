@@ -232,7 +232,6 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
     def _ensure_data_file_exists(self):
         """
         Checks if the data file exists and downloads it if it does not.
-        Will be replaced with SDE API in future.
         """
 
         data_file_path = self.config.data_file
