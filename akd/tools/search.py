@@ -435,12 +435,12 @@ class SemanticScholarSearchToolConfig(BaseToolConfig):
     @field_validator("api_key", mode="before")
     @classmethod
     def validate_api_key(cls, v):
-        if v is None:
-            logger.warning(
-                "Semantic Scholar API key not provided. Rate limits may apply.",
-            )
-        return SecretStr(v) if v else None
-
+        if not v:
+            logger.warning("Semantic Scholar API key not provided. Rate limits may apply.")
+            return None
+        if isinstance(v, SecretStr):
+            return v.get_secret_value()
+        return v  
 
 class SemanticScholarSearchTool(
     BaseTool[
