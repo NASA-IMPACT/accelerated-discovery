@@ -64,8 +64,23 @@ class MapperConfig(BaseConfig):
         True, description="Enable result caching for performance"
     )
 
+    # Semantic field mapping groups
+    semantic_groups: Dict[str, List[str]] = Field(
+        default_factory=lambda: {
+            "identifiers": ["id", "identifier", "uid", "key", "_id", "pk"],
+            "text_content": ["text", "content", "body", "description", "summary"],
+            "titles": ["title", "name", "heading", "label"],
+            "queries": ["query", "search", "question", "term"],
+            "results": ["results", "data", "items", "documents", "papers"],
+            "scores": ["score", "confidence", "relevance", "rating"],
+            "counts": ["count", "total", "length", "size", "num_results"],
+            "urls": ["url", "link", "href", "uri", "source"],
+        },
+        description="Semantic field groupings for fuzzy matching",
+    )
 
-class MappingInput(InputSchema):
+
+class MapperInput(InputSchema):
     """
     Type-safe input specification for data mapping operations.
 
@@ -311,17 +326,8 @@ class SemanticFieldMapper(BaseMappingStrategy):
     def __init__(self, config: Optional[MapperConfig] = None):
         super().__init__(config)
 
-        # Basic semantic field groups for common patterns
-        self.semantic_groups = {
-            "identifiers": ["id", "identifier", "uid", "key", "_id", "pk"],
-            "text_content": ["text", "content", "body", "description", "summary"],
-            "titles": ["title", "name", "heading", "label"],
-            "queries": ["query", "search", "question", "term"],
-            "results": ["results", "data", "items", "documents", "papers"],
-            "scores": ["score", "confidence", "relevance", "rating"],
-            "counts": ["count", "total", "length", "size", "num_results"],
-            "urls": ["url", "link", "href", "uri", "source"],
-        }
+        # Use semantic groups from config
+        self.semantic_groups = self.config.semantic_groups
 
         # Create reverse mapping for quick lookup
         self.field_to_group = {}
@@ -578,12 +584,9 @@ class LLMFallbackMapper(BaseMappingStrategy):
 
         # Get target schema information
         target_fields = self._get_schema_fields(target_schema)
-        schema_info = {
-            "name": target_schema.__name__,
-            "fields": target_fields,
-            "description": getattr(target_schema, "__doc__", ""),
-        }
+        schema_description = getattr(target_schema, "__doc__", "")
 
+        # Format mapping hints
         hints_text = ""
         if mapping_hints:
             hints_text = f"\nMapping hints: {json.dumps(mapping_hints, indent=2)}"
