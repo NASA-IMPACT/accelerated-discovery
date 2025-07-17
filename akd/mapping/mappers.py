@@ -22,7 +22,7 @@ from akd.configs.prompts import LLM_TRANSFORMATION_PROMPT
 from akd.serializers import AKDSerializer
 
 
-class MappingConfig(BaseConfig):
+class MapperConfig(BaseConfig):
     """
     Configuration for data mapping operations.
 
@@ -84,7 +84,7 @@ class MappingInput(InputSchema):
     )
 
 
-class MappingOutput(OutputSchema):
+class MapperOutput(OutputSchema):
     """
     Result of data mapping operation with comprehensive transformation details.
 
@@ -112,7 +112,7 @@ class MappingOutput(OutputSchema):
     )
 
 
-class BaseMappingStrategy(AbstractBase[MappingInput, MappingOutput]):
+class BaseMappingStrategy(AbstractBase[MapperInput, MapperOutput]):
     """
     Abstract base class for all mapping strategies.
 
@@ -121,12 +121,12 @@ class BaseMappingStrategy(AbstractBase[MappingInput, MappingOutput]):
     Pydantic model handling.
     """
 
-    input_schema = MappingInput
-    output_schema = MappingOutput
-    config_schema = MappingConfig
+    input_schema = MapperInput
+    output_schema = MapperOutput
+    config_schema = MapperConfig
 
-    def __init__(self, config: Optional[MappingConfig] = None):
-        super().__init__(config=config or MappingConfig())
+    def __init__(self, config: Optional[MapperConfig] = None):
+        super().__init__(config=config or MapperConfig())
         self.failure_count = 0
         self.is_disabled = False
         self.serializer = AKDSerializer()
@@ -151,7 +151,7 @@ class BaseMappingStrategy(AbstractBase[MappingInput, MappingOutput]):
         """
         pass
 
-    async def _arun(self, params: MappingInput, **kwargs) -> MappingOutput:
+    async def _arun(self, params: MapperInput, **kwargs) -> MapperOutput:
         """Execute the mapping strategy with proper error handling."""
         _ = kwargs  # Unused but required by interface
 
@@ -162,7 +162,7 @@ class BaseMappingStrategy(AbstractBase[MappingInput, MappingOutput]):
             # Create empty target model with default values
             try:
                 empty_target = params.target_schema()
-                return MappingOutput(
+                return MapperOutput(
                     mapped_model=empty_target,
                     mapping_confidence=0.0,
                     used_strategy=f"{self.__class__.__name__} (disabled)",
@@ -179,7 +179,7 @@ class BaseMappingStrategy(AbstractBase[MappingInput, MappingOutput]):
                     # Last resort: use dict representation
                     empty_target = params.target_schema.model_construct()
 
-                return MappingOutput(
+                return MapperOutput(
                     mapped_model=empty_target,
                     mapping_confidence=0.0,
                     used_strategy=f"{self.__class__.__name__} (disabled)",
@@ -200,7 +200,7 @@ class BaseMappingStrategy(AbstractBase[MappingInput, MappingOutput]):
                 # Try with model_construct for partial data
                 mapped_model = params.target_schema.model_construct(**result["mapped"])
 
-            return MappingOutput(
+            return MapperOutput(
                 mapped_model=mapped_model,
                 mapping_confidence=result["confidence"],
                 used_strategy=self.__class__.__name__,
@@ -308,7 +308,7 @@ class SemanticFieldMapper(BaseMappingStrategy):
     and common field name patterns.
     """
 
-    def __init__(self, config: Optional[MappingConfig] = None):
+    def __init__(self, config: Optional[MapperConfig] = None):
         super().__init__(config)
 
         # Basic semantic field groups for common patterns
@@ -466,7 +466,7 @@ class LLMFallbackMapper(BaseMappingStrategy):
     It serves as the final fallback in the waterfall approach.
     """
 
-    def __init__(self, config: Optional[MappingConfig] = None):
+    def __init__(self, config: Optional[MapperConfig] = None):
         super().__init__(config)
 
         # Initialize LLM client with graceful fallback
@@ -655,7 +655,7 @@ class LLMFallbackMapper(BaseMappingStrategy):
         return min(confidence, 0.9)  # Cap at 0.9 for LLM transformations
 
 
-class WaterfallMapper(AbstractBase[MappingInput, MappingOutput]):
+class WaterfallMapper(AbstractBase[MapperInput, MapperOutput]):
     """
     Orchestrates multiple mapping strategies in waterfall pattern.
 
@@ -664,12 +664,14 @@ class WaterfallMapper(AbstractBase[MappingInput, MappingOutput]):
     providing robust data compatibility between different agent schemas.
     """
 
-    input_schema = MappingInput
-    output_schema = MappingOutput
-    config_schema = MappingConfig
+    input_schema = MapperInput
+    output_schema = MapperOutput
+    config_schema = MapperConfig
 
-    def __init__(self, config: Optional[MappingConfig] = None):
-        super().__init__(config=config or MappingConfig())
+    def __init__(
+        self, config: Optional[MapperConfig] = None, *mappers: BaseMappingStrategy
+    ) -> None:
+        super().__init__(config=config or MapperConfig())
 
         # Initialize mapping strategies
         self.direct_mapper = DirectFieldMapper(self.config)
@@ -677,10 +679,11 @@ class WaterfallMapper(AbstractBase[MappingInput, MappingOutput]):
         self.llm_mapper = LLMFallbackMapper(self.config)
 
         # Cache for performance
-        self._cache: Dict[str, MappingOutput] = {}
-        self.serializer = AKDSerializer()
+        self._cache: Dict[str, MapperOutput] = {}
 
-    async def _arun(self, params: MappingInput, **kwargs) -> MappingOutput:
+        return mappers
+
+    async def _arun(self, params: MapperInput, **kwargs) -> MapperOutput:
         """
         Execute waterfall mapping with progressive strategy application.
 
@@ -750,7 +753,7 @@ class WaterfallMapper(AbstractBase[MappingInput, MappingOutput]):
             empty_target = params.target_schema()
             source_fields = list(params.source_model.__class__.model_fields.keys())
 
-            return MappingOutput(
+            return MapperOutput(
                 mapped_model=empty_target,
                 mapping_confidence=0.0,
                 used_strategy="none",
@@ -762,7 +765,7 @@ class WaterfallMapper(AbstractBase[MappingInput, MappingOutput]):
             empty_target = params.target_schema.model_construct()
             source_fields = list(params.source_model.__class__.model_fields.keys())
 
-            return MappingOutput(
+            return MapperOutput(
                 mapped_model=empty_target,
                 mapping_confidence=0.0,
                 used_strategy="none",
@@ -773,13 +776,13 @@ class WaterfallMapper(AbstractBase[MappingInput, MappingOutput]):
                 },
             )
 
-    def _is_acceptable_result(self, result: MappingOutput) -> bool:
+    def _is_acceptable_result(self, result: MapperOutput) -> bool:
         """Check if a mapping result is acceptable to stop the waterfall."""
 
         # Accept if we have a valid mapped model and reasonable confidence
         return result.mapped_model is not None and result.mapping_confidence > 0.1
 
-    def _generate_cache_key(self, params: MappingInput) -> str:
+    def _generate_cache_key(self, params: MapperInput) -> str:
         """Generate cache key for mapping parameters."""
 
         # Convert source model to dict for key generation

@@ -7,15 +7,15 @@ sophisticated transformation strategies to handle data compatibility between age
 
 The module includes:
 - WaterfallMapper: Main orchestrator for multi-stage mapping
-- MappingInput/Output: Input and output schemas for mapping operations
+- MapperInput/Output: Input and output schemas for mapping operations
 - Individual mapping strategies: Direct, Semantic, and LLM-based mapping
 """
 
 from .mappers import (
     WaterfallMapper,
-    MappingInput,
-    MappingOutput,
-    MappingConfig,
+    MapperInput,
+    MapperOutput,
+    MapperConfig,
     BaseMappingStrategy,
     DirectFieldMapper,
     SemanticFieldMapper,
@@ -24,9 +24,9 @@ from .mappers import (
 
 __all__ = [
     "WaterfallMapper",
-    "MappingInput", 
-    "MappingOutput",
-    "MappingConfig",
+    "MapperInput", 
+    "MapperOutput",
+    "MapperConfig",
     "BaseMappingStrategy",
     "DirectFieldMapper",
     "SemanticFieldMapper", 

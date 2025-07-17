@@ -21,8 +21,8 @@ from akd.agents.relevancy import RelevancyAgentInputSchema, RelevancyAgentOutput
 from akd.mapping.mappers import (
     DirectFieldMapper,
     LLMFallbackMapper,
-    MappingConfig,
-    MappingInput,
+    MapperConfig,
+    MapperInput,
     SemanticFieldMapper,
     WaterfallMapper,
 )
@@ -137,7 +137,7 @@ class TestSemanticFieldMapping:
     @pytest.mark.asyncio
     async def test_semantic_similarity(self):
         """Test mapping with semantically similar field names."""
-        config = MappingConfig(semantic_threshold=0.4)
+        config = MapperConfig(semantic_threshold=0.4)
         mapper = SemanticFieldMapper(config=config)
 
         # Create model with similar but not exact field names
@@ -159,11 +159,11 @@ class TestSemanticFieldMapping:
     async def test_semantic_threshold_behavior(self):
         """Test semantic mapping with different thresholds."""
         # High threshold - more selective
-        high_config = MappingConfig(semantic_threshold=0.9)
+        high_config = MapperConfig(semantic_threshold=0.9)
         mapper_high = SemanticFieldMapper(config=high_config)
 
         # Low threshold - more permissive
-        low_config = MappingConfig(semantic_threshold=0.3)
+        low_config = MapperConfig(semantic_threshold=0.3)
         mapper_low = SemanticFieldMapper(config=low_config)
 
         source = LiteratureSearchOutput(
@@ -293,7 +293,7 @@ class TestWaterfallMapper:
         source = QueryInput(query="test query", context="test context")
 
         result = await mapper.arun(
-            MappingInput(source_model=source, target_schema=QueryInput)
+            MapperInput(source_model=source, target_schema=QueryInput)
         )
 
         assert result.used_strategy == "DirectFieldMapper"
@@ -313,7 +313,7 @@ class TestWaterfallMapper:
         )
 
         result = await mapper.arun(
-            MappingInput(
+            MapperInput(
                 source_model=source,
                 target_schema=ExtractionInput,
                 mapping_hints={
@@ -335,12 +335,12 @@ class TestWaterfallMapper:
 
         # First call
         result1 = await mapper.arun(
-            MappingInput(source_model=source, target_schema=QueryOutput)
+            MapperInput(source_model=source, target_schema=QueryOutput)
         )
 
         # Second call should use cache
         result2 = await mapper.arun(
-            MappingInput(source_model=source, target_schema=QueryOutput)
+            MapperInput(source_model=source, target_schema=QueryOutput)
         )
 
         # Results should be identical
@@ -364,7 +364,7 @@ class TestRealAgentMappings:
 
         # Map to LitAgent input (should use first query)
         result = await mapper.arun(
-            MappingInput(
+            MapperInput(
                 source_model=query_output,
                 target_schema=LitAgentInputSchema,
                 mapping_hints={"queries": "query"},  # Map queries list to single query
@@ -395,7 +395,7 @@ class TestRealAgentMappings:
         )
 
         result = await mapper.arun(
-            MappingInput(source_model=lit_output, target_schema=ExtractionInputSchema)
+            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema)
         )
 
         assert result.mapping_confidence > 0.0
@@ -413,7 +413,7 @@ class TestRealAgentMappings:
         )
 
         result = await mapper.arun(
-            MappingInput(
+            MapperInput(
                 source_model=extraction_input, target_schema=RelevancyAgentInputSchema
             )
         )
@@ -442,7 +442,7 @@ class TestRealAgentMappings:
         )
 
         lit_result = await mapper.arun(
-            MappingInput(source_model=query_output, target_schema=LitAgentInputSchema)
+            MapperInput(source_model=query_output, target_schema=LitAgentInputSchema)
         )
 
         # Step 2: LitAgent output -> ExtractionAgent input
@@ -460,7 +460,7 @@ class TestRealAgentMappings:
         )
 
         extraction_result = await mapper.arun(
-            MappingInput(source_model=lit_output, target_schema=ExtractionInputSchema)
+            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema)
         )
 
         # Verify the pipeline works
@@ -513,7 +513,7 @@ class TestRealAgentMappings:
         for source_schema, target_schema in compatible_pairs:
             if source_schema in sample_data:
                 result = await mapper.arun(
-                    MappingInput(
+                    MapperInput(
                         source_model=sample_data[source_schema],
                         target_schema=target_schema,
                     )
@@ -545,7 +545,7 @@ class TestAgentPairMappings:
         )
 
         result = await mapper.arun(
-            MappingInput(source_model=lit_output, target_schema=ExtractionInput)
+            MapperInput(source_model=lit_output, target_schema=ExtractionInput)
         )
 
         assert result.mapping_confidence > 0.0
@@ -562,7 +562,7 @@ class TestAgentPairMappings:
         )
 
         result = await mapper.arun(
-            MappingInput(source_model=query_input, target_schema=LiteratureSearchInput)
+            MapperInput(source_model=query_input, target_schema=LiteratureSearchInput)
         )
 
         assert result.mapped_model.query == "find papers on quantum computing"
@@ -575,13 +575,13 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_incompatible_schemas(self):
         """Test handling of incompatible schemas."""
-        mapper = WaterfallMapper(config=MappingConfig(enable_llm_fallback=False))
+        mapper = WaterfallMapper(config=MapperConfig(enable_llm_fallback=False))
 
         # Create source with no matching fields
         source = ExtractionOutput(extractions=[{"data": "value"}], confidence_score=0.8)
 
         result = await mapper.arun(
-            MappingInput(source_model=source, target_schema=LiteratureSearchInput)
+            MapperInput(source_model=source, target_schema=LiteratureSearchInput)
         )
 
         # Should handle gracefully even without matches
@@ -591,7 +591,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_strategy_disabling(self):
         """Test with disabled strategies."""
-        config = MappingConfig(
+        config = MapperConfig(
             enable_direct_matching=False,
             enable_llm_fallback=False,
             semantic_threshold=0.4,
@@ -603,7 +603,7 @@ class TestErrorHandling:
         )
 
         result = await mapper.arun(
-            MappingInput(source_model=source, target_schema=QueryInput)
+            MapperInput(source_model=source, target_schema=QueryInput)
         )
 
         # Should only use semantic mapping
@@ -616,7 +616,7 @@ class TestConfigurationScenarios:
     @pytest.mark.asyncio
     async def test_high_confidence_direct_mapping(self):
         """Test scenarios where direct mapping should have high confidence."""
-        config = MappingConfig(
+        config = MapperConfig(
             enable_semantic_matching=False, enable_llm_fallback=False
         )
         mapper = WaterfallMapper(config=config)
@@ -625,7 +625,7 @@ class TestConfigurationScenarios:
         source = QueryAgentInputSchema(query="renewable energy research", num_queries=5)
 
         result = await mapper.arun(
-            MappingInput(source_model=source, target_schema=QueryAgentInputSchema)
+            MapperInput(source_model=source, target_schema=QueryAgentInputSchema)
         )
 
         assert result.used_strategy == "DirectFieldMapper"
@@ -634,7 +634,7 @@ class TestConfigurationScenarios:
     @pytest.mark.asyncio
     async def test_semantic_only_mapping(self):
         """Test mapping with only semantic matching enabled."""
-        config = MappingConfig(
+        config = MapperConfig(
             enable_direct_matching=False,
             enable_llm_fallback=False,
             semantic_threshold=0.4,
@@ -647,7 +647,7 @@ class TestConfigurationScenarios:
         )
 
         result = await mapper.arun(
-            MappingInput(source_model=source, target_schema=QueryAgentInputSchema)
+            MapperInput(source_model=source, target_schema=QueryAgentInputSchema)
         )
 
         assert result.used_strategy in ["SemanticFieldMapper", "none"]
@@ -655,7 +655,7 @@ class TestConfigurationScenarios:
     @pytest.mark.asyncio
     async def test_llm_only_mapping(self):
         """Test mapping with only LLM fallback enabled."""
-        config = MappingConfig(
+        config = MapperConfig(
             enable_direct_matching=False,
             enable_semantic_matching=False,
             enable_llm_fallback=True,
@@ -668,7 +668,7 @@ class TestConfigurationScenarios:
         )
 
         result = await mapper.arun(
-            MappingInput(source_model=source, target_schema=RelevancyAgentInputSchema)
+            MapperInput(source_model=source, target_schema=RelevancyAgentInputSchema)
         )
 
         # Should use LLM mapping if available, or fail gracefully
