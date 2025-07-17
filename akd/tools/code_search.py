@@ -603,4 +603,4 @@ class SDECodeSearchTool(CodeSearchTool):
             )
             for result in all_results_data
         ]
-        return self.output_schema(results=formatted_results)
+        return self.output_schema(results=formatted_results, category="technology")
