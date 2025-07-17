@@ -8,9 +8,10 @@ import json
 import numpy as np
 import pandas as pd
 from loguru import logger
-from pydantic import ValidationError, computed_field
+from pydantic import ValidationError, computed_field, Field
 from pydantic.networks import HttpUrl
 from scipy.spatial.distance import cdist
+from tenacity import retry, stop_after_attempt
 
 from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
@@ -208,15 +209,21 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
             # Parse embeddings if they are in string format
             if self.debug:
-                logger.debug(f"Embeddings column dtype: {self.repo_data[self.config.embeddings_column].dtype}")
+                logger.debug(
+                    f"Embeddings column dtype: {self.repo_data[self.config.embeddings_column].dtype}"
+                )
             if self.repo_data[self.config.embeddings_column].dtype == "object":
-                self.repo_data[self.config.embeddings_column] = self.repo_data[self.config.embeddings_column].apply(
+                self.repo_data[self.config.embeddings_column] = self.repo_data[
+                    self.config.embeddings_column
+                ].apply(
                     self.embedder._parse_embedding,
                 )
 
             # Stack all embeddings into a matrix
             if self.debug:
-                logger.debug(f"Embeddings column: {self.repo_data[self.config.embeddings_column].head()}")
+                logger.debug(
+                    f"Embeddings column: {self.repo_data[self.config.embeddings_column].head()}"
+                )
             self.embeddings_matrix = np.vstack(
                 self.repo_data[self.config.embeddings_column].tolist(),
             )
@@ -264,7 +271,10 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             batch_size: Size of batches for embedding generation
         """
         # Check if embeddings already exist
-        if self.config.embeddings_column in self.repo_data.columns and not force_regenerate:
+        if (
+            self.config.embeddings_column in self.repo_data.columns
+            and not force_regenerate
+        ):
             logger.info(
                 f"Embeddings column '{self.config.embeddings_column}' already exists. Skipping generation."
             )
@@ -299,7 +309,9 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         save_data = self.repo_data.copy()
 
         # Convert numpy arrays to string representation for CSV storage
-        save_data[self.config.embeddings_column] = save_data[self.config.embeddings_column].apply(
+        save_data[self.config.embeddings_column] = save_data[
+            self.config.embeddings_column
+        ].apply(
             lambda x: ",".join(map(str, x)) if isinstance(x, np.ndarray) else x,
         )
 
@@ -376,7 +388,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 results = self.find_repo(
                     query=query,
                     top_k=params.top_k,
-                    remove_embedding_column=self.config.remove_embedding_column
+                    remove_embedding_column=self.config.remove_embedding_column,
                 )
                 if results:
                     all_results_data.extend(results)
@@ -516,10 +528,19 @@ class SDECodeSearchToolConfig(CodeSearchToolConfig):
     """
     Configuration for the SDE code search tool.
     """
-    
-    base_url: str = os.getenv("SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search")  
+
+    base_url: str = os.getenv(
+        "SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
+    )
     page_size: int = 10
     max_pages: int = 1
+    headers: dict = Field(
+        default_factory=lambda: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        description="Headers for the SDE API",
+    )
     debug: bool = False
 
 
@@ -532,25 +553,7 @@ class SDECodeSearchTool(CodeSearchTool):
     output_schema = CodeSearchToolOutputSchema
     config_schema = SDECodeSearchToolConfig
 
-    def __init__(
-        self,
-        config: SDECodeSearchToolConfig | None = None,
-        debug: bool = False,
-    ):
-        """
-        Initializes the SDECodeSearchTool.
-        """
-
-        self.headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        self.base_url = config.base_url 
-        self.page_size = config.page_size
-        self.max_pages = config.max_pages
-        self.debug = config.debug
-        super().__init__(config, debug)
-
+    @retry(stop=stop_after_attempt(2))
     def sde_search(self, page: int, query: str):
         """
         Search for code using SDE REST API.
@@ -560,11 +563,13 @@ class SDECodeSearchTool(CodeSearchTool):
             "filters": {},
             "page": page,
             "pageSize": self.page_size,
-            "search_term": query
+            "search_term": query,
         }
-        if self.debug:  
+        if self.debug:
             logger.debug(f"Payload: {payload}")
-        response = requests.post(self.base_url, headers=self.headers, data=json.dumps(payload))
+        response = requests.post(
+            self.base_url, headers=self.headers, data=json.dumps(payload)
+        )
         if self.debug:
             logger.debug(f"Response: {response.json()}")
         return response.json()["documents"]
@@ -581,26 +586,42 @@ class SDECodeSearchTool(CodeSearchTool):
         all_results_data = []
         for query in params.queries:
             if self.debug:
-                logger.debug(f"Searching for query: '{query}' with top_k={params.max_results}")
+                logger.debug(
+                    f"Searching for query: '{query}' with top_k={params.max_results}"
+                )
 
             try:
                 for page in range(self.max_pages):
-                    results = self.sde_search(page=page, query=query)
-                    if results:
-                        all_results_data.extend(results)
-                    else:
-                        break
-                all_results_data = all_results_data[:params.max_results]
+                    try:
+                        results = self.sde_search(page=page, query=query)
+                        if results:
+                            all_results_data.extend(results)
+                        else:
+                            break
+                    except Exception as e:
+                        logger.error(
+                            f"Error during search for query '{query}' on page {page}: {e}"
+                        )
+                        continue  # continue to the next page
+                all_results_data = all_results_data[: params.max_results]
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
 
         formatted_results = [
             SearchResultItem(
-                title="SDE Code Search",
-                url=HttpUrlAdapter.validate_python(result["readme_url"]),
+                title=f"SDE Code Search for {query}",
+                url=HttpUrlAdapter.validate_python(result["url"]),
                 content=result["full_text"],
                 query=query,
+                extra=result,
             )
             for result in all_results_data
         ]
+        try:
+            formatted_results = self._sort_results(
+                formatted_results,
+                sort_by="score",
+            )
+        except Exception as e:
+            logger.error(f"Error sorting repo list by score: {e}")
         return self.output_schema(results=formatted_results, category="technology")

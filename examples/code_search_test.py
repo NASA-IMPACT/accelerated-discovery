@@ -8,12 +8,12 @@ import asyncio
 from akd.tools.search import SearxNGSearchToolConfig
 from akd.tools.code_search import (
     CodeSearchToolInputSchema,
-    LocalRepoCodeSearchTool, 
-    LocalRepoCodeSearchToolConfig, 
-    LocalRepoCodeSearchToolInputSchema, 
+    LocalRepoCodeSearchTool,
+    LocalRepoCodeSearchToolConfig,
+    LocalRepoCodeSearchToolInputSchema,
     GitHubCodeSearchTool,
-    SDECodeSearchTool, 
-    SDECodeSearchToolConfig
+    SDECodeSearchTool,
+    SDECodeSearchToolConfig,
 )
 
 
@@ -26,8 +26,7 @@ async def local_repo_search_test():
     tool = LocalRepoCodeSearchTool(config=cfg)
 
     search_input = LocalRepoCodeSearchToolInputSchema(
-        queries=["landslide nepal"], 
-        max_results=5
+        queries=["landslide nepal"], max_results=5
     )
 
     print("Running the search...")
@@ -37,7 +36,7 @@ async def local_repo_search_test():
     for result in output.results:
         print(result.url)
         print(result.content)
-        print("-"*100)
+        print("-" * 100)
 
 
 # GitHub Search Tool
@@ -49,8 +48,7 @@ async def github_search_test():
     tool = GitHubCodeSearchTool(config=cfg)
 
     search_input = CodeSearchToolInputSchema(
-        queries=["landslide nepal"], 
-        max_results=10
+        queries=["landslide nepal"], max_results=10
     )
 
     print("Running the search...")
@@ -60,8 +58,8 @@ async def github_search_test():
     for result in output.results:
         print(result.url)
         print(result.content)
-        print("-"*100)
- 
+        print("-" * 100)
+
 
 async def sde_search_test():
     """An async function to run the tool."""
@@ -71,8 +69,7 @@ async def sde_search_test():
     tool = SDECodeSearchTool(config=cfg)
 
     search_input = CodeSearchToolInputSchema(
-        queries=["landslide nepal"], 
-        max_results=5
+        queries=["Weather Prediction"], max_results=5
     )
 
     print("Running the search...")
@@ -82,7 +79,7 @@ async def sde_search_test():
     for result in output.results:
         print(result.url)
         print(result.content)
-        print("-"*100)
+        print("-" * 100)
 
 
 if __name__ == "__main__":
@@ -92,13 +89,3 @@ if __name__ == "__main__":
     asyncio.run(github_search_test())
     print("Running SDE search test...")
     asyncio.run(sde_search_test())
-
-
-
-
-
-
-
-
-
-
