@@ -576,34 +576,44 @@ class SemanticScholarSearchTool(
             or not item.get("paperId")
         ):
             return None 
-        return PaperDataItem(
-            paper_id=item.get("paperId") or None,
-            corpus_id=item.get("corpusId") or None,
-            external_ids=item.get("externalIds") or None,
-            url=item.get("url") or None,
-            title=item.get("title") or None,
-            abstract=item.get("abstract") or None,
-            venue=item.get("venue") or None,
-            publication_venue=item.get("publicationVenue") or None,
-            year=item.get("year") or None,
-            reference_count=item.get("referenceCount") or None,
-            citation_count=item.get("citationCount") or None,
-            influential_citation_count=item.get("influentialCitationCount") or None,
-            is_open_access=item.get("isOpenAccess") or None,
-            open_access_pdf=item.get("openAccessPdf") or None,
-            fields_of_study=item.get("fieldsOfStudy") or None,
-            s2_fields_of_study=item.get("s2FieldsOfStudy") or None,
-            publication_types=item.get("publicationTypes") or None,
-            publication_date=item.get("publicationDate") or None,
-            journal=item.get("journal") or None,
-            citation_styles=item.get("citationStyles") or None,
-            authors=item.get("authors") or None,
-            citations=item.get("citations") or None,
-            references=item.get("references") or None,
-            embedding=item.get("embedding") or None,
-            tldr=item.get("tldr") or None,
-            doi=doi or None,
-        )
+        try:
+            paper_item = PaperDataItem(
+                paper_id=item.get("paperId") or None,
+                corpus_id=item.get("corpusId") or None,
+                external_ids=item.get("externalIds") or None,
+                url=item.get("url") or None,
+                title=item.get("title") or None,
+                abstract=item.get("abstract") or None,
+                venue=item.get("venue") or None,
+                publication_venue=item.get("publicationVenue") or None,
+                year=item.get("year") or None,
+                reference_count=item.get("referenceCount") or None,
+                citation_count=item.get("citationCount") or None,
+                influential_citation_count=item.get("influentialCitationCount") or None,
+                is_open_access=item.get("isOpenAccess") or None,
+                open_access_pdf=item.get("openAccessPdf") or None,
+                fields_of_study=item.get("fieldsOfStudy") or None,
+                s2_fields_of_study=item.get("s2FieldsOfStudy") or None,
+                publication_types=item.get("publicationTypes") or None,
+                publication_date=item.get("publicationDate") or None,
+                journal=item.get("journal") or None,
+                citation_styles=item.get("citationStyles") or None,
+                authors=item.get("authors") or None,
+                citations=item.get("citations") or None,
+                references=item.get("references") or None,
+                embedding=item.get("embedding") or None,
+                tldr=item.get("tldr") or None,
+                doi=doi or None,
+            )
+            if self.debug:
+                logger.debug(
+                    f"Processed paper with DOI {doi}"
+                )
+            return paper_item
+        except Exception as e:
+            logger.debug(
+                f"Could not parse response to paper object for doi {doi}: {str(e)}",
+            )
     
     async def _fetch_paper_by_doi(
         self,
