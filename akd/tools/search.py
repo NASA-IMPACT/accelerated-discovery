@@ -574,10 +574,8 @@ class SemanticScholarSearchTool(
         if (
             not item
             or not item.get("paperId")
-            or not item.get("title")
         ):
             return None 
-
         return PaperDataItem(
             paper_id=item.get("paperId") or None,
             corpus_id=item.get("corpusId") or None,
@@ -626,9 +624,8 @@ class SemanticScholarSearchTool(
         """
         search_url = f"{self.config.base_url}/graph/v1/paper/DOI:{query}"
         params = {
-            "fields": ",".join(self.config.fields),
+            "fields": ",".join(self.config.fields)
         }
-
         headers = {}
         if self.config.api_key:
             api_key_value = self.config.api_key
@@ -680,7 +677,7 @@ class SemanticScholarSearchTool(
                 f"Failed to fetch Semantic Scholar results for query '{query}': {e}",
             )
 
-        return None
+        return []
 
     def _parse_result(
         self,
@@ -919,7 +916,7 @@ class SemanticScholarSearchTool(
                 f"num_queries={len(params.queries)}",
             )
 
-        if self.endpoint == "doi":
+        if self.config.endpoint == "doi":
             async with aiohttp.ClientSession() as session:
                 tasks = [
                     self._fetch_paper_by_doi(
