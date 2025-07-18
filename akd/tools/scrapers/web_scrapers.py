@@ -582,10 +582,6 @@ class DoclingScraper(WebScraperToolBase):
             md, meta = await self._process_document(path)
             return WebpageScraperToolOutputSchema(content=md, metadata=meta)
 
-        except ValueError as e:
-            # format not supported
-            raise RuntimeError(f"[Unsupported Format] {e}")
-
         except FileNotFoundError as e:
             # local file was missing
             raise RuntimeError(f"[File Not Found] {e}")
