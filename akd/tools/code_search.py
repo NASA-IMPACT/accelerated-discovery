@@ -610,8 +610,8 @@ class SDECodeSearchTool(CodeSearchTool):
         formatted_results = [
             SearchResultItem(
                 title=f"SDE Code Search for {query}",
-                url=HttpUrlAdapter.validate_python(result["url"]),
-                content=result["full_text"],
+                url=HttpUrlAdapter.validate_python(result.pop("url", "")),
+                content=result.pop("full_text", ""),
                 query=query,
                 extra=result,
             )

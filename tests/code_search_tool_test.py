@@ -3,6 +3,8 @@ import os
 import pytest
 import requests
 import numpy as np
+import json
+import pandas as pd
 
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -12,13 +14,16 @@ from akd.tools.misc import Embedder
 from akd.tools.search import SearxNGSearchToolConfig, SearxNGSearchToolInputSchema
 from akd.tools.code_search import (
     CodeSearchToolInputSchema,
-    LocalRepoCodeSearchTool, 
-    LocalRepoCodeSearchToolConfig, 
-    LocalRepoCodeSearchToolInputSchema, 
+    LocalRepoCodeSearchTool,
+    LocalRepoCodeSearchToolConfig,
+    LocalRepoCodeSearchToolInputSchema,
     GitHubCodeSearchTool,
-    SDECodeSearchTool, 
-    SDECodeSearchToolConfig
+    SDECodeSearchTool,
+    SDECodeSearchToolConfig,
 )
+
+
+"""Validate the output structure"""
 
 
 def validate_output_structure(output):
@@ -32,7 +37,9 @@ def validate_output_structure(output):
         assert result.content and result.content.strip()
 
 
-# Initialize the tools and run the tests
+"""Initialize the tools"""
+
+
 @pytest.fixture
 def local_tool():
     config = LocalRepoCodeSearchToolConfig(debug=True)
@@ -51,6 +58,45 @@ def sde_tool():
     return SDECodeSearchTool(config=config)
 
 
+"""Test1: Google Drive Link"""
+
+
+def test_google_drive_link():
+    config = LocalRepoCodeSearchToolConfig()
+    file_id = config.google_drive_file_id
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    response = requests.head(url, allow_redirects=True)
+    assert response.status_code == 200
+
+
+"""Test2: Data file validation"""
+
+
+def test_data_file_validation():
+    config = LocalRepoCodeSearchToolConfig()
+    df = pd.read_csv(config.data_file)
+    assert df is not None
+    assert not df.empty
+    assert "embeddings" in df.columns
+
+
+"""Test3: Vector Embedding"""
+
+
+def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
+    texts = ["flood prediction", "earthquake classification"]
+    embeddings = embedder.embed_texts(texts)
+
+    assert isinstance(embeddings, np.ndarray)
+    assert embeddings.shape[0] == 2
+    assert embeddings.shape[1] == embedder.get_embedding_dimensions()
+    assert not np.isnan(embeddings).any()
+
+
+"""Test4: Local Repo Search"""
+
+
 @pytest.mark.asyncio
 async def test_local_repo_search(local_tool):
     input_params = LocalRepoCodeSearchToolInputSchema(
@@ -64,6 +110,20 @@ async def test_local_repo_search(local_tool):
     # Output structure validation
     output = await local_tool._arun(input_params)
     validate_output_structure(output)
+
+
+"""Test5: SearxNG server"""
+
+
+@pytest.mark.asyncio
+async def test_searxng_server():
+    url = "http://localhost:8080"
+    response = requests.head(url)
+    assert response.status_code == 200
+    assert response.headers.get("Content-Type") == "text/html; charset=utf-8"
+
+
+"""Test6: GitHub Search"""
 
 
 @pytest.mark.asyncio
@@ -81,6 +141,24 @@ async def test_github_code_search(github_tool):
     validate_output_structure(output)
 
 
+"""Test7: SDE API"""
+
+
+@pytest.mark.asyncio
+async def test_sde_api():
+    url = "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    payload = {"filters": {}, "page": 0, "pageSize": 1, "search_term": "test"}
+
+    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=5)
+    assert response.status_code == 200
+    data = response.json()
+    assert "documents" in data
+
+
+"""Test8: SDE Search"""
+
+
 @pytest.mark.asyncio
 async def test_sde_code_search(sde_tool):
     input_params = CodeSearchToolInputSchema(
@@ -94,28 +172,3 @@ async def test_sde_code_search(sde_tool):
     # Output structure validation
     output = await sde_tool._arun(input_params)
     validate_output_structure(output)
-
-
-def test_google_drive_link():
-    config = LocalRepoCodeSearchToolConfig()
-    file_id = config.google_drive_file_id
-    url = f"https://drive.google.com/uc?export=download&id={file_id}"
-
-    response = requests.head(url, allow_redirects=True)
-    assert response.status_code == 200
-
-
-def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
-    texts = ["flood prediction", "earthquake classification"]
-    embeddings = embedder.embed_texts(texts)
-    
-    assert isinstance(embeddings, np.ndarray)
-    assert embeddings.shape[0] == 2
-    assert embeddings.shape[1] == embedder.get_embedding_dimensions()
-    assert not np.isnan(embeddings).any()
-
-
-
-
-
-
