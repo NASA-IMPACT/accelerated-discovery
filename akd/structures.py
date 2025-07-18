@@ -100,6 +100,107 @@ class ResearchData(BaseModel):
     )
 
 
+class PaperDataItem(BaseModel):
+    """Represents a single paper data object retrieved from Semantic Scholar."""
+    paper_id: str = Field(
+        ...,
+        description="Semantic Scholar’s primary unique identifier for a paper.",
+    )
+    corpus_id: Optional[int] = Field(
+        ...,
+        description="Semantic Scholar’s secondary unique identifier for a paper.",
+    )
+    external_ids: Optional[object]  = Field(
+        None,
+        description="Valid URL to download data referenced in research. Leave None if unavailable.",
+    )
+    url: Optional[str] = Field(
+        ...,
+        description="URL of the paper on the Semantic Scholar website.",
+    )
+    title: Optional[str] = Field(
+        ...,
+        description="Title of the paper.",
+    )
+    abstract: Optional[str] = Field(
+        ...,
+        description="The paper's abstract. Note that due to legal reasons, this may be missing even if we display an abstract on the website.",
+    )
+    venue: Optional[str] = Field(
+        ...,
+        description="The name of the paper’s publication venue.",
+    )
+    publication_venue: Optional[object] = Field(
+        ...,
+        description="An object that contains the following information about the journal or conference in which this paper was published: id (the venue’s unique ID), name (the venue’s name), type (the type of venue), alternate_names (an array of alternate names for the venue), and url (the venue’s website).",
+    )
+    year: Optional[int] = Field(
+        ...,
+        description="The year the paper was published.",
+    )
+    reference_count: Optional[int] = Field(
+        ...,
+        description="The total number of papers this paper references.",
+    )
+    citation_count: Optional[int] = Field(
+        ...,
+        description="The total number of papers that references this paper.",
+    )
+    influential_citation_count: Optional[int] = Field(
+        ...,
+        description="A subset of the citation count, where the cited publication has a significant impact on the citing publication. ",
+    )
+    is_open_access: Optional[bool] = Field(
+        ...,
+        description="Whether the paper is open access.",
+    )
+    open_access_pdf: Optional[object] = Field(
+        ...,
+        description="An object that contains the following parameters: url (a link to the paper’s PDF), status, the paper's license, and a legal disclaimer.",
+    )
+    fields_of_study: Optional[list[str]] = Field(
+        ...,
+        description="A list of the paper’s high-level academic categories from external sources. ",
+    )
+    publication_types: Optional[list[str]] = Field(
+        ...,
+        description="The type of this publication.",
+    )
+    publication_date: Optional[str] = Field(
+        ...,
+        description="The date when this paper was published, in YYYY-MM-DD format.",
+    )
+    journal: Optional[object] = Field(
+        ...,
+        description="An object that contains the following parameters, if available: name (the journal name), volume (the journal’s volume number), and pages (the page number range)",
+    )
+    citation_styles: Optional[object] = Field(
+        ...,
+        description="The BibTex bibliographical citation of the paper.",
+    )
+    authors: Optional[list[object]] = Field(
+        ...,
+        description="List of authors corresponding to the paper.",
+    )
+    citations: Optional[list[object]] = Field(
+        ...,
+        description="List of citations the paper has.",
+    )
+    references: Optional[list[object]] = Field(
+        ...,
+        description="List of references used in the paper.",
+    )
+    embedding: Optional[object] = Field(
+        ...,
+        description="The paper's embedding.",
+    )
+    tldr: Optional[object] = Field(
+        ...,
+        description="Tldr version of the paper.",
+    )
+    
+
+
 # =============================================================================
 # Extraction Schemas
 # =============================================================================
