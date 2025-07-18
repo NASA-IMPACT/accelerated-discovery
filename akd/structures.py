@@ -26,8 +26,11 @@ except ImportError:
 # Search and Data Models
 # =============================================================================
 
+class SearchItem(BaseModel):
+    pass
 
-class SearchResultItem(BaseModel):
+
+class SearchResultItem(SearchItem):
     """Represents a single search result item with metadata."""
 
     # Required fields
@@ -100,9 +103,9 @@ class ResearchData(BaseModel):
     )
 
 
-class PaperDataItem(BaseModel):
+class PaperDataItem(SearchItem):
     """Represents a single paper data object retrieved from Semantic Scholar."""
-    paper_id: str = Field(
+    paper_id: Optional[str] = Field(
         ...,
         description="Semantic Scholar’s primary unique identifier for a paper.",
     )
