@@ -151,7 +151,7 @@ class PaperDataItem(SearchItem):
     )
     influential_citation_count: Optional[int] = Field(
         ...,
-        description="A subset of the citation count, where the cited publication has a significant impact on the citing publication. ",
+        description="A subset of the citation count, where the cited publication has a significant impact on the citing publication.",
     )
     is_open_access: Optional[bool] = Field(
         ...,
@@ -163,7 +163,11 @@ class PaperDataItem(SearchItem):
     )
     fields_of_study: Optional[list[str]] = Field(
         ...,
-        description="A list of the paper’s high-level academic categories from external sources. ",
+        description="A list of the paper’s high-level academic categories from external sources.",
+    )
+    s2_fields_of_study: Optional[list[object]] = Field(
+        ...,
+        description="An array of objects. Each object contains the following parameters: category (a field of study. The possible fields are the same as in fieldsOfStudy), and source (specifies whether the category was classified by Semantic Scholar or by an external source.",
     )
     publication_types: Optional[list[str]] = Field(
         ...,
@@ -201,7 +205,10 @@ class PaperDataItem(SearchItem):
         ...,
         description="Tldr version of the paper.",
     )
-    
+    doi: Optional[str] = Field(
+        ...,
+        description="The DOI of the paper from the query."
+    )
 
 
 # =============================================================================
