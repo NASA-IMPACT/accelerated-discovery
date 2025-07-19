@@ -591,6 +591,7 @@ class DoclingScraper(WebScraperToolBase):
     async def _arun(
         self,
         params: WebpageScraperToolInputSchema,
+        **kwargs,
     ) -> WebpageScraperToolOutputSchema:
         """
         Entry point for external calls.
