@@ -1,12 +1,16 @@
 import json
 import re
-from typing import List, Optional, Any, Dict, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
+from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling_core.types import DoclingDocument
 from markdownify import markdownify
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, field_validator
 from readability import Document
 from requests import HTTPError, RequestException
 
@@ -14,10 +18,6 @@ from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools import BaseTool, BaseToolConfig
 
-from docling.datamodel.base_models import InputFormat
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-from docling_core.types import DoclingDocument
 
 class WebpageScraperToolInputSchema(InputSchema):
     """
@@ -466,37 +466,49 @@ class Crawl4AIWebScraper(WebScraperToolBase):
         )
 
 
+class DoclingScraperConfig(BaseToolConfig):
+    pdf_mode: Literal["accurate", "fast"] = Field(default="accurate")
+    export_type: Literal["markdown", "html"] = Field(default="markdown")
+    analyze_image: bool = Field(
+        default=False,
+        description="Use VML to analyze image? (might slow down the parse)",
+    )
+    do_table_structure: bool = Field(default=False)
+
+    @field_validator("pdf_mode", "export_type", mode="before")
+    @classmethod
+    def convert_to_lowercase(cls, v):
+        if isinstance(v, str):
+            return v.lower()
+        return v
+
+
 class DoclingScraper(WebScraperToolBase):
     """
     Scrapes PDF, HTML, docs (and other supported formats) into Markdown using Docling.
     """
 
-    def __init__(
-        self,
-        pdf_mode: str = "accurate",
-        export_type: str = "markdown",
-        analyze_image: bool = False,
-        do_table_structure: bool = True,
-    ):
-        """
-        Initializes the DoclingScraper with the specified configuration. Defaults to accurate PDF mode, markdown export, table structure (ocr on pdf) enabled, and no image based extraction. 
-        """
-        super().__init__()
-        self.pdf_mode = pdf_mode.lower()
-        self.export_type = export_type.lower()
-        self.analyze_image = analyze_image
-        self.do_table_structure = do_table_structure
-        self.setup_converter()
+    config_schema = DoclingScraperConfig
 
-    def setup_converter(
+    def _post_init(
+        self,
+    ) -> None:
+        super()._post_init()
+        self._setup_converter()
+
+    def _setup_converter(
         self,
         custom_options: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
-        Initialize the DocumentConverter, conditionally configuring for pdf_mode, Common Table Structure (CV) and image analysis options. 
+        Initialize the DocumentConverter, conditionally configuring for pdf_mode,
+        Common Table Structure (CV) and image analysis options.
         """
+        print(self.config)
         # Disable table-structure (CV) if images are not analyzed
-        pipeline_options = PdfPipelineOptions(do_table_structure=self.do_table_structure)
+        pipeline_options = PdfPipelineOptions(
+            do_table_structure=self.do_table_structure,
+        )
         pipeline_options.table_structure_options.mode = (
             TableFormerMode.ACCURATE
             if self.pdf_mode.lower() == "accurate"
@@ -504,7 +516,7 @@ class DoclingScraper(WebScraperToolBase):
         )
 
         format_options: Dict[InputFormat, Any] = {
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
         }
         if custom_options:
             format_options.update(custom_options)
@@ -522,7 +534,8 @@ class DoclingScraper(WebScraperToolBase):
             allowed_formats.append(InputFormat.IMAGE)
 
         self.doc_converter = DocumentConverter(
-            allowed_formats=allowed_formats, format_options=format_options
+            allowed_formats=allowed_formats,
+            format_options=format_options,
         )
 
     async def _get_docling_document(
@@ -554,7 +567,8 @@ class DoclingScraper(WebScraperToolBase):
         return "\n".join(lines).strip() + "\n"
 
     async def _process_document(
-        self, path: str
+        self,
+        path: str,
     ) -> Tuple[str, WebpageMetadata]:
         """
         Full round-trip: fetch doc, export to markdown, clean, and build metadata (docling doesn't support metadata extraction).
@@ -565,13 +579,14 @@ class DoclingScraper(WebScraperToolBase):
 
         metadata = WebpageMetadata(
             url=path,
-            query=path, 
+            query=path,
             title="Untitled",
         )
         return markdown, metadata
 
     async def _arun(
-        self, params: WebpageScraperToolInputSchema
+        self,
+        params: WebpageScraperToolInputSchema,
     ) -> WebpageScraperToolOutputSchema:
         """
         Entry point for external calls.
