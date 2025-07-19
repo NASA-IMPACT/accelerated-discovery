@@ -10,7 +10,7 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMo
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types import DoclingDocument
 from markdownify import markdownify
-from pydantic import Field, HttpUrl, field_validator
+from pydantic import Field, HttpUrl, field_validator, model_validator
 from readability import Document
 from requests import HTTPError, RequestException
 
@@ -474,6 +474,17 @@ class DoclingScraperConfig(BaseToolConfig):
         description="Use VML to analyze image? (might slow down the parse)",
     )
     do_table_structure: bool = Field(default=False)
+    allowed_formats: list[InputFormat] = Field(
+        default_factory=lambda: [
+            InputFormat.PDF,
+            InputFormat.DOCX,
+            InputFormat.PPTX,
+            InputFormat.HTML,
+            InputFormat.XLSX,
+            InputFormat.ASCIIDOC,
+            InputFormat.MD,
+        ],
+    )
 
     @field_validator("pdf_mode", "export_type", mode="before")
     @classmethod
@@ -481,6 +492,12 @@ class DoclingScraperConfig(BaseToolConfig):
         if isinstance(v, str):
             return v.lower()
         return v
+
+    @model_validator(mode="after")
+    def add_image_format_if_needed(self):
+        if self.analyze_image and InputFormat.IMAGE not in self.allowed_formats:
+            self.allowed_formats.append(InputFormat.IMAGE)
+        return self
 
 
 class DoclingScraper(WebScraperToolBase):
@@ -504,7 +521,6 @@ class DoclingScraper(WebScraperToolBase):
         Initialize the DocumentConverter, conditionally configuring for pdf_mode,
         Common Table Structure (CV) and image analysis options.
         """
-        print(self.config)
         # Disable table-structure (CV) if images are not analyzed
         pipeline_options = PdfPipelineOptions(
             do_table_structure=self.do_table_structure,
@@ -521,20 +537,8 @@ class DoclingScraper(WebScraperToolBase):
         if custom_options:
             format_options.update(custom_options)
 
-        allowed_formats = [
-            InputFormat.PDF,
-            InputFormat.DOCX,
-            InputFormat.PPTX,
-            InputFormat.HTML,
-            InputFormat.XLSX,
-            InputFormat.ASCIIDOC,
-            InputFormat.MD,
-        ]
-        if self.analyze_image:
-            allowed_formats.append(InputFormat.IMAGE)
-
         self.doc_converter = DocumentConverter(
-            allowed_formats=allowed_formats,
+            allowed_formats=self.allowed_formats,
             format_options=format_options,
         )
 
