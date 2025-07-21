@@ -30,6 +30,7 @@ dependencies = [
     "langchain-openai>=0.3.27",
     "pytest-asyncio>=1.0.0",
     "tenacity>=9.1.2",
+    "httpx>=0.28.1",
 ]
 
 [tool.poetry]
