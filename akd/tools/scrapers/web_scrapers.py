@@ -24,7 +24,7 @@ from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools import BaseTool, BaseToolConfig
 
-from .utils import _DoclingTitleExtractor
+from .utils import _DoclingMetadataExtractor
 
 
 class WebpageScraperToolInputSchema(InputSchema):
@@ -534,7 +534,7 @@ class DoclingScraper(WebScraperToolBase):
     ) -> None:
         super()._post_init()
         self._setup_converter()
-        self._title_extractor = _DoclingTitleExtractor(
+        self._metadata_extractor = _DoclingMetadataExtractor(
             early_search_limit=self.config.title_early_search_limit,
             fallback_title=self.config.title_fallback,
             debug=self.config.debug,
@@ -658,10 +658,12 @@ class DoclingScraper(WebScraperToolBase):
         markdown = doc.export_to_markdown()
         markdown = await self._clean_markdown(markdown)
 
+        _docling_metadata = await self._metadata_extractor.arun(doc)
+
         metadata = WebpageMetadata(
             url=path,
             query=path,
-            title=(await self._title_extractor.arun(doc)).title,
+            title=_docling_metadata.title,
         )
         return markdown, metadata
 

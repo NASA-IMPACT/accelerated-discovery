@@ -1,28 +1,34 @@
 from docling_core.types import DoclingDocument
 from docling_core.types.doc.document import SectionHeaderItem, TitleItem
+from pydantic import Field
 
 from akd._base import OutputSchema, UnrestrictedAbstractBase
 
 
-class _DoclingTitleExtractorOutputSchema(OutputSchema):
+class _DoclingMetadataExtractorOutputSchema(OutputSchema):
     """
-    Output schema for the DoclingTitleExtractor tool.
-    Represents the extracted title as a string.
+    Output schema for the DoclingMetadataExtractor tool.
+    Represents the extracted metadata as a dictionary.
     """
 
-    title: str
+    title: str = Field(
+        default="Untitled",
+        description="The extracted title of the document.",
+    )
+    published_date: str | None = None
 
 
-class _DoclingTitleExtractor(UnrestrictedAbstractBase):
+class _DoclingMetadataExtractor(UnrestrictedAbstractBase):
     """
-    A utility class for extracting titles from DoclingDocument objects.
+    A utility class for extracting metadata from DoclingDocument objects.
     (Hidden from public API)
 
-    Uses a prioritized search strategy:
-    1. Main section headers (level=1) in first 10 text items
-    2. Any TitleItem in the document
-    3. Any main section header (level=1) anywhere in document
-    4. Document name attribute
+    For title:
+        Uses a prioritized search strategy:
+        1. Main section headers (level=1) in first 10 text items
+        2. Any TitleItem in the document
+        3. Any main section header (level=1) anywhere in document
+        4. Document name attribute
     5. "Untitled" as final fallback
 
     Note:
@@ -31,8 +37,8 @@ class _DoclingTitleExtractor(UnrestrictedAbstractBase):
     - For convenience, we just bypass config-based validation here.
     """
 
-    input_schema: DoclingDocument
-    output_schema: _DoclingTitleExtractorOutputSchema
+    input_schema = DoclingDocument
+    output_schema = _DoclingMetadataExtractorOutputSchema
 
     def __init__(
         self,
@@ -55,7 +61,7 @@ class _DoclingTitleExtractor(UnrestrictedAbstractBase):
         self,
         doc: DoclingDocument,
         **kwargs,
-    ) -> _DoclingTitleExtractorOutputSchema:
+    ) -> _DoclingMetadataExtractorOutputSchema:
         """
         Extracts the title from a DoclingDocument using prioritized search strategies.
 
@@ -65,14 +71,18 @@ class _DoclingTitleExtractor(UnrestrictedAbstractBase):
         Returns:
             The extracted title string, or fallback_title if no suitable title found
         """
-        title = (
+
+        title = self.extract_title(doc)
+        return _DoclingMetadataExtractorOutputSchema(title=title)
+
+    def extract_title(self, doc: DoclingDocument) -> str:
+        return (
             self._find_early_main_section_header(doc)
             or self._find_title_item(doc)
             or self._find_any_main_section_header(doc)
             or self._get_document_name(doc)
             or self.fallback_title
         )
-        return _DoclingTitleExtractorOutputSchema(title=title)
 
     def _find_early_main_section_header(self, doc: DoclingDocument) -> str | None:
         """
