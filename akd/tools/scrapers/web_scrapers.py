@@ -1,18 +1,29 @@
 import json
 import re
-from typing import List, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
+from docling.document_converter import (
+    DocumentConverter,
+    HTMLFormatOption,
+    PdfFormatOption,
+)
+from docling_core.types import DoclingDocument
+from loguru import logger
 from markdownify import markdownify
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, field_validator, model_validator
 from readability import Document
 from requests import HTTPError, RequestException
 
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools import BaseTool, BaseToolConfig
+
+from .utils import _DoclingMetadataExtractor
 
 
 class WebpageScraperToolInputSchema(InputSchema):
@@ -460,3 +471,180 @@ class Crawl4AIWebScraper(WebScraperToolBase):
             content=crawl_result.markdown.strip(),
             metadata=metadata,
         )
+
+
+class DoclingScraperConfig(BaseToolConfig):
+    pdf_mode: Literal["accurate", "fast"] = Field(default="fast")
+    export_type: Literal["markdown", "html"] = Field(default="markdown")
+    analyze_image: bool = Field(
+        default=False,
+        description="Use VML to analyze image? (might slow down the parse)",
+    )
+    do_table_structure: bool = Field(default=False)
+    use_ocr: bool = Field(default=False, description="Use OCR for PDF parsing?")
+    allowed_formats: list[InputFormat] = Field(
+        default_factory=lambda: [
+            InputFormat.PDF,
+            InputFormat.DOCX,
+            InputFormat.PPTX,
+            InputFormat.HTML,
+            InputFormat.XLSX,
+            InputFormat.ASCIIDOC,
+            InputFormat.MD,
+        ],
+    )
+    title_fallback: str = Field(
+        default="Untitled",
+    )
+    title_early_search_limit: int = Field(
+        default=10,
+    )
+
+    @field_validator("pdf_mode", "export_type", mode="before")
+    @classmethod
+    def convert_to_lowercase(cls, v):
+        if isinstance(v, str):
+            return v.lower()
+        return v
+
+    @model_validator(mode="after")
+    def add_image_format_if_needed(self):
+        if self.analyze_image and InputFormat.IMAGE not in self.allowed_formats:
+            self.allowed_formats.append(InputFormat.IMAGE)
+        return self
+
+
+class DoclingScraper(WebScraperToolBase):
+    """
+    Scrapes PDF, HTML, docs (and other supported formats) into Markdown using Docling.
+
+    Note:
+
+    - This tool requires the `docling` package to be installed.
+    - It supports both PDF and HTML formats, with options for OCR and table structure parsing.
+    - The `pdf_mode` can be set to "accurate" or "fast"
+    - Make sure `huggingface-cli login` is run before using this tool to access the required models.
+    """
+
+    config_schema = DoclingScraperConfig
+
+    def _post_init(
+        self,
+    ) -> None:
+        super()._post_init()
+        self._setup_converter()
+        self._metadata_extractor = _DoclingMetadataExtractor(
+            early_search_limit=self.config.title_early_search_limit,
+            fallback_title=self.config.title_fallback,
+            debug=self.config.debug,
+        )
+
+    def _setup_converter(
+        self,
+        custom_options: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Initialize the DocumentConverter, conditionally configuring for pdf_mode,
+        Common Table Structure (CV) and image analysis options.
+        """
+        # Disable table-structure (CV) if images are not analyzed
+        pipeline_options = PdfPipelineOptions(
+            do_table_structure=self.do_table_structure,
+            do_ocr=self.use_ocr,
+        )
+        pipeline_options.table_structure_options.mode = (
+            TableFormerMode.ACCURATE
+            if self.pdf_mode.lower() == "accurate"
+            else TableFormerMode.FAST
+        )
+
+        format_options: Dict[InputFormat, Any] = {
+            InputFormat.HTML: HTMLFormatOption(),
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
+        }
+        self.format_options = format_options
+        if custom_options:
+            format_options.update(custom_options)
+
+        if self.debug:
+            logger.debug(
+                f"Docling format options :: {format_options}",
+            )
+
+        self.doc_converter = DocumentConverter(
+            allowed_formats=self.allowed_formats,
+            format_options=format_options,
+        )
+
+    async def _get_docling_document(
+        self,
+        file_path: str,
+        force_format: Optional[InputFormat] = None,
+        reconfigure: bool = False,
+    ) -> DoclingDocument:
+        """
+        Convert a single URL into a DoclingDocument.
+        Raises:
+            RuntimeError      -- conversion failure
+        """
+        if reconfigure or not hasattr(self, "doc_converter"):
+            self._setup_converter()
+
+        try:
+            result = self.doc_converter.convert(file_path)
+            return result.document
+        except Exception as e:
+            raise RuntimeError(f"Conversion failed ({file_path}): {e}")
+
+    async def _clean_markdown(self, md: str) -> str:
+        """
+        Tidy up markdown: collapse excessive blank lines & trim trailing spaces.
+        """
+        md = re.sub(r"\n\s*\n\s*\n", "\n\n", md)
+        lines = [line.rstrip() for line in md.splitlines()]
+        return "\n".join(lines).strip() + "\n"
+
+    async def _process_document(
+        self,
+        path: str,
+    ) -> Tuple[str, WebpageMetadata]:
+        """
+        Full round-trip: fetch doc, export to markdown, clean, and build metadata (docling doesn't support metadata extraction).
+        """
+        doc = await self._get_docling_document(path)
+        markdown = doc.export_to_markdown()
+        markdown = await self._clean_markdown(markdown)
+
+        _docling_metadata = await self._metadata_extractor.arun(doc)
+
+        metadata = WebpageMetadata(
+            url=path,
+            query=path,
+            title=_docling_metadata.title,
+        )
+        return markdown, metadata
+
+    async def _arun(
+        self,
+        params: WebpageScraperToolInputSchema,
+        **kwargs,
+    ) -> WebpageScraperToolOutputSchema:
+        """
+        Entry point for external calls.
+        Returns cleaned markdown + metadata, or raises a descriptive error.
+        """
+        path = str(params.url)
+        try:
+            md, meta = await self._process_document(path)
+            return WebpageScraperToolOutputSchema(content=md, metadata=meta)
+
+        except FileNotFoundError as e:
+            # local file was missing
+            raise RuntimeError(f"[File Not Found] {e}")
+
+        except RuntimeError as e:
+            # issues during conversion
+            raise RuntimeError(f"[Conversion Error] {e}")
+
+        except Exception as e:
+            raise RuntimeError(f"[Internal Error] Failed to scrape {path}") from e
