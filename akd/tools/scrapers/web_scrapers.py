@@ -24,6 +24,8 @@ from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools import BaseTool, BaseToolConfig
 
+from .utils import _DoclingTitleExtractor
+
 
 class WebpageScraperToolInputSchema(InputSchema):
     """
@@ -492,6 +494,12 @@ class DoclingScraperConfig(BaseToolConfig):
             InputFormat.MD,
         ],
     )
+    title_fallback: str = Field(
+        default="Untitled",
+    )
+    title_early_search_limit: int = Field(
+        default=10,
+    )
 
     @field_validator("pdf_mode", "export_type", mode="before")
     @classmethod
@@ -526,6 +534,11 @@ class DoclingScraper(WebScraperToolBase):
     ) -> None:
         super()._post_init()
         self._setup_converter()
+        self._title_extractor = _DoclingTitleExtractor(
+            early_search_limit=self.config.title_early_search_limit,
+            fallback_title=self.config.title_fallback,
+            debug=self.config.debug,
+        )
 
     def _setup_converter(
         self,
@@ -648,7 +661,7 @@ class DoclingScraper(WebScraperToolBase):
         metadata = WebpageMetadata(
             url=path,
             query=path,
-            title=await self._extract_title(doc),
+            title=(await self._title_extractor.arun(doc)).title,
         )
         return markdown, metadata
 
