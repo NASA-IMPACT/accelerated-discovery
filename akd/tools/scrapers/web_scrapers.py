@@ -13,7 +13,6 @@ from docling.document_converter import (
     PdfFormatOption,
 )
 from docling_core.types import DoclingDocument
-from docling_core.types.doc.document import SectionHeaderItem, TitleItem
 from loguru import logger
 from markdownify import markdownify
 from pydantic import Field, HttpUrl, field_validator, model_validator
@@ -589,7 +588,7 @@ class DoclingScraper(WebScraperToolBase):
             RuntimeError      -- conversion failure
         """
         if reconfigure or not hasattr(self, "doc_converter"):
-            self.setup_converter()
+            self._setup_converter()
 
         try:
             result = self.doc_converter.convert(file_path)
@@ -604,48 +603,6 @@ class DoclingScraper(WebScraperToolBase):
         md = re.sub(r"\n\s*\n\s*\n", "\n\n", md)
         lines = [line.rstrip() for line in md.splitlines()]
         return "\n".join(lines).strip() + "\n"
-
-    async def _extract_title(self, doc: DoclingDocument) -> str:
-        """
-        Extracts the title from a DoclingDocument.
-        Looks for SectionHeaderItem (level=1) first, then TitleItem, then doc.name.
-        If none found, returns "Untitled".
-        """
-        # First priority: Look for main section headers (level=1) early in document
-        for text_item in doc.texts[:10]:
-            if (
-                isinstance(text_item, SectionHeaderItem)
-                and getattr(text_item, "level", None) == 1
-                and getattr(text_item, "text", None)
-                and text_item.text.strip()
-            ):
-                return text_item.text.strip()
-
-        # Second priority: Look for any TitleItem
-        for text_item in doc.texts:
-            if (
-                isinstance(text_item, TitleItem)
-                and getattr(text_item, "text", None)
-                and text_item.text.strip()
-            ):
-                return text_item.text.strip()
-
-        # Third priority: Look for any level=1 SectionHeaderItem anywhere
-        for text_item in doc.texts:
-            if (
-                isinstance(text_item, SectionHeaderItem)
-                and getattr(text_item, "level", None) == 1
-                and getattr(text_item, "text", None)
-                and text_item.text.strip()
-            ):
-                return text_item.text.strip()
-
-        # Fall back to document name
-        if getattr(doc, "name", None) and doc.name.strip():
-            return doc.name.strip()
-
-        # Final fallback
-        return "Untitled"
 
     async def _process_document(
         self,
