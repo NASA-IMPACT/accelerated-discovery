@@ -8,7 +8,6 @@ import requests
 from loguru import logger
 from markdownify import markdownify
 from pydantic import Field, FilePath, HttpUrl
-from bs4 import BeautifulSoup
 
 from .web_scrapers import (
     WebpageMetadata,
@@ -16,11 +15,6 @@ from .web_scrapers import (
     WebpageScraperToolOutputSchema,
     WebScraperToolBase,
 )
-
-from docling.datamodel.base_models import InputFormat
-from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-from docling_core.types import DoclingDocument
 
 
 class PdfMetadata(WebpageMetadata):

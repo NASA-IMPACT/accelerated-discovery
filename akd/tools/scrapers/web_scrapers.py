@@ -9,6 +9,7 @@ from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types import DoclingDocument
+from loguru import logger
 from markdownify import markdownify
 from pydantic import Field, HttpUrl, field_validator, model_validator
 from readability import Document
@@ -538,6 +539,11 @@ class DoclingScraper(WebScraperToolBase):
         }
         if custom_options:
             format_options.update(custom_options)
+
+        if self.debug:
+            logger.debug(
+                f"Docling format options :: {format_options}",
+            )
 
         self.doc_converter = DocumentConverter(
             allowed_formats=self.allowed_formats,
