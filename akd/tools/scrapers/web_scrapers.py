@@ -13,6 +13,7 @@ from docling.document_converter import (
     PdfFormatOption,
 )
 from docling_core.types import DoclingDocument
+from docling_core.types.doc.document import SectionHeaderItem, TitleItem
 from loguru import logger
 from markdownify import markdownify
 from pydantic import Field, HttpUrl, field_validator, model_validator
@@ -591,20 +592,43 @@ class DoclingScraper(WebScraperToolBase):
         lines = [line.rstrip() for line in md.splitlines()]
         return "\n".join(lines).strip() + "\n"
 
-    async def extract_title(self, doc: DoclingDocument) -> str:
+    async def _extract_title(self, doc: DoclingDocument) -> str:
         """
         Extracts the title from a DoclingDocument.
-        If no title is found, returns doc.name.
-        If that is also not found, returns "Untitled".
+        Looks for SectionHeaderItem (level=1) first, then TitleItem, then doc.name.
+        If none found, returns "Untitled".
         """
-        # Look for the first title item in the document
+        # First priority: Look for main section headers (level=1) early in document
+        for text_item in doc.texts[:10]:
+            if (
+                isinstance(text_item, SectionHeaderItem)
+                and getattr(text_item, "level", None) == 1
+                and getattr(text_item, "text", None)
+                and text_item.text.strip()
+            ):
+                return text_item.text.strip()
+
+        # Second priority: Look for any TitleItem
         for text_item in doc.texts:
-            if hasattr(text_item, "label") and text_item.label.value == "title":
-                if text_item.text and text_item.text.strip():
-                    return text_item.text.strip()
+            if (
+                isinstance(text_item, TitleItem)
+                and getattr(text_item, "text", None)
+                and text_item.text.strip()
+            ):
+                return text_item.text.strip()
+
+        # Third priority: Look for any level=1 SectionHeaderItem anywhere
+        for text_item in doc.texts:
+            if (
+                isinstance(text_item, SectionHeaderItem)
+                and getattr(text_item, "level", None) == 1
+                and getattr(text_item, "text", None)
+                and text_item.text.strip()
+            ):
+                return text_item.text.strip()
 
         # Fall back to document name
-        if hasattr(doc, "name") and doc.name and doc.name.strip():
+        if getattr(doc, "name", None) and doc.name.strip():
             return doc.name.strip()
 
         # Final fallback
@@ -624,7 +648,7 @@ class DoclingScraper(WebScraperToolBase):
         metadata = WebpageMetadata(
             url=path,
             query=path,
-            title=await self.extract_title(doc),
+            title=await self._extract_title(doc),
         )
         return markdown, metadata
 
