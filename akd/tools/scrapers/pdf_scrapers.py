@@ -2,8 +2,10 @@ import os
 import re
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 
 import fitz
+import httpx
 import requests
 from loguru import logger
 from markdownify import markdownify
@@ -149,8 +151,48 @@ class SimplePDFScraper(WebScraperToolBase):
         return res
 
     @staticmethod
-    def _is_pdf(val) -> bool:
-        return val.lower().endswith(".pdf")
+    async def _is_pdf(val: str) -> bool:
+        """
+        Determines if a URL or file path points to a PDF.
+
+        Args:
+            val: URL or file path to check
+
+        Returns:
+            bool: True if the value points to a PDF
+        """
+        val_lower = val.lower()
+
+        # Handle local file paths
+        if not val_lower.startswith(("http://", "https://")):
+            return val_lower.endswith(".pdf")
+
+        # Parse URL to check path component
+        try:
+            parsed = urlparse(val_lower)
+            path = parsed.path
+
+            # Check common PDF URL patterns
+            if path.endswith(".pdf") or "/pdf" in path:
+                return True
+
+            # For uncertain cases, check content-type header
+            async with httpx.AsyncClient() as client:
+                response = await client.head(
+                    val,
+                    timeout=10.0,
+                    follow_redirects=True,
+                )
+                content_type = response.headers.get("content-type", "").lower()
+                return "application/pdf" in content_type
+
+        except Exception:
+            # Fallback to basic pattern matching if HTTP request fails
+            try:
+                parsed = urlparse(val_lower)
+                return parsed.path.endswith(".pdf") or "/pdf" in parsed.path
+            except Exception:
+                return False
 
     async def _download_pdf_from_url(
         self,
@@ -228,7 +270,7 @@ class SimplePDFScraper(WebScraperToolBase):
         """
         path = str(params.url)
         pdf_path = str(params.url)
-        if not self._is_pdf(path):
+        if not await self._is_pdf(path):
             raise RuntimeError(f"{path} is not a valid pdf.")
         temp_file = None
         try:
