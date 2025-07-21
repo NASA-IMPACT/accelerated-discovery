@@ -72,3 +72,24 @@ OUTPUT INSTRUCTIONS:
   - HIGH_QUALITY_EVIDENCE only for credible, well-supported claims from reliable sources.
 - Always provide specific, actionable reasoning for each assessment.
 - Be conservative in your judgments to maintain the quality of literature search results."""
+
+
+LLM_TRANSFORMATION_PROMPT = """Transform the following source data into the target schema format.
+
+SOURCE DATA:
+{source_data}
+
+TARGET SCHEMA: {schema_name}
+Description: {schema_description}
+Required fields: {target_fields}
+{mapping_hints}
+
+INSTRUCTIONS:
+1. Extract relevant information from the source data
+2. Map it to the target schema fields as best as possible
+3. Use intelligent inference for missing but derivable fields
+4. Return ONLY valid JSON matching the target schema
+5. If a field cannot be determined, omit it or use null
+6. Be conservative but creative in your mappings
+
+Return only the JSON object, no additional text:"""
