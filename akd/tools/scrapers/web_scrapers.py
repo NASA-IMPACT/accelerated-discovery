@@ -591,6 +591,25 @@ class DoclingScraper(WebScraperToolBase):
         lines = [line.rstrip() for line in md.splitlines()]
         return "\n".join(lines).strip() + "\n"
 
+    async def extract_title(self, doc: DoclingDocument) -> str:
+        """
+        Extracts the title from a DoclingDocument.
+        If no title is found, returns doc.name.
+        If that is also not found, returns "Untitled".
+        """
+        # Look for the first title item in the document
+        for text_item in doc.texts:
+            if hasattr(text_item, "label") and text_item.label.value == "title":
+                if text_item.text and text_item.text.strip():
+                    return text_item.text.strip()
+
+        # Fall back to document name
+        if hasattr(doc, "name") and doc.name and doc.name.strip():
+            return doc.name.strip()
+
+        # Final fallback
+        return "Untitled"
+
     async def _process_document(
         self,
         path: str,
@@ -605,7 +624,7 @@ class DoclingScraper(WebScraperToolBase):
         metadata = WebpageMetadata(
             url=path,
             query=path,
-            title="Untitled",
+            title=await self.extract_title(doc),
         )
         return markdown, metadata
 
