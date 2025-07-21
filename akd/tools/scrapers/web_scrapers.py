@@ -467,13 +467,14 @@ class Crawl4AIWebScraper(WebScraperToolBase):
 
 
 class DoclingScraperConfig(BaseToolConfig):
-    pdf_mode: Literal["accurate", "fast"] = Field(default="accurate")
+    pdf_mode: Literal["accurate", "fast"] = Field(default="fast")
     export_type: Literal["markdown", "html"] = Field(default="markdown")
     analyze_image: bool = Field(
         default=False,
         description="Use VML to analyze image? (might slow down the parse)",
     )
     do_table_structure: bool = Field(default=False)
+    use_ocr: bool = Field(default=False, description="Use OCR for PDF parsing?")
     allowed_formats: list[InputFormat] = Field(
         default_factory=lambda: [
             InputFormat.PDF,
@@ -524,6 +525,7 @@ class DoclingScraper(WebScraperToolBase):
         # Disable table-structure (CV) if images are not analyzed
         pipeline_options = PdfPipelineOptions(
             do_table_structure=self.do_table_structure,
+            do_ocr=self.use_ocr,
         )
         pipeline_options.table_structure_options.mode = (
             TableFormerMode.ACCURATE
