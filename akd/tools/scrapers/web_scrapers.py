@@ -7,7 +7,11 @@ from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.document_converter import (
+    DocumentConverter,
+    HTMLFormatOption,
+    PdfFormatOption,
+)
 from docling_core.types import DoclingDocument
 from loguru import logger
 from markdownify import markdownify
@@ -505,6 +509,13 @@ class DoclingScraperConfig(BaseToolConfig):
 class DoclingScraper(WebScraperToolBase):
     """
     Scrapes PDF, HTML, docs (and other supported formats) into Markdown using Docling.
+
+    Note:
+
+    - This tool requires the `docling` package to be installed.
+    - It supports both PDF and HTML formats, with options for OCR and table structure parsing.
+    - The `pdf_mode` can be set to "accurate" or "fast"
+    - Make sure `huggingface-cli login` is run before using this tool to access the required models.
     """
 
     config_schema = DoclingScraperConfig
@@ -535,8 +546,10 @@ class DoclingScraper(WebScraperToolBase):
         )
 
         format_options: Dict[InputFormat, Any] = {
+            InputFormat.HTML: HTMLFormatOption(),
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
         }
+        self.format_options = format_options
         if custom_options:
             format_options.update(custom_options)
 
