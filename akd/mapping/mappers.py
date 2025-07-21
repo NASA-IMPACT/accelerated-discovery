@@ -14,8 +14,8 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Type
 
 from langchain_openai import (
-    ChatOpenAI,
-)  # TODO: implement liteLLM interface and replace this
+    ChatOpenAI,  # TODO: implement liteLLM interface and replace this
+)
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -329,9 +329,6 @@ class SemanticFieldMapper(BaseMappingStrategy):
 
     def __init__(self, config: Optional[MapperConfig] = None):
         super().__init__(config)
-
-        # Use semantic groups from config
-        self.semantic_groups = self.config.semantic_groups
 
         # Create reverse mapping for quick lookup
         self.field_to_group = {}
@@ -804,7 +801,8 @@ class WaterfallMapper(AbstractBase[MapperInput, MapperOutput]):
         """Generate cache key for mapping parameters."""
 
         # Convert source model to dict for key generation
-        source_dict = self.serializer._convert_pydantic_to_dict(params.source_model)
+        serializer = AKDSerializer()
+        source_dict = serializer._convert_pydantic_to_dict(params.source_model)
 
         key_data = {
             "source_schema": params.source_model.__class__.__name__,
