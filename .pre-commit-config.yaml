@@ -8,6 +8,11 @@ repos:
    - id: debug-statements
      language_version: python3.12
    - id: requirements-txt-fixer
+   - id: detect-private-key
+   - id: check-added-large-files
+     args: ['--maxkb=1000']
+   - id: check-case-conflict
+   - id: check-merge-conflict
 - repo: https://github.com/asottile/setup-cfg-fmt
   rev: v2.2.0
   hooks:
@@ -30,3 +35,32 @@ repos:
    - id: ruff-check
      args: ["--fix"]
    - id: ruff-format
+
+# Security checks
+- repo: https://github.com/Yelp/detect-secrets
+  rev: v1.4.0
+  hooks:
+   - id: detect-secrets
+     args: ['--baseline', '.secrets.baseline']
+     exclude: '^(.*\.lock|package-lock\.json|uv\.lock)$'
+
+# Custom local hooks for additional security
+- repo: local
+  hooks:
+   - id: check-env-files
+     name: Check for .env files
+     entry: bash -c 'if git diff --cached --name-only | grep -E "(^|\/)\.env(\.|$)"; then echo "Error: .env files must not be committed"; exit 1; fi'
+     language: system
+     pass_filenames: false
+   
+   - id: check-sensitive-files
+     name: Check for sensitive files
+     entry: bash -c 'if git diff --cached --name-only | grep -E "\.(pem|key|pfx|p12)$|id_rsa|id_dsa|id_ecdsa|id_ed25519"; then echo "Error: Sensitive files detected"; exit 1; fi'
+     language: system
+     pass_filenames: false
+   
+   - id: check-openai-keys
+     name: Check for OpenAI API keys
+     entry: bash -c 'if git diff --cached --name-only --diff-filter=ACM | xargs grep -l "sk-[A-Za-z0-9]\{20,\}" 2>/dev/null; then echo "Error: OpenAI API key detected"; exit 1; fi'
+     language: system
+     pass_filenames: false

@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING, Annotated, Any, Dict, List, Literal, Optional,
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from akd.structures import SearchResultItem, Tool
+from akd.structures import SearchResultItem
+from akd.common_types import ToolType as Tool
 from akd.utils import LANGCHAIN_CORE_INSTALLED
 
 if TYPE_CHECKING or LANGCHAIN_CORE_INSTALLED:
