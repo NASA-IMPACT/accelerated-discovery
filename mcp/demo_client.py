@@ -312,7 +312,7 @@ async def main():
     print("="*60)
     
     # Get server path
-    server_path = Path(__file__).parent / "akd_mcp_server.py"
+    server_path = Path(__file__).parent / "server.py"
     
     if not server_path.exists():
         print(f"❌ Server script not found: {server_path}")

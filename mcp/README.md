@@ -50,7 +50,7 @@ That's it! The MCP server and all dependencies are now installed.
 1. **Test the MCP server**:
    ```bash
    cd mcp
-   python test_mcp_client.py
+   python demo_client.py
    ```
 
 2. **Configure Claude Desktop** (or other MCP client) with the configuration shown below.
@@ -80,7 +80,7 @@ Location: `~/.config/Claude/claude_desktop_config.json`
     "akd-research": {
       "command": "/path/to/your/project/.venv/bin/python",
       "args": [
-        "/path/to/your/project/mcp/akd_mcp_server.py"
+        "/path/to/your/project/mcp/server.py"
       ],
       "env": {
         "PYTHONPATH": "/path/to/your/project"
@@ -109,7 +109,7 @@ Location: `~/.config/Claude/claude_desktop_config.json`
 Other MCP-compatible clients may have different configuration formats. Please refer to your client's documentation for specific configuration instructions. The key information you'll need:
 
 - **Server command**: `/path/to/your/project/.venv/bin/python`
-- **Server arguments**: `["/path/to/your/project/mcp/akd_mcp_server.py"]`
+- **Server arguments**: `["/path/to/your/project/mcp/server.py"]`
 - **Environment variables**:
   - `PYTHONPATH`: Path to the project root
   - `OPENAI_API_KEY`: Your OpenAI API key
@@ -220,7 +220,7 @@ The test client provides an interactive interface to test all MCP tools:
 
 ```bash
 cd mcp
-python test_mcp_client.py
+python demo_client.py
 ```
 
 This will launch an interactive session where you can:
@@ -243,7 +243,7 @@ mcp> quit                          # Exit
 You can also test the server standalone:
 ```bash
 cd mcp
-python akd_mcp_server.py
+python server.py
 ```
 
 This should output:
@@ -255,7 +255,7 @@ AKD Research MCP Server running on stdio...
 
 To modify or extend the MCP server:
 
-1. **Server Implementation**: `akd_mcp_server.py`
+1. **Server Implementation**: `server.py`
    - Add new tools by defining async functions decorated with `@mcp.tool()`
    - Each tool should have clear parameter descriptions
    - The server imports directly from AKD framework sources

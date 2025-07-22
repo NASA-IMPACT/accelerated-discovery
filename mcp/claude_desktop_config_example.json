@@ -6,9 +6,7 @@
         "/path/to/accelerated-discovery/mcp/akd_mcp_server.py"
       ],
       "env": {
-        "PYTHONPATH": "/path/to/accelerated-discovery",
-        "OPENAI_API_KEY": "your-openai-api-key-here",
-        "SEARXNG_BASE_URL": "http://localhost:8888"
+        "PYTHONPATH": "/path/to/accelerated-discovery"
       }
     }
   }
