@@ -167,14 +167,7 @@ class AbstractBase[
         if self.config is None:
             return
 
-        # Convert BaseConfig to dict if it's a BaseModel
-        config = (
-            self.config.model_dump()
-            if isinstance(self.config, BaseConfig)
-            else self.config
-        )
-
-        for attr, value in config.items():
+        for attr, value in self.config.items():
             setattr(self, attr, value)
 
     @classmethod

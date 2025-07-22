@@ -84,14 +84,11 @@ class LLMEvaluator(BaseTool):
         debug: bool = False,
     ):
         """ """
-        config = config or LLMEvaluatorConfig(debug=debug)
-        super().__init__(config=config)
-        # add stock metrics
-        # add custom evaluator methods (DAG, Criteria based GEval, etc.)
-        # add _run_ and _arun methods for synchronous and asynchronous evaluation
+        self.config = config or LLMEvaluatorConfig(debug=debug)
+        super().__init__(config=self.config)
 
+    def _post_init(self) -> None:
         # return a dictionary with scores and explanations
-
         self.metrics = (
             [
                 GEval(
@@ -104,11 +101,12 @@ class LLMEvaluator(BaseTool):
                 )
                 for m in config.custom_metrics
             ]
-            if config.custom_metrics
-            else config.default_metrics
-        )
+            if self.config.custom_metrics
+            else self.config.default_metrics
 
-        self.threshold = config.threshold
+            self.threshold = config.threshold
+
+        )
 
     async def _arun(self, params: LLMEvaluatorInputSchema) -> LLMEvaluatorOutputSchema:
         """ """
