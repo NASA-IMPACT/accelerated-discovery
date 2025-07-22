@@ -167,3 +167,4 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 searxng/settings.yml
+searxng/uwsgi.ini*

@@ -1,9 +1,19 @@
 # flake8: noqa: E501
-from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Union
+"""
+Refactored data structures and schemas for AKD project.
 
-from pydantic import BaseModel, Field, HttpUrl, computed_field
+This module contains core data models, schemas, and type definitions
+organized into logical sections for better maintainability.
+"""
 
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, computed_field
+
+# from akd.common_types import ToolType
+from akd.configs.project import CONFIG
+
+# Import guards for optional dependencies
 try:
     import langchain_core  # noqa: F401
 
@@ -11,27 +21,32 @@ try:
 except ImportError:
     LANGCHAIN_CORE_INSTALLED = False
 
-from akd.configs.project import CONFIG
 
-from .agents._base import BaseAgent
-from .tools._base import BaseTool
-
+# =============================================================================
+# Search and Data Models
+# =============================================================================
 
 class SearchResultItem(BaseModel):
-    """This schema represents a single search result item"""
+    """Represents a single search result item with metadata."""
 
+    # Required fields
     url: HttpUrl = Field(..., description="The URL of the search result")
+    title: str = Field(..., description="The title of the search result")
+    query: str = Field(..., description="The query used to obtain the search result")
+
+    # Optional metadata
     pdf_url: Optional[HttpUrl] = Field(
         None,
         description="The PDF URL of the search paper",
     )
-    title: str = Field(..., description="The title of the search result")
     content: Optional[str] = Field(
         None,
         description="The content snippet of the search result",
     )
-    query: str = Field(..., description="The query used to obtain the search result")
-    category: Optional[str] = Field(None, description="Category of the search result")
+    category: Optional[str] = Field(
+        None,
+        description="Category of the search result",
+    )
     doi: Optional[str] = Field(
         None,
         description="Digital Object Identifier (DOI) of the search result",
@@ -44,7 +59,10 @@ class SearchResultItem(BaseModel):
         None,
         description="Engine that fetched the search result",
     )
-    tags: Optional[List[str]] = Field(None, description="Tags for the search result")
+    tags: Optional[List[str]] = Field(
+        None,
+        description="Tags for the search result",
+    )
     extra: Optional[Dict[str, Any]] = Field(
         None,
         description="Extra information from the search result",
@@ -53,69 +71,172 @@ class SearchResultItem(BaseModel):
     @computed_field
     @property
     def title_augmented(self) -> str:
-        return (
-            f"{self.title} - (Published {self.published_date})"
-            if self.published_date
-            else self.title
-        )
-
-
-class ExtractionSchema(BaseModel):
-    """
-    Base schema for information extraction
-    """
-
-    answer: str = Field(
-        CONFIG.model_config_settings.default_no_answer,
-        description="Direct, concise answer to the input query",
-    )
-    related_knowledge: List[str] = Field(
-        None,
-        description="List of related information that can support "
-        "answering the query. Should be very concise.",
-    )
+        """Returns title with publication date if available."""
+        if self.published_date:
+            return f"{self.title} - (Published {self.published_date})"
+        return self.title
 
 
 class ResearchData(BaseModel):
     """
     Represents the dataset used in scientific research.
 
-    This schema captures key metadata about the data sources utilized in research,
-    including their format, origin, and accessibility. It ensures structured
-    documentation of data provenance, allowing for better reproducibility
-    and understanding of the research findings.
+    Captures key metadata about data sources including format, origin,
+    and accessibility for better reproducibility and documentation.
     """
 
     data_format: str = Field(
         ...,
-        description="Type of data used (e.g: HDF5/CSV/JSON or other) in the research",
+        description="Type of data used (e.g: HDF5/CSV/JSON) in the research",
     )
     origin: str = Field(
         ...,
-        description="Mission/Instrument/Model the data is derived from "
-        "(e.g., HLS, MERRA-2) in the research",
+        description="Mission/Instrument/Model the data is derived from (e.g., HLS, MERRA-2)",
     )
-    # source: str = Field(..., description="Source for the literature research")
     data_url: Optional[HttpUrl] = Field(
         None,
-        description="A valid URL to download data that the research references/uses. "
-        "If not available, leave empty/None. No need to provide fake url like example.com",
+        description="Valid URL to download data referenced in research. Leave None if unavailable.",
+    )
+
+
+class PaperDataItem(BaseModel):
+    """Represents a single paper data object retrieved from Semantic Scholar."""
+    paper_id: Optional[str] = Field(
+        ...,
+        description="Semantic Scholar’s primary unique identifier for a paper.",
+    )
+    corpus_id: Optional[int] = Field(
+        ...,
+        description="Semantic Scholar’s secondary unique identifier for a paper.",
+    )
+    external_ids: Optional[object]  = Field(
+        None,
+        description="Valid URL to download data referenced in research. Leave None if unavailable.",
+    )
+    url: Optional[str] = Field(
+        ...,
+        description="URL of the paper on the Semantic Scholar website.",
+    )
+    title: Optional[str] = Field(
+        ...,
+        description="Title of the paper.",
+    )
+    abstract: Optional[str] = Field(
+        ...,
+        description="The paper's abstract. Note that due to legal reasons, this may be missing even if we display an abstract on the website.",
+    )
+    venue: Optional[str] = Field(
+        ...,
+        description="The name of the paper’s publication venue.",
+    )
+    publication_venue: Optional[object] = Field(
+        ...,
+        description="An object that contains the following information about the journal or conference in which this paper was published: id (the venue’s unique ID), name (the venue’s name), type (the type of venue), alternate_names (an array of alternate names for the venue), and url (the venue’s website).",
+    )
+    year: Optional[int] = Field(
+        ...,
+        description="The year the paper was published.",
+    )
+    reference_count: Optional[int] = Field(
+        ...,
+        description="The total number of papers this paper references.",
+    )
+    citation_count: Optional[int] = Field(
+        ...,
+        description="The total number of papers that references this paper.",
+    )
+    influential_citation_count: Optional[int] = Field(
+        ...,
+        description="A subset of the citation count, where the cited publication has a significant impact on the citing publication.",
+    )
+    is_open_access: Optional[bool] = Field(
+        ...,
+        description="Whether the paper is open access.",
+    )
+    open_access_pdf: Optional[object] = Field(
+        ...,
+        description="An object that contains the following parameters: url (a link to the paper’s PDF), status, the paper's license, and a legal disclaimer.",
+    )
+    fields_of_study: Optional[list[str]] = Field(
+        ...,
+        description="A list of the paper’s high-level academic categories from external sources.",
+    )
+    s2_fields_of_study: Optional[list[object]] = Field(
+        ...,
+        description="An array of objects. Each object contains the following parameters: category (a field of study. The possible fields are the same as in fieldsOfStudy), and source (specifies whether the category was classified by Semantic Scholar or by an external source.",
+    )
+    publication_types: Optional[list[str]] = Field(
+        ...,
+        description="The type of this publication.",
+    )
+    publication_date: Optional[str] = Field(
+        ...,
+        description="The date when this paper was published, in YYYY-MM-DD format.",
+    )
+    journal: Optional[object] = Field(
+        ...,
+        description="An object that contains the following parameters, if available: name (the journal name), volume (the journal’s volume number), and pages (the page number range)",
+    )
+    citation_styles: Optional[object] = Field(
+        ...,
+        description="The BibTex bibliographical citation of the paper.",
+    )
+    authors: Optional[list[object]] = Field(
+        ...,
+        description="List of authors corresponding to the paper.",
+    )
+    citations: Optional[list[object]] = Field(
+        ...,
+        description="List of citations the paper has.",
+    )
+    references: Optional[list[object]] = Field(
+        ...,
+        description="List of references used in the paper.",
+    )
+    embedding: Optional[object] = Field(
+        ...,
+        description="The paper's embedding.",
+    )
+    tldr: Optional[object] = Field(
+        ...,
+        description="Tldr version of the paper.",
+    )
+    doi: Optional[str] = Field(
+        ...,
+        description="The DOI of the paper from the query."
+    )
+
+
+# =============================================================================
+# Extraction Schemas
+# =============================================================================
+
+
+class ExtractionSchema(BaseModel):
+    """Base schema for information extraction tasks."""
+
+    answer: str = Field(
+        CONFIG.model_config_settings.default_no_answer,
+        description="Direct, concise answer to the input query",
+    )
+    related_knowledge: Optional[List[str]] = Field(
+        None,
+        description="List of concise related information supporting the query answer",
     )
 
 
 class SingleEstimation(ExtractionSchema):
     """
     Represents an estimation extracted from research literature.
-    This schema is used when the extraction involves estimating a specific
-    value, parameter, or result based on scientific data and methodologies.
-    It captures essential details about the estimation process, including
-    the research data used, the methodology applied, and any relevant
-    assumptions or validation steps.
+
+    Used for extracting specific values, parameters, or results based on
+    scientific data and methodologies. Captures estimation process details
+    including methodology, assumptions, and validation.
     """
 
     research_data: ResearchData = Field(
         ...,
-        description="Data being used for the estimation in the research",
+        description="Data used for the estimation in the research",
     )
     methodology: str = Field(
         ...,
@@ -127,8 +248,7 @@ class SingleEstimation(ExtractionSchema):
     )
     confidence_level: Optional[float] = Field(
         None,
-        description="Confidence level of the estimation, if available "
-        "(e.g., probability or margin of error)",
+        description="Confidence level of the estimation (e.g., probability or margin of error)",
     )
     validation_method: Optional[str] = Field(
         None,
@@ -137,24 +257,57 @@ class SingleEstimation(ExtractionSchema):
 
 
 class ExtractionDTO(BaseModel):
-    source: str
-    result: Any
+    """Data Transfer Object for extraction results."""
+
+    source: str = Field(..., description="Source of the extraction")
+    result: Any = Field(..., description="Extracted result data")
 
 
-class RelevancyLabel(str, Enum):
-    RELEVANT = "Relevant"
-    NOT_RELEVANT = "Not Relevant"
+# =============================================================================
+# Tool System Models
+# =============================================================================
 
 
-if LANGCHAIN_CORE_INSTALLED:
-    from langchain_core.tools.structured import StructuredTool
+class ToolSearchResult(BaseModel):
+    """Represents the result of a tool search operation."""
 
-    Tool = Union[BaseTool, BaseAgent, StructuredTool]
-else:
-    Tool = Union[BaseTool, BaseAgent]
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-GuardrailType = Union[BaseTool, Callable, Coroutine]
+    # causes serialization issues as arbitrary type
+    tool: Optional[Any] = Field(
+        None,
+        description="Tool found during search",
+    )  # Should be ToolType, but circular import issues
+    # tool: Optional["ToolType"] = Field(...)
+    args: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Input arguments extracted when tool is found",
+    )
+    result: Optional[Any] = Field(
+        None,
+        description="Result when tool is executed",
+    )
 
-# A callable or a tuple of callable and input key mapping
-AnyCallable = Union[BaseTool, BaseAgent, Callable[..., Any]]
-CallableSpec = Union[AnyCallable, Tuple[AnyCallable, Dict[str, str]]]
+    @property
+    def name(self) -> str:
+        """Returns the name of the tool or its class name."""
+        if self.tool is None:
+            return "Unknown"
+        return getattr(self.tool, "name", self.tool.__class__.__name__)
+
+
+# =============================================================================
+# Exports
+# =============================================================================
+
+__all__ = [
+    # Search and Data Models
+    "SearchResultItem",
+    "ResearchData",
+    # Extraction Schemas
+    "ExtractionSchema",
+    "SingleEstimation",
+    "ExtractionDTO",
+    # Tool Models
+    "ToolSearchResult",
+]

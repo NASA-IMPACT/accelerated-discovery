@@ -5,7 +5,11 @@ from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents import InstructorBaseAgent
-from akd.structures import RelevancyLabel
+
+
+class RelevancyLabel(str, Enum):
+    RELEVANT = "Relevant"
+    NOT_RELEVANT = "Not Relevant"
 
 
 class RelevancyAgentInputSchema(InputSchema):

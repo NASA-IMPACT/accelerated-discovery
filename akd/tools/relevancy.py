@@ -16,10 +16,10 @@ from akd.agents.relevancy import (
     RelevancyAgent,
     RelevancyAgentInputSchema,
     RelevancyAgentOutputSchema,
+    RelevancyLabel,
     ScopeRelevanceLabel,
     TopicAlignmentLabel,
 )
-from akd.structures import RelevancyLabel
 from akd.tools._base import BaseTool, BaseToolConfig
 
 

@@ -2,6 +2,8 @@ import asyncio
 from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional
+import gdown
+from loguru import logger
 
 try:
     from langchain_core.tools.structured import StructuredTool
@@ -118,3 +120,20 @@ def get_akd_root() -> Path:
     Returns the root directory of the AKD project.
     """
     return Path(__file__).parent.parent.resolve()
+
+def google_drive_downloader(file_id: str, output_path: str, quiet: bool = False) -> None:
+    """
+    Download a file from Google Drive using the file ID.
+
+    Args:
+        file_id (str): The ID of the file on Google Drive.
+        output_path (str): The path to save the downloaded file.
+        quiet (bool): Whether to suppress download output.
+    """
+    try:
+        url = f"https://drive.google.com/uc?id={file_id}"
+        gdown.download(url, output_path, quiet=quiet)
+        logger.info(f"Downloaded file from Google Drive to '{output_path}'")
+    except Exception as e:
+        logger.error(f"Failed to download from Google Drive: {e}")
+        raise
