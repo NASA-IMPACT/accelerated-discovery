@@ -8,7 +8,7 @@ organized into logical sections for better maintainability.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, computed_field
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, computed_field
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
@@ -31,40 +31,40 @@ class SearchResultItem(BaseModel):
     """Represents a single search result item with metadata."""
 
     # Required fields
-    url: HttpUrl = Field(..., description="The URL of the search result")
+    url: AnyUrl = Field(..., description="The URL of the search result")
     title: str = Field(..., description="The title of the search result")
     query: str = Field(..., description="The query used to obtain the search result")
 
     # Optional metadata
-    pdf_url: Optional[HttpUrl] = Field(
+    pdf_url: AnyUrl | None = Field(
         None,
         description="The PDF URL of the search paper",
     )
-    content: Optional[str] = Field(
+    content: str | None = Field(
         None,
         description="The content snippet of the search result",
     )
-    category: Optional[str] = Field(
+    category: str | None = Field(
         None,
         description="Category of the search result",
     )
-    doi: Optional[str] = Field(
+    doi: str | None = Field(
         None,
         description="Digital Object Identifier (DOI) of the search result",
     )
-    published_date: Optional[str] = Field(
+    published_date: str | None = Field(
         None,
         description="Publication date for the search result",
     )
-    engine: Optional[str] = Field(
+    engine: str | None = Field(
         None,
         description="Engine that fetched the search result",
     )
-    tags: Optional[List[str]] = Field(
+    tags: list[str] | None = Field(
         None,
         description="Tags for the search result",
     )
-    extra: Optional[Dict[str, Any]] = Field(
+    extra: dict[str, Any] | None = Field(
         None,
         description="Extra information from the search result",
     )
@@ -94,7 +94,7 @@ class ResearchData(BaseModel):
         ...,
         description="Mission/Instrument/Model the data is derived from (e.g., HLS, MERRA-2)",
     )
-    data_url: Optional[HttpUrl] = Field(
+    data_url: Optional[AnyUrl] = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )

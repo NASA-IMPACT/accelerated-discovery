@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from pydantic import Field, HttpUrl, computed_field
+from pydantic import AnyUrl, Field, computed_field
 from readability import Document
 
 from akd._base import InputSchema, OutputSchema
@@ -17,7 +17,7 @@ class ScraperToolInputSchema(InputSchema):
     Input schema for the ScraperTool.
     """
 
-    url: HttpUrl = Field(
+    url: AnyUrl = Field(
         ...,
         description="URL of the webpage to scrape.",
     )
