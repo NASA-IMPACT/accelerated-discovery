@@ -19,7 +19,7 @@ from akd.agents.query import (
     QueryAgentInputSchema,
     QueryAgentOutputSchema,
 )
-from akd.structures import SearchItem, SearchResultItem, PaperDataItem
+from akd.structures import SearchResultItem, PaperDataItem
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.relevancy import EnhancedRelevancyChecker
 
@@ -45,7 +45,7 @@ class SearchToolOutputSchema(OutputSchema):
     """Schema for output of a tool for searching for information,
     news, references, and other content."""
 
-    results: List[SearchItem] = Field(
+    results: List[SearchResultItem] = Field(
         ...,
         description="List of search result items",
     )
