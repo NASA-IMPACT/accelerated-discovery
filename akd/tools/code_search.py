@@ -12,6 +12,7 @@ from pydantic import ValidationError, computed_field, Field
 from pydantic.networks import HttpUrl
 from scipy.spatial.distance import cdist
 from tenacity import retry, stop_after_attempt
+from sentence_transformers import CrossEncoder
 
 from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
@@ -31,7 +32,10 @@ class CodeSearchToolInputSchema(SearchToolInputSchema):
     Input schema for the code search tool.
     """
 
-    pass
+    @computed_field
+    def top_k(self) -> int:
+        """Returns the number of top results to return."""
+        return self.max_results
 
 
 class CodeSearchToolOutputSchema(SearchToolOutputSchema):
@@ -120,11 +124,11 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
 
             # Then check if 'extra' field exists and contains the sort_by key
             if (
-                "extra" in result
-                and isinstance(result["extra"], dict)
-                and sort_by in result["extra"]
+                result.extra
+                and isinstance(result.extra, dict)
+                and sort_by in result.extra
             ):
-                return result["extra"][sort_by]
+                return result.extra[sort_by]
 
             # If key not found anywhere, return a default value that will sort last
             # Using float('inf') for numerical sorting or empty string for string sorting
@@ -139,15 +143,85 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
             return results
 
 
-class LocalRepoCodeSearchToolInputSchema(CodeSearchToolInputSchema):
+class CombinedCodeSearchToolConfig(CodeSearchToolConfig):
     """
-    Input schema for the local repository code search tool.
+    Configuration for the combined code search tool.
     """
 
-    @computed_field
-    def top_k(self) -> int:
-        """Returns the number of top results to return."""
-        return self.max_results
+    reranker_model_name: str = Field(
+        "cross-encoder/ms-marco-MiniLM-L6-v2",
+        description="The model to use for reranking the combined results.",
+    )
+
+
+class CombinedCodeSearchTool(CodeSearchTool):
+    """
+    Tool for performing combined code search using multiple sub-tools and CrossEncoder reranking.
+    """
+
+    input_schema = CodeSearchToolInputSchema
+    output_schema = CodeSearchToolOutputSchema
+    config_schema = CombinedCodeSearchToolConfig
+
+    def __init__(
+        self,
+        config: CombinedCodeSearchToolConfig | None = None,
+        tools: Optional[list[CodeSearchTool]] = None,
+        debug: bool = False,
+    ):
+        super().__init__(config, debug)
+        self.tools = tools or [
+            LocalRepoCodeSearchTool(debug=debug),
+            GitHubCodeSearchTool(debug=debug),
+            SDECodeSearchTool(debug=debug),
+        ]
+        self.reranker_model = CrossEncoder(config.reranker_model_name)
+
+    async def _arun(
+        self,
+        params: CodeSearchToolInputSchema,
+        **kwargs,
+    ) -> CodeSearchToolOutputSchema:
+        """Run the combined code search tool and aggregate results from all tools."""
+        all_results: list[SearchResultItem] = []
+
+        for tool in self.tools:
+            try:
+                if self.debug:
+                    logger.debug(f"Running tool: {tool.__class__.__name__}")
+                result = await tool._arun(params)
+                for res in result.results:
+                    res.extra["tool"] = tool.__class__.__name__
+                all_results.extend(result.results)
+            except Exception as e:
+                logger.error(f"Error running tool {tool.__class__.__name__}: {e}")
+
+        reranked = self._rerank_results(all_results, params.queries[0])[: params.top_k]
+        return self.output_schema(results=reranked, category="technology")
+
+    def _rerank_results(
+        self, results: list[SearchResultItem], query: str
+    ) -> list[SearchResultItem]:
+        """
+        Rerank results using a CrossEncoder model based on the query and result content.
+        """
+
+        try:
+            # Generate (query, content) pairs
+            pairs = [(query, result.content) for result in results]
+
+            # Get similarity scores from CrossEncoder
+            scores = self.reranker_model.predict(pairs)
+
+            # Attach scores
+            for score, result in zip(scores, results):
+                result.extra["score"] = score
+
+            # Sort results by score
+            return self._sort_results(results, sort_by="score")
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}")
+            return results
 
 
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
@@ -173,7 +247,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
     It automatically downloads the necessary data file if it's not found locally.
     """
 
-    input_schema = LocalRepoCodeSearchToolInputSchema
+    input_schema = CodeSearchToolInputSchema
     output_schema = CodeSearchToolOutputSchema
     config_schema = LocalRepoCodeSearchToolConfig
 
