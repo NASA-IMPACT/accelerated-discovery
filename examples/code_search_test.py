@@ -10,13 +10,11 @@ from akd.tools.code_search import (
     CodeSearchToolInputSchema,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
-    LocalRepoCodeSearchToolInputSchema,
     GitHubCodeSearchTool,
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
     CombinedCodeSearchTool,
     CombinedCodeSearchToolConfig,
-    CombinedCodeSearchToolInputSchema,
 )
 
 
@@ -28,9 +26,7 @@ async def local_repo_search_test():
     cfg = LocalRepoCodeSearchToolConfig()
     tool = LocalRepoCodeSearchTool(config=cfg)
 
-    search_input = LocalRepoCodeSearchToolInputSchema(
-        queries=["landslide nepal"], max_results=5
-    )
+    search_input = CodeSearchToolInputSchema(queries=["landslide nepal"], max_results=5)
 
     print("Running the search...")
     output = await tool._arun(search_input)
@@ -93,7 +89,7 @@ async def combined_code_search_test():
     cfg = CombinedCodeSearchToolConfig()
     tool = CombinedCodeSearchTool(config=cfg)
 
-    search_input = CombinedCodeSearchToolInputSchema(
+    search_input = CodeSearchToolInputSchema(
         queries=["landslide nepal"], max_results=10
     )
 
@@ -110,13 +106,11 @@ async def combined_code_search_test():
 
 
 if __name__ == "__main__":
-    """
     print("Running local repo search test...")
     asyncio.run(local_repo_search_test())
     print("Running GitHub search test...")
     asyncio.run(github_search_test())
     print("Running SDE search test...")
     asyncio.run(sde_search_test())
-    """
     print("Running combined code search test...")
     asyncio.run(combined_code_search_test())

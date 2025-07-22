@@ -32,7 +32,10 @@ class CodeSearchToolInputSchema(SearchToolInputSchema):
     Input schema for the code search tool.
     """
 
-    pass
+    @computed_field
+    def top_k(self) -> int:
+        """Returns the number of top results to return."""
+        return self.max_results
 
 
 class CodeSearchToolOutputSchema(SearchToolOutputSchema):
@@ -140,17 +143,6 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
             return results
 
 
-class CombinedCodeSearchToolInputSchema(CodeSearchToolInputSchema):
-    """
-    Input schema for the combined code search tool.
-    """
-
-    @computed_field
-    def top_k(self) -> int:
-        """Returns the number of top results to return."""
-        return self.max_results
-
-
 class CombinedCodeSearchToolConfig(CodeSearchToolConfig):
     """
     Configuration for the combined code search tool.
@@ -167,7 +159,7 @@ class CombinedCodeSearchTool(CodeSearchTool):
     Tool for performing combined code search using multiple sub-tools and CrossEncoder reranking.
     """
 
-    input_schema = CombinedCodeSearchToolInputSchema
+    input_schema = CodeSearchToolInputSchema
     output_schema = CodeSearchToolOutputSchema
     config_schema = CombinedCodeSearchToolConfig
 
@@ -232,17 +224,6 @@ class CombinedCodeSearchTool(CodeSearchTool):
             return results
 
 
-class LocalRepoCodeSearchToolInputSchema(CodeSearchToolInputSchema):
-    """
-    Input schema for the local repository code search tool.
-    """
-
-    @computed_field
-    def top_k(self) -> int:
-        """Returns the number of top results to return."""
-        return self.max_results
-
-
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
     Configuration for the local repository code search tool.
@@ -266,7 +247,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
     It automatically downloads the necessary data file if it's not found locally.
     """
 
-    input_schema = LocalRepoCodeSearchToolInputSchema
+    input_schema = CodeSearchToolInputSchema
     output_schema = CodeSearchToolOutputSchema
     config_schema = LocalRepoCodeSearchToolConfig
 
