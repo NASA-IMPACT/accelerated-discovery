@@ -2,6 +2,7 @@ import re
 
 import httpx
 from bs4 import BeautifulSoup
+from crawl4ai import AsyncWebCrawler
 from markdownify import markdownify
 from readability import Document
 from requests import HTTPError, RequestException
@@ -152,5 +153,38 @@ class SimpleWebScraper(WebScraper):
 
         return ScraperToolOutputSchema(
             content=markdown_content.strip(),
+            metadata=metadata,
+        )
+
+
+class Crawl4AIWebScraper(WebScraper):
+    async def fetch(self, url: str):
+        async with AsyncWebCrawler() as crawler:
+            return await crawler.arun(url=url)
+
+    async def _arun(
+        self,
+        params: ScraperToolInputSchema,
+        **kwargs,
+    ) -> ScraperToolOutputSchema:
+        """
+        Async version of the run method.
+        """
+        if params.url.path.endswith((".pdf", ".PDF")):
+            raise RuntimeError(f"Can't parse url with PDF :: {params.url}")
+
+        crawl_result = await self.fetch(str(params.url))
+
+        html_content = crawl_result.html
+
+        soup = BeautifulSoup(html_content, "html.parser")
+        metadata = await self._extract_metadata(
+            soup,
+            Document(html_content),
+            str(params.url),
+        )
+
+        return ScraperToolOutputSchema(
+            content=crawl_result.markdown.strip(),
             metadata=metadata,
         )
