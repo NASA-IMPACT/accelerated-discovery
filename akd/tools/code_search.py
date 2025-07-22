@@ -177,14 +177,13 @@ class CombinedCodeSearchTool(CodeSearchTool):
         tools: Optional[list[CodeSearchTool]] = None,
         debug: bool = False,
     ):
-        config = config or self.config_schema()
+        super().__init__(config, debug)
         self.tools = tools or [
             LocalRepoCodeSearchTool(debug=debug),
             GitHubCodeSearchTool(debug=debug),
             SDECodeSearchTool(debug=debug),
         ]
         self.reranker_model = CrossEncoder(config.reranker_model_name)
-        super().__init__(config, debug)
 
     async def _arun(
         self,
