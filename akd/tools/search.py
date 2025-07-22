@@ -19,7 +19,7 @@ from akd.agents.query import (
     QueryAgentInputSchema,
     QueryAgentOutputSchema,
 )
-from akd.structures import SearchResultItem
+from akd.structures import SearchResultItem, PaperDataItem
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.relevancy import EnhancedRelevancyChecker
 
@@ -502,7 +502,7 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = f"{self.config.base_url}/graph/v1/paper/search"
+        search_url = f"{self.config.base_url}graph/v1/paper/search"
         params = {
             "query": query,
             "offset": offset,
@@ -560,6 +560,130 @@ class SemanticScholarSearchTool(
             )
 
         return None
+    
+    def _parse_paper(
+        self,
+        item: Dict[str, Any],
+        doi: Optional[str],
+    ) -> Optional[PaperDataItem]:
+        """Parses a single paper from the Semantic Scholar API response."""
+        if (
+            not item
+            or not item.get("paperId")
+        ):
+            return None 
+        try:
+            paper_item = PaperDataItem(
+                paper_id=item.get("paperId"),
+                corpus_id=item.get("corpusId"),
+                external_ids=item.get("externalIds"),
+                url=item.get("url"),
+                title=item.get("title"),
+                abstract=item.get("abstract"),
+                venue=item.get("venue"),
+                publication_venue=item.get("publicationVenue"),
+                year=item.get("year"),
+                reference_count=item.get("referenceCount"),
+                citation_count=item.get("citationCount"),
+                influential_citation_count=item.get("influentialCitationCount"),
+                is_open_access=item.get("isOpenAccess"),
+                open_access_pdf=item.get("openAccessPdf"),
+                fields_of_study=item.get("fieldsOfStudy"),
+                s2_fields_of_study=item.get("s2FieldsOfStudy"),
+                publication_types=item.get("publicationTypes"),
+                publication_date=item.get("publicationDate"),
+                journal=item.get("journal"),
+                citation_styles=item.get("citationStyles"),
+                authors=item.get("authors"),
+                citations=item.get("citations"),
+                references=item.get("references"),
+                embedding=item.get("embedding"),
+                tldr=item.get("tldr"),
+                doi=doi or None,
+            )
+            if self.debug:
+                logger.debug(
+                    f"Processed paper with DOI {doi}"
+                )
+            return paper_item
+        except Exception as e:
+            logger.debug(
+                f"Could not parse response to paper object for doi {doi}: {str(e)}",
+            )
+    
+    async def _fetch_paper_by_doi(
+        self,
+        session: aiohttp.ClientSession,
+        query: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetches a single page of search results from Semantic Scholar.
+
+        Args:
+            session: The aiohttp session.
+            query: The search query.
+            offset: The starting offset for results.
+            limit: The number of results to fetch for this page.
+
+        Returns:
+            The JSON response dictionary from the API or None if an error occurs.
+        """
+        search_url = f"{self.config.base_url}graph/v1/paper/DOI:{query}"
+        params = {
+            "fields": ",".join(self.config.fields)
+        }
+        headers = {}
+        if self.config.api_key:
+            api_key_value = self.config.api_key
+            if api_key_value:
+                headers["x-api-key"] = api_key_value
+
+        if self.debug:
+            logger.debug(
+                f"Fetching paper details via Semantic Scholar: query='{query}'",
+            )
+            if headers:
+                logger.debug("Using API Key.")
+
+        try:
+            async with session.get(
+                search_url,
+                params=params,
+                headers=headers,
+            ) as response:
+                response.raise_for_status()  # Raise exception for 4xx or 5xx errors
+                data = await response.json()
+                if self.debug:
+                    logger.debug(data)
+                    logger.debug(f"API Response Status: {response.status}")
+                    # Avoid logging full data if it's too large or sensitive
+                    logger.debug(
+                        f"Received {len(data.get('data', []))} items. Total: {data.get('total')}, Offset: {data.get('offset')}, Next: {data.get('next')}",
+                    )
+                return [self._parse_paper(item=data, doi=query)]
+            
+        except aiohttp.ClientResponseError as e:
+            logger.error(
+                f"HTTP Error fetching Semantic Scholar for query '{query}': {e.status} {e.message}",
+            )
+            # Log request details that caused the error
+            logger.error(f"Request URL: {response.url}")
+            logger.error(f"Request Params: {params}")
+            logger.error(f"Response Headers: {response.headers}")
+            try:
+                error_body = await response.text()
+                logger.error(
+                    f"Response Body: {error_body[:500]}",
+                )  # Log part of the body
+            except Exception as read_err:
+                logger.error(f"Could not read error response body: {read_err}")
+
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch Semantic Scholar results for query '{query}': {e}",
+            )
+
+        return []
 
     def _parse_result(
         self,
@@ -577,7 +701,7 @@ class SemanticScholarSearchTool(
             return None  # Skip incomplete results
 
         external_ids = item.get("externalIds") or {}
-        doi = external_ids.pop("DOI")
+        doi = external_ids.get("DOI") # All papers do not have a DOI
 
         # Extract author names if requested and available
         authors = [
@@ -753,7 +877,32 @@ class SemanticScholarSearchTool(
             )
 
         return final_results
+    
+    async def doi_to_paper(self,
+                           params: SemanticScholarSearchToolInputSchema,
+                           **kwargs,
+    )-> list[PaperDataItem]:
+        """
+        Fetches a paper based on it's DOI.
 
+        Args:
+            params: Input parameters including queries and category.
+
+        Returns:
+            List of PaperDataItem objects.
+        """
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                self._fetch_paper_by_doi(
+                    session,
+                    query,
+                )
+                for query in params.queries
+            ]
+            results_per_query = await asyncio.gather(*tasks)
+        results = [item for sublist in results_per_query for item in sublist]
+        return results
+        
     async def _arun(
         self,
         params: SemanticScholarSearchToolInputSchema,
@@ -791,7 +940,7 @@ class SemanticScholarSearchTool(
 
         if self.debug:
             logger.debug(
-                f"Running Semantic Scholar Search: "
+                f"Running Semantic Scholar Search: ",
                 f"final_max_results={final_max_results}, "
                 f"target_per_query={target_results_per_query}, "
                 f"num_queries={len(params.queries)}",
