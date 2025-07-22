@@ -401,8 +401,6 @@ class SemanticScholarSearchToolConfig(BaseToolConfig):
         default=(os.getenv("SEMANTIC_SCHOLAR_API_KEY") or os.getenv("S2_API_KEY")),
     )
     base_url: HttpUrl = Field(default="https://api.semanticscholar.org")
-    endpoint: str = Field(default="search",
-                          description="API endpoint type: 'search', 'doi', or externalID such as 'ARXIV'")
     max_results: int = Field(default=int(os.getenv("SEMANTIC_SCHOLAR_MAX_RESULTS", 10)))
     fields: List[str] = Field(
         default_factory=lambda: [
@@ -464,7 +462,6 @@ class SemanticScholarSearchTool(
         cls,
         api_key: Optional[str] = None,
         base_url: Optional[HttpUrl] = "https://api.semanticscholar.org",
-        endpoint: str = "search",
         max_results: int = 10,
         fields: Optional[List[str]] = None,
         results_per_page: int = 100,
@@ -475,7 +472,6 @@ class SemanticScholarSearchTool(
         config_data = {
             "api_key": api_key or os.getenv("SEMANTIC_SCHOLAR_API_KEY"),
             "base_url": base_url or "https://api.semanticscholar.org",
-            "endpoint": endpoint,
             "max_results": max_results,
             "results_per_page": results_per_page,
             "max_pages_per_query": max_pages_per_query,
@@ -705,7 +701,7 @@ class SemanticScholarSearchTool(
             return None  # Skip incomplete results
 
         external_ids = item.get("externalIds") or {}
-        doi = external_ids.pop("DOI")
+        doi = external_ids.get("DOI") # All papers do not have a DOI
 
         # Extract author names if requested and available
         authors = [
@@ -881,7 +877,32 @@ class SemanticScholarSearchTool(
             )
 
         return final_results
+    
+    async def doi_to_paper(self,
+                           params: SemanticScholarSearchToolInputSchema,
+                           **kwargs,
+    )-> list[PaperDataItem]:
+        """
+        Fetches a paper based on it's DOI.
 
+        Args:
+            params: Input parameters including queries and category.
+
+        Returns:
+            List of PaperDataItem objects.
+        """
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                self._fetch_paper_by_doi(
+                    session,
+                    query,
+                )
+                for query in params.queries
+            ]
+            results_per_query = await asyncio.gather(*tasks)
+        results = [item for sublist in results_per_query for item in sublist]
+        return results
+        
     async def _arun(
         self,
         params: SemanticScholarSearchToolInputSchema,
@@ -920,52 +941,35 @@ class SemanticScholarSearchTool(
         if self.debug:
             logger.debug(
                 f"Running Semantic Scholar Search: ",
-                f"endpoint={self.config.endpoint}, "
                 f"final_max_results={final_max_results}, "
                 f"target_per_query={target_results_per_query}, "
                 f"num_queries={len(params.queries)}",
             )
 
-        if self.config.endpoint == "doi":
-            async with aiohttp.ClientSession() as session:
-                tasks = [
-                    self._fetch_paper_by_doi(
-                        session,
-                        query,
-                    )
-                    for query in params.queries
-                ]
-                results_per_query = await asyncio.gather(*tasks)
-            all_raw_results = [item for sublist in results_per_query for item in sublist]
-            return SemanticScholarSearchToolOutputSchema(
-                results=all_raw_results,
-            )
-        
-        else:
-            async with aiohttp.ClientSession() as session:
-                tasks = [
-                    self._fetch_search_results_paginated(
-                        session,
-                        query,
-                        params.category,
-                        target_results_per_query,
-                    )
-                    for query in params.queries
-                ]
-                results_per_query = await asyncio.gather(*tasks)
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                self._fetch_search_results_paginated(
+                    session,
+                    query,
+                    params.category,
+                    target_results_per_query,
+                )
+                for query in params.queries
+            ]
+            results_per_query = await asyncio.gather(*tasks)
 
-            all_raw_results = [item for sublist in results_per_query for item in sublist]
+        all_raw_results = [item for sublist in results_per_query for item in sublist]
 
-            # Final processing: deduplicate across queries and trim to max_results
-            final_results = await self._process_final_results(
-                all_raw_results,
-                final_max_results,
-            )
+        # Final processing: deduplicate across queries and trim to max_results
+        final_results = await self._process_final_results(
+            all_raw_results,
+            final_max_results,
+        )
 
-            return SemanticScholarSearchToolOutputSchema(
-                results=final_results,
-                category=params.category,  # Pass through the requested category
-            )
+        return SemanticScholarSearchToolOutputSchema(
+            results=final_results,
+            category=params.category,  # Pass through the requested category
+        )
 
 
 class SimpleAgenticLitSearchToolConfig(BaseToolConfig):
