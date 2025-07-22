@@ -1,6 +1,8 @@
 import json
 import re
+from urllib.parse import urlparse
 
+import httpx
 from bs4 import BeautifulSoup
 from pydantic import Field, HttpUrl, computed_field
 from readability import Document
@@ -313,4 +315,53 @@ class WebScraper(ScraperToolBase):
 
 
 class PDFScraper(ScraperToolBase):
-    pass
+    @staticmethod
+    def is_pdf_local(path: str) -> bool:
+        """Checks if a local file path points to a PDF."""
+        val_lower = path.lower()
+        if not val_lower.startswith(("http://", "https://")):
+            return val_lower.endswith(".pdf")
+        return False
+
+    @staticmethod
+    async def is_pdf_remote(url: str) -> bool:
+        """Check if a remote URL points to a PDF."""
+        val_lower = url.lower()
+        try:
+            parsed = urlparse(val_lower)
+            path = parsed.path
+            # Check common PDF URL patterns
+            if path.endswith(".pdf") or "/pdf" in path:
+                return True
+
+            # For uncertain cases, check content-type header
+            async with httpx.AsyncClient() as client:
+                response = await client.head(
+                    url,
+                    timeout=10.0,
+                    follow_redirects=True,
+                )
+                content_type = response.headers.get("content-type", "").lower()
+                return "application/pdf" in content_type
+        except Exception:
+            # Fallback to basic pattern matching if HTTP request fails
+            try:
+                parsed = urlparse(val_lower)
+                return parsed.path.endswith(".pdf") or "/pdf" in parsed.path
+            except Exception:
+                return False
+        return False
+
+    @staticmethod
+    async def is_pdf(val: str) -> bool:
+        """
+        Determines if a URL or file path points to a PDF.
+        Args:
+            val: URL or file path to check
+        Returns:
+            bool: True if the value points to a PDF
+        """
+        val_lower = val.lower()
+        return PDFScraper.is_pdf_local(val_lower) or await PDFScraper.is_pdf_remote(
+            val_lower,
+        )
