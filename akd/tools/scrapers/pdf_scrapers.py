@@ -188,15 +188,29 @@ class SimplePDFScraper(PDFScraper):
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         headers = self.headers
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 async with client.stream("GET", url, headers=headers) as response:
                     response.raise_for_status()
 
+                    # Check content length if provided
+                    content_length = response.headers.get("content-length")
+                    if content_length and int(content_length) > self.max_content_length:
+                        raise RuntimeError(
+                            f"PDF size ({content_length} bytes) exceeds maximum allowed size ({self.max_content_length} bytes)",
+                        )
+
                     logger.debug(f"Downloading PDF at {temp_file.name}")
+                    downloaded_bytes = 0
                     with open(temp_file.name, "wb") as f:
                         async for chunk in response.aiter_bytes(
                             chunk_size=self.chunk_size,
                         ):
+                            downloaded_bytes += len(chunk)
+                            # Safety check: ensure we don't exceed max_content_length
+                            if downloaded_bytes > self.max_content_length:
+                                raise RuntimeError(
+                                    f"Downloaded size ({downloaded_bytes} bytes) exceeds maximum allowed size ({self.max_content_length} bytes)",
+                                )
                             f.write(chunk)
 
             return temp_file.name, temp_file
