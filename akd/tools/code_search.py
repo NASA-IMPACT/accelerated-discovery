@@ -134,13 +134,22 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
             # Using float('inf') for numerical sorting or empty string for string sorting
             return float("-inf")
 
+        # deduplicate results by url
+        seen_urls = set()
+        deduped_results = []
+        for result in results:
+            url = str(result.url)
+            if url not in seen_urls:
+                seen_urls.add(url)
+                deduped_results.append(result)
+
         try:
             # Sort in descending order (highest score first)
             # Change reverse=False if you want ascending order
-            return sorted(results, key=__get_sort_key, reverse=True)
+            return sorted(deduped_results, key=__get_sort_key, reverse=True)
         except TypeError:
             # If sorting fails (mixed types), return as is
-            return results
+            return deduped_results
 
 
 class CombinedCodeSearchToolConfig(CodeSearchToolConfig):
