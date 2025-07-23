@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urljoin
 
@@ -21,12 +22,29 @@ from akd.agents.query import (
     QueryAgentOutputSchema,
 )
 from akd.agents.relevancy import (
+    ContentDepthLabel,
+    EvidenceQualityLabel,
+    MethodologicalRelevanceLabel,
     MultiRubricRelevancyAgent,
     MultiRubricRelevancyInputSchema,
     MultiRubricRelevancyOutputSchema,
+    RecencyRelevanceLabel,
+    ScopeRelevanceLabel,
+    TopicAlignmentLabel,
 )
 from akd.structures import PaperDataItem, SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
+
+
+class QueryFocusStrategy(str, Enum):
+    """Query adaptation strategies based on rubric analysis."""
+
+    REFINE_TOPIC_SPECIFICITY = "refine_topic_specificity"
+    SEARCH_COMPREHENSIVE_REVIEWS = "search_comprehensive_reviews"
+    TARGET_PEER_REVIEWED_SOURCES = "target_peer_reviewed_sources"
+    SEARCH_METHODOLOGICAL_PAPERS = "search_methodological_papers"
+    ADD_RECENT_YEAR_FILTERS = "add_recent_year_filters"
+    ADJUST_QUERY_SCOPE = "adjust_query_scope"
 
 
 class SearchToolInputSchema(InputSchema):
@@ -1005,14 +1023,6 @@ class SimpleAgenticLitSearchToolConfig(BaseToolConfig):
         default=2,
         description="Stop if no rubric improvement for this many iterations.",
     )
-    enable_adaptive_queries: bool = Field(
-        default=True,
-        description="Enable adaptive query generation based on rubric gaps.",
-    )
-    enable_meta_learning: bool = Field(
-        default=True,
-        description="Enable meta-learning from iteration patterns.",
-    )
     debug: bool = Field(
         default=False,
         description="Enable debug logging.",
@@ -1068,9 +1078,6 @@ class SimpleAgenticLitSearchTool(SearchTool):
 
         # Track rubric patterns for agentic learning
         self.rubric_history = []
-        self.iteration_improvements = []
-        self.query_effectiveness = {}  # Track which query types work best for specific rubrics
-        self.successful_patterns = []  # Track successful query-rubric combinations
 
     def _deduplicate_results(
         self,
@@ -1094,24 +1101,25 @@ class SimpleAgenticLitSearchTool(SearchTool):
         """Analyze multi-rubric output to determine positive/negative assessments."""
         analysis = self._RubricAnalysis()
 
-        # Determine positive assessments for each rubric
+        # Determine positive assessments using enum values directly
         analysis.topic_alignment_positive = (
-            rubric_output.topic_alignment.value == "aligned"
+            rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED
         )
         analysis.content_depth_positive = (
-            rubric_output.content_depth.value == "comprehensive"
+            rubric_output.content_depth == ContentDepthLabel.COMPREHENSIVE
         )
         analysis.recency_relevance_positive = (
-            rubric_output.recency_relevance.value == "current"
+            rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT
         )
         analysis.methodological_relevance_positive = (
-            rubric_output.methodological_relevance.value == "methodologically_sound"
+            rubric_output.methodological_relevance
+            == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND
         )
         analysis.evidence_quality_positive = (
-            rubric_output.evidence_quality.value == "high_quality_evidence"
+            rubric_output.evidence_quality == EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE
         )
         analysis.scope_relevance_positive = (
-            rubric_output.scope_relevance.value == "in_scope"
+            rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE
         )
 
         # Count positive rubrics
@@ -1158,92 +1166,124 @@ class SimpleAgenticLitSearchTool(SearchTool):
         self,
         rubric_analysis: "_RubricAnalysis",
         iteration: int,
+        current_result_count: int,
+        desired_max_results: int,
         query: str,
     ) -> tuple[bool, str]:
-        """Make intelligent stopping decision based on multi-rubric analysis."""
+        """Dynamic agentic stopping decision balancing quality, quantity, and adaptivity."""
 
-        # Strong stopping condition: High positive rubric count
-        if rubric_analysis.positive_rubric_count >= self.min_positive_rubrics:
-            return True, (
-                f"STOP: {rubric_analysis.positive_rubric_count}/6 rubrics positive "
-                f"(≥{self.min_positive_rubrics} required). Strong rubrics: {rubric_analysis.strong_rubrics}"
-            )
+        # Calculate progress metrics for dynamic decision making
+        result_progress = (
+            current_result_count / desired_max_results if desired_max_results > 0 else 0
+        )
+        quality_score = rubric_analysis.positive_rubric_count / 6
 
-        # Check for critical weak combinations that should continue
-        critical_weak_rubrics = {"topic_alignment", "evidence_quality"}
-        weak_critical = critical_weak_rubrics.intersection(
-            set(rubric_analysis.weak_rubrics),
+        # Dynamic minimum results threshold (adaptive based on quality)
+        min_results_threshold = max(
+            desired_max_results * 0.3,  # At least 30% of requested
+            min(5, desired_max_results),  # But at least 5 or total requested if less
         )
 
-        if weak_critical and rubric_analysis.positive_rubric_count < 3:
+        # Never stop if we have too few results
+        if current_result_count < min_results_threshold:
             return False, (
-                f"CONTINUE: Critical rubrics weak ({weak_critical}) and only "
-                f"{rubric_analysis.positive_rubric_count}/6 positive. Need improvement in: {rubric_analysis.weak_rubrics}"
+                f"CONTINUE: Need more results ({current_result_count}/{min_results_threshold:.0f} minimum)"
             )
 
-        # Meta-learning: Check for improvement patterns
-        if self.enable_meta_learning and len(self.rubric_history) >= 2:
-            # previous_analysis = self.rubric_history[-2]["analysis"]
-            # improvement = (
-            #     rubric_analysis.positive_rubric_count
-            #     - previous_analysis.positive_rubric_count
-            # )
+        # Dynamic quality threshold - lower if we have many results, higher if few
+        quality_threshold = self.min_positive_rubrics
+        if result_progress > 0.8:  # If we have most requested results
+            quality_threshold = max(
+                2,
+                self.min_positive_rubrics - 1,
+            )  # Lower quality bar
+        elif result_progress < 0.5:  # If we have few results
+            quality_threshold = min(
+                5,
+                self.min_positive_rubrics + 1,
+            )  # Higher quality bar
 
-            # Stop if no improvement for several iterations
-            stagnant_iterations = 0
-            for i in range(
-                len(self.rubric_history) - 1,
-                max(0, len(self.rubric_history) - self.rubric_improvement_threshold),
-                -1,
-            ):
-                if (
-                    i > 0
-                    and self.rubric_history[i]["analysis"].positive_rubric_count
-                    <= self.rubric_history[i - 1]["analysis"].positive_rubric_count
-                ):
-                    stagnant_iterations += 1
-                else:
-                    break
-
-            if stagnant_iterations >= self.rubric_improvement_threshold:
-                return True, (
-                    f"STOP: No rubric improvement for {stagnant_iterations} iterations. "
-                    f"Current: {rubric_analysis.positive_rubric_count}/6 positive"
+        # Adaptive stopping based on quality + quantity balance
+        if rubric_analysis.positive_rubric_count >= quality_threshold:
+            # Good quality achieved
+            if current_result_count >= desired_max_results:
+                return (
+                    True,
+                    f"STOP: Target reached ({current_result_count}/{desired_max_results}) + quality good ({rubric_analysis.positive_rubric_count}/6)",
+                )
+            elif (
+                result_progress >= 0.7 and quality_score >= 0.67
+            ):  # 70% results + 67% quality
+                return (
+                    True,
+                    f"STOP: Sufficient results ({current_result_count}/{desired_max_results}) + excellent quality ({rubric_analysis.positive_rubric_count}/6)",
                 )
 
-        # Moderate case: Continue if potential for improvement
-        if rubric_analysis.positive_rubric_count >= 2:
-            return False, (
-                f"CONTINUE: Moderate progress ({rubric_analysis.positive_rubric_count}/6 positive). "
-                f"Weak areas to improve: {rubric_analysis.weak_rubrics}"
+        # Force stop if we've exceeded target significantly (search overflow protection)
+        if current_result_count >= desired_max_results * 1.5:
+            return (
+                True,
+                f"STOP: Exceeded target ({current_result_count}/{desired_max_results}) - preventing overflow",
             )
 
-        # Weak case: Continue but flag for strategic query changes
-        return False, (
-            f"CONTINUE: Weak results ({rubric_analysis.positive_rubric_count}/6 positive). "
-            f"Major improvements needed in: {rubric_analysis.weak_rubrics}"
-        )
+        # Critical rubrics check - but balanced with results progress
+        critical_rubrics = {"topic_alignment", "evidence_quality"}
+        weak_critical = critical_rubrics.intersection(set(rubric_analysis.weak_rubrics))
+
+        if (
+            weak_critical and result_progress < 0.8
+        ):  # Only block if we don't have most results
+            return False, (
+                f"CONTINUE: Critical rubrics weak ({weak_critical}) + need more results ({current_result_count}/{desired_max_results})"
+            )
+
+        # Adaptive stagnation check - more lenient if we need more results
+        if len(self.rubric_history) >= self.rubric_improvement_threshold:
+            recent_scores = [
+                h["analysis"].positive_rubric_count
+                for h in self.rubric_history[-self.rubric_improvement_threshold :]
+            ]
+            if all(
+                score <= rubric_analysis.positive_rubric_count
+                for score in recent_scores
+            ):
+                # Only stop for stagnation if we have reasonable results or excellent quality
+                if result_progress >= 0.6 or quality_score >= 0.8:
+                    return True, (
+                        f"STOP: No improvement in {self.rubric_improvement_threshold} iterations + {current_result_count}/{desired_max_results} results"
+                    )
+
+        # Continue searching - provide specific guidance
+        if result_progress < 0.5:
+            return (
+                False,
+                f"CONTINUE: Need more results ({current_result_count}/{desired_max_results}) + improving quality ({rubric_analysis.positive_rubric_count}/6)",
+            )
+        else:
+            return (
+                False,
+                f"CONTINUE: Refining quality ({rubric_analysis.positive_rubric_count}/6) with {current_result_count}/{desired_max_results} results",
+            )
 
     def _generate_query_focus_recommendations(
         self,
         rubric_analysis: "_RubricAnalysis",
     ) -> List[str]:
         """Generate query focus recommendations based on weak rubrics."""
-        recommendations = []
+        # Mapping from weak rubrics to query focus strategies
+        rubric_to_strategy = {
+            "topic_alignment": QueryFocusStrategy.REFINE_TOPIC_SPECIFICITY,
+            "content_depth": QueryFocusStrategy.SEARCH_COMPREHENSIVE_REVIEWS,
+            "evidence_quality": QueryFocusStrategy.TARGET_PEER_REVIEWED_SOURCES,
+            "methodological_relevance": QueryFocusStrategy.SEARCH_METHODOLOGICAL_PAPERS,
+            "recency_relevance": QueryFocusStrategy.ADD_RECENT_YEAR_FILTERS,
+            "scope_relevance": QueryFocusStrategy.ADJUST_QUERY_SCOPE,
+        }
 
+        recommendations = []
         for weak_rubric in rubric_analysis.weak_rubrics:
-            if weak_rubric == "topic_alignment":
-                recommendations.append("refine_topic_specificity")
-            elif weak_rubric == "content_depth":
-                recommendations.append("search_comprehensive_reviews")
-            elif weak_rubric == "evidence_quality":
-                recommendations.append("target_peer_reviewed_sources")
-            elif weak_rubric == "methodological_relevance":
-                recommendations.append("search_methodological_papers")
-            elif weak_rubric == "recency_relevance":
-                recommendations.append("add_recent_year_filters")
-            elif weak_rubric == "scope_relevance":
-                recommendations.append("adjust_query_scope")
+            if strategy := rubric_to_strategy.get(weak_rubric):
+                recommendations.append(strategy.value)
 
         return recommendations
 
@@ -1290,20 +1330,14 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 rubric_analysis = self._analyze_rubrics(rubric_result)
                 criteria.rubric_analysis = rubric_analysis
 
-                # Store rubric history for meta-learning
-                if self.enable_meta_learning:
-                    self.rubric_history.append(
-                        {
-                            "iteration": iteration,
-                            "analysis": rubric_analysis,
-                            "query": query,
-                        },
-                    )
+                # Store rubric history for meta-learning (moved to _learn_from_iteration)
 
                 # Agentic stopping decision based on multi-rubric analysis
                 stop_decision, reasoning = self._make_agentic_stopping_decision(
                     rubric_analysis,
                     iteration,
+                    len(all_results),
+                    max_results,
                     query,
                 )
 
@@ -1311,7 +1345,7 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 criteria.reasoning_trace = reasoning
 
                 # Generate query focus recommendations for next iteration
-                if not stop_decision and self.enable_adaptive_queries:
+                if not stop_decision:
                     criteria.recommended_query_focus = (
                         self._generate_query_focus_recommendations(
                             rubric_analysis,
@@ -1383,7 +1417,7 @@ class SimpleAgenticLitSearchTool(SearchTool):
         try:
             # Enhance content with rubric-based guidance
             enhanced_content = accumulated_content
-            if rubric_focus and self.enable_adaptive_queries:
+            if rubric_focus:
                 focus_guidance = self._create_rubric_focus_guidance(rubric_focus)
                 enhanced_content += f"\n\nFOCUS AREAS NEEDED: {focus_guidance}"
 
@@ -1409,8 +1443,8 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 if rubric_focus:
                     logger.debug(f"Applied rubric focus: {rubric_focus}")
 
-            # Apply rubric-based query modifications if enabled
-            if rubric_focus and self.enable_adaptive_queries:
+            # Apply rubric-based query modifications
+            if rubric_focus:
                 adapted_queries = self._adapt_queries_for_rubrics(
                     followup_result.followup_queries,
                     rubric_focus,
@@ -1448,7 +1482,7 @@ class SimpleAgenticLitSearchTool(SearchTool):
         """.strip()
 
         # Add rubric-based focus guidance
-        if rubric_focus and self.enable_adaptive_queries:
+        if rubric_focus:
             focus_guidance = self._create_rubric_focus_guidance(rubric_focus)
             query_instruction += f"\n\nFOCUS AREAS NEEDED: {focus_guidance}"
 
@@ -1461,8 +1495,8 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 ),
             )
 
-            # Apply rubric-based query modifications if enabled
-            if rubric_focus and self.enable_adaptive_queries:
+            # Apply rubric-based query modifications
+            if rubric_focus:
                 adapted_queries = self._adapt_queries_for_rubrics(
                     res.queries,
                     rubric_focus,
@@ -1480,12 +1514,12 @@ class SimpleAgenticLitSearchTool(SearchTool):
     def _create_rubric_focus_guidance(self, rubric_focus: List[str]) -> str:
         """Create human-readable guidance for rubric focus areas."""
         guidance_map = {
-            "refine_topic_specificity": "Make queries more specific to the target topic and domain",
-            "search_comprehensive_reviews": "Look for systematic reviews, meta-analyses, and comprehensive surveys",
-            "target_peer_reviewed_sources": "Focus on high-impact peer-reviewed journals and quality publications",
-            "search_methodological_papers": "Find papers with strong methodological approaches and validation",
-            "add_recent_year_filters": "Prioritize recent publications (last 2-3 years)",
-            "adjust_query_scope": "Refine the scope to match the research question boundaries",
+            QueryFocusStrategy.REFINE_TOPIC_SPECIFICITY.value: "Make queries more specific to the target topic and domain",
+            QueryFocusStrategy.SEARCH_COMPREHENSIVE_REVIEWS.value: "Look for systematic reviews, meta-analyses, and comprehensive surveys",
+            QueryFocusStrategy.TARGET_PEER_REVIEWED_SOURCES.value: "Focus on high-impact peer-reviewed journals and quality publications",
+            QueryFocusStrategy.SEARCH_METHODOLOGICAL_PAPERS.value: "Find papers with strong methodological approaches and validation",
+            QueryFocusStrategy.ADD_RECENT_YEAR_FILTERS.value: "Prioritize recent publications (last 2-3 years)",
+            QueryFocusStrategy.ADJUST_QUERY_SCOPE.value: "Refine the scope to match the research question boundaries",
         }
 
         guidance_list = [guidance_map.get(focus, focus) for focus in rubric_focus]
@@ -1498,12 +1532,12 @@ class SimpleAgenticLitSearchTool(SearchTool):
 
         # Priority order for rubric fixes (most critical first)
         priority_order = [
-            "refine_topic_specificity",  # Most important - improves relevance
-            "target_peer_reviewed_sources",  # High impact - improves quality
-            "search_comprehensive_reviews",  # Good for depth
-            "add_recent_year_filters",  # Simple but effective
-            "search_methodological_papers",  # Specific improvement
-            "adjust_query_scope",  # General fallback
+            QueryFocusStrategy.REFINE_TOPIC_SPECIFICITY.value,  # Most important - improves relevance
+            QueryFocusStrategy.TARGET_PEER_REVIEWED_SOURCES.value,  # High impact - improves quality
+            QueryFocusStrategy.SEARCH_COMPREHENSIVE_REVIEWS.value,  # Good for depth
+            QueryFocusStrategy.ADD_RECENT_YEAR_FILTERS.value,  # Simple but effective
+            QueryFocusStrategy.SEARCH_METHODOLOGICAL_PAPERS.value,  # Specific improvement
+            QueryFocusStrategy.ADJUST_QUERY_SCOPE.value,  # General fallback
         ]
 
         # Return top 2-3 priorities to avoid complexity
@@ -1522,17 +1556,6 @@ class SimpleAgenticLitSearchTool(SearchTool):
         rubric_focus: List[str],
     ) -> List[str]:
         """Apply rubric-specific adaptations to queries with smart prioritization."""
-        adapted_queries = []
-
-        # Get learned adaptations first
-        learned_adaptations = self._get_learned_query_adaptations(rubric_focus)
-        if learned_adaptations:
-            if self.debug:
-                logger.debug(
-                    f"Applying learned query adaptations: {learned_adaptations}",
-                )
-            adapted_queries.extend(learned_adaptations[:1])  # Limit learned adaptations
-
         # Prioritize focus areas to avoid over-complexity
         prioritized_focus = self._prioritize_rubric_focus(rubric_focus)
 
@@ -1541,6 +1564,7 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 f"Prioritized rubric focus (from {len(rubric_focus)} to {len(prioritized_focus)}): {prioritized_focus}",
             )
 
+        adapted_queries = []
         for i, query in enumerate(queries):
             # Apply different adaptations to different queries for variety
             focus_for_this_query = (
@@ -1574,23 +1598,23 @@ class SimpleAgenticLitSearchTool(SearchTool):
 
     def _apply_single_focus_adaptation(self, query: str, focus: str) -> str:
         """Apply a single, clean adaptation based on rubric focus."""
-        if focus == "refine_topic_specificity":
+        if focus == QueryFocusStrategy.REFINE_TOPIC_SPECIFICITY.value:
             # Make query more specific without complex syntax
             return f"{query} specific detailed"
 
-        elif focus == "search_comprehensive_reviews":
+        elif focus == QueryFocusStrategy.SEARCH_COMPREHENSIVE_REVIEWS.value:
             return f"{query} review OR survey OR meta-analysis"
 
-        elif focus == "target_peer_reviewed_sources":
+        elif focus == QueryFocusStrategy.TARGET_PEER_REVIEWED_SOURCES.value:
             return f"{query} journal peer-reviewed"
 
-        elif focus == "search_methodological_papers":
+        elif focus == QueryFocusStrategy.SEARCH_METHODOLOGICAL_PAPERS.value:
             return f"{query} methodology approach"
 
-        elif focus == "add_recent_year_filters":
+        elif focus == QueryFocusStrategy.ADD_RECENT_YEAR_FILTERS.value:
             return f"{query} 2020..2025"
 
-        elif focus == "adjust_query_scope":
+        elif focus == QueryFocusStrategy.ADJUST_QUERY_SCOPE.value:
             return f'"{query}" specific'
 
         return query
@@ -1601,59 +1625,43 @@ class SimpleAgenticLitSearchTool(SearchTool):
         queries: List[str],
         rubric_analysis: "_RubricAnalysis",
     ):
-        """Learn from iteration results to improve future query generation."""
-        if not self.enable_meta_learning:
-            return
-
-        # Track query effectiveness for each rubric
-        for query in queries:
-            query_key = query.lower()[:50]  # Use first 50 chars as key
-            if query_key not in self.query_effectiveness:
-                self.query_effectiveness[query_key] = {
-                    "rubric_improvements": {},
-                    "usage_count": 0,
-                    "avg_positive_rubrics": 0.0,
-                }
-
-            self.query_effectiveness[query_key]["usage_count"] += 1
-            self.query_effectiveness[query_key]["avg_positive_rubrics"] = (
-                self.query_effectiveness[query_key]["avg_positive_rubrics"]
-                * (self.query_effectiveness[query_key]["usage_count"] - 1)
-                + rubric_analysis.positive_rubric_count
-            ) / self.query_effectiveness[query_key]["usage_count"]
-
-        # Track successful patterns (4+ positive rubrics)
-        if rubric_analysis.positive_rubric_count >= 4:
-            pattern = {
+        """Simple learning: just track rubric history for trend analysis."""
+        self.rubric_history.append(
+            {
                 "iteration": iteration,
-                "queries": queries,
-                "positive_rubrics": rubric_analysis.strong_rubrics,
-                "rubric_count": rubric_analysis.positive_rubric_count,
-            }
-            self.successful_patterns.append(pattern)
+                "analysis": rubric_analysis,
+                "query": " AND ".join(queries),
+            },
+        )
 
-            if self.debug:
-                logger.debug(f"Recorded successful pattern: {pattern}")
+    def _calculate_dynamic_batch_size(self, iteration: int, previous_criteria) -> int:
+        """Calculate adaptive batch size based on rubric performance."""
+        base_size = self.max_results_per_iteration
 
-    def _get_learned_query_adaptations(self, rubric_focus: List[str]) -> List[str]:
-        """Get query adaptations based on learned patterns."""
-        if not self.enable_meta_learning or not self.successful_patterns:
-            return []
+        # First iteration uses base size
+        if iteration <= 1:
+            return base_size
 
-        adaptations = []
+        # If we have rubric analysis from previous iteration
+        if (
+            hasattr(previous_criteria, "rubric_analysis")
+            and previous_criteria.rubric_analysis
+        ):
+            rubric_count = previous_criteria.rubric_analysis.positive_rubric_count
 
-        # Find successful patterns that addressed similar rubric weaknesses
-        for pattern in self.successful_patterns:
-            if any(
-                focus.replace("_", " ") in " ".join(pattern["queries"])
-                for focus in rubric_focus
-            ):
-                # Extract successful query elements
-                for query in pattern["queries"]:
-                    if len(query) > 20:  # Avoid very short queries
-                        adaptations.append(query)
+            # If doing very poorly (0-1 positive rubrics), search more aggressively
+            if rubric_count <= 1:
+                return min(base_size * 2, 20)  # Double the search, cap at 20
 
-        return adaptations[:2]  # Return top 2 learned adaptations
+            # If doing poorly (2 positive rubrics), search slightly more
+            elif rubric_count == 2:
+                return int(base_size * 1.5)
+
+            # If doing well (4+ positive rubrics), can be more conservative
+            elif rubric_count >= 4:
+                return max(base_size // 2, 5)  # Half the search, minimum 5
+
+        return base_size
 
     async def _arun(
         self,
@@ -1680,7 +1688,9 @@ class SimpleAgenticLitSearchTool(SearchTool):
             iteration += 1
 
             remaining_needed = desired_max_results - len(all_results)
-            search_limit = min(remaining_needed, params.max_results)
+            # Dynamic batch sizing: adjust based on previous rubric performance
+            dynamic_batch_size = self._calculate_dynamic_batch_size(iteration, criteria)
+            search_limit = min(remaining_needed, dynamic_batch_size)
 
             current_queries = params.queries
             if iteration > 0:
