@@ -23,6 +23,7 @@ from akd.structures import SearchResultItem, PaperDataItem
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.relevancy import EnhancedRelevancyChecker
 
+from urllib.parse import urljoin
 
 class SearchToolInputSchema(InputSchema):
     """
@@ -502,7 +503,7 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = f"{self.config.base_url}graph/v1/paper/search"
+        search_url = urljoin(self.config.base_url, "graph/v1/paper/search")
         params = {
             "query": query,
             "offset": offset,
@@ -628,7 +629,7 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = f"{self.config.base_url}graph/v1/paper/DOI:{query}"
+        search_url = urljoin(self.config.base_url, "graph/v1/paper/search")
         params = {
             "fields": ",".join(self.config.fields)
         }
