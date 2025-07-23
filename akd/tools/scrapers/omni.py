@@ -54,7 +54,6 @@ class OmniScraper(WebScraper, PDFScraper):
 
 class DoclingScraperConfig(ScraperToolConfig):
     pdf_mode: Literal["accurate", "fast"] = Field(default="fast")
-    export_type: Literal["markdown", "html"] = Field(default="markdown")
     analyze_image: bool = Field(
         default=False,
         description="Use VML to analyze image? (might slow down the parse)",
@@ -191,8 +190,13 @@ class DoclingScraper(OmniScraper):
         Full round-trip: fetch doc, export to markdown, clean, and build metadata (docling doesn't support metadata extraction).
         """
         doc = await self._get_docling_document(path)
-        markdown = doc.export_to_markdown()
-        markdown = await self._clean_markdown(markdown)
+
+        content = ""
+        if self.export_type == "html":
+            content = doc.export_to_html()
+        else:
+            content = doc.export_to_markdown()
+            content = await self._clean_markdown(content)
 
         _docling_metadata = await self._metadata_extractor.arun(doc)
 
@@ -201,7 +205,7 @@ class DoclingScraper(OmniScraper):
             query=path,
             title=_docling_metadata.title,
         )
-        return markdown, metadata
+        return content, metadata
 
     async def _arun(
         self,
@@ -216,8 +220,8 @@ class DoclingScraper(OmniScraper):
         if path.startswith("file://"):
             path = unquote(params.url.path)
         try:
-            md, meta = await self._process_document(path)
-            return ScraperToolOutputSchema(content=md, metadata=meta)
+            content, meta = await self._process_document(path)
+            return ScraperToolOutputSchema(content=content, metadata=meta)
 
         except FileNotFoundError as e:
             # local file was missing

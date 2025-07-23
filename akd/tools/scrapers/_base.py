@@ -2,7 +2,7 @@ import json
 import os
 import re
 import tempfile
-from typing import Tuple
+from typing import Literal, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -61,6 +61,10 @@ class ScraperToolConfig(BaseToolConfig):
     max_content_length: int = Field(
         default=100_000_000,
         description="Maximum content length in bytes to process.",
+    )
+    export_type: Literal["markdown", "html"] = Field(
+        default="markdown",
+        description="Format to export the scraped content.",
     )
     debug: bool = Field(
         default=True,
