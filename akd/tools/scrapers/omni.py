@@ -1,5 +1,6 @@
 import re
 from typing import Any, Literal, Tuple
+from urllib.parse import unquote
 
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
@@ -10,7 +11,7 @@ from docling.document_converter import (
 )
 from docling_core.types import DoclingDocument
 from loguru import logger
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, FilePath, FileUrl, HttpUrl, field_validator, model_validator
 
 from ._base import (
     PDFScraper,
@@ -23,12 +24,30 @@ from ._base import (
 from .utils import _DoclingMetadataExtractor
 
 
+class OmniScraperInputSchema(ScraperToolInputSchema):
+    """
+    Input schema for OmniScraper tools, extending the base scraper input schema.
+    """
+
+    url: HttpUrl | FilePath | FileUrl = Field(
+        ...,
+        description="The URL of the document to scrape.",
+    )
+
+
+class OmniScrapedMetadata(ScrapedMetadata):
+    url: HttpUrl | FilePath | FileUrl = Field(
+        ...,
+        description="The URL or file path of the scraped document.",
+    )
+
+
 class OmniScraper(WebScraper, PDFScraper):
     """
     Base class for OmniScraper tools, combining web scraping and PDF scraping capabilities.
     """
 
-    input_schema = ScraperToolInputSchema
+    input_schema = OmniScraperInputSchema
     output_schema = ScraperToolOutputSchema
     config_schema = ScraperToolConfig
 
@@ -167,7 +186,7 @@ class DoclingScraper(OmniScraper):
     async def _process_document(
         self,
         path: str,
-    ) -> Tuple[str, ScrapedMetadata]:
+    ) -> Tuple[str, OmniScrapedMetadata]:
         """
         Full round-trip: fetch doc, export to markdown, clean, and build metadata (docling doesn't support metadata extraction).
         """
@@ -177,7 +196,7 @@ class DoclingScraper(OmniScraper):
 
         _docling_metadata = await self._metadata_extractor.arun(doc)
 
-        metadata = ScrapedMetadata(
+        metadata = OmniScrapedMetadata(
             url=path,
             query=path,
             title=_docling_metadata.title,
@@ -186,7 +205,7 @@ class DoclingScraper(OmniScraper):
 
     async def _arun(
         self,
-        params: ScraperToolInputSchema,
+        params: OmniScraperInputSchema,
         **kwargs,
     ) -> ScraperToolOutputSchema:
         """
@@ -194,6 +213,8 @@ class DoclingScraper(OmniScraper):
         Returns cleaned markdown + metadata, or raises a descriptive error.
         """
         path = str(params.url)
+        if path.startswith("file://"):
+            path = unquote(params.url.path)
         try:
             md, meta = await self._process_document(path)
             return ScraperToolOutputSchema(content=md, metadata=meta)
