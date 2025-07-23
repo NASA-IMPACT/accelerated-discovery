@@ -1,12 +1,8 @@
 import os
 import re
-import tempfile
-from typing import Tuple
 from urllib.parse import unquote
 
 import fitz
-import httpx
-from loguru import logger
 from markdownify import markdownify
 from pydantic import AnyUrl, Field, field_validator
 
@@ -166,57 +162,6 @@ class SimplePDFScraper(PDFScraper):
         if self._is_url(path):
             return path
         return f"file://{os.path.abspath(path)}"
-
-    async def _download_pdf_from_url(
-        self,
-        url: str,
-    ) -> Tuple[str, tempfile.NamedTemporaryFile]:
-        """
-        Downloads a PDF from a URL and returns the path to the temporary file.
-
-        Args:
-            url: The URL of the PDF to download
-
-        Returns:
-            tuple[str, tempfile.NamedTemporaryFile]:
-                containing the local path to the downloaded file
-                and the temporary file object
-
-        Raises:
-            RuntimeError: If there is an error downloading the PDF
-        """
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        headers = self.headers
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                async with client.stream("GET", url, headers=headers) as response:
-                    response.raise_for_status()
-
-                    # Check content length if provided
-                    content_length = response.headers.get("content-length")
-                    if content_length and int(content_length) > self.max_content_length:
-                        raise RuntimeError(
-                            f"PDF size ({content_length} bytes) exceeds maximum allowed size ({self.max_content_length} bytes)",
-                        )
-
-                    logger.debug(f"Downloading PDF at {temp_file.name}")
-                    downloaded_bytes = 0
-                    with open(temp_file.name, "wb") as f:
-                        async for chunk in response.aiter_bytes(
-                            chunk_size=self.chunk_size,
-                        ):
-                            downloaded_bytes += len(chunk)
-                            # Safety check: ensure we don't exceed max_content_length
-                            if downloaded_bytes > self.max_content_length:
-                                raise RuntimeError(
-                                    f"Downloaded size ({downloaded_bytes} bytes) exceeds maximum allowed size ({self.max_content_length} bytes)",
-                                )
-                            f.write(chunk)
-
-            return temp_file.name, temp_file
-        except Exception as e:
-            os.unlink(temp_file.name)
-            raise RuntimeError(f"Error downloading PDF from URL: {e}")
 
     async def _process_pdf(self, path: str) -> tuple[str, ScrapedMetadata]:
         """
