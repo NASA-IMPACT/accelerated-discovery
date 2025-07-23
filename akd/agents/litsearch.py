@@ -15,8 +15,6 @@ from akd.tools.scrapers.web_scrapers import (
     WebScraperToolBase,
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
-
-# --- MODIFIED: Re-importing the TextSplitterTool and its schema ---
 from akd.tools.text_splitter import TextSplitterInputSchema, TextSplitterTool
 from akd.tools.vector_db_tool import VectorDBTool
 
