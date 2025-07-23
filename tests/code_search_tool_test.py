@@ -11,12 +11,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 from akd.tools.misc import Embedder
-from akd.tools.search import SearxNGSearchToolConfig, SearxNGSearchToolInputSchema
+from akd.tools.search import SearxNGSearchToolConfig
 from akd.tools.code_search import (
     CodeSearchToolInputSchema,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
-    LocalRepoCodeSearchToolInputSchema,
     GitHubCodeSearchTool,
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
@@ -99,7 +98,7 @@ def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
 
 @pytest.mark.asyncio
 async def test_local_repo_search(local_tool):
-    input_params = LocalRepoCodeSearchToolInputSchema(
+    input_params = CodeSearchToolInputSchema(
         queries=["landslide nepal"],
         max_results=3,
     )
