@@ -54,6 +54,8 @@ class ScraperToolOutputSchema(OutputSchema):
 class ScraperToolConfig(BaseToolConfig):
     """Configuration for the ScraperTool."""
 
+    # model_config = ConfigDict(extra="allow")
+
     timeout: int = Field(
         default=30,
         description="Timeout in seconds for HTTP requests.",
@@ -66,9 +68,15 @@ class ScraperToolConfig(BaseToolConfig):
         default="markdown",
         description="Format to export the scraped content.",
     )
+
     debug: bool = Field(
         default=True,
         description="Boolean flag for debug mode",
+    )
+
+    user_agent: str = Field(
+        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        description="User agent string to use for requests.",
     )
 
 

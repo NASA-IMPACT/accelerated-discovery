@@ -24,8 +24,8 @@ from akd.tools.search import SearxNGSearchTool
 
 async def main(args):
     lit_agent_config = get_lit_agent_settings(args.config)
-    search_config = lit_agent_config.search
-    scraper_config = lit_agent_config.scraper
+    search_config = lit_agent_config.search.model_dump()
+    scraper_config = lit_agent_config.scraper.model_dump()
 
     search_tool = SearxNGSearchTool(config=search_config)
 

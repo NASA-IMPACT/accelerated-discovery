@@ -8,11 +8,11 @@ from akd._base import InputSchema, OutputSchema
 from akd.agents import BaseAgent
 from akd.structures import ExtractionDTO
 from akd.tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
+from akd.tools.scrapers._base import ScrapedMetadata
 from akd.tools.scrapers.web_scrapers import (
-    WebpageMetadata,
-    WebpageScraperToolInputSchema,
-    WebpageScraperToolOutputSchema,
-    WebScraperToolBase,
+    ScraperToolInputSchema,
+    ScraperToolOutputSchema,
+    WebScraper,
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
 from akd.tools.evaluator.base_evaluator import (
@@ -64,7 +64,7 @@ class LitAgent(BaseAgent):
         query_agent: QueryAgent,
         extraction_agent: EstimationExtractionAgent,
         search_tool: SearxNGSearchTool,
-        web_scraper: WebScraperToolBase,
+        web_scraper: WebScraper,
         article_resolver: BaseArticleResolver,
         n_queries: int = 3,
         debug: bool = False,
@@ -132,13 +132,13 @@ class LitAgent(BaseAgent):
             url = resolver_output.url
             try:
                 scraped_content = await self.web_scraper.arun(
-                    WebpageScraperToolInputSchema(url=url),
+                    ScraperToolInputSchema(url=url),
                 )
             except Exception:
                 logger.warning("Fallback to search result content, not webpage")
-                scraped_content = WebpageScraperToolOutputSchema(
+                scraped_content = ScraperToolOutputSchema(
                     content=result.content,
-                    metadata=WebpageMetadata(**result.model_dump()),
+                    metadata=ScrapedMetadata(**result.model_dump()),
                 )
 
             content = scraped_content.content or result.content

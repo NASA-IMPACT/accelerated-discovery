@@ -1,10 +1,7 @@
-import json
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 from deepeval.metrics import BaseMetric, GEval
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
-from pydantic import Field
-from akd.tools.search import SimpleAgenticLitSearchToolConfig
+from pydantic import Field, ConfigDict
 from .._base import BaseTool, BaseToolConfig, InputSchema, OutputSchema
 from .preset_evaluators import (
     usefulness,
@@ -17,6 +14,8 @@ from .preset_evaluators import (
 
 # from deepeval import Evaluator, SomeMetric
 class LLMEvaluatorInputSchema(InputSchema):
+    """Input schema for the LLMEvaluator"""
+
     input: str
     output: str
     # TODO: implement reference output checking
@@ -24,12 +23,15 @@ class LLMEvaluatorInputSchema(InputSchema):
 
 
 class SingleEvaluationOutputSchema(OutputSchema):
+    """Output schema for a single evaluation result, subset of the LLMEvaluator output"""
+
     score: float
     reason: str
     metric: str
 
 
 class LLMEvaluatorOutputSchema(OutputSchema):
+    """Output schema for LLMEvaluator"""
 
     score: float
     evaluations: List[SingleEvaluationOutputSchema]
@@ -43,6 +45,8 @@ class LLMEvaluatorConfig(BaseToolConfig):
     Configuration class for LLMEvaluator.
     This class can be extended to add evaluator-specific configurations.
     """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     default_metrics: List[BaseMetric] = Field(
         default_factory=lambda: [
@@ -83,7 +87,10 @@ class LLMEvaluator(BaseTool):
         config: LLMEvaluatorConfig | None = None,
         debug: bool = False,
     ):
-        """ """
+        """
+        Modular evaluator for LLM outputs using configurable criteria and deepeval metrics.
+        Loads criteria from a JSON file and exposes an evaluate method for integration.
+        """
         self.config = config or LLMEvaluatorConfig(debug=debug)
         super().__init__(config=self.config)
 

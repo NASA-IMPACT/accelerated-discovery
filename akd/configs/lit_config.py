@@ -5,13 +5,13 @@ import tomllib
 from pydantic import ValidationError
 from pydantic_settings import BaseSettings
 
-from akd.tools.scrapers.web_scrapers import WebpageScraperToolConfig
+from akd.tools.scrapers._base import ScraperToolConfig
 from akd.tools.search import SearxNGSearchToolConfig
 
 
 class LitAgentSettings(BaseSettings):
     search: SearxNGSearchToolConfig
-    scraper: WebpageScraperToolConfig
+    scraper: ScraperToolConfig
 
     @classmethod
     def from_toml(cls, toml_file_path: str) -> LitAgentSettings:
