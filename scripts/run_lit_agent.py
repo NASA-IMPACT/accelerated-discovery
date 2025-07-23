@@ -2,10 +2,7 @@ import argparse
 import asyncio
 import json
 
-import openai
 from loguru import logger
-from pydantic import ConfigDict
-from langchain_openai import ChatOpenAI
 
 from akd.agents.extraction import (
     EstimationExtractionAgent,
@@ -14,25 +11,23 @@ from akd.agents.extraction import (
 from akd.agents.factory import create_query_agent
 from akd.agents.intents import IntentAgent
 from akd.agents.litsearch import LitAgent, LitAgentInputSchema
-from akd.configs.lit_config import get_lit_agent_settings
-from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
+from akd.tools.scrapers.composite import CompositeScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
 from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
 from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
-from akd.tools.search import SearxNGSearchTool
+from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolConfig
+from akd.tools.text_splitter import TextSplitterTool
+from akd.tools.vector_db_tool import VectorDBTool, VectorDBToolConfig
 
 
 async def main(args):
-    lit_agent_config = get_lit_agent_settings(args.config)
-    search_config = lit_agent_config.search
-    scraper_config = lit_agent_config.scraper
-
+    search_config = SearxNGSearchToolConfig(max_results=3)
     search_tool = SearxNGSearchTool(config=search_config)
 
-    scraper = CompositeWebScraper(
-        SimpleWebScraper(scraper_config),
-        Crawl4AIWebScraper(scraper_config),
-        SimplePDFScraper(scraper_config),
+    scraper = CompositeScraper(
+        SimpleWebScraper(),
+        Crawl4AIWebScraper(),
+        SimplePDFScraper(),
         debug=True,
     )
 
@@ -42,11 +37,15 @@ async def main(args):
         IdentityResolver(),
     )
 
-    intent_agent = IntentAgent(
-        config=ConfigDict(client=ChatOpenAI()),
+    text_splitter = TextSplitterTool()
+    vector_db_config = VectorDBToolConfig(
+        collection_name="lit_agent_demo",
     )
+    vector_db_tool = VectorDBTool(config=vector_db_config)
 
+    intent_agent = IntentAgent()
     query_agent = create_query_agent()
+
     schema_mapper = IntentBasedExtractionSchemaMapper()
     extraction_agent = EstimationExtractionAgent()
 
@@ -58,12 +57,14 @@ async def main(args):
         search_tool=search_tool,
         web_scraper=scraper,
         article_resolver=article_resolver,
+        text_splitter=text_splitter,
+        vector_db_tool=vector_db_tool,
     )
 
     lit_agent.clear_history()
 
     result = await lit_agent.arun(
-        LitAgentInputSchema(query=args.query, max_search_results=5)
+        LitAgentInputSchema(query=args.query, max_search_results=5),
     )
     logger.info(result.model_dump())
 
