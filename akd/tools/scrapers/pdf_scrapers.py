@@ -75,7 +75,14 @@ class PDFScraperInputSchema(ScraperToolInputSchema):
 
 
 class PDFScraperToolConfig(WebScraperToolConfig):
-    pass
+    chunk_size: int = Field(
+        8192,
+        description="The size of each chunk of PDF to process while downloading the PDF (in bytes).",
+    )
+    accept_header: str = Field(
+        default="application/pdf,application/octet-stream,text/html,application/xhtml+xml,*/*;q=0.8",
+        description="Accept header for HTTP requests with PDF as primary target.",
+    )
 
 
 class SimplePDFScraper(PDFScraper):
@@ -179,10 +186,7 @@ class SimplePDFScraper(PDFScraper):
             RuntimeError: If there is an error downloading the PDF
         """
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        headers = {
-            "User-Agent": self.user_agent,
-            "Accept": "application/pdf",
-        }
+        headers = self.headers
         try:
             async with httpx.AsyncClient() as client:
                 async with client.stream("GET", url, headers=headers) as response:
@@ -190,7 +194,9 @@ class SimplePDFScraper(PDFScraper):
 
                     logger.debug(f"Downloading PDF at {temp_file.name}")
                     with open(temp_file.name, "wb") as f:
-                        async for chunk in response.aiter_bytes(chunk_size=8192):
+                        async for chunk in response.aiter_bytes(
+                            chunk_size=self.chunk_size,
+                        ):
                             f.write(chunk)
 
             return temp_file.name, temp_file
