@@ -1,35 +1,59 @@
-import json
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 from deepeval.metrics import BaseMetric, GEval
-from deepeval.test_case import LLMTestCase, LLMTestCaseParams
-from pydantic import Field
-from akd.tools.search import SimpleAgenticLitSearchToolConfig
+from deepeval.test_case import LLMTestCaseParams
+from pydantic import Field, model_validator
+from typing_extensions import Self
+
+from akd.tools.search import SearchResultItem
+
 from .._base import BaseTool, BaseToolConfig, InputSchema, OutputSchema
+from .custom_deepeval_extensions import LLMTestCaseGuardian
 from .preset_evaluators import (
-    usefulness,
-    faithfulness,
-    completeness,
     accuracy,
+    completeness,
+    faithfulness,
     timeliness,
+    usefulness,
 )
 
 
 # from deepeval import Evaluator, SomeMetric
 class LLMEvaluatorInputSchema(InputSchema):
+    """
+    Input schema for Evaluator tool
+    """
+
     input: str
     output: str
+    search_result: SearchResultItem
     # TODO: implement reference output checking
     reference: Optional[str] = None
 
+    @model_validator(mode="after")
+    def check_mutually_exclusive_fields(self) -> Self:
+        if self.search_result:
+            if self.input or self.output:
+                raise ValueError(
+                    "If 'search_result' is provided, 'input' and 'output' must not be provided.",
+                )
+        return self
+
 
 class SingleEvaluationOutputSchema(OutputSchema):
+    """
+    Output schema single evaluation
+    """
+
     score: float
     reason: str
     metric: str
 
 
 class LLMEvaluatorOutputSchema(OutputSchema):
+    """
+    Output schema for Evaluator tool
+    """
 
     score: float
     evaluations: List[SingleEvaluationOutputSchema]
@@ -59,16 +83,20 @@ class LLMEvaluatorConfig(BaseToolConfig):
         description="List of custom metrics to use for evaluation. Each metric should be a dictionary with the necessary parameters.",
     )
     threshold: float = Field(
-        default=0.5, description="Default threshold for evaluation success"
+        default=0.5,
+        description="Default threshold for evaluation success",
     )
     debug: bool = Field(
         default=False,
         description="Enable debug logging.",
     )
 
+    model_config = {
+        "arbitrary_types_allowed": True,
+    }
+
 
 class LLMEvaluator(BaseTool):
-
     input_schema = LLMEvaluatorInputSchema
     output_schema = LLMEvaluatorOutputSchema
     config_schema = LLMEvaluatorConfig
@@ -112,7 +140,14 @@ class LLMEvaluator(BaseTool):
 
     async def _arun(self, params: LLMEvaluatorInputSchema) -> LLMEvaluatorOutputSchema:
         """ """
-        test_case = LLMTestCase(input=params.input, actual_output=params.output)
+
+        if not params.search_result:
+            test_case = LLMTestCaseGuardian(
+                input=params.input,
+                actual_output=params.output,
+            )
+        else:
+            test_case = LLMTestCaseGuardian(search_result=params.search_result)
 
         for metric in self.metrics:
             metric.measure(test_case)
@@ -124,7 +159,9 @@ class LLMEvaluator(BaseTool):
             success=avg_score >= self.threshold,
             evaluations=[
                 SingleEvaluationOutputSchema(
-                    score=metric.score, reason=metric.reason, metric=metric.name
+                    score=metric.score,
+                    reason=metric.reason,
+                    metric=metric.name,
                 )
                 for metric in self.metrics
             ],

@@ -1,9 +1,18 @@
-from deepeval.metrics.dag import (
-    DeepAcyclicGraph,
-    BinaryJudgementNode,
-    VerdictNode,
-)
 from deepeval.metrics import DAGMetric
+from deepeval.metrics.dag import BinaryJudgementNode, DeepAcyclicGraph, VerdictNode
+
+from akd.tools.granite_guardian_tool import (
+    GraniteGuardianTool,
+    GraniteGuardianToolConfig,
+    GuardianModelID,
+    OllamaType,
+    RiskDefinition,
+)
+
+from .custom_deepeval_extensions import (
+    GraniteGuardianBinaryNode,
+    LLMTestCaseParamsGuardian,
+)
 
 usefulness_5 = BinaryJudgementNode(
     label="Usefullness 5",
@@ -203,6 +212,22 @@ timeliness_1 = BinaryJudgementNode(
     children=[
         VerdictNode(verdict=False, score=0),
         VerdictNode(verdict=True, child=timeliness_2),
+    ],
+)
+
+answer_relevance_guardian_node = GraniteGuardianBinaryNode(
+    criteria=RiskDefinition.ANSWER_RELEVANCE,
+    evaluation_params=[LLMTestCaseParamsGuardian.SEARCH_RESULT],
+    granite_guardian_tool=GraniteGuardianTool(
+        config=GraniteGuardianToolConfig(
+            model=GuardianModelID.GUARDIAN_8B,
+            default_risk_type=RiskDefinition.ANSWER_RELEVANCE,
+            ollama_type=OllamaType.CHAT,
+        ),
+    ),
+    children=[
+        VerdictNode(verdict=False, score=0),
+        VerdictNode(verdict=True, score=10),
     ],
 )
 
