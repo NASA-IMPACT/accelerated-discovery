@@ -76,8 +76,10 @@ class SearxNGSearchToolInputSchema(SearchToolInputSchema):
     Schema for input to a tool for searching for information,
     news, references, and other content.
     """
-
-    pass
+    category: Optional[Literal["general", "science", "technology"]] = Field(
+        default=None,
+        description="Category of the search queries. If None, no category is used.",
+    )
 
 
 class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
