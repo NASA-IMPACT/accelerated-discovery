@@ -99,14 +99,13 @@ class LLMEvaluator(BaseTool):
                         LLMTestCaseParams.ACTUAL_OUTPUT,
                     ],
                 )
-                for m in config.custom_metrics
+                for m in self.config.custom_metrics
             ]
             if self.config.custom_metrics
             else self.config.default_metrics
-
-            self.threshold = config.threshold
-
         )
+
+        self.threshold = self.config.threshold
 
     async def _arun(self, params: LLMEvaluatorInputSchema) -> LLMEvaluatorOutputSchema:
         """ """
