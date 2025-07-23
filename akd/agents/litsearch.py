@@ -1,5 +1,6 @@
 from typing import List
 
+from langchain_core.documents import Document
 from loguru import logger
 from pydantic import Field
 
@@ -14,6 +15,10 @@ from akd.tools.scrapers.web_scrapers import (
     WebScraperToolBase,
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
+
+# --- MODIFIED: Re-importing the TextSplitterTool and its schema ---
+from akd.tools.text_splitter import TextSplitterInputSchema, TextSplitterTool
+from akd.tools.vector_db_tool import VectorDBTool
 
 from .extraction import (
     EstimationExtractionAgent,
@@ -60,6 +65,8 @@ class LitAgent(BaseAgent):
         search_tool: SearxNGSearchTool,
         web_scraper: WebScraperToolBase,
         article_resolver: BaseArticleResolver,
+        text_splitter: TextSplitterTool,
+        vector_db_tool: VectorDBTool,
         n_queries: int = 3,
         debug: bool = False,
     ) -> None:
@@ -71,9 +78,18 @@ class LitAgent(BaseAgent):
         self.search_tool = search_tool
         self.web_scraper = web_scraper
         self.article_resolver = article_resolver
+        self.text_splitter = text_splitter
+        self.vector_db_tool = vector_db_tool
 
         self.n_queries = n_queries
         super().__init__(debug=debug)
+
+    async def get_response_async(self, *args, **kwargs) -> LitAgentOutputSchema:
+        """
+        This method is required by the BaseAgent but is not used by LitAgent,
+        which is an orchestrator. The main entry point is the `_arun` method.
+        """
+        raise NotImplementedError()
 
     async def _arun(
         self,
@@ -110,6 +126,7 @@ class LitAgent(BaseAgent):
         # Log search results
         logger.info(f"Found {len(search_results.results)} relevant web pages:")
         contents = []
+        docs_to_split = []
         for i, result in enumerate(search_results.results, 1):
             logger.debug(f"Result {i} : Scraping the url {result.url}")
             resolver_output = await self.article_resolver.arun(
@@ -132,7 +149,36 @@ class LitAgent(BaseAgent):
                 f"Result {i}: {result.title} | "
                 f"{url} | {content[:100]}.. | words={len(content.split())}",
             )
+
             contents.append(ExtractionDTO(source=str(url), result=content))
+
+            if content:
+                doc = Document(
+                    page_content=content,
+                    metadata={
+                        "id": str(url),
+                        "source": str(url),
+                        "title": result.title,
+                    },
+                )
+                docs_to_split.append(doc)
+
+        # Split and index the documents
+        if docs_to_split:
+            logger.info(f"Splitting {len(docs_to_split)} documents into chunks...")
+            splitter_output = await self.text_splitter.arun(
+                TextSplitterInputSchema(
+                    documents=docs_to_split,
+                ),
+            )
+            docs_to_index = splitter_output.chunks
+
+            if docs_to_index:
+                logger.info(f"Indexing {len(docs_to_index)} document chunks...")
+                try:
+                    self.vector_db_tool.index(documents=docs_to_index)
+                except Exception as e:
+                    logger.error(f"Failed to index document chunks in VectorDB: {e}")
 
         results = []
         for content in contents:
