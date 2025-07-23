@@ -1,11 +1,24 @@
 [project]
-name = "accelerated-discovery"
-version = "0.0.1"
-description = "Add your description here"
+name = "akd"
+version = "0.1.0"
+description = "Human-centric Multi-Agent System (MAS) framework for scientific discovery"
 readme = "README.md"
+license = "Apache-2.0"
+authors = [
+    {name = "Nish", email = "np0069@uah.edu"},
+    {name = "Kumar", email = "mr0051@uah.edu"}
+]
+keywords = ["scientific-discovery", "multi-agent", "research", "literature-search", "ai", "accelerated-knowledge-discovery"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "atomic-agents>=1.1.0",
     "crawl4ai>=0.5.0.post4",
     "duckduckgo-search>=8.0.1",
     "gdown>=5.2.0",
@@ -32,19 +45,20 @@ dependencies = [
     "pytest-asyncio>=1.0.0",
     "tenacity>=9.1.2",
     "httpx>=0.28.1",
+    "deepeval>=3.0.2",
+
 ]
+
+[project.urls]
+Homepage = "https://github.com/NASA-IMPACT/accelerated-discovery"
+Repository = "https://github.com/NASA-IMPACT/accelerated-discovery"
+Documentation = "https://github.com/NASA-IMPACT/accelerated-discovery/blob/main/README.md"
+Issues = "https://github.com/NASA-IMPACT/accelerated-discovery/issues"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["akd", "scripts"]
-
-[tool.poetry]
-packages = [
-    { include = "akd"},
-]
-
-[dependency-groups]
-test = [
-    "deepeval>=3.0.2",
-    "pytest>=8.3.5",
-]
+include = ["akd*"]
+exclude = ["tests*", "examples*", "scripts*", "notebooks*"]
