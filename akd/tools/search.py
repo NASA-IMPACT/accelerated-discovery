@@ -1247,10 +1247,16 @@ class SimpleAgenticLitSearchTool(SearchTool):
                 score <= rubric_analysis.positive_rubric_count
                 for score in recent_scores
             ):
-                # Only stop for stagnation if we have reasonable results or excellent quality
-                if result_progress >= 0.6 or quality_score >= 0.8:
+                # Only stop for stagnation if we have BOTH reasonable quantity AND excellent quality
+                # Never stop for stagnation if we have less than 50% of requested results
+                if result_progress >= 0.6 and quality_score >= 0.8:
                     return True, (
-                        f"STOP: No improvement in {self.rubric_improvement_threshold} iterations + {current_result_count}/{desired_max_results} results"
+                        f"STOP: No improvement in {self.rubric_improvement_threshold} iterations + sufficient results ({current_result_count}/{desired_max_results}) + excellent quality"
+                    )
+                elif result_progress < 0.5:
+                    # Force continue if we don't have enough results yet
+                    return False, (
+                        f"CONTINUE: Stagnation detected but insufficient results ({current_result_count}/{desired_max_results}) - need at least 50%"
                     )
 
         # Continue searching - provide specific guidance
