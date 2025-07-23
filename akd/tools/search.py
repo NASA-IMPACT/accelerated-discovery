@@ -1023,6 +1023,31 @@ class SimpleAgenticLitSearchToolConfig(BaseToolConfig):
         default=2,
         description="Stop if no rubric improvement for this many iterations.",
     )
+    # Dynamic stopping thresholds
+    early_stop_result_progress: float = Field(
+        default=0.7,
+        ge=0.5,
+        le=1.0,
+        description="Minimum result progress (0.5-1.0) to allow early stopping with excellent quality.",
+    )
+    early_stop_quality_score: float = Field(
+        default=0.67,
+        ge=0.5,
+        le=1.0,
+        description="Minimum quality score (0.5-1.0) to allow early stopping with sufficient results.",
+    )
+    stagnation_result_progress: float = Field(
+        default=0.6,
+        ge=0.5,
+        le=1.0,
+        description="Minimum result progress (0.5-1.0) to allow stopping due to stagnation.",
+    )
+    stagnation_quality_score: float = Field(
+        default=0.8,
+        ge=0.5,
+        le=1.0,
+        description="Minimum quality score (0.5-1.0) to allow stopping due to stagnation.",
+    )
     debug: bool = Field(
         default=False,
         description="Enable debug logging.",
@@ -1212,11 +1237,12 @@ class SimpleAgenticLitSearchTool(SearchTool):
                     f"STOP: Target reached ({current_result_count}/{desired_max_results}) + quality good ({rubric_analysis.positive_rubric_count}/6)",
                 )
             elif (
-                result_progress >= 0.7 and quality_score >= 0.67
-            ):  # 70% results + 67% quality
+                result_progress >= self.early_stop_result_progress
+                and quality_score >= self.early_stop_quality_score
+            ):  # Configurable early stopping thresholds
                 return (
                     True,
-                    f"STOP: Sufficient results ({current_result_count}/{desired_max_results}) + excellent quality ({rubric_analysis.positive_rubric_count}/6)",
+                    f"STOP: Sufficient results ({current_result_count}/{desired_max_results}, {result_progress:.1%}) + excellent quality ({rubric_analysis.positive_rubric_count}/6, {quality_score:.1%})",
                 )
 
         # Force stop if we've exceeded target significantly (search overflow protection)
@@ -1249,9 +1275,12 @@ class SimpleAgenticLitSearchTool(SearchTool):
             ):
                 # Only stop for stagnation if we have BOTH reasonable quantity AND excellent quality
                 # Never stop for stagnation if we have less than 50% of requested results
-                if result_progress >= 0.6 and quality_score >= 0.8:
+                if (
+                    result_progress >= self.stagnation_result_progress
+                    and quality_score >= self.stagnation_quality_score
+                ):
                     return True, (
-                        f"STOP: No improvement in {self.rubric_improvement_threshold} iterations + sufficient results ({current_result_count}/{desired_max_results}) + excellent quality"
+                        f"STOP: No improvement in {self.rubric_improvement_threshold} iterations + sufficient results ({current_result_count}/{desired_max_results}, {result_progress:.1%}) + excellent quality ({quality_score:.1%})"
                     )
                 elif result_progress < 0.5:
                     # Force continue if we don't have enough results yet
