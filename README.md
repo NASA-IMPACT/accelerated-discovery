@@ -48,6 +48,10 @@ cp .env.example .env
 
 Refer to the [notebooks](notebooks) for examples.
 
+### Granite Guardian Setup
+
+For enhanced content validation and safety guardrails, see the [Granite Guardian Setup Guide](docs/granite-guardian-setup.md).
+
 ## Key Features
 
 
