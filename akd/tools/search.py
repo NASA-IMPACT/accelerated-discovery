@@ -631,7 +631,7 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = urljoin(str(self.config.base_url), "graph/v1/paper/search")
+        search_url = urljoin(str(self.config.base_url), f"graph/v1/paper/DOI:{query}")
         params = {
             "fields": ",".join(self.config.fields)
         }
