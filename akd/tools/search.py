@@ -47,6 +47,18 @@ class QueryFocusStrategy(str, Enum):
     ADJUST_QUERY_SCOPE = "adjust_query_scope"
 
 
+class SearchToolConfig(BaseToolConfig):
+    """
+    Base configuration for search tools.
+    This can be extended by specific search tool configurations.
+    """
+
+    max_results: int = Field(
+        10,
+        description="Maximum number of search results to return.",
+    )
+
+
 class SearchToolInputSchema(InputSchema):
     """
     Schema for input to a tool for searching for information,
@@ -91,6 +103,7 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
 
     input_schema = SearchToolInputSchema
     output_schema = SearchToolOutputSchema
+    config_schema = SearchToolConfig
 
 
 class SearxNGSearchToolInputSchema(SearchToolInputSchema):
@@ -109,7 +122,7 @@ class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
     pass
 
 
-class SearxNGSearchToolConfig(BaseToolConfig):
+class SearxNGSearchToolConfig(SearchToolConfig):
     base_url: HttpUrl = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
     max_results: int = os.getenv("SEARXNG_MAX_RESULTS", 10)
     engines: List[str] = os.getenv(
@@ -417,7 +430,7 @@ class SemanticScholarSearchToolOutputSchema(SearchToolOutputSchema):
     pass
 
 
-class SemanticScholarSearchToolConfig(BaseToolConfig):
+class SemanticScholarSearchToolConfig(SearchToolConfig):
     """Configuration for the Semantic Scholar Search Tool."""
 
     api_key: Optional[str] = Field(
@@ -480,7 +493,6 @@ class SemanticScholarSearchTool(
 
     input_schema = SemanticScholarSearchToolInputSchema
     output_schema = SemanticScholarSearchToolOutputSchema
-
     config_schema = SemanticScholarSearchToolConfig
 
     @classmethod
@@ -996,9 +1008,19 @@ class SemanticScholarSearchTool(
         )
 
 
-class SimpleAgenticLitSearchToolConfig(BaseToolConfig):
+class AgenticSearchTool(SearchTool):
     """
-    Configuration for the SimpleAgenticLitSearchTool.
+    Type for agentic search tools that use multi-rubric analysis
+    and does agentic decision-making.
+    """
+
+    input_schema = SearchToolInputSchema
+    output_schema = SearchToolOutputSchema
+
+
+class ControlledAgenticLitSearchToolConfig(SearchToolConfig):
+    """
+    Configuration for the ControlledAgenticLitSearchTool.
     This tool uses multi-rubric analysis and agentic decision-making
     to perform intelligent iterative literature searches.
     """
@@ -1054,11 +1076,19 @@ class SimpleAgenticLitSearchToolConfig(BaseToolConfig):
     )
 
 
-class SimpleAgenticLitSearchTool(SearchTool):
-    input_schema = SearchToolInputSchema
-    output_schema = SearchToolOutputSchema
+class ControlledAgenticLitSearchTool(AgenticSearchTool):
+    """
+    Tool for performing controlled agentic literature searches
+    using multi-rubric analysis and agentic decision-making.
+    This tool iteratively refines search queries based on rubric assessments
+    and dynamically decides when to stop searching based on quality and quantity of results.
 
-    config_schema = SimpleAgenticLitSearchToolConfig
+    Note:
+        - It's not stateless. Meaning: we track the history of rubrics
+          and decisions made during the search process.
+    """
+
+    config_schema = ControlledAgenticLitSearchToolConfig
 
     class _RubricAnalysis(BaseModel):
         """Analysis of multi-rubric assessment for agentic decision making."""
@@ -1080,21 +1110,22 @@ class SimpleAgenticLitSearchTool(SearchTool):
     class _StoppingCriteria(BaseModel):
         stop_now: bool = Field(default=False)
         reasoning_trace: str = Field(default="")
-        rubric_analysis: Optional["SimpleAgenticLitSearchTool._RubricAnalysis"] = Field(
-            default=None,
+        rubric_analysis: Optional["ControlledAgenticLitSearchTool._RubricAnalysis"] = (
+            Field(
+                default=None,
+            )
         )
         recommended_query_focus: List[str] = Field(default_factory=list)
 
     def __init__(
         self,
-        config: SimpleAgenticLitSearchToolConfig | None = None,
+        config: ControlledAgenticLitSearchToolConfig | None = None,
         search_tool: SearchTool | None = None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
         query_agent: QueryAgent | None = None,
         followup_query_agent: FollowUpQueryAgent | None = None,
         debug: bool = False,
     ) -> None:
-        config = config or SimpleAgenticLitSearchToolConfig(debug=debug)
         super().__init__(config=config, debug=debug)
         self.search_tool = search_tool or SearxNGSearchTool()
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
@@ -1329,7 +1360,7 @@ class SimpleAgenticLitSearchTool(SearchTool):
         all_results: list,
         current_results: list,
         max_results: int,
-    ) -> "SimpleAgenticLitSearchTool._StoppingCriteria":
+    ) -> "ControlledAgenticLitSearchTool._StoppingCriteria":
         criteria = self._StoppingCriteria(
             stop_now=False,
             reasoning_trace=f"Iteration {iteration}/{self.max_iteration}",
