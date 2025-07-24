@@ -17,12 +17,11 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.structures import SearchResultItem
-from akd.tools._base import BaseTool, BaseToolConfig
-from akd.utils import get_akd_root
 
 if TYPE_CHECKING:
-    pass
+    from akd.structures import SearchResultItem
+from akd.tools._base import BaseTool, BaseToolConfig
+from akd.utils import get_akd_root
 
 
 class SourceInfo(BaseModel):
@@ -61,7 +60,7 @@ class ValidationResult(BaseModel):
 class SourceValidatorInputSchema(InputSchema):
     """Input schema for source validation tool."""
 
-    search_results: List[SearchResultItem] = Field(
+    search_results: List["SearchResultItem"] = Field(
         ...,
         description="List of search results to validate",
     )
@@ -271,9 +270,7 @@ class SourceValidator(
         issn_list = (
             issn_data
             if isinstance(issn_data, list)
-            else [issn_data]
-            if issn_data
-            else []
+            else [issn_data] if issn_data else []
         )
 
         # Extract open access information
@@ -485,15 +482,16 @@ class SourceValidator(
         summary = {
             "total_processed": total_results,
             "whitelisted_count": whitelisted_count,
-            "whitelisted_percentage": (whitelisted_count / total_results * 100)
-            if total_results > 0
-            else 0,
+            "whitelisted_percentage": (
+                (whitelisted_count / total_results * 100) if total_results > 0 else 0
+            ),
             "error_count": error_count,
             "category_breakdown": category_counts,
-            "avg_confidence": sum(r.confidence_score for r in validated_results)
-            / total_results
-            if total_results > 0
-            else 0,
+            "avg_confidence": (
+                sum(r.confidence_score for r in validated_results) / total_results
+                if total_results > 0
+                else 0
+            ),
         }
 
         if self.debug:

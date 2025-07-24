@@ -1,4 +1,5 @@
 from typing import List
+import json
 
 from loguru import logger
 from pydantic import Field
@@ -7,13 +8,18 @@ from akd._base import InputSchema, OutputSchema
 from akd.agents import BaseAgent
 from akd.structures import ExtractionDTO
 from akd.tools.scrapers.resolvers import BaseArticleResolver, ResolverInputSchema
+from akd.tools.scrapers._base import ScrapedMetadata
 from akd.tools.scrapers.web_scrapers import (
-    WebpageMetadata,
-    WebpageScraperToolInputSchema,
-    WebpageScraperToolOutputSchema,
-    WebScraperToolBase,
+    ScraperToolInputSchema,
+    ScraperToolOutputSchema,
+    WebScraper,
 )
 from akd.tools.search import SearxNGSearchTool, SearxNGSearchToolInputSchema
+from akd.tools.evaluator.base_evaluator import (
+    LLMEvaluator,
+    LLMEvaluatorInputSchema,
+    LLMEvaluatorConfig,
+)
 
 from .extraction import (
     EstimationExtractionAgent,
@@ -58,7 +64,7 @@ class LitAgent(BaseAgent):
         query_agent: QueryAgent,
         extraction_agent: EstimationExtractionAgent,
         search_tool: SearxNGSearchTool,
-        web_scraper: WebScraperToolBase,
+        web_scraper: WebScraper,
         article_resolver: BaseArticleResolver,
         n_queries: int = 3,
         debug: bool = False,
@@ -74,6 +80,14 @@ class LitAgent(BaseAgent):
 
         self.n_queries = n_queries
         super().__init__(debug=debug)
+
+    # get_response_async is required by the BaseAgent interface,
+    # but it seems that the LitAgent runtime logic is all implemented in _arun.
+    # Therefore, we can leave this method unimplemented or raise NotImplementedError.
+    # TODO: Migrate the logic from _arun to get_response_async, and have
+    # _arun call get_response_async.
+    async def get_response_async(self, *args, **kwargs):
+        pass
 
     async def _arun(
         self,
@@ -118,13 +132,13 @@ class LitAgent(BaseAgent):
             url = resolver_output.url
             try:
                 scraped_content = await self.web_scraper.arun(
-                    WebpageScraperToolInputSchema(url=url),
+                    ScraperToolInputSchema(url=url),
                 )
             except Exception:
                 logger.warning("Fallback to search result content, not webpage")
-                scraped_content = WebpageScraperToolOutputSchema(
+                scraped_content = ScraperToolOutputSchema(
                     content=result.content,
-                    metadata=WebpageMetadata(**result.model_dump()),
+                    metadata=ScrapedMetadata(**result.model_dump()),
                 )
 
             content = scraped_content.content or result.content
@@ -142,14 +156,68 @@ class LitAgent(BaseAgent):
                     ExtractionInputSchema(query=query, content=content.result),
                 )
                 logger.debug(f"Source={content.source} | Answer={answer}")
-                if answer:
-                    content.result = answer
-                    results.append(content)
+
+                if not answer:
+                    logger.warning(
+                        f"No answer extracted for content from {content.source}."
+                    )
+                    continue
+
+                content.result = answer
+                results.append(content)
             except KeyboardInterrupt:
                 break
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Error processing content from {content.source}: {e}")
                 continue
-        return LitAgentOutputSchema(results=results)
+
+        extraction_quality_metric = {
+            "name": "Extraction Evaluation",
+            "criteria": "Evaluate wether or not the answer correctly extracts and summarizes the content, in a way that is relevant to the input query",
+        }
+        extraction_structure_metric = {
+            "name": "Extraction Structure Evaluation",
+            "criteria": "Does the content includes a title and an abstract?",
+        }
+        extraction_evaluator_config = LLMEvaluatorConfig(
+            custom_metrics=[extraction_quality_metric, extraction_structure_metric],
+            threshold=0.5,
+        )
+        extraction_evaluator = LLMEvaluator(
+            config=extraction_evaluator_config, debug=self.debug
+        )
+        evaluator_config = LLMEvaluatorConfig(threshold=0.5)
+        evaluator = LLMEvaluator(config=evaluator_config, debug=self.debug)
+
+        _results = []
+        for content in results:
+
+            evaluator_input = LLMEvaluatorInputSchema(
+                input=params.query, output=content.result.model_dump_json()
+            )
+
+            extraction_evaluation = await extraction_evaluator._arun(evaluator_input)
+
+            if not extraction_evaluation.success:
+                logger.warning(
+                    f"Low extraction evaluation score ({extraction_evaluation.score}) for content from {content.source}, skipping."
+                )
+                continue
+
+            evaluation = await evaluator._arun(evaluator_input)
+
+            if not evaluation.success:
+                logger.warning(
+                    f"Low evaluation score ({evaluation.score}) for content from {content.source}, skipping."
+                )
+                continue
+            _results.append(content)
+
+        logger.info(
+            f"Number of results left after evaluation: {len(_results)}, intial quantity: {len(results)}"
+        )
+
+        return LitAgentOutputSchema(results=_results)
 
     def clear_history(self) -> None:
         logger.warning("Clearing history for all the agents")

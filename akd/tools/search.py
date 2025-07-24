@@ -25,6 +25,7 @@ from akd.tools.relevancy import EnhancedRelevancyChecker
 
 from urllib.parse import urljoin
 
+
 class SearchToolInputSchema(InputSchema):
     """
     Schema for input to a tool for searching for information,
@@ -293,6 +294,7 @@ class SearxNGSearchTool(SearchTool):
                 await asyncio.sleep(0.1)
 
             except Exception as e:
+
                 logger.error(
                     f"Error fetching page {current_page} for query '{query}': {str(e)}",
                 )
@@ -437,11 +439,14 @@ class SemanticScholarSearchToolConfig(BaseToolConfig):
     @classmethod
     def validate_api_key(cls, v):
         if not v:
-            logger.warning("Semantic Scholar API key not provided. Rate limits may apply.")
+            logger.warning(
+                "Semantic Scholar API key not provided. Rate limits may apply."
+            )
             return None
         if isinstance(v, SecretStr):
             return v.get_secret_value()
-        return v  
+        return v
+
 
 class SemanticScholarSearchTool(
     BaseTool[
@@ -561,18 +566,15 @@ class SemanticScholarSearchTool(
             )
 
         return None
-    
+
     def _parse_paper(
         self,
         item: Dict[str, Any],
         doi: Optional[str],
     ) -> Optional[PaperDataItem]:
         """Parses a single paper from the Semantic Scholar API response."""
-        if (
-            not item
-            or not item.get("paperId")
-        ):
-            return None 
+        if not item or not item.get("paperId"):
+            return None
         try:
             paper_item = PaperDataItem(
                 paper_id=item.get("paperId"),
@@ -603,15 +605,13 @@ class SemanticScholarSearchTool(
                 doi=doi or None,
             )
             if self.debug:
-                logger.debug(
-                    f"Processed paper with DOI {doi}"
-                )
+                logger.debug(f"Processed paper with DOI {doi}")
             return paper_item
         except Exception as e:
             logger.debug(
                 f"Could not parse response to paper object for doi {doi}: {str(e)}",
             )
-    
+
     async def _fetch_paper_by_doi(
         self,
         session: aiohttp.ClientSession,
@@ -630,9 +630,7 @@ class SemanticScholarSearchTool(
             The JSON response dictionary from the API or None if an error occurs.
         """
         search_url = urljoin(self.config.base_url, "graph/v1/paper/search")
-        params = {
-            "fields": ",".join(self.config.fields)
-        }
+        params = {"fields": ",".join(self.config.fields)}
         headers = {}
         if self.config.api_key:
             api_key_value = self.config.api_key
@@ -662,7 +660,7 @@ class SemanticScholarSearchTool(
                         f"Received {len(data.get('data', []))} items. Total: {data.get('total')}, Offset: {data.get('offset')}, Next: {data.get('next')}",
                     )
                 return [self._parse_paper(item=data, doi=query)]
-            
+
         except aiohttp.ClientResponseError as e:
             logger.error(
                 f"HTTP Error fetching Semantic Scholar for query '{query}': {e.status} {e.message}",
@@ -702,7 +700,7 @@ class SemanticScholarSearchTool(
             return None  # Skip incomplete results
 
         external_ids = item.get("externalIds") or {}
-        doi = external_ids.get("DOI") # All papers do not have a DOI
+        doi = external_ids.get("DOI")  # All papers do not have a DOI
 
         # Extract author names if requested and available
         authors = [
@@ -878,11 +876,12 @@ class SemanticScholarSearchTool(
             )
 
         return final_results
-    
-    async def doi_to_paper(self,
-                           params: SemanticScholarSearchToolInputSchema,
-                           **kwargs,
-    )-> list[PaperDataItem]:
+
+    async def doi_to_paper(
+        self,
+        params: SemanticScholarSearchToolInputSchema,
+        **kwargs,
+    ) -> list[PaperDataItem]:
         """
         Fetches a paper based on it's DOI.
 
@@ -903,7 +902,7 @@ class SemanticScholarSearchTool(
             results_per_query = await asyncio.gather(*tasks)
         results = [item for sublist in results_per_query for item in sublist]
         return results
-        
+
     async def _arun(
         self,
         params: SemanticScholarSearchToolInputSchema,

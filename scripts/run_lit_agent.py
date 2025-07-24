@@ -13,28 +13,31 @@ from akd.agents.extraction import (
 )
 from akd.agents.factory import create_query_agent
 from akd.agents.intents import IntentAgent
-from akd.agents.litsearch import LitAgent, LitAgentInputSchema
+from akd.agents.litsearch import LitAgent, LitAgentInputSchema, LitAgentOutputSchema
 from akd.configs.lit_config import get_lit_agent_settings
-from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
+from akd.tools.scrapers.composite import CompositeScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
 from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
 from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 from akd.tools.search import SearxNGSearchTool
+from akd.tools.scrapers.omni import DoclingScraper, DoclingScraperConfig
 
 
 async def main(args):
     lit_agent_config = get_lit_agent_settings(args.config)
     search_config = lit_agent_config.search
-    scraper_config = lit_agent_config.scraper
+    # scraper_config = lit_agent_config.scraper.model_dump()
 
     search_tool = SearxNGSearchTool(config=search_config)
 
-    scraper = CompositeWebScraper(
-        SimpleWebScraper(scraper_config),
-        Crawl4AIWebScraper(scraper_config),
-        SimplePDFScraper(scraper_config),
-        debug=True,
-    )
+    # scraper = CompositeScraper(
+    #     SimpleWebScraper(scraper_config),
+    #     Crawl4AIWebScraper(scraper_config),
+    #     SimplePDFScraper(scraper_config),
+    #     debug=True,
+    # )
+
+    scraper = DoclingScraper(DoclingScraperConfig())
 
     article_resolver = ResearchArticleResolver(
         ArxivResolver(),
@@ -42,9 +45,7 @@ async def main(args):
         IdentityResolver(),
     )
 
-    intent_agent = IntentAgent(
-        config=ConfigDict(client=ChatOpenAI()),
-    )
+    intent_agent = IntentAgent()
 
     query_agent = create_query_agent()
     schema_mapper = IntentBasedExtractionSchemaMapper()
@@ -65,10 +66,15 @@ async def main(args):
     result = await lit_agent.arun(
         LitAgentInputSchema(query=args.query, max_search_results=5)
     )
-    logger.info(result.model_dump())
+    logger.info(f"Lit agent results: {result.model_dump()}")
 
-    with open("./temp/test_lit_agent.json", "w") as f:
-        f.write(json.dumps(result.model_dump(mode="json")["results"], indent=2))
+    with open("test_lit_agent.json", "w") as f:
+        f.write(
+            json.dumps([r.model_dump(mode="json") for r in result.results], indent=2)
+        )
+    return result
+    # with open("./temp/test_lit_agent.json", "w") as f:
+    #     f.write(json.dumps(result.model_dump(mode="json")["results"], indent=2))
 
 
 if __name__ == "__main__":
