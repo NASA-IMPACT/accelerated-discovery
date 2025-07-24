@@ -618,7 +618,19 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
             )
 
         # Call the parent's _arun method with the modified parameters
-        return await super()._arun(params=params, max_results=max_results, **kwargs)
+        output = await super()._arun(params=params, max_results=max_results, **kwargs)
+
+        try:
+            deduped = self._deduplicate_results(output.results, key="url")
+        except Exception as e:
+            logger.error(f"Error deduplicating results: {e}")
+
+        try:
+            sorted_results = self._sort_results(deduped, sort_by="score")
+        except Exception as e:
+            logger.error(f"Error sorting repo list by score: {e}")
+
+        return self.output_schema(results=sorted_results, category="technology")
 
 
 class SDECodeSearchToolConfig(CodeSearchToolConfig):
