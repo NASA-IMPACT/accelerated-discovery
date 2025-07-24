@@ -890,16 +890,16 @@ class SemanticScholarSearchTool(
         Args:
             params: Input parameters including queries and category.
             **kwargs:
-            - external_id (str, optional): The type of external identifier ("DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId").
+            - external_id (str, optional): The type of external identifier ("DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL").
               Defaults to "DOI" if not provided.
         Returns:
             List of PaperDataItem objects.
         """
-        external_id = kwargs.get("external_id", "DOI").upper()
-        if external_id not in ["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId"]:
+        external_id = kwargs.get("external_id", "DOI")
+        if external_id not in ["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]:
             raise ValueError(
                 f"Unsupported external_id '{external_id}'. "
-                f"Must be one of: {', '.join(["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId"])}"
+                f"Must be one of: {', '.join(["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"])}"
             )
 
         async with aiohttp.ClientSession() as session:
