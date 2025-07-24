@@ -107,6 +107,23 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
             )
         return output
 
+    def _deduplicate_results(
+        self,
+        results: list[SearchResultItem],
+        key: str = "url",
+    ) -> list[SearchResultItem]:
+        """
+        Deduplicate results based on a unique key (default is URL).
+        """
+        seen = set()
+        deduped = []
+        for result in results:
+            val = str(getattr(result, key, ""))
+            if val and val not in seen:
+                seen.add(val)
+                deduped.append(result)
+        return deduped
+
     def _sort_results(
         self,
         results: list[SearchResultItem],
@@ -218,7 +235,8 @@ class CombinedCodeSearchTool(CodeSearchTool):
                 result.extra["score"] = score
 
             # Sort results by score
-            return self._sort_results(results, sort_by="score")
+            deduped = self._deduplicate_results(results, key="url")
+            return self._sort_results(deduped, sort_by="score")
         except Exception as e:
             logger.error(f"Reranking failed: {e}")
             return results
@@ -480,14 +498,19 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             for result in all_results_data
         ]
         try:
-            formatted_results = self._sort_results(
-                formatted_results,
+            deduped = self._deduplicate_results(formatted_results, key="url")
+        except Exception as e:
+            logger.error(f"Error deduplicating results: {e}")
+
+        try:
+            sorted_results = self._sort_results(
+                deduped,
                 sort_by="score",
             )
         except Exception as e:
             logger.error(f"Error sorting repo list by score: {e}")
 
-        return self.output_schema(results=formatted_results, category="technology")
+        return self.output_schema(results=sorted_results, category="technology")
 
 
 class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
@@ -692,10 +715,15 @@ class SDECodeSearchTool(CodeSearchTool):
             for result in all_results_data
         ]
         try:
-            formatted_results = self._sort_results(
-                formatted_results,
+            deduped = self._deduplicate_results(formatted_results, key="url")
+        except Exception as e:
+            logger.error(f"Error deduplicating results: {e}")
+
+        try:
+            sorted_results = self._sort_results(
+                deduped,
                 sort_by="score",
             )
         except Exception as e:
             logger.error(f"Error sorting repo list by score: {e}")
-        return self.output_schema(results=formatted_results, category="technology")
+        return self.output_schema(results=sorted_results, category="technology")
