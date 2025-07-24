@@ -107,6 +107,23 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
             )
         return output
 
+    def _deduplicate_results(
+        self,
+        results: list[SearchResultItem],
+        key: str = "url",
+    ) -> list[SearchResultItem]:
+        """
+        Deduplicate results based on a unique key (default is URL).
+        """
+        seen = set()
+        deduped = []
+        for result in results:
+            val = str(getattr(result, key, ""))
+            if val and val not in seen:
+                seen.add(val)
+                deduped.append(result)
+        return deduped
+
     def _sort_results(
         self,
         results: list[SearchResultItem],
@@ -218,7 +235,9 @@ class CombinedCodeSearchTool(CodeSearchTool):
                 result.extra["score"] = score
 
             # Sort results by score
-            return self._sort_results(results, sort_by="score")
+            return self._sort_results(
+                self._deduplicate_results(results), sort_by="score"
+            )
         except Exception as e:
             logger.error(f"Reranking failed: {e}")
             return results
@@ -481,7 +500,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         ]
         try:
             formatted_results = self._sort_results(
-                formatted_results,
+                self._deduplicate_results(formatted_results),
                 sort_by="score",
             )
         except Exception as e:
@@ -693,7 +712,7 @@ class SDECodeSearchTool(CodeSearchTool):
         ]
         try:
             formatted_results = self._sort_results(
-                formatted_results,
+                self._deduplicate_results(formatted_results),
                 sort_by="score",
             )
         except Exception as e:
