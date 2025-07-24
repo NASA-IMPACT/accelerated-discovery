@@ -167,7 +167,7 @@ class AbstractBase[
         if self.config is None:
             return
 
-        for attr, value in self.config.items():
+        for attr, value in self.config.model_dump().items():
             setattr(self, attr, value)
 
     @classmethod

@@ -186,13 +186,14 @@ class LitAgent(BaseAgent):
         extraction_evaluator = LLMEvaluator(
             config=extraction_evaluator_config, debug=self.debug
         )
-        evaluator_config = LLMEvaluatorConfig(threshold=5.0)
+        evaluator_config = LLMEvaluatorConfig(threshold=0.5)
         evaluator = LLMEvaluator(config=evaluator_config, debug=self.debug)
 
         _results = []
         for content in results:
+
             evaluator_input = LLMEvaluatorInputSchema(
-                input=params.query, output=json.dumps(content.result.model_dump())
+                input=params.query, output=content.result.model_dump_json()
             )
 
             extraction_evaluation = await extraction_evaluator._arun(evaluator_input)
@@ -211,6 +212,10 @@ class LitAgent(BaseAgent):
                 )
                 continue
             _results.append(content)
+
+        logger.info(
+            f"Number of results left after evaluation: {len(_results)}, intial quantity: {len(results)}"
+        )
 
         return LitAgentOutputSchema(results=_results)
 

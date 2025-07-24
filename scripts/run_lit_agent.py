@@ -20,21 +20,24 @@ from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
 from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
 from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 from akd.tools.search import SearxNGSearchTool
+from akd.tools.scrapers.omni import DoclingScraper, DoclingScraperConfig
 
 
 async def main(args):
     lit_agent_config = get_lit_agent_settings(args.config)
-    search_config = lit_agent_config.search.model_dump()
-    scraper_config = lit_agent_config.scraper.model_dump()
+    search_config = lit_agent_config.search
+    # scraper_config = lit_agent_config.scraper.model_dump()
 
     search_tool = SearxNGSearchTool(config=search_config)
 
-    scraper = CompositeScraper(
-        SimpleWebScraper(scraper_config),
-        Crawl4AIWebScraper(scraper_config),
-        SimplePDFScraper(scraper_config),
-        debug=True,
-    )
+    # scraper = CompositeScraper(
+    #     SimpleWebScraper(scraper_config),
+    #     Crawl4AIWebScraper(scraper_config),
+    #     SimplePDFScraper(scraper_config),
+    #     debug=True,
+    # )
+
+    scraper = DoclingScraper(DoclingScraperConfig())
 
     article_resolver = ResearchArticleResolver(
         ArxivResolver(),
@@ -42,9 +45,7 @@ async def main(args):
         IdentityResolver(),
     )
 
-    intent_agent = IntentAgent(
-        config=ConfigDict(client=ChatOpenAI()),
-    )
+    intent_agent = IntentAgent()
 
     query_agent = create_query_agent()
     schema_mapper = IntentBasedExtractionSchemaMapper()

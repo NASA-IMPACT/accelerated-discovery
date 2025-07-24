@@ -6,6 +6,7 @@ from ._base import (
     ScraperToolBase,
     ScraperToolInputSchema,
     ScraperToolOutputSchema,
+    ScraperToolConfig,
 )
 from .resolvers import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
 
@@ -59,6 +60,7 @@ class CompositeScraper(ScraperToolBase):
         *scrapers: ScraperToolBase,
         debug: bool = False,
     ) -> None:
+
         super().__init__(debug=debug)
         self.scrapers = scrapers
 

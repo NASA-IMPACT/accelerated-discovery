@@ -105,6 +105,7 @@ class LLMEvaluator(BaseTool):
                         LLMTestCaseParams.INPUT,
                         LLMTestCaseParams.ACTUAL_OUTPUT,
                     ],
+                    verbose_mode=True,
                 )
                 for m in self.config.custom_metrics
             ]

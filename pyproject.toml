@@ -45,7 +45,7 @@ dependencies = [
     "pytest-asyncio>=1.0.0",
     "tenacity>=9.1.2",
     "httpx>=0.28.1",
-    "deepeval>=3.1.9",
+    "deepeval>=3.0.2",
     "xai-sdk>=1.0.0"
 
 ]
