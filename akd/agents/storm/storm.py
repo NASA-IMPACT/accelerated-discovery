@@ -4,7 +4,7 @@ from langgraph.pregel import RetryPolicy
 from pydantic import Field, computed_field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgent, BaseAgentConfig
+from akd.agents import BaseAgent, BaseAgentConfig
 from akd.configs.storm_config import STORM_SETTINGS, StormSettings
 
 from .config import initialise_storm_config
