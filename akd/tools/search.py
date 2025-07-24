@@ -614,10 +614,11 @@ class SemanticScholarSearchTool(
                 f"Could not parse response to paper object for doi {doi}: {str(e)}",
             )
     
-    async def _fetch_paper_by_doi(
+    async def _fetch_paper_by_external_id(
         self,
         session: aiohttp.ClientSession,
         query: str,
+        external_id: str = 'DOI',
     ) -> Optional[Dict[str, Any]]:
         """
         Fetches a single page of search results from Semantic Scholar.
@@ -631,7 +632,7 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = urljoin(str(self.config.base_url), f"graph/v1/paper/DOI:{query}")
+        search_url = urljoin(str(self.config.base_url), f"graph/v1/paper/{external_id}:{query}")
         params = {
             "fields": ",".join(self.config.fields)
         }
@@ -881,24 +882,34 @@ class SemanticScholarSearchTool(
 
         return final_results
     
-    async def doi_to_paper(self,
+    async def fetch_paper_by_external_id(self,
                            params: SemanticScholarSearchToolInputSchema,
                            **kwargs,
     )-> list[PaperDataItem]:
         """
-        Fetches a paper based on it's DOI.
+        Fetches a paper from Semantic Scholar using an external ID.
 
         Args:
             params: Input parameters including queries and category.
-
+            **kwargs:
+            - external_id (str, optional): The type of external identifier ("DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL").
+              Defaults to "DOI" if not provided.
         Returns:
             List of PaperDataItem objects.
         """
+        external_id = kwargs.get("external_id", "DOI")
+        if external_id not in ["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]:
+            raise ValueError(
+                f"Unsupported external_id '{external_id}'. "
+                f"Must be one of: {', '.join(["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"])}"
+            )
+
         async with aiohttp.ClientSession() as session:
             tasks = [
-                self._fetch_paper_by_doi(
+                self._fetch_paper_by_external_id(
                     session,
                     query,
+                    external_id
                 )
                 for query in params.queries
             ]
