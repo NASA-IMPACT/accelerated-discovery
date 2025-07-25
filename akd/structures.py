@@ -67,6 +67,26 @@ class SearchResultItem(BaseModel):
         None,
         description="Extra information from the search result",
     )
+    
+    # Relevancy assessment fields
+    relevancy_score: float | None = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Overall relevancy score (0-1) from multi-rubric assessment",
+    )
+    relevancy_assessment: dict[str, Any] | None = Field(
+        None,
+        description="Detailed multi-rubric relevancy assessment results",
+    )
+    should_fetch_full_content: bool = Field(
+        False,
+        description="Whether full content should be fetched based on relevancy",
+    )
+    query_alignment_details: dict[str, Any] | None = Field(
+        None,
+        description="Details about alignment with original vs reformulated queries",
+    )
 
     @computed_field
     @property
