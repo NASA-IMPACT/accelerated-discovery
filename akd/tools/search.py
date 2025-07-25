@@ -32,6 +32,7 @@ from akd.agents.relevancy import (
     ScopeRelevanceLabel,
     TopicAlignmentLabel,
 )
+from akd.agents.schemas import DeepResearchInputSchema, DeepResearchOutputSchema
 from akd.structures import PaperDataItem, SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
 
@@ -1120,7 +1121,7 @@ class ControlledAgenticLitSearchTool(AgenticSearchTool):
     def __init__(
         self,
         config: ControlledAgenticLitSearchToolConfig | None = None,
-        search_tool: SearchTool | None = None,
+        search_tool: SearxNGSearchTool | None = None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
         query_agent: QueryAgent | None = None,
         followup_query_agent: FollowUpQueryAgent | None = None,
@@ -1852,3 +1853,582 @@ class ControlledAgenticLitSearchTool(AgenticSearchTool):
 
         logger.debug(f"Final Stopping Criteria :: {criteria}")
         return SearchToolOutputSchema(results=all_results, category=params.category)
+
+
+class DeepLitSearchToolConfig(SearchToolConfig):
+    """
+    Configuration for the DeepLitSearchTool that implements multi-agent deep research.
+    """
+
+    # Model configurations
+    use_mini_model: bool = Field(
+        default=True,
+        description="Use o3-mini-deep-research (faster) vs full o3 model",
+    )
+
+    # Research parameters
+    max_research_iterations: int = Field(
+        default=5,
+        description="Maximum number of research iterations",
+    )
+
+    quality_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Quality threshold for stopping research (0-1)",
+    )
+
+    # Agent behavior
+    auto_clarify: bool = Field(
+        default=True,
+        description="Automatically ask clarifying questions if needed",
+    )
+
+    max_clarifying_rounds: int = Field(
+        default=1,
+        description="Maximum rounds of clarification",
+    )
+
+    # Streaming and progress
+    enable_streaming: bool = Field(
+        default=True,
+        description="Enable streaming of research progress",
+    )
+
+    # Search tool selection
+    use_semantic_scholar: bool = Field(
+        default=True,
+        description="Include Semantic Scholar in searches",
+    )
+
+    debug: bool = Field(
+        default=False,
+        description="Enable debug logging",
+    )
+
+
+class DeepLitSearchTool(AgenticSearchTool):
+    """
+    Advanced literature search tool implementing multi-agent deep research pattern.
+
+    This tool orchestrates multiple agents to:
+    1. Triage and clarify research queries
+    2. Build detailed research instructions
+    3. Perform iterative deep research with quality checks
+    4. Produce comprehensive, well-structured research reports
+
+    The implementation follows the OpenAI Deep Research pattern but is adapted
+    to work within the akd framework using existing tools and agents.
+    """
+
+    config_schema = DeepLitSearchToolConfig
+
+    def __init__(
+        self,
+        config: DeepLitSearchToolConfig | None = None,
+        search_tool: SearchTool | None = None,
+        relevancy_agent: MultiRubricRelevancyAgent | None = None,
+        triage_agent=None,
+        clarifying_agent=None,
+        instruction_agent=None,
+        research_agent=None,
+        debug: bool = False,
+    ) -> None:
+        """Initialize the DeepLitSearchTool with agents and configuration."""
+        super().__init__(config=config, debug=debug)
+
+        # Initialize search tools
+        self.search_tool = search_tool or SearxNGSearchTool()
+        self.semantic_scholar_tool = (
+            SemanticScholarSearchTool() if self.use_semantic_scholar else None
+        )
+
+        # Initialize relevancy agent
+        self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
+
+        # Import agents here to avoid circular imports
+        from akd.agents.deep_research import (
+            ClarifyingAgent,
+            DeepResearchAgent,
+            InstructionBuilderAgent,
+            TriageAgent,
+        )
+
+        # Initialize deep research agents
+        self.triage_agent = triage_agent or TriageAgent(debug=debug)
+        self.clarifying_agent = clarifying_agent or ClarifyingAgent(debug=debug)
+        self.instruction_agent = instruction_agent or InstructionBuilderAgent(
+            debug=debug
+        )
+        self.research_agent = research_agent or DeepResearchAgent(debug=debug)
+
+        # Track research state
+        self.research_history = []
+        self.clarification_history = []
+
+    async def _handle_clarification(
+        self,
+        query: str,
+        mock_answers: Optional[Dict[str, str]] = None,
+    ) -> tuple[str, List[str]]:
+        """
+        Handle the clarification process with the user. This is a placeholder for the actual clarification process that will be implemented in the akd planner.
+
+        Args:
+            query: The original research query
+            mock_answers: Optional mock answers for testing
+
+        Returns:
+            Tuple of (enriched_query, clarifications)
+        """
+        from akd.agents.schemas import ClarifyingAgentInputSchema
+
+        clarifying_input = ClarifyingAgentInputSchema(query=query)
+        clarifying_output = await self.clarifying_agent.arun(clarifying_input)
+
+        if self.debug:
+            logger.debug(f"Clarifying questions: {clarifying_output.questions}")
+
+        # In a real implementation, this would interact with the user
+        # For now, we'll use mock answers or default responses
+        clarifications = []
+        for question in clarifying_output.questions:
+            answer = (mock_answers or {}).get(question, "No specific preference")
+            clarifications.append(f"{question}: {answer}")
+
+        # Create enriched query with clarifications
+        enriched_query = f"{query}\n\nAdditional context:\n" + "\n".join(clarifications)
+
+        return enriched_query, clarifications
+
+    async def _build_research_instructions(
+        self,
+        query: str,
+        clarifications: Optional[List[str]] = None,
+    ) -> str:
+        """
+        Build detailed research instructions from query and clarifications.
+
+        Args:
+            query: The research query (possibly enriched)
+            clarifications: List of clarification responses
+
+        Returns:
+            Detailed research instructions
+        """
+        from akd.agents.schemas import InstructionBuilderInputSchema
+
+        instruction_input = InstructionBuilderInputSchema(
+            query=query,
+            clarifications=clarifications,
+        )
+
+        instruction_output = await self.instruction_agent.arun(instruction_input)
+
+        if self.debug:
+            logger.debug(
+                f"Research instructions: {instruction_output.research_instructions}"
+            )
+            logger.debug(f"Focus areas: {instruction_output.focus_areas}")
+
+        return instruction_output.research_instructions
+
+    async def _perform_deep_research(
+        self,
+        instructions: str,
+        original_query: str,
+    ) -> "DeepResearchOutputSchema":
+        """
+        Perform the actual deep research using iterative search and synthesis.
+
+        This method coordinates search tools, relevancy checking, and the
+        research agent to produce comprehensive results.
+
+        Args:
+            instructions: Detailed research instructions
+            original_query: The original user query
+
+        Returns:
+            Deep research output with report and metadata
+        """
+
+        # Initialize research tracking
+        all_results = []
+        iterations = 0
+        quality_scores = []
+        research_trace = []
+
+        # Initial search queries from instructions
+        initial_queries = await self._generate_initial_queries(instructions)
+
+        while iterations < self.max_research_iterations:
+            iterations += 1
+            research_trace.append(
+                f"Iteration {iterations}: Searching with queries: {initial_queries}"
+            )
+
+            # Perform searches
+            search_results = await self._execute_searches(initial_queries)
+
+            if not search_results:
+                research_trace.append(f"Iteration {iterations}: No new results found")
+                break
+
+            # Deduplicate and add to results
+            new_results = self._deduplicate_results(search_results, all_results)
+            all_results.extend(new_results)
+
+            # Evaluate quality
+            if new_results:
+                quality_score = await self._evaluate_research_quality(
+                    new_results,
+                    original_query,
+                )
+                quality_scores.append(quality_score)
+
+                research_trace.append(
+                    f"Iteration {iterations}: Found {len(new_results)} new results, "
+                    f"quality score: {quality_score:.2f}"
+                )
+
+                # Check if we've reached quality threshold
+                avg_quality = sum(quality_scores) / len(quality_scores)
+                if avg_quality >= self.quality_threshold and len(all_results) >= 10:
+                    research_trace.append(
+                        f"Stopping: Quality threshold reached ({avg_quality:.2f})"
+                    )
+                    break
+
+            # Generate refined queries for next iteration
+            if iterations < self.max_research_iterations:
+                initial_queries = await self._generate_refined_queries(
+                    initial_queries,
+                    all_results,
+                    instructions,
+                )
+
+        # Synthesize final research report
+        research_input = DeepResearchInputSchema(
+            research_instructions=instructions,
+            original_query=original_query,
+            max_iterations=iterations,
+            quality_threshold=self.quality_threshold,
+        )
+
+        # For now, create a structured output
+        # In a full implementation, this would use the research agent
+        research_output = await self._synthesize_research(
+            all_results,
+            research_input,
+            quality_scores,
+            research_trace,
+        )
+
+        return research_output
+
+    async def _generate_initial_queries(self, instructions: str) -> List[str]:
+        """Generate initial search queries from research instructions."""
+        from akd.agents.query import QueryAgent
+        from akd.agents.schemas import QueryAgentInputSchema
+
+        query_agent = QueryAgent()
+        query_input = QueryAgentInputSchema(
+            query=instructions,
+            num_queries=5,  # More queries for comprehensive coverage
+        )
+
+        query_output = await query_agent.arun(query_input)
+        return query_output.queries
+
+    async def _execute_searches(self, queries: List[str]) -> List[SearchResultItem]:
+        """Execute searches using available search tools."""
+        all_results = []
+
+        # Search with primary tool
+        search_input = SearchToolInputSchema(
+            queries=queries,
+            max_results=20,
+            category="science",
+        )
+
+        primary_results = await self.search_tool.arun(search_input)
+        all_results.extend(primary_results.results)
+
+        # Search with Semantic Scholar if enabled
+        if self.semantic_scholar_tool and self.use_semantic_scholar:
+            # Convert to SemanticScholarSearchToolInputSchema
+            ss_input = SemanticScholarSearchToolInputSchema(
+                queries=queries,
+                max_results=20,
+                category="science",
+            )
+            ss_results = await self.semantic_scholar_tool.arun(ss_input)
+            all_results.extend(ss_results.results)
+
+        return all_results
+
+    def _deduplicate_results(
+        self,
+        new_results: List[SearchResultItem],
+        existing_results: List[SearchResultItem],
+    ) -> List[SearchResultItem]:
+        """Remove duplicate results based on URL and title."""
+        existing_urls = {r.url for r in existing_results}
+        existing_titles = {r.title.lower() for r in existing_results if r.title}
+
+        unique_results = []
+        for result in new_results:
+            if result.url not in existing_urls:
+                if not result.title or result.title.lower() not in existing_titles:
+                    unique_results.append(result)
+
+        return unique_results
+
+    async def _evaluate_research_quality(
+        self,
+        results: List[SearchResultItem],
+        query: str,
+    ) -> float:
+        """Evaluate the quality of research results."""
+        if not results:
+            return 0.0
+
+        # Accumulate content for evaluation
+        content = "\n\n".join(
+            [
+                f"Title: {r.title}\nContent: {r.content}"
+                for r in results[:5]  # Evaluate top 5 results
+            ]
+        )
+
+        rubric_input = MultiRubricRelevancyInputSchema(
+            content=content,
+            query=query,
+        )
+
+        rubric_output = await self.relevancy_agent.arun(rubric_input)
+
+        # Calculate quality score from rubrics
+        positive_count = sum(
+            [
+                rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED,
+                rubric_output.content_depth == ContentDepthLabel.COMPREHENSIVE,
+                rubric_output.evidence_quality
+                == EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE,
+                rubric_output.methodological_relevance
+                == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND,
+                rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT,
+                rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE,
+            ]
+        )
+
+        return positive_count / 6.0
+
+    async def _generate_refined_queries(
+        self,
+        previous_queries: List[str],
+        results: List[SearchResultItem],
+        instructions: str,
+    ) -> List[str]:
+        """Generate refined queries based on current results."""
+        from akd.agents.query import FollowUpQueryAgent
+        from akd.agents.schemas import FollowUpQueryAgentInputSchema
+
+        # Create content summary from results
+        content = "\n\n".join(
+            [
+                f"Title: {r.title}\nSummary: {r.content[:200]}..."
+                for r in results[-10:]  # Use recent results
+            ]
+        )
+
+        followup_agent = FollowUpQueryAgent()
+        # Enhance content with research instructions context
+        enhanced_content = (
+            f"Research Instructions: {instructions}\n\nCurrent Results:\n{content}"
+        )
+
+        followup_input = FollowUpQueryAgentInputSchema(
+            original_queries=previous_queries,
+            content=enhanced_content,
+            num_queries=3,
+        )
+
+        followup_output = await followup_agent.arun(followup_input)
+        return followup_output.followup_queries
+
+    async def _synthesize_research(
+        self,
+        results: List[SearchResultItem],
+        research_input: DeepResearchInputSchema,
+        quality_scores: List[float],
+        research_trace: List[str],
+    ) -> "DeepResearchOutputSchema":
+        """Synthesize research results into a comprehensive report."""
+        from akd.agents.schemas import DeepResearchOutputSchema
+
+        # Group results by relevance
+        high_quality_results = results[:20]  # Top 20 results
+
+        # Extract key findings
+        key_findings = []
+        for result in high_quality_results[:10]:
+            if result.content:
+                # Extract first significant sentence as a finding
+                sentences = result.content.split(". ")
+                if sentences:
+                    key_findings.append(sentences[0] + ".")
+
+        # Create research report structure
+        report_sections = [
+            "# Research Report",
+            "\n## Executive Summary",
+            f"This research on '{research_input.original_query}' analyzed {len(results)} sources "
+            f"across {len(research_trace)} iterations.",
+            "\n## Key Findings",
+        ]
+
+        for i, finding in enumerate(key_findings[:5], 1):
+            report_sections.append(f"{i}. {finding}")
+
+        report_sections.extend(
+            [
+                "\n## Detailed Analysis",
+                "Based on the comprehensive literature review, the following themes emerged:",
+                "\n## Sources Consulted",
+            ]
+        )
+
+        # Add top sources
+        sources = []
+        citations = []
+        for result in high_quality_results:
+            sources.append(str(result.url))
+            citations.append(
+                {
+                    "title": result.title or "Untitled",
+                    "url": str(result.url),
+                    "excerpt": (result.content or "") + "...",
+                }
+            )
+            report_sections.append(f"- [{result.title}]({result.url})")
+
+        report_sections.extend(
+            [
+                "\n## Research Quality",
+                f"Average quality score: {sum(quality_scores) / len(quality_scores):.2f}"
+                if quality_scores
+                else "No quality scores available",
+                "\n## Limitations and Gaps",
+                "- Limited to publicly available sources",
+                "- Time constraints may have limited depth of analysis",
+            ]
+        )
+
+        research_report = "\n".join(report_sections)
+
+        # Create output
+        output = DeepResearchOutputSchema(
+            research_report=research_report,
+            key_findings=key_findings,
+            sources_consulted=sources,
+            evidence_quality_score=sum(quality_scores) / len(quality_scores)
+            if quality_scores
+            else 0.5,
+            gaps_identified=[
+                "Potential newer research not yet indexed",
+                "Non-English sources not included",
+            ],
+            citations=citations,
+            iterations_performed=len(research_trace),
+            research_trace=research_trace,
+        )
+
+        return output
+
+    async def _arun(
+        self,
+        params: SearchToolInputSchema,
+        **kwargs: Any,
+    ) -> SearchToolOutputSchema:
+        """
+        Run the DeepLitSearchTool with multi-agent orchestration.
+
+        This implements the full deep research pipeline:
+        1. Triage the query
+        2. Clarify if needed
+        3. Build research instructions
+        4. Perform deep research
+        5. Return structured results
+        """
+        from akd.agents.schemas import TriageAgentInputSchema
+
+        original_query = " ".join(params.queries)  # Combine queries
+
+        # Step 1: Triage the query
+        triage_input = TriageAgentInputSchema(query=original_query)
+        triage_output = await self.triage_agent.arun(triage_input)
+
+        if self.debug:
+            logger.debug(f"Triage decision: {triage_output.routing_decision}")
+            logger.debug(f"Reasoning: {triage_output.reasoning}")
+
+        # Step 2: Handle based on triage decision
+        enriched_query = original_query
+        clarifications = None
+
+        if triage_output.needs_clarification and self.auto_clarify:
+            enriched_query, clarifications = await self._handle_clarification(
+                original_query,
+                kwargs.get("mock_answers"),
+            )
+
+        # Step 3: Build research instructions
+        instructions = await self._build_research_instructions(
+            enriched_query,
+            clarifications,
+        )
+
+        # Step 4: Perform deep research
+        research_output = await self._perform_deep_research(
+            instructions,
+            original_query,
+        )
+
+        # Step 5: Convert research output to SearchToolOutputSchema
+        # Extract search results from the research for compatibility
+        results = []
+        for citation in research_output.citations or []:
+            results.append(
+                SearchResultItem(
+                    url=citation["url"],
+                    title=citation["title"],
+                    content=citation["excerpt"],
+                    query=original_query,
+                    category="science",
+                )
+            )
+
+        # Add research report as a special result
+        if results:
+            results.insert(
+                0,
+                SearchResultItem(
+                    url="deep-research://report",
+                    title="Deep Research Report",
+                    content=research_output.research_report,
+                    query=original_query,
+                    category="research",
+                    extra={
+                        "key_findings": research_output.key_findings,
+                        "quality_score": research_output.evidence_quality_score,
+                        "iterations": research_output.iterations_performed,
+                    },
+                ),
+            )
+
+        return SearchToolOutputSchema(
+            results=results,
+            category=params.category,
+        )
