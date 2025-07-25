@@ -121,13 +121,6 @@ class ControlledSearchAgent(SearchAgent):
     class _RubricAnalysis(BaseModel):
         """Analysis of multi-rubric assessment for agentic decision making."""
 
-        topic_alignment_positive: bool = Field(default=False)
-        content_depth_positive: bool = Field(default=False)
-        recency_relevance_positive: bool = Field(default=False)
-        methodological_relevance_positive: bool = Field(default=False)
-        evidence_quality_positive: bool = Field(default=False)
-        scope_relevance_positive: bool = Field(default=False)
-
         positive_rubric_count: int = Field(default=0)
         weak_rubrics: List[str] = Field(default_factory=list)
         strong_rubrics: List[str] = Field(default_factory=list)
@@ -196,53 +189,44 @@ class ControlledSearchAgent(SearchAgent):
         """Analyze multi-rubric output to determine positive/negative assessments."""
         analysis = self._RubricAnalysis()
 
-        # Determine positive assessments using enum values directly
-        analysis.topic_alignment_positive = (
-            rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED
-        )
-        analysis.content_depth_positive = (
-            rubric_output.content_depth == ContentDepthLabel.COMPREHENSIVE
-        )
-        analysis.recency_relevance_positive = (
-            rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT
-        )
-        analysis.methodological_relevance_positive = (
-            rubric_output.methodological_relevance
-            == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND
-        )
-        analysis.evidence_quality_positive = (
-            rubric_output.evidence_quality == EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE
-        )
-        analysis.scope_relevance_positive = (
-            rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE
-        )
-
-        # Count positive rubrics
-        positive_flags = [
-            analysis.topic_alignment_positive,
-            analysis.content_depth_positive,
-            analysis.recency_relevance_positive,
-            analysis.methodological_relevance_positive,
-            analysis.evidence_quality_positive,
-            analysis.scope_relevance_positive,
+        # Check each rubric against its positive value
+        rubric_checks = [
+            (
+                "topic_alignment",
+                rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED,
+            ),
+            (
+                "content_depth",
+                rubric_output.content_depth == ContentDepthLabel.COMPREHENSIVE,
+            ),
+            (
+                "recency_relevance",
+                rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT,
+            ),
+            (
+                "methodological_relevance",
+                rubric_output.methodological_relevance
+                == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND,
+            ),
+            (
+                "evidence_quality",
+                rubric_output.evidence_quality
+                == EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE,
+            ),
+            (
+                "scope_relevance",
+                rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE,
+            ),
         ]
-        analysis.positive_rubric_count = sum(positive_flags)
 
-        # Identify weak and strong rubrics
-        rubric_mapping = {
-            "topic_alignment": analysis.topic_alignment_positive,
-            "content_depth": analysis.content_depth_positive,
-            "recency_relevance": analysis.recency_relevance_positive,
-            "methodological_relevance": analysis.methodological_relevance_positive,
-            "evidence_quality": analysis.evidence_quality_positive,
-            "scope_relevance": analysis.scope_relevance_positive,
-        }
-
-        for rubric_name, is_positive in rubric_mapping.items():
+        # Categorize rubrics
+        for rubric_name, is_positive in rubric_checks:
             if is_positive:
                 analysis.strong_rubrics.append(rubric_name)
             else:
                 analysis.weak_rubrics.append(rubric_name)
+
+        analysis.positive_rubric_count = len(analysis.strong_rubrics)
 
         # Overall assessment
         if analysis.positive_rubric_count >= 4:
