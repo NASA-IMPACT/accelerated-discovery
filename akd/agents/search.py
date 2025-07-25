@@ -115,6 +115,62 @@ class ControlledSearchAgentConfig(BaseAgentConfig):
         le=6,
         description="Minimum positive rubrics (out of 6) for 'moderate' assessment.",
     )
+    # Progress thresholds for stopping decision
+    min_result_percentage: float = Field(
+        default=0.3,
+        ge=0.1,
+        le=0.8,
+        description="Minimum percentage of requested results before allowing stop.",
+    )
+    min_absolute_results: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Minimum absolute number of results before allowing stop.",
+    )
+    high_progress_threshold: float = Field(
+        default=0.8,
+        ge=0.6,
+        le=1.0,
+        description="Progress threshold for 'high progress' quality adjustments.",
+    )
+    low_progress_threshold: float = Field(
+        default=0.5,
+        ge=0.2,
+        le=0.7,
+        description="Progress threshold for 'low progress' quality adjustments.",
+    )
+    # Quality adjustments for stopping decision
+    min_quality_when_high_progress: int = Field(
+        default=2,
+        ge=1,
+        le=4,
+        description="Minimum quality threshold when high progress.",
+    )
+    max_quality_when_low_progress: int = Field(
+        default=5,
+        ge=3,
+        le=6,
+        description="Maximum quality threshold when low progress.",
+    )
+    # Safety limits for stopping decision
+    overflow_multiplier: float = Field(
+        default=1.5,
+        ge=1.2,
+        le=3.0,
+        description="Stop when results exceed target by this multiplier.",
+    )
+    critical_rubrics_threshold: float = Field(
+        default=0.8,
+        ge=0.5,
+        le=1.0,
+        description="Progress threshold for critical rubrics check.",
+    )
+    # Critical rubrics set
+    critical_rubrics: set[str] = Field(
+        default_factory=lambda: {"topic_alignment", "evidence_quality"},
+        description="Rubrics considered critical for quality.",
+    )
 
 
 class ControlledSearchAgent(SearchAgent):
@@ -130,6 +186,9 @@ class ControlledSearchAgent(SearchAgent):
     """
 
     config_schema = ControlledSearchAgentConfig
+
+    # Total number of rubrics used in quality assessment
+    _TOTAL_RUBRICS = 6
 
     class _RubricAnalysis(BaseModel):
         """Analysis of multi-rubric assessment for agentic decision making."""
@@ -270,12 +329,16 @@ class ControlledSearchAgent(SearchAgent):
         result_progress = (
             current_result_count / desired_max_results if desired_max_results > 0 else 0
         )
-        quality_score = rubric_analysis.positive_rubric_count / 6
+        quality_score = rubric_analysis.positive_rubric_count / self._TOTAL_RUBRICS
 
         # Dynamic minimum results threshold (adaptive based on quality)
         min_results_threshold = max(
-            desired_max_results * 0.3,  # At least 30% of requested
-            min(5, desired_max_results),  # But at least 5 or total requested if less
+            desired_max_results
+            * self.config.min_result_percentage,  # At least configurable % of requested
+            min(
+                self.config.min_absolute_results,
+                desired_max_results,
+            ),  # But at least configurable minimum or total requested if less
         )
 
         # Never stop if we have too few results
@@ -286,14 +349,18 @@ class ControlledSearchAgent(SearchAgent):
 
         # Dynamic quality threshold - lower if we have many results, higher if few
         quality_threshold = self.min_positive_rubrics
-        if result_progress > 0.8:  # If we have most requested results
+        if (
+            result_progress > self.config.high_progress_threshold
+        ):  # If we have most requested results
             quality_threshold = max(
-                2,
+                self.config.min_quality_when_high_progress,
                 self.min_positive_rubrics - 1,
             )  # Lower quality bar
-        elif result_progress < 0.5:  # If we have few results
+        elif (
+            result_progress < self.config.low_progress_threshold
+        ):  # If we have few results
             quality_threshold = min(
-                5,
+                self.config.max_quality_when_low_progress,
                 self.min_positive_rubrics + 1,
             )  # Higher quality bar
 
@@ -303,7 +370,7 @@ class ControlledSearchAgent(SearchAgent):
             if current_result_count >= desired_max_results:
                 return (
                     True,
-                    f"STOP: Target reached ({current_result_count}/{desired_max_results}) + quality good ({rubric_analysis.positive_rubric_count}/6)",
+                    f"STOP: Target reached ({current_result_count}/{desired_max_results}) + quality good ({rubric_analysis.positive_rubric_count}/{self._TOTAL_RUBRICS})",
                 )
             elif (
                 result_progress >= self.early_stop_result_progress
@@ -311,22 +378,25 @@ class ControlledSearchAgent(SearchAgent):
             ):  # Configurable early stopping thresholds
                 return (
                     True,
-                    f"STOP: Sufficient results ({current_result_count}/{desired_max_results}, {result_progress:.1%}) + excellent quality ({rubric_analysis.positive_rubric_count}/6, {quality_score:.1%})",
+                    f"STOP: Sufficient results ({current_result_count}/{desired_max_results}, {result_progress:.1%}) + excellent quality ({rubric_analysis.positive_rubric_count}/{self._TOTAL_RUBRICS}, {quality_score:.1%})",
                 )
 
         # Force stop if we've exceeded target significantly (search overflow protection)
-        if current_result_count >= desired_max_results * 1.5:
+        if (
+            current_result_count
+            >= desired_max_results * self.config.overflow_multiplier
+        ):
             return (
                 True,
                 f"STOP: Exceeded target ({current_result_count}/{desired_max_results}) - preventing overflow",
             )
 
         # Critical rubrics check - but balanced with results progress
-        critical_rubrics = {"topic_alignment", "evidence_quality"}
+        critical_rubrics = self.config.critical_rubrics
         weak_critical = critical_rubrics.intersection(set(rubric_analysis.weak_rubrics))
 
         if (
-            weak_critical and result_progress < 0.8
+            weak_critical and result_progress < self.config.critical_rubrics_threshold
         ):  # Only block if we don't have most results
             return False, (
                 f"CONTINUE: Critical rubrics weak ({weak_critical}) + need more results ({current_result_count}/{desired_max_results})"
@@ -351,22 +421,22 @@ class ControlledSearchAgent(SearchAgent):
                     return True, (
                         f"STOP: No improvement in {self.rubric_improvement_threshold} iterations + sufficient results ({current_result_count}/{desired_max_results}, {result_progress:.1%}) + excellent quality ({quality_score:.1%})"
                     )
-                elif result_progress < 0.5:
+                elif result_progress < self.config.low_progress_threshold:
                     # Force continue if we don't have enough results yet
                     return False, (
                         f"CONTINUE: Stagnation detected but insufficient results ({current_result_count}/{desired_max_results}) - need at least 50%"
                     )
 
         # Continue searching - provide specific guidance
-        if result_progress < 0.5:
+        if result_progress < self.config.low_progress_threshold:
             return (
                 False,
-                f"CONTINUE: Need more results ({current_result_count}/{desired_max_results}) + improving quality ({rubric_analysis.positive_rubric_count}/6)",
+                f"CONTINUE: Need more results ({current_result_count}/{desired_max_results}) + improving quality ({rubric_analysis.positive_rubric_count}/{self._TOTAL_RUBRICS})",
             )
         else:
             return (
                 False,
-                f"CONTINUE: Refining quality ({rubric_analysis.positive_rubric_count}/6) with {current_result_count}/{desired_max_results} results",
+                f"CONTINUE: Refining quality ({rubric_analysis.positive_rubric_count}/{self._TOTAL_RUBRICS}) with {current_result_count}/{desired_max_results} results",
             )
 
     def _generate_query_focus_recommendations(
