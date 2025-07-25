@@ -102,6 +102,19 @@ class ControlledSearchAgentConfig(BaseAgentConfig):
         le=1.0,
         description="Minimum quality score (0.5-1.0) to allow stopping due to stagnation.",
     )
+    # Overall assessment thresholds
+    strong_assessment_threshold: int = Field(
+        default=4,
+        ge=1,
+        le=6,
+        description="Minimum positive rubrics (out of 6) for 'strong' assessment.",
+    )
+    moderate_assessment_threshold: int = Field(
+        default=2,
+        ge=1,
+        le=6,
+        description="Minimum positive rubrics (out of 6) for 'moderate' assessment.",
+    )
 
 
 class ControlledSearchAgent(SearchAgent):
@@ -228,10 +241,12 @@ class ControlledSearchAgent(SearchAgent):
 
         analysis.positive_rubric_count = len(analysis.strong_rubrics)
 
-        # Overall assessment
-        if analysis.positive_rubric_count >= 4:
+        # Overall assessment using configurable thresholds
+        if analysis.positive_rubric_count >= self.config.strong_assessment_threshold:
             analysis.overall_assessment = "strong"
-        elif analysis.positive_rubric_count >= 2:
+        elif (
+            analysis.positive_rubric_count >= self.config.moderate_assessment_threshold
+        ):
             analysis.overall_assessment = "moderate"
         else:
             analysis.overall_assessment = "weak"
