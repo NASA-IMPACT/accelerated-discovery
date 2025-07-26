@@ -691,7 +691,7 @@ class SemanticScholarSearchTool(
                 f"Failed to fetch Semantic Scholar results for query '{query}': {e}",
             )
 
-        return []
+        return [None]
 
     def _parse_result(
         self,
