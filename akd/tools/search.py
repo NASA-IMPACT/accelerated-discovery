@@ -433,6 +433,8 @@ class SemanticScholarSearchToolConfig(BaseToolConfig):
             ),
         ),
     )
+    # External ID to fetch paper details with
+    external_id: Optional[Literal["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]] = Field(default="DOI")
     debug: bool = False
 
     @field_validator("api_key", mode="before")
@@ -469,6 +471,7 @@ class SemanticScholarSearchTool(
         fields: Optional[List[str]] = None,
         results_per_page: int = 100,
         max_pages_per_query: int = 5,
+        external_id: str = "DOI",
         debug: bool = False,
     ) -> SemanticScholarSearchTool:
         """Creates an instance from specific parameters."""
@@ -478,6 +481,7 @@ class SemanticScholarSearchTool(
             "max_results": max_results,
             "results_per_page": results_per_page,
             "max_pages_per_query": max_pages_per_query,
+            "external_id": external_id,
             "debug": debug,
         }
         if fields:
@@ -897,19 +901,12 @@ class SemanticScholarSearchTool(
         Returns:
             List of PaperDataItem objects.
         """
-        external_id = kwargs.get("external_id", "DOI")
-        if external_id not in ["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]:
-            raise ValueError(
-                f"Unsupported external_id '{external_id}'. "
-                f"Must be one of: {', '.join(["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"])}"
-            )
-
         async with aiohttp.ClientSession() as session:
             tasks = [
                 self._fetch_paper_by_external_id(
                     session,
                     query,
-                    external_id
+                    kwargs.get("external_id", self.config.external_id)
                 )
                 for query in params.queries
             ]
