@@ -1,11 +1,14 @@
 import ast
 import asyncio
+import networkx as nx
+
+from typing import List, Tuple, Dict, Union
 
 from .prompts import *
-from .structures import *
+from .structures import ParsedPaper, PaperDataItem
 
 
-async def add_paper_to_graph(paper, G, llm):
+async def add_paper_to_graph(G: nx.Graph, paper: ParsedPaper, llm) -> nx.Graph:
     """
     Adds a paper and its associated metadata to a NetworkX graph.
 
@@ -89,7 +92,7 @@ async def add_paper_to_graph(paper, G, llm):
     return G
                     
 
-def get_nodes_by_type(G, node_type):
+def get_nodes_by_type(G: nx.Graph, node_type: str) -> List[str]:
     """
     Retrieves all nodes from the graph that match a specific node type.
 
@@ -104,59 +107,65 @@ def get_nodes_by_type(G, node_type):
     return nodes
 
 
-def extract_direct_triples(graph, start_node):
+def extract_direct_triples(G: nx.Graph, start_node: str) ->List[Tuple[str, str, str]]:
     """
     Extracts all direct relationship triples from the given start node in the graph.
 
     Args:
-        graph (networkx.Graph): The graph containing nodes and edges.
+        G (networkx.Graph): The graph containing nodes and edges.
         start_node (str): The node ID from which to extract direct relationships.
 
     Returns:
         List[Tuple[str, str, str]]: A deduplicated list of (node_type_1, relationship, node_type_2) triples.
     """
     triples = []
-    if start_node not in graph:
+    if start_node not in G:
         raise ValueError(f"Node {start_node} does not exist in the graph.")
-    for neighbor, data in graph[start_node].items():
-        node_type_1 = graph.nodes[start_node].get("node_type", "unknown")
-        node_type_2 = graph.nodes[neighbor].get("node_type", "unknown")
+    for neighbor, data in G[start_node].items():
+        node_type_1 = G.nodes[start_node].get("node_type", "unknown")
+        node_type_2 = G.nodes[neighbor].get("node_type", "unknown")
         relationship = data.get("relationship", "unknown")
         triples.append((node_type_1, relationship, node_type_2))
     return list(set(triples))
 
 
-def get_connected_nodes(graph, start_node, target_node_type=None, relation=None, single=False):
+def get_connected_nodes(G: nx.Graph, 
+                        start_node: str, 
+                        target_node_type: str = None,
+                        relation: str = None,
+                        first_node: bool = False) -> Union[List, Dict, None]:
     """
     Retrieves nodes directly connected to a given node, with optional filtering by node type and relationship.
 
     Args:
-        graph (networkx.Graph): The graph containing nodes and edges.
+        G (networkx.Graph): The graph containing nodes and edges.
         start_node (str): The node ID from which to search for connected nodes.
         target_node_type (Optional[str]): Filter to return only nodes of this type. If None, all types are considered.
         relation (Optional[str]): Filter to return only edges with this relationship label. If None, all relationships are considered.
-        single (bool): If True, return only the first matching node's attributes (dict). If False, return all matches.
+        first_node (bool): If True, return only the first matching node's attributes (dict). If False, return all matches.
 
     Returns:
         Union[List[Tuple[str, str, dict]], dict, None]:
-            - If single=False: A list of tuples (node_id, relationship, node_attributes) matching the criteria.
-            - If single=True: A single node's attributes (dict) if found, else None.
+            - If first_node=False: A list of tuples (node_id, relationship, node_attributes) matching the criteria.
+            - If first_node=True: A single node's attributes (dict) if found, else None.
     """
-    if start_node not in graph:
+    if start_node not in G:
         raise ValueError(f"Node {start_node} does not exist in the graph.")
     connected_nodes = []
-    for neighbor, data in graph[start_node].items():
-        neighbor_node_type = graph.nodes[neighbor].get("node_type", "unknown")
+    for neighbor, data in G[start_node].items():
+        neighbor_node_type = G.nodes[neighbor].get("node_type", "unknown")
         relationship = data.get("relationship", "unknown")
         if (target_node_type is None or neighbor_node_type == target_node_type) and \
            (relation is None or relation == relationship):
-            connected_nodes.append((neighbor, relationship, graph.nodes[neighbor]))
-            if single:
-                return graph.nodes[neighbor]
-    return connected_nodes if not single else None
+            connected_nodes.append((neighbor, relationship, G.nodes[neighbor]))
+            if first_node:
+                return G.nodes[neighbor]
+    return connected_nodes if not first_node else None
 
 
-async def select_subsections(connected_subsection_nodes, query, llm):
+async def select_subsections(connected_subsection_nodes: List,
+                             query: str,
+                             llm) -> List[str]:
     """
     Selects relevant subsection nodes from a list of connected nodes based on a user query using an LLM.
 
@@ -183,7 +192,10 @@ async def select_subsections(connected_subsection_nodes, query, llm):
     return selected_subsection_nodes
 
 
-async def retrieve_relevant_sections(G, paper_node, query, llm):
+async def retrieve_relevant_sections(G: nx.Graph,
+                                    paper_node: str,
+                                    query: str,
+                                    llm) -> List[str]:
     """
     Retrieves relevant section and subsection nodes from a graph based on a user query using an LLM.
 
@@ -222,7 +234,7 @@ async def retrieve_relevant_sections(G, paper_node, query, llm):
     return selected_nodes
 
 
-async def classify_section_titles(paper: PaperDataItem, llm):
+async def classify_section_titles(paper: PaperDataItem, llm) -> Dict[str, str]:
     """
     Classifies section titles of a paper into standardized categories using an LLM.
 
@@ -245,7 +257,9 @@ async def classify_section_titles(paper: PaperDataItem, llm):
     return section_to_key
 
 
-async def select_nodes(G, query, llm):
+async def select_nodes(G: nx.Graph,
+                       query: str,
+                       llm) -> List[List[str]]:
     """
     Selects relevant section and subsection nodes across all paper nodes in the graph based on a query.
 
@@ -266,7 +280,10 @@ async def select_nodes(G, query, llm):
     return all_selected_nodes
 
 
-async def generate_final_answer(G, query, all_selected_nodes, llm):
+async def generate_final_answer(G: nx.Graph, 
+                                query: str,
+                                all_selected_nodes: List[List[str]],
+                                llm) -> str:
     """
     Generates a consolidated answer for the query based on selected nodes in the graph.
 
@@ -280,7 +297,7 @@ async def generate_final_answer(G, query, all_selected_nodes, llm):
         Response: The output of the summarization chain containing the final consolidated answer.
     """
     local_answer_chain = gen_answer_prompt | llm
-    answer_chain = summarise_answer_prompt | llm
+    final_answer_chain = summarise_answer_prompt | llm
     all_answer_prompt_data = []
     for selected_nodes in all_selected_nodes:
         answer_prompt_data = []
@@ -293,20 +310,28 @@ async def generate_final_answer(G, query, all_selected_nodes, llm):
                 'section_content': node_data[list(node_data.keys())[1]]
             })
         all_answer_prompt_data.append(answer_prompt_data)
-    all_answers = []
-    for answer_prompt_data in all_answer_prompt_data:
-        answers = await local_answer_chain.abatch(answer_prompt_data)
-        all_answers.append(answers)
+    all_answers = await asyncio.gather(*[
+        local_answer_chain.abatch(answer_prompt_data) for answer_prompt_data in all_answer_prompt_data
+    ])
     attributed_answers = []
     for answers, selected_nodes in zip(all_answers, all_selected_nodes):
         for node_id, answer in zip(selected_nodes, answers):
             attributed_answers.append({node_id: answer.content})
-    output = await answer_chain.ainvoke(input={'query': query, "attributed_answer_list": attributed_answers})
-    # final_answer = format_final_answer(G, output.content)
+    output = await final_answer_chain.ainvoke(input={'query': query, "attributed_answer_list": attributed_answers})
     return output
 
 
-def format_final_answer(G, output):
+def format_final_answer(G: nx.Graph, output: str) -> str:
+    """
+    Formats the final answer by appending human-readable citations based on graph node metadata.
+
+    Args:
+        G (networkx.Graph): The graph containing paper and section nodes.
+        output (str): The generated model output/
+
+    Returns:
+        str: A string combining the main answer and a formatted "### Sources" section with numbered citations.
+    """
     cited_sources = output.split("### Sources")[-1].strip().split('\n')
     attributed_sources = []
     for i in range(len(cited_sources)):

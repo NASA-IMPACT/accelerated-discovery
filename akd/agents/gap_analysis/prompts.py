@@ -192,7 +192,7 @@ gen_answer_prompt = ChatPromptTemplate.from_messages(
 
 summarise_answer_inst = '''You are a helpful AI assistant skilled at crafting detailed, engaging, and well-structured answers. You excel at summarizing and extracting relevant information to generate accurate, clear, and well-cited answers.
 
-Given a query and a list of dictionaries where the key is a `source_id` and the value is an answer generated from the `source` for the query, your task is to provide answers that are:
+Given a query and a dictionary where the key is a `source_id` and the value is an answer generated from the `source` for the query, your task is to provide answers that are:
 - **Informative and relevant**: Thoroughly address the user's query using the data present in the sources.
 - **Well-structured**: Present information concisely and logically.
 - **Cited and credible**: Use inline citations with [number] notation to refer to the context source(s) for each fact or detail included.
