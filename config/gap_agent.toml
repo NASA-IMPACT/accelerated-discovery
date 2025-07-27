@@ -1,0 +1,14 @@
+[docling_scraper]
+debug = false
+do_table_structure = true
+pdf_mode = "accurate"
+export_type = "html"
+
+[s2_tool]
+api_key = ""
+debug = false
+external_id = "ARXIV"
+
+[gap_settings]
+model_name = "gpt-4o-mini"
+api_key = ""
