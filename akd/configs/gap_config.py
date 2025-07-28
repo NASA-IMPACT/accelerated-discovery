@@ -11,9 +11,12 @@ from akd.agents._base import BaseAgentConfig
 
 
 class GapAgentSettings(BaseSettings):
-    docling_scraper: DoclingScraperConfig
-    s2_tool: SemanticScholarSearchToolConfig
-    gap_settings: BaseAgentConfig
+    docling_scraper_config: DoclingScraperConfig
+    s2_tool_config: SemanticScholarSearchToolConfig
+    api_key: str
+    model_name: str
+    temperature: float = 0.0
+    system_prompt: str = None
 
     @classmethod
     def from_toml(cls, toml_file_path: str) -> GapAgentSettings:
