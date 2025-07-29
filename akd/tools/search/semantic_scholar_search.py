@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  
+import asyncio
 import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
@@ -13,7 +13,7 @@ from pydantic.networks import HttpUrl
 
 from akd.structures import PaperDataItem, SearchResultItem
 from akd.tools._base import BaseTool
-from .base_search import SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
+from ._base import SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
 
 class SemanticScholarSearchToolInputSchema(SearchToolInputSchema):
     """
@@ -38,7 +38,7 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
         default=(os.getenv("SEMANTIC_SCHOLAR_API_KEY") or os.getenv("S2_API_KEY")),
     )
     base_url: HttpUrl = Field(default="https://api.semanticscholar.org")
-    max_results: int = Field(default=int(os.getenv("SEMANTIC_SCHOLAR_MAX_RESULTS", 10)))
+    max_results: int = Field(default=int(os.getenv("SEMANTIC_SCHOLAR_MAX_RESULTS", "10")))
     fields: List[str] = Field(
         default_factory=lambda: [
             "paperId",
@@ -54,7 +54,7 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
     )
     # Semantic Scholar API limits per request
     results_per_page: int = Field(
-        default=int(os.getenv("SEMANTIC_SCHOLAR_RESULTS_PER_PAGE", 10)),
+        default=int(os.getenv("SEMANTIC_SCHOLAR_RESULTS_PER_PAGE", "10")),
         le=100,
         gt=0,
     )
@@ -63,9 +63,11 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
         default=int(
             os.getenv(
                 "SEMANTIC_SCHOLAR_MAX_PAGES",
-                10,
+                "10",
             ),
         ),
+        gt=0,
+        le=50,
     )
     debug: bool = False
 

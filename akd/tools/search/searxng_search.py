@@ -6,10 +6,11 @@ from typing import List, Optional
 
 import aiohttp
 from loguru import logger
+from pydantic import Field
 from pydantic.networks import HttpUrl
 
 from akd.structures import SearchResultItem
-from .base_search import SearchTool, SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
+from ._base import SearchTool, SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
 
 
 class SearxNGSearchToolInputSchema(SearchToolInputSchema):
@@ -29,15 +30,17 @@ class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
 
 
 class SearxNGSearchToolConfig(SearchToolConfig):
-    base_url: HttpUrl = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
-    max_results: int = os.getenv("SEARXNG_MAX_RESULTS", 10)
-    engines: List[str] = os.getenv(
-        "SEARXNG_ENGINES",
-        "google,arxiv,google_scholar",
-    ).split(",")
-    max_pages: int = int(os.getenv("SEARXNG_MAX_PAGES", 25))
-    results_per_page: int = int(os.getenv("SEARXNG_RESULTS_PER_PAGE", 10))
-    score_cutoff: float = float(os.getenv("SEARXNG_SCORE_CUTOFF", 0.25))
+    base_url: HttpUrl = Field(default=os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"))
+    max_results: int = Field(default=int(os.getenv("SEARXNG_MAX_RESULTS", "10")))
+    engines: List[str] = Field(
+        default_factory=lambda: os.getenv(
+            "SEARXNG_ENGINES",
+            "google,arxiv,google_scholar",
+        ).split(",")
+    )
+    max_pages: int = Field(default=int(os.getenv("SEARXNG_MAX_PAGES", "25")), gt=0, le=100)
+    results_per_page: int = Field(default=int(os.getenv("SEARXNG_RESULTS_PER_PAGE", "10")), gt=0, le=100)
+    score_cutoff: float = Field(default=float(os.getenv("SEARXNG_SCORE_CUTOFF", "0.25")), ge=0.0, le=1.0)
     debug: bool = False
 
 
@@ -140,22 +143,32 @@ class SearxNGSearchTool(SearchTool):
         if category:
             query_params["categories"] = category
 
-        async with session.get(
-            f"{self.base_url}/search",
-            params=query_params,
-        ) as response:
-            if response.status != 200:
-                raise Exception(
-                    f"Failed to fetch search results for query '{query}': {response.status} {response.reason}",
-                )
-            data = await response.json()
-            results = data.get("results", [])
+        try:
+            async with session.get(
+                f"{self.base_url}/search",
+                params=query_params,
+            ) as response:
+                if response.status != 200:
+                    logger.error(
+                        f"HTTP Error fetching SearxNG results for query '{query}': {response.status} {response.reason}",
+                    )
+                    if self.debug:
+                        logger.debug(f"Request URL: {response.url}")
+                        logger.debug(f"Request Params: {query_params}")
+                    raise Exception(
+                        f"Failed to fetch search results for query '{query}': {response.status} {response.reason}",
+                    )
+                data = await response.json()
+                results = data.get("results", [])
 
-            # Add the query to each result
-            for result in results:
-                result["query"] = query
+                # Add the query to each result
+                for result in results:
+                    result["query"] = query
 
-            return results
+                return results
+        except Exception as e:
+            logger.error(f"Failed to fetch SearxNG results for query '{query}': {e}")
+            raise
 
     async def _process_results(
         self,
@@ -235,7 +248,7 @@ class SearxNGSearchTool(SearchTool):
 
             except Exception as e:
                 logger.error(
-                    f"Error fetching page {current_page} for query '{query}': {str(e)}",
+                    f"Error fetching page {current_page} for query '{query}': {e}",
                 )
                 break
 
