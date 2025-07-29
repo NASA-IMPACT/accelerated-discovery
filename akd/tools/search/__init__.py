@@ -3,7 +3,7 @@
 # Re-export SearchResultItem from structures for backward compatibility
 from akd.structures import SearchResultItem
 
-from .base_search import (
+from ._base import (
     AgenticSearchTool,
     QueryFocusStrategy,
     SearchTool, 

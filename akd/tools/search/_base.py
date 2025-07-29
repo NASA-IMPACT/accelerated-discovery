@@ -85,6 +85,3 @@ class AgenticSearchTool(SearchTool):
     Type for agentic search tools that use multi-rubric analysis
     and does agentic decision-making.
     """
-
-    input_schema = SearchToolInputSchema
-    output_schema = SearchToolOutputSchema
