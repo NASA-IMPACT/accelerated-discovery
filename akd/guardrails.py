@@ -3,7 +3,6 @@
 from typing import List, Optional
 
 from loguru import logger
-from pydantic import computed_field
 
 from akd.configs.guardrails_config import GuardrailsConfig
 from akd.tools.granite_guardian_tool import (
@@ -204,27 +203,29 @@ def add_guardrails(
                 """Add guardrails validation status to response object."""
                 # Store the guardrails status in the object's __dict__ to bypass Pydantic validation
                 object.__setattr__(response, "_guardrails_passed", guardrails_passed)
-                
+
                 # Add a method to check guardrails validation status
                 def guardrails_validated():
                     return getattr(response, "_guardrails_passed", True)
-                
-                object.__setattr__(response, "guardrails_validated", guardrails_validated)
+
+                object.__setattr__(
+                    response, "guardrails_validated", guardrails_validated
+                )
 
         # Preserve original class metadata
         GuardedClass.__name__ = f"Guardrailed{cls.__name__}"
         GuardedClass.__qualname__ = f"Guardrailed{cls.__qualname__}"
         GuardedClass.__module__ = cls.__module__
         GuardedClass.__doc__ = cls.__doc__ or f"Guardrailed version of {cls.__name__}"
-        
+
         # Preserve class attributes needed by the framework
-        if hasattr(cls, 'input_schema'):
+        if hasattr(cls, "input_schema"):
             GuardedClass.input_schema = cls.input_schema
-        if hasattr(cls, 'output_schema'):
+        if hasattr(cls, "output_schema"):
             GuardedClass.output_schema = cls.output_schema
-        if hasattr(cls, 'config_schema'):
+        if hasattr(cls, "config_schema"):
             GuardedClass.config_schema = cls.config_schema
-            
+
         return GuardedClass
 
     return decorator
@@ -235,7 +236,7 @@ def add_guardrails(
 # @add_guardrails(...)
 # class MyAgent(InstructorBaseAgent):
 #     pass
-# 
+#
 # @add_guardrails(...)
 # class MyTool(BaseTool):
 #     pass
