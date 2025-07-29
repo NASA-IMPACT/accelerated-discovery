@@ -4,7 +4,8 @@ from akd.agents.factory import create_multi_rubric_relevancy_agent
 from akd.agents.relevancy import MultiRubricRelevancyAgent
 from akd.tools.relevancy import EnhancedRelevancyCheckerConfig, RubricWeights
 
-from .scrapers.composite import CompositeWebScraper, ResearchArticleResolver
+from .scrapers import ScraperToolBase, ScraperToolConfig
+from .scrapers.composite import CompositeScraper, ResearchArticleResolver
 from .scrapers.pdf_scrapers import SimplePDFScraper
 from .scrapers.resolvers import (
     ADSResolver,
@@ -13,22 +14,17 @@ from .scrapers.resolvers import (
     BaseArticleResolver,
     IdentityResolver,
 )
-from .scrapers.web_scrapers import (
-    Crawl4AIWebScraper,
-    SimpleWebScraper,
-    WebpageScraperToolConfig,
-    WebScraperToolBase,
-)
+from .scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 from .search import SearchTool, SearxNGSearchTool, SearxNGSearchToolConfig
 
 
 def create_default_scraper(
-    config: Optional[WebpageScraperToolConfig] = None,
+    config: Optional[ScraperToolConfig] = None,
     debug: bool = False,
-) -> WebScraperToolBase:
-    config = config or WebpageScraperToolConfig()
+) -> ScraperToolBase:
+    config = config or ScraperToolConfig()
     config.debug = debug
-    return CompositeWebScraper(
+    return CompositeScraper(
         SimpleWebScraper(config),
         Crawl4AIWebScraper(config),
         SimplePDFScraper(config),
