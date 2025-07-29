@@ -1,7 +1,5 @@
 from ._base import BaseTool, BaseToolConfig
 from .search import (
-    DeepLitSearchTool,
-    DeepLitSearchToolConfig,
     SearxNGSearchTool,
     SemanticScholarSearchTool,
 )
@@ -22,8 +20,6 @@ __all__ = [
     "SourceValidatorConfig",
     "create_source_validator",
     # Search Tools
-    "DeepLitSearchTool",
-    "DeepLitSearchToolConfig",
     "SearxNGSearchTool", 
     "SemanticScholarSearchTool",
     # Relevancy Assessment

@@ -23,12 +23,6 @@ from .semantic_scholar_search import (
     SemanticScholarSearchToolInputSchema,
     SemanticScholarSearchToolOutputSchema,
 )
-from .agentic_search import (
-    ControlledAgenticLitSearchTool,
-    ControlledAgenticLitSearchToolConfig,
-    DeepLitSearchTool,
-    DeepLitSearchToolConfig,
-)
 
 __all__ = [
     # Re-exported structures
@@ -50,9 +44,4 @@ __all__ = [
     "SemanticScholarSearchToolConfig",
     "SemanticScholarSearchToolInputSchema", 
     "SemanticScholarSearchToolOutputSchema",
-    # Agentic Search
-    "ControlledAgenticLitSearchTool",
-    "ControlledAgenticLitSearchToolConfig",
-    "DeepLitSearchTool",
-    "DeepLitSearchToolConfig",
 ]
