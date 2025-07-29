@@ -6,6 +6,12 @@ from .deep_research import (
     TriageAgent,
 )
 from .guardrails import add_guardrails
+from .litsearch import (
+    ControlledAgenticLitSearchAgent,
+    ControlledAgenticLitSearchAgentConfig,
+    DeepLitSearchAgent,
+    DeepLitSearchAgentConfig,
+)
 
 __all__ = [
     "BaseAgent", 
@@ -18,4 +24,9 @@ __all__ = [
     "DeepResearchAgent", 
     "InstructionBuilderAgent",
     "TriageAgent",
+    # Literature Search Agents
+    "ControlledAgenticLitSearchAgent",
+    "ControlledAgenticLitSearchAgentConfig",
+    "DeepLitSearchAgent",
+    "DeepLitSearchAgentConfig",
 ]
