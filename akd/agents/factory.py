@@ -1,17 +1,10 @@
 from akd.agents import BaseAgentConfig
-from akd.agents.extraction import EstimationExtractionAgent, IntentBasedExtractionSchemaMapper
+from akd.agents.extraction import EstimationExtractionAgent
 from akd.agents.intents import IntentAgent
-from akd.agents.litsearch import ControlledAgenticLitSearchAgent
-from akd.agents.query import QueryAgent, FollowUpQueryAgent
-from akd.agents.relevancy import MultiRubricRelevancyAgent, RelevancyAgent
-from akd.tools.scrapers.composite import CompositeScraper, ResearchArticleResolver
-from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
-from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
-from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
-from akd.tools.search import SearxNGSearchTool
+from akd.agents.query import QueryAgent
+from akd.agents.relevancy import MultiRubricRelevancyAgent
 from akd.configs.project import CONFIG
 from akd.configs.prompts import (
-    DEFAULT_SYSTEM_PROMPT,
     EXTRACTION_SYSTEM_PROMPT,
     INTENT_SYSTEM_PROMPT,
     MULTI_RUBRIC_RELEVANCY_SYSTEM_PROMPT,
@@ -69,47 +62,3 @@ def create_multi_rubric_relevancy_agent(
         system_prompt=MULTI_RUBRIC_RELEVANCY_SYSTEM_PROMPT,
     )
     return MultiRubricRelevancyAgent(config, debug=debug)
-
-
-def create_followupquery_agent(
-    config: BaseAgentConfig | None = None,
-    debug: bool = False,
-) -> FollowUpQueryAgent:
-    """Create a FollowUpQueryAgent instance."""
-    config = config or BaseAgentConfig(
-        api_key=CONFIG.model_config_settings.api_keys.openai,
-        model_name=CONFIG.model_config_settings.model_name,
-        temperature=CONFIG.model_config_settings.temperature,
-        system_prompt=QUERY_SYSTEM_PROMPT,  # Reuse query prompt
-    )
-    return FollowUpQueryAgent(config, debug=debug)
-
-
-def create_relevancy_agent(
-    config: BaseAgentConfig | None = None,
-    debug: bool = False,
-) -> RelevancyAgent:
-    """Create a basic RelevancyAgent instance."""
-    config = config or BaseAgentConfig(
-        api_key=CONFIG.model_config_settings.api_keys.openai,
-        model_name=CONFIG.model_config_settings.model_name,
-        temperature=CONFIG.model_config_settings.temperature,
-        system_prompt=DEFAULT_SYSTEM_PROMPT,  # Use default for basic relevancy
-    )
-    return RelevancyAgent(config, debug=debug)
-
-
-def create_lit_agent(
-    config: BaseAgentConfig | None = None,
-    debug: bool = False,
-) -> ControlledAgenticLitSearchAgent:
-    """Create a ControlledAgenticLitSearchAgent with default configuration."""
-    from akd.agents.litsearch import ControlledAgenticLitSearchAgentConfig
-    
-    # Use the new agent's config system
-    agent_config = ControlledAgenticLitSearchAgentConfig()
-    if config:
-        # Map basic config properties to new config if provided
-        agent_config.debug = debug
-        
-    return ControlledAgenticLitSearchAgent(config=agent_config, debug=debug)

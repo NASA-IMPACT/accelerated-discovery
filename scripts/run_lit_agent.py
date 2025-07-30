@@ -2,9 +2,10 @@ import argparse
 import asyncio
 import json
 
-from langchain_openai import ChatOpenAI
+import openai
 from loguru import logger
 from pydantic import ConfigDict
+from langchain_openai import ChatOpenAI
 
 from akd.agents.extraction import (
     EstimationExtractionAgent,
@@ -12,10 +13,7 @@ from akd.agents.extraction import (
 )
 from akd.agents.factory import create_query_agent
 from akd.agents.intents import IntentAgent
-from akd.agents.litsearch import (
-    ControlledAgenticLitSearchAgent,
-    LitSearchAgentInputSchema,
-)
+from akd.agents.litsearch import LitAgent, LitAgentInputSchema
 from akd.configs.lit_config import get_lit_agent_settings
 from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
 from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
@@ -52,14 +50,20 @@ async def main(args):
     schema_mapper = IntentBasedExtractionSchemaMapper()
     extraction_agent = EstimationExtractionAgent()
 
-    # Use the new ControlledAgenticLitSearchAgent with proper configuration
-    from akd.agents.litsearch import ControlledAgenticLitSearchAgentConfig
+    lit_agent = LitAgent(
+        intent_agent=intent_agent,
+        schema_mapper=schema_mapper,
+        query_agent=query_agent,
+        extraction_agent=extraction_agent,
+        search_tool=search_tool,
+        web_scraper=scraper,
+        article_resolver=article_resolver,
+    )
 
-    agent_config = ControlledAgenticLitSearchAgentConfig(debug=True)
-    lit_agent = ControlledAgenticLitSearchAgent(config=agent_config, debug=True)
+    lit_agent.clear_history()
 
     result = await lit_agent.arun(
-        LitSearchAgentInputSchema(query=args.query, max_results=5)
+        LitAgentInputSchema(query=args.query, max_search_results=5)
     )
     logger.info(result.model_dump())
 
