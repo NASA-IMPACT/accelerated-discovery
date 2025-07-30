@@ -153,7 +153,9 @@ class LangBaseAgent[
             Type[BaseModel]: The response from the language model.
         """
         response_model = response_model or self.output_schema
-        structured_client = self.client.with_structured_output(response_model)
+        structured_client = self.client.with_structured_output(
+            response_model, method="function_calling"
+        )
 
         # Format messages using the prompt template
         formatted_messages = self.prompt_template.format_messages(
