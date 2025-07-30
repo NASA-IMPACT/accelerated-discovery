@@ -174,7 +174,7 @@ class WebScraper(ScraperToolBase):
             url (str): The URL of the webpage.
 
         Returns:
-            WebpageMetadata: The extracted metadata.
+            ScrapedMetadata: The extracted metadata.
         """
         # domain = urlparse(url).netloc
 
