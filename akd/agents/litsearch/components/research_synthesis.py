@@ -1,37 +1,59 @@
 """
-Embedded research synthesis component for literature search agents.
+Embedded research synthesis component for deep literature search agent.
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 from pydantic import Field
 
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd._base import InputSchema, OutputSchema
+from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd.configs.prompts import DEEP_RESEARCH_AGENT_PROMPT
 from akd.structures import SearchResultItem
 
 
-class DeepResearchInputSchema(InputSchema):
-    """Input schema for deep research synthesis agent."""
-    
+class ResearchSynthesisInputSchema(InputSchema):
+    """Input schema for the ResearchSynthesisAgent."""
+
     query: str = Field(..., description="Research query to synthesize")
-    search_results: List[SearchResultItem] = Field(..., description="Search results to synthesize")
-    context: Optional[str] = Field(default=None, description="Additional research context")
+    search_results: List[SearchResultItem] = Field(
+        ..., description="Search results to synthesize into a report"
+    )
+    context: Optional[str] = Field(
+        default=None,
+        description="Additional research context including instructions, quality scores, and trace",
+    )
 
 
-class DeepResearchOutputSchema(OutputSchema):
-    """Output schema for deep research synthesis agent."""
-    
-    synthesis_report: str = Field(..., description="Comprehensive research synthesis report")
-    key_findings: List[str] = Field(default_factory=list, description="Key research findings")
-    research_gaps: List[str] = Field(default_factory=list, description="Identified research gaps")
-    confidence_score: float = Field(default=0.0, description="Confidence in synthesis quality", ge=0.0, le=1.0)
+class ResearchSynthesisOutputSchema(OutputSchema):
+    """Output schema for the ResearchSynthesisAgent."""
+
+    research_report: str = Field(
+        ..., description="Comprehensive research report in markdown format"
+    )
+    key_findings: List[str] = Field(
+        default_factory=list,
+        description="Key research findings extracted from the sources",
+    )
+    sources_consulted: List[str] = Field(
+        default_factory=list,
+        description="URLs of sources that were analyzed",
+    )
+    evidence_quality_score: float = Field(
+        default=0.5,
+        description="Overall quality score of the evidence (0.0-1.0)",
+        ge=0.0,
+        le=1.0,
+    )
+    citations: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Structured citation information for key sources",
+    )
 
 
-class ResearchSynthesisComponentConfig(BaseAgentConfig):
-    """Configuration for the embedded research synthesis component."""
+class ResearchSynthesisAgentConfig(BaseAgentConfig):
+    """Configuration for the ResearchSynthesisAgent."""
 
     system_prompt: str = DEEP_RESEARCH_AGENT_PROMPT
     model_name: str = "gpt-4o"
@@ -39,28 +61,47 @@ class ResearchSynthesisComponentConfig(BaseAgentConfig):
     max_tokens: int = 4000
 
 
+class ResearchSynthesisAgent(
+    InstructorBaseAgent[ResearchSynthesisInputSchema, ResearchSynthesisOutputSchema]
+):
+    """
+    Agent that synthesizes research results into comprehensive reports.
+
+    This agent takes search results and research context, then creates
+    well-structured research reports with key findings, citations, and
+    quality assessments following scientific research standards.
+    """
+
+    input_schema = ResearchSynthesisInputSchema
+    output_schema = ResearchSynthesisOutputSchema
+    config_schema = ResearchSynthesisAgentConfig
+
+    def __init__(
+        self,
+        config: ResearchSynthesisAgentConfig | None = None,
+        debug: bool = False,
+    ) -> None:
+        """Initialize the ResearchSynthesisAgent with configuration."""
+        config = config or ResearchSynthesisAgentConfig()
+        super().__init__(config=config, debug=debug)
+
+
 class ResearchSynthesisComponent:
     """
-    Embedded research synthesis component that creates comprehensive research reports.
+    Embedded research synthesis component that wraps ResearchSynthesisAgent.
 
-    This component is embedded within literature search agents to provide
-    research synthesis functionality without requiring separate agent instantiation.
+    This component provides the interface expected by literature search agents
+    while using the clean agent pattern internally.
     """
 
     def __init__(
         self,
-        config: Optional[ResearchSynthesisComponentConfig] = None,
+        config: Optional[ResearchSynthesisAgentConfig] = None,
         debug: bool = False,
     ):
-        self.config = config or ResearchSynthesisComponentConfig()
         self.debug = debug
-
-        # Create internal instructor agent for research synthesis
-        self._agent = InstructorBaseAgent[
-            DeepResearchInputSchema, DeepResearchOutputSchema
-        ](config=self.config, debug=debug)
-        self._agent.input_schema = DeepResearchInputSchema
-        self._agent.output_schema = DeepResearchOutputSchema
+        # Create the internal agent
+        self._agent = ResearchSynthesisAgent(config=config, debug=debug)
 
     async def synthesize(
         self,
@@ -70,7 +111,7 @@ class ResearchSynthesisComponent:
         quality_scores: List[float],
         research_trace: List[str],
         iterations_performed: int,
-    ) -> DeepResearchOutputSchema:
+    ):
         """
         Synthesize research results into a comprehensive report.
 
@@ -83,112 +124,101 @@ class ResearchSynthesisComponent:
             iterations_performed: Number of iterations performed
 
         Returns:
-            Comprehensive research output with report and metadata
+            Object with research_report, key_findings, sources_consulted,
+            evidence_quality_score, and citations attributes
         """
         if self.debug:
             logger.debug(f"Synthesizing {len(results)} results into research report")
 
-        # Prepare research input for synthesis
-        research_input = DeepResearchInputSchema(
-            research_instructions=research_instructions,
-            original_query=original_query,
-            max_iterations=iterations_performed,
-            quality_threshold=sum(quality_scores) / len(quality_scores)
-            if quality_scores
-            else 0.5,
+        # Prepare context with all relevant information
+        avg_quality = (
+            sum(quality_scores) / len(quality_scores) if quality_scores else 0.5
+        )
+        context = (
+            f"Research Instructions: {research_instructions}\n"
+            f"Iterations Performed: {iterations_performed}\n"
+            f"Average Quality Score: {avg_quality:.2f}\n"
+            f"Research Trace:\n"
+            + "\n".join(f"- {trace}" for trace in research_trace[-5:])
         )
 
-        # For now, create a structured output based on results
-        # In a full implementation, this would use the research agent for synthesis
-        return await self._create_structured_output(
-            results,
-            research_input,
-            quality_scores,
-            research_trace,
-            iterations_performed,
+        # Create input for the agent
+        agent_input = ResearchSynthesisInputSchema(
+            query=original_query,
+            search_results=results,
+            context=context,
         )
 
-    async def _create_structured_output(
+        try:
+            # Use the agent to synthesize the research
+            agent_output = await self._agent.arun(agent_input)
+
+            if self.debug:
+                logger.debug("Agent synthesis completed successfully")
+                logger.debug(f"Key findings: {len(agent_output.key_findings)}")
+                logger.debug(f"Evidence quality: {agent_output.evidence_quality_score}")
+
+            # Return the agent output directly - it has the expected interface
+            return agent_output
+
+        except Exception as e:
+            logger.error(f"Error in agent synthesis: {e}")
+            # Create a simple fallback if agent fails
+            return self._create_fallback_output(
+                results,
+                original_query,
+                quality_scores,
+                research_trace,
+                iterations_performed,
+            )
+
+    def _create_fallback_output(
         self,
         results: List[SearchResultItem],
-        research_input: DeepResearchInputSchema,
+        original_query: str,
         quality_scores: List[float],
         research_trace: List[str],
         iterations_performed: int,
-    ) -> DeepResearchOutputSchema:
-        """Create structured research output from results."""
+        num_results_to_analyze: int = 100,
+    ):
+        """Create a basic fallback output if agent synthesis fails."""
 
-        # Group results by relevance score if available
-        if (
-            results
-            and hasattr(results[0], "relevancy_score")
-            and results[0].relevancy_score is not None
-        ):
-            # Sort by relevancy score (highest first)
-            sorted_results = sorted(
-                results,
-                key=lambda r: getattr(r, "relevancy_score", 0.0),
-                reverse=True,
-            )
-            high_quality_results = sorted_results[:20]
-        else:
-            # Fall back to original ordering
-            high_quality_results = results[:20]
+        num_results_to_analyze = min(num_results_to_analyze, len(results))
+        if self.debug:
+            logger.debug("Using fallback synthesis method")
 
-        # Extract key findings
+        # Extract basic information
+        source_urls = [str(result.url) for result in results[:num_results_to_analyze]]
         key_findings = []
-        for result in high_quality_results[:10]:
+
+        for result in results[:num_results_to_analyze]:
             if result.content:
-                # Extract first significant sentence as a finding
+                # Extract first sentence as a simple finding
                 sentences = result.content.split(". ")
                 if sentences:
                     key_findings.append(sentences[0] + ".")
 
-        # Create research report structure
-        report_sections = [
-            "# Research Report",
-            f"\nThis research on '{research_input.original_query}' analyzed {len(results)} sources",
-            f"across {iterations_performed} iterations.",
-            "\n## Key Findings",
-        ]
+        # Create basic report
+        report = f"""# Research Report
 
-        for i, finding in enumerate(key_findings[:5], 1):
-            report_sections.append(f"{i}. {finding}")
+        This research on '{original_query}' analyzed {num_results_to_analyze} sources across {iterations_performed} iterations."""
 
-        report_sections.extend(
-            [
-                "\n## Sources Consulted",
-            ]
+        report += "\n\n## Key Findings\n\n"
+        report += "\n".join(
+            f"{i + 1}. {finding}" for i, finding in enumerate(key_findings)
+        )
+        report += "\n\n## Sources Consulted\n\n"
+        report += "\n".join(f"- {url}" for url in source_urls) + "\n"
+
+        avg_quality = (
+            sum(quality_scores) / len(quality_scores) if quality_scores else 0.3
         )
 
-        # Create citations list
-        citations = []
-        sources = []
-        for result in high_quality_results:
-            sources.append(str(result.url))
-            citation = {
-                "title": result.title or "Untitled",
-                "url": str(result.url),
-                "excerpt": (result.content[:200] if result.content else "") + "...",
-            }
-            citations.append(citation)
-            report_sections.append(f"- [{result.title}]({result.url})")
-
-        research_report = "\n".join(report_sections)
-
-        # Create final output
-        return DeepResearchOutputSchema(
-            research_report=research_report,
+        # Return object with expected attributes
+        return ResearchSynthesisOutputSchema(
+            research_report=report,
             key_findings=key_findings,
-            sources_consulted=sources,
-            evidence_quality_score=sum(quality_scores) / len(quality_scores)
-            if quality_scores
-            else 0.5,
-            gaps_identified=[
-                "Potential newer research not yet indexed",
-                "Non-English sources not included",
-            ],
-            citations=citations,
-            iterations_performed=iterations_performed,
-            research_trace=research_trace,
+            sources_consulted=source_urls,
+            evidence_quality_score=avg_quality,
+            citations=[{"url": url, "title": "N/A"} for url in source_urls],
         )
