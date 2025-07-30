@@ -7,27 +7,47 @@ from typing import List, Optional
 from loguru import logger
 from pydantic import Field
 
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd._base import InputSchema, OutputSchema
+from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd.configs.prompts import DEEP_RESEARCH_AGENT_PROMPT
 from akd.structures import SearchResultItem
 
 
 class DeepResearchInputSchema(InputSchema):
     """Input schema for deep research synthesis agent."""
-    
+
     query: str = Field(..., description="Research query to synthesize")
-    search_results: List[SearchResultItem] = Field(..., description="Search results to synthesize")
-    context: Optional[str] = Field(default=None, description="Additional research context")
+    search_results: List[SearchResultItem] = Field(
+        ...,
+        description="Search results to synthesize",
+    )
+    context: Optional[str] = Field(
+        default=None,
+        description="Additional research context",
+    )
 
 
 class DeepResearchOutputSchema(OutputSchema):
     """Output schema for deep research synthesis agent."""
-    
-    synthesis_report: str = Field(..., description="Comprehensive research synthesis report")
-    key_findings: List[str] = Field(default_factory=list, description="Key research findings")
-    research_gaps: List[str] = Field(default_factory=list, description="Identified research gaps")
-    confidence_score: float = Field(default=0.0, description="Confidence in synthesis quality", ge=0.0, le=1.0)
+
+    synthesis_report: str = Field(
+        ...,
+        description="Comprehensive research synthesis report",
+    )
+    key_findings: List[str] = Field(
+        default_factory=list,
+        description="Key research findings",
+    )
+    research_gaps: List[str] = Field(
+        default_factory=list,
+        description="Identified research gaps",
+    )
+    confidence_score: float = Field(
+        default=0.0,
+        description="Confidence in synthesis quality",
+        ge=0.0,
+        le=1.0,
+    )
 
 
 class ResearchSynthesisComponentConfig(BaseAgentConfig):
@@ -57,7 +77,8 @@ class ResearchSynthesisComponent:
 
         # Create internal instructor agent for research synthesis
         self._agent = InstructorBaseAgent[
-            DeepResearchInputSchema, DeepResearchOutputSchema
+            DeepResearchInputSchema,
+            DeepResearchOutputSchema,
         ](config=self.config, debug=debug)
         self._agent.input_schema = DeepResearchInputSchema
         self._agent.output_schema = DeepResearchOutputSchema
@@ -158,7 +179,7 @@ class ResearchSynthesisComponent:
         report_sections.extend(
             [
                 "\n## Sources Consulted",
-            ]
+            ],
         )
 
         # Create citations list

@@ -94,8 +94,7 @@ class LitSearchAgentOutputSchema(SearchAgentOutputSchema):
 class LitSearchAgentConfig(SearchAgentConfig):
     """Base configuration for literature search agents."""
 
-    debug: bool = Field(default=False, description="Enable debug logging")
-    max_iterations: int = Field(default=5, description="Maximum search iterations")
+    pass
 
 
 class RubricAnalysis(BaseModel):
@@ -136,9 +135,9 @@ class LitBaseAgent(SearchAgent[LitSearchAgentInputSchema, LitSearchAgentOutputSc
     - Consistent error handling and logging patterns
     """
 
-    input_schema = LitSearchAgentInputSchema
-    output_schema = LitSearchAgentOutputSchema
-    config_schema = LitSearchAgentConfig
+    input_schema = SearchAgentInputSchema
+    output_schema = SearchAgentOutputSchema
+    config_schema = SearchAgentConfig
 
     def _validate_query(self, query: str) -> str:
         """Validate and clean the input query."""
