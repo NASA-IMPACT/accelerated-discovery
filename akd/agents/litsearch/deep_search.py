@@ -35,10 +35,7 @@ from akd.tools.scrapers import (
     SimpleWebScraper,
 )
 from akd.tools.search.searxng_search import SearxNGSearchTool
-from akd.tools.search.semantic_scholar_search import (
-    SemanticScholarSearchTool,
-    SemanticScholarSearchToolInputSchema,
-)
+from akd.tools.search.semantic_scholar_search import SemanticScholarSearchTool
 
 from ._base import (
     LitBaseAgent,
@@ -380,7 +377,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         # Search with Semantic Scholar if enabled
         if self.semantic_scholar_tool and self.config.use_semantic_scholar:
-            ss_input = SemanticScholarSearchToolInputSchema(
+            ss_input = self.semantic_scholar_tool.input_schema(
                 queries=queries,
                 max_results=20,
                 category="science",
