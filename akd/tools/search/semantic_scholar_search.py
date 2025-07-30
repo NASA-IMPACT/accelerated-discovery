@@ -7,13 +7,15 @@ from urllib.parse import urljoin
 
 import aiohttp
 from loguru import logger
-from pydantic import BaseModel, SecretStr, field_validator
+from pydantic import SecretStr, field_validator
 from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
 from akd.structures import PaperDataItem, SearchResultItem
 from akd.tools._base import BaseTool
+
 from ._base import SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
+
 
 class SemanticScholarSearchToolInputSchema(SearchToolInputSchema):
     """
@@ -38,7 +40,9 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
         default=(os.getenv("SEMANTIC_SCHOLAR_API_KEY") or os.getenv("S2_API_KEY")),
     )
     base_url: HttpUrl = Field(default="https://api.semanticscholar.org")
-    max_results: int = Field(default=int(os.getenv("SEMANTIC_SCHOLAR_MAX_RESULTS", "10")))
+    max_results: int = Field(
+        default=int(os.getenv("SEMANTIC_SCHOLAR_MAX_RESULTS", "10")),
+    )
     fields: List[str] = Field(
         default_factory=lambda: [
             "paperId",
@@ -253,7 +257,7 @@ class SemanticScholarSearchTool(
         self,
         session: aiohttp.ClientSession,
         query: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> list[PaperDataItem]:
         """
         Fetches a single page of search results from Semantic Scholar.
 
@@ -609,5 +613,3 @@ class SemanticScholarSearchTool(
             results=final_results,
             category=params.category,  # Pass through the requested category
         )
-
-
