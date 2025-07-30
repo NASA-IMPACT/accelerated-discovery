@@ -78,12 +78,12 @@ class ClarificationComponent:
         clarifying_output = await self._agent.arun(clarifying_input)
 
         if self.debug:
-            logger.debug(f"Generated {len(clarifying_output.questions)} questions")
+            logger.debug(f"Generated {len(clarifying_output.clarifying_questions)} questions")
 
         # In a real implementation, this would interact with the user
         # For now, we'll use mock answers or default responses
         clarifications = []
-        for question in clarifying_output.questions:
+        for question in clarifying_output.clarifying_questions:
             answer = (mock_answers or {}).get(question, "No specific preference")
             clarifications.append(f"{question}: {answer}")
 
