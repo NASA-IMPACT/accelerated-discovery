@@ -254,6 +254,7 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
         "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
+    wait_time: int = 1
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     remove_embedding_column: bool = True
     text_column: str = "text"
@@ -402,7 +403,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
             if self.config.embedder_type == "openai":
                 # Wait for 1 second between batches to avoid rate limit
-                time.sleep(1)
+                time.sleep(self.config.wait_time)
 
         # Store embeddings in memory
         self.repo_data[self.config.embeddings_column] = embeddings
