@@ -10,6 +10,7 @@
 *.xls
 .envrc
 .env
+.worktrees/
 data/cmr_collections_umm.json
 notebooks/artifacts/
 tmp/
