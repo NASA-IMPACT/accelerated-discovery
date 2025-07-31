@@ -214,7 +214,8 @@ class DeepLitSearchAgent(LitBaseAgent):
             logger.debug("Starting clarification process")
 
         enriched_query, clarifications = await self.clarification_component.process(
-            query, mock_answers
+            query,
+            mock_answers,
         )
 
         self.clarification_history.extend(clarifications)
@@ -263,12 +264,12 @@ class DeepLitSearchAgent(LitBaseAgent):
         while iterations < self.config.max_research_iterations:
             iterations += 1
             research_trace.append(
-                f"Iteration {iterations}: Searching with queries: {initial_queries}"
+                f"Iteration {iterations}: Searching with queries: {initial_queries}",
             )
 
             if self.debug:
                 logger.debug(
-                    f"Research iteration {iterations}/{self.config.max_research_iterations}"
+                    f"Research iteration {iterations}/{self.config.max_research_iterations}",
                 )
 
             # Perform searches
@@ -296,7 +297,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
                 research_trace.append(
                     f"Iteration {iterations}: Found {len(new_results)} new results, "
-                    f"quality score: {quality_score:.2f}"
+                    f"quality score: {quality_score:.2f}",
                 )
 
                 # Check if we've reached quality threshold
@@ -306,7 +307,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                     and len(all_results) >= 10
                 ):
                     research_trace.append(
-                        f"Stopping: Quality threshold reached ({avg_quality:.2f})"
+                        f"Stopping: Quality threshold reached ({avg_quality:.2f})",
                     )
                     break
 
@@ -374,7 +375,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         )
 
         primary_results = await self.search_tool.arun(
-            self.search_tool.input_schema(**search_input.model_dump())
+            self.search_tool.input_schema(**search_input.model_dump()),
         )
         all_results.extend(primary_results.results)
 
@@ -392,7 +393,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         if self.link_relevancy_assessor and all_results:
             if self.debug:
                 logger.debug(
-                    f"Assessing relevancy for {len(all_results)} search results"
+                    f"Assessing relevancy for {len(all_results)} search results",
                 )
 
             reformulated_query = None
@@ -412,11 +413,11 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             try:
                 assessment_output = await self.link_relevancy_assessor.arun(
-                    assessor_input
+                    assessor_input,
                 )
                 if self.debug:
                     logger.debug(
-                        f"Relevancy assessment summary: {assessment_output.assessment_summary}"
+                        f"Relevancy assessment summary: {assessment_output.assessment_summary}",
                     )
                 return assessment_output.filtered_results
             except Exception as e:
@@ -442,7 +443,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         if self.debug:
             logger.debug(
-                f"Fetching full content for {len(high_relevancy_results)} high-relevancy results"
+                f"Fetching full content for {len(high_relevancy_results)} high-relevancy results",
             )
 
         for result in high_relevancy_results:
@@ -456,13 +457,13 @@ class DeepLitSearchAgent(LitBaseAgent):
                             result.content = pdf_content.content
                             if self.debug:
                                 logger.debug(
-                                    f"Fetched PDF content for {result.url} ({len(result.content)} chars)"
+                                    f"Fetched PDF content for {result.url} ({len(result.content)} chars)",
                                 )
                             continue
                     except Exception as e:
                         if self.debug:
                             logger.debug(
-                                f"PDF scraping failed for {result.pdf_url}: {e}"
+                                f"PDF scraping failed for {result.pdf_url}: {e}",
                             )
 
                 # Fall back to web scraping
@@ -470,12 +471,12 @@ class DeepLitSearchAgent(LitBaseAgent):
                     web_input = ScraperToolInputSchema(url=str(result.url))
                     web_content = await self.web_scraper.arun(web_input)
                     if web_content.content and len(web_content.content) > len(
-                        result.content or ""
+                        result.content or "",
                     ):
                         result.content = web_content.content
                         if self.debug:
                             logger.debug(
-                                f"Fetched web content for {result.url} ({len(result.content)} chars)"
+                                f"Fetched web content for {result.url} ({len(result.content)} chars)",
                             )
 
             except Exception as e:
@@ -516,7 +517,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             [
                 f"Title: {r.title}\nContent: {r.content}"
                 for r in results[:5]  # Evaluate top 5 results
-            ]
+            ],
         )
 
         rubric_input = MultiRubricRelevancyInputSchema(
@@ -546,7 +547,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND,
                 rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT,
                 rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE,
-            ]
+            ],
         )
 
         return positive_count / 6  # Total number of rubrics
@@ -565,7 +566,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             [
                 f"Title: {r.title}\nSummary: {r.content[:200]}..."
                 for r in results[-10:]  # Use recent results
-            ]
+            ],
         )
 
         # Enhance content with research instructions context

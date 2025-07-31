@@ -7,23 +7,32 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 from pydantic import Field
 
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd._base import InputSchema, OutputSchema
+from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd.configs.prompts import CLARIFYING_AGENT_PROMPT
 
 
 class ClarifyingAgentInputSchema(InputSchema):
     """Input schema for clarifying agent."""
-    
+
     query: str = Field(..., description="Query that needs clarification")
-    search_results: Optional[List[Dict]] = Field(default=None, description="Existing search results for context")
+    search_results: Optional[List[Dict]] = Field(
+        default=None,
+        description="Existing search results for context",
+    )
 
 
 class ClarifyingAgentOutputSchema(OutputSchema):
     """Output schema for clarifying agent."""
-    
-    clarifying_questions: List[str] = Field(..., description="List of clarifying questions")
-    needs_clarification: bool = Field(..., description="Whether clarification is needed")
+
+    clarifying_questions: List[str] = Field(
+        ...,
+        description="List of clarifying questions",
+    )
+    needs_clarification: bool = Field(
+        ...,
+        description="Whether clarification is needed",
+    )
     reasoning: str = Field(..., description="Reasoning for clarification needs")
 
 
@@ -53,13 +62,16 @@ class ClarificationComponent:
 
         # Create internal instructor agent for clarification processing
         self._agent = InstructorBaseAgent[
-            ClarifyingAgentInputSchema, ClarifyingAgentOutputSchema
+            ClarifyingAgentInputSchema,
+            ClarifyingAgentOutputSchema,
         ](config=self.config, debug=debug)
         self._agent.input_schema = ClarifyingAgentInputSchema
         self._agent.output_schema = ClarifyingAgentOutputSchema
 
     async def process(
-        self, query: str, mock_answers: Optional[Dict[str, str]] = None
+        self,
+        query: str,
+        mock_answers: Optional[Dict[str, str]] = None,
     ) -> Tuple[str, List[str]]:
         """
         Generate clarifying questions and create enriched query.
@@ -92,7 +104,7 @@ class ClarificationComponent:
 
         if self.debug:
             logger.debug(
-                f"Created enriched query with {len(clarifications)} clarifications"
+                f"Created enriched query with {len(clarifications)} clarifications",
             )
 
         return enriched_query, clarifications

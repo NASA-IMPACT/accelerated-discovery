@@ -13,11 +13,11 @@ from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents.extraction import ExtractionInputSchema
-from akd.agents.litsearch import LitAgentInputSchema, LitAgentOutputSchema
 
 # Import akd agent schemas
 from akd.agents.query import QueryAgentInputSchema, QueryAgentOutputSchema
-from akd.agents.relevancy import RelevancyAgentInputSchema, RelevancyAgentOutputSchema
+from akd.agents.relevancy import RelevancyAgentInputSchema
+from akd.agents.search import LitSearchAgentInputSchema, LitSearchAgentOutputSchema
 from akd.mapping.mappers import (
     DirectFieldMapper,
     LLMFallbackMapper,
@@ -82,7 +82,8 @@ class TestDirectFieldMapping:
 
         # Create source model with matching field names
         source = QueryInput(
-            query="carbon capture technology", context="materials science"
+            query="carbon capture technology",
+            context="materials science",
         )
 
         # Map to target schema with same field names
@@ -118,7 +119,9 @@ class TestDirectFieldMapping:
         mapper = DirectFieldMapper()
 
         source = LiteratureSearchOutput(
-            documents=[{"title": "Paper 1"}], search_query="test query", total_results=1
+            documents=[{"title": "Paper 1"}],
+            search_query="test query",
+            total_results=1,
         )
 
         result = await mapper.map_models(
@@ -167,15 +170,19 @@ class TestSemanticFieldMapping:
         mapper_low = SemanticFieldMapper(config=low_config)
 
         source = LiteratureSearchOutput(
-            documents=[], search_query="test", total_results=0
+            documents=[],
+            search_query="test",
+            total_results=0,
         )
 
         result_high = await mapper_high.map_models(
-            source_model=source, target_schema=QueryInput
+            source_model=source,
+            target_schema=QueryInput,
         )
 
         result_low = await mapper_low.map_models(
-            source_model=source, target_schema=QueryInput
+            source_model=source,
+            target_schema=QueryInput,
         )
 
         # Low threshold should map more fields
@@ -192,11 +199,13 @@ class TestLLMFallbackMapping:
 
         if mapper.llm is None:
             source = ExtractionOutput(
-                extractions=[{"field": "value"}], confidence_score=0.9
+                extractions=[{"field": "value"}],
+                confidence_score=0.9,
             )
 
             result = await mapper.map_models(
-                source_model=source, target_schema=QueryInput
+                source_model=source,
+                target_schema=QueryInput,
             )
 
             # Should fall back gracefully
@@ -215,7 +224,7 @@ class TestLLMFallbackMapping:
                     {
                         "title": "Solar Cells",
                         "abstract": "Advanced photovoltaic research",
-                    }
+                    },
                 ],
                 search_query="renewable energy technology",
                 total_results=1,
@@ -223,7 +232,8 @@ class TestLLMFallbackMapping:
 
             # Test LLM transformation to a different schema
             result = await mapper.map_models(
-                source_model=source, target_schema=ExtractionInput
+                source_model=source,
+                target_schema=ExtractionInput,
             )
 
             # Should use LLM successfully
@@ -246,7 +256,8 @@ class TestLLMFallbackMapping:
             )
 
             result = await mapper.map_models(
-                source_model=source, target_schema=ExtractionOutput
+                source_model=source,
+                target_schema=ExtractionOutput,
             )
 
             # LLM should intelligently extract information
@@ -270,7 +281,9 @@ class TestLLMFallbackMapping:
             # Test the prompt creation method directly
             source_dict = mapper._convert_model_to_dict(source)
             prompt = mapper._create_transformation_prompt(
-                source_dict, ExtractionInput, {"query": "text_content"}
+                source_dict,
+                ExtractionInput,
+                {"query": "text_content"},
             )
 
             # Verify prompt contains necessary information
@@ -293,7 +306,7 @@ class TestWaterfallMapper:
         source = QueryInput(query="test query", context="test context")
 
         result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryInput)
+            MapperInput(source_model=source, target_schema=QueryInput),
         )
 
         assert result.used_strategy == "DirectFieldMapper"
@@ -320,7 +333,7 @@ class TestWaterfallMapper:
                     "search_query": "text_content",
                     "total_results": "document_title",
                 },
-            )
+            ),
         )
 
         assert result.mapping_confidence > 0.0
@@ -335,12 +348,12 @@ class TestWaterfallMapper:
 
         # First call
         result1 = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryOutput)
+            MapperInput(source_model=source, target_schema=QueryOutput),
         )
 
         # Second call should use cache
         result2 = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryOutput)
+            MapperInput(source_model=source, target_schema=QueryOutput),
         )
 
         # Results should be identical
@@ -366,9 +379,9 @@ class TestRealAgentMappings:
         result = await mapper.arun(
             MapperInput(
                 source_model=query_output,
-                target_schema=LitAgentInputSchema,
+                target_schema=LitSearchAgentInputSchema,
                 mapping_hints={"queries": "query"},  # Map queries list to single query
-            )
+            ),
         )
 
         assert result.mapping_confidence > 0.0
@@ -382,7 +395,7 @@ class TestRealAgentMappings:
         # Create realistic LitAgent output
         from akd.structures import ExtractionDTO
 
-        lit_output = LitAgentOutputSchema(
+        lit_output = LitSearchAgentOutputSchema(
             results=[
                 ExtractionDTO(
                     source="https://example.com/solar-paper",
@@ -390,12 +403,12 @@ class TestRealAgentMappings:
                         "title": "Advanced Solar Cell Technologies",
                         "content": "Recent breakthroughs in perovskite solar cells...",
                     },
-                )
-            ]
+                ),
+            ],
         )
 
         result = await mapper.arun(
-            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema)
+            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema),
         )
 
         assert result.mapping_confidence > 0.0
@@ -414,8 +427,9 @@ class TestRealAgentMappings:
 
         result = await mapper.arun(
             MapperInput(
-                source_model=extraction_input, target_schema=RelevancyAgentInputSchema
-            )
+                source_model=extraction_input,
+                target_schema=RelevancyAgentInputSchema,
+            ),
         )
 
         # Should have high confidence for direct field mapping
@@ -442,25 +456,28 @@ class TestRealAgentMappings:
         )
 
         lit_result = await mapper.arun(
-            MapperInput(source_model=query_output, target_schema=LitAgentInputSchema)
+            MapperInput(
+                source_model=query_output,
+                target_schema=LitSearchAgentInputSchema,
+            ),
         )
 
         # Step 2: LitAgent output -> ExtractionAgent input
         from akd.structures import ExtractionDTO
 
-        lit_output = LitAgentOutputSchema(
+        lit_output = LitSearchAgentOutputSchema(
             results=[
                 ExtractionDTO(
                     source="research_paper.pdf",
                     result={
-                        "content": "Solar cell efficiency has reached 47.1% using concentrated photovoltaics"
+                        "content": "Solar cell efficiency has reached 47.1% using concentrated photovoltaics",
                     },
-                )
-            ]
+                ),
+            ],
         )
 
         extraction_result = await mapper.arun(
-            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema)
+            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema),
         )
 
         # Verify the pipeline works
@@ -474,36 +491,33 @@ class TestRealAgentMappings:
         mapper = WaterfallMapper()
 
         # Test all combinations of real agent schemas
-        real_schemas = [
-            QueryAgentInputSchema,
-            QueryAgentOutputSchema,
-            LitAgentInputSchema,
-            LitAgentOutputSchema,
-            ExtractionInputSchema,
-            RelevancyAgentInputSchema,
-            RelevancyAgentOutputSchema,
-        ]
+        # removed unused variable real_schemas
 
         # Create sample instances for each schema
         sample_data = {
             QueryAgentInputSchema: QueryAgentInputSchema(
-                query="test query", num_queries=3
+                query="test query",
+                num_queries=3,
             ),
             QueryAgentOutputSchema: QueryAgentOutputSchema(
-                queries=["query1", "query2"]
+                queries=["query1", "query2"],
             ),
-            LitAgentInputSchema: LitAgentInputSchema(query="literature search"),
+            LitSearchAgentInputSchema: LitSearchAgentInputSchema(
+                query="literature search",
+            ),
             ExtractionInputSchema: ExtractionInputSchema(
-                query="test", content="content"
+                query="test",
+                content="content",
             ),
             RelevancyAgentInputSchema: RelevancyAgentInputSchema(
-                query="test", content="content"
+                query="test",
+                content="content",
             ),
         }
 
         # Test mappings between compatible schemas
         compatible_pairs = [
-            (QueryAgentInputSchema, LitAgentInputSchema),  # Both have query field
+            (QueryAgentInputSchema, LitSearchAgentInputSchema),  # Both have query field
             (
                 ExtractionInputSchema,
                 RelevancyAgentInputSchema,
@@ -516,7 +530,7 @@ class TestRealAgentMappings:
                     MapperInput(
                         source_model=sample_data[source_schema],
                         target_schema=target_schema,
-                    )
+                    ),
                 )
 
                 # Should have reasonable confidence for compatible schemas
@@ -538,14 +552,14 @@ class TestAgentPairMappings:
                 {
                     "title": "Solar Cell Efficiency",
                     "content": "Recent advances in perovskite...",
-                }
+                },
             ],
             search_query="solar cell efficiency",
             total_results=1,
         )
 
         result = await mapper.arun(
-            MapperInput(source_model=lit_output, target_schema=ExtractionInput)
+            MapperInput(source_model=lit_output, target_schema=ExtractionInput),
         )
 
         assert result.mapping_confidence > 0.0
@@ -562,7 +576,7 @@ class TestAgentPairMappings:
         )
 
         result = await mapper.arun(
-            MapperInput(source_model=query_input, target_schema=LiteratureSearchInput)
+            MapperInput(source_model=query_input, target_schema=LiteratureSearchInput),
         )
 
         assert result.mapped_model.query == "find papers on quantum computing"
@@ -581,7 +595,7 @@ class TestErrorHandling:
         source = ExtractionOutput(extractions=[{"data": "value"}], confidence_score=0.8)
 
         result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=LiteratureSearchInput)
+            MapperInput(source_model=source, target_schema=LiteratureSearchInput),
         )
 
         # Should handle gracefully even without matches
@@ -599,11 +613,13 @@ class TestErrorHandling:
         mapper = WaterfallMapper(config=config)
 
         source = LiteratureSearchOutput(
-            documents=[], search_query="test", total_results=0
+            documents=[],
+            search_query="test",
+            total_results=0,
         )
 
         result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryInput)
+            MapperInput(source_model=source, target_schema=QueryInput),
         )
 
         # Should only use semantic mapping
@@ -617,7 +633,8 @@ class TestConfigurationScenarios:
     async def test_high_confidence_direct_mapping(self):
         """Test scenarios where direct mapping should have high confidence."""
         config = MapperConfig(
-            enable_semantic_matching=False, enable_llm_fallback=False
+            enable_semantic_matching=False,
+            enable_llm_fallback=False,
         )
         mapper = WaterfallMapper(config=config)
 
@@ -625,7 +642,7 @@ class TestConfigurationScenarios:
         source = QueryAgentInputSchema(query="renewable energy research", num_queries=5)
 
         result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryAgentInputSchema)
+            MapperInput(source_model=source, target_schema=QueryAgentInputSchema),
         )
 
         assert result.used_strategy == "DirectFieldMapper"
@@ -642,12 +659,12 @@ class TestConfigurationScenarios:
         mapper = WaterfallMapper(config=config)
 
         # Should use semantic mapping for similar field names
-        source = LitAgentOutputSchema(
-            results=[]  # Empty results for simplicity
+        source = LitSearchAgentOutputSchema(
+            results=[],  # Empty results for simplicity
         )
 
         result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryAgentInputSchema)
+            MapperInput(source_model=source, target_schema=QueryAgentInputSchema),
         )
 
         assert result.used_strategy in ["SemanticFieldMapper", "none"]
@@ -668,7 +685,7 @@ class TestConfigurationScenarios:
         )
 
         result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=RelevancyAgentInputSchema)
+            MapperInput(source_model=source, target_schema=RelevancyAgentInputSchema),
         )
 
         # Should use LLM mapping if available, or fail gracefully

@@ -12,12 +12,15 @@ from ._base import (
 )
 from .searxng_search import (
     SearxNGSearchTool,
+    SearxNGSearchToolConfig,
     SearxNGSearchToolInputSchema,
     SearxNGSearchToolOutputSchema,
     SearxNGSearchToolConfig,
 )
 from .semantic_scholar_search import (
     SemanticScholarSearchTool,
+    SemanticScholarSearchToolConfig,
+    SemanticScholarSearchToolInputSchema,
     SemanticScholarSearchToolOutputSchema,
 )
 
@@ -37,5 +40,7 @@ __all__ = [
     "SearxNGSearchToolConfig",
     # Semantic Scholar
     "SemanticScholarSearchTool",
+    "SemanticScholarSearchToolInputSchema",
     "SemanticScholarSearchToolOutputSchema",
+    "SemanticScholarSearchToolConfig",
 ]

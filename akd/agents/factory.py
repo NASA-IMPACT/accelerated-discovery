@@ -1,14 +1,9 @@
 from akd.agents import BaseAgentConfig
-from akd.agents.extraction import EstimationExtractionAgent, IntentBasedExtractionSchemaMapper
+from akd.agents.extraction import EstimationExtractionAgent
 from akd.agents.intents import IntentAgent
-from akd.agents.litsearch import ControlledAgenticLitSearchAgent
-from akd.agents.query import QueryAgent, FollowUpQueryAgent
+from akd.agents.query import FollowUpQueryAgent, QueryAgent
 from akd.agents.relevancy import MultiRubricRelevancyAgent, RelevancyAgent
-from akd.tools.scrapers.composite import CompositeScraper, ResearchArticleResolver
-from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
-from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
-from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
-from akd.tools.search import SearxNGSearchTool
+from akd.agents.search import ControlledSearchAgent
 from akd.configs.project import CONFIG
 from akd.configs.prompts import (
     DEFAULT_SYSTEM_PROMPT,
@@ -102,14 +97,14 @@ def create_relevancy_agent(
 def create_lit_agent(
     config: BaseAgentConfig | None = None,
     debug: bool = False,
-) -> ControlledAgenticLitSearchAgent:
-    """Create a ControlledAgenticLitSearchAgent with default configuration."""
-    from akd.agents.litsearch import ControlledAgenticLitSearchAgentConfig
-    
+) -> ControlledSearchAgent:
+    """Create a ControlledSearchAgent with default configuration."""
+    from akd.agents.search import ControlledSearchAgentConfig
+
     # Use the new agent's config system
-    agent_config = ControlledAgenticLitSearchAgentConfig()
+    agent_config = ControlledSearchAgentConfig()
     if config:
         # Map basic config properties to new config if provided
         agent_config.debug = debug
-        
-    return ControlledAgenticLitSearchAgent(config=agent_config, debug=debug)
+
+    return ControlledSearchAgent(config=agent_config, debug=debug)

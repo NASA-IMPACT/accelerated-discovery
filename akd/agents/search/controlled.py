@@ -7,7 +7,7 @@ and agentic decision-making to iteratively refine search queries based on rubric
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, List, Optional
 
 from loguru import logger
 from pydantic import Field
@@ -42,7 +42,7 @@ from ._base import (
 )
 
 
-class ControlledAgenticLitSearchAgentConfig(LitSearchAgentConfig):
+class ControlledSearchAgentConfig(LitSearchAgentConfig):
     """
     Configuration for the ControlledAgenticLitSearchAgent.
     This agent uses multi-rubric analysis and agentic decision-making
@@ -114,7 +114,7 @@ class ControlledAgenticLitSearchAgentConfig(LitSearchAgentConfig):
     )
 
 
-class ControlledAgenticLitSearchAgent(LitBaseAgent):
+class ControlledSearchAgent(LitBaseAgent):
     """
     Agent for performing controlled agentic literature searches
     using multi-rubric analysis and agentic decision-making.
@@ -127,11 +127,11 @@ class ControlledAgenticLitSearchAgent(LitBaseAgent):
           and decisions made during the search process.
     """
 
-    config_schema = ControlledAgenticLitSearchAgentConfig
+    config_schema = ControlledSearchAgentConfig
 
     def __init__(
         self,
-        config: ControlledAgenticLitSearchAgentConfig | None = None,
+        config: ControlledSearchAgentConfig | None = None,
         search_tool=None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
         query_agent: QueryAgent | None = None,
@@ -139,7 +139,8 @@ class ControlledAgenticLitSearchAgent(LitBaseAgent):
         debug: bool = False,
     ) -> None:
         super().__init__(
-            config=config or ControlledAgenticLitSearchAgentConfig(), debug=debug
+            config=config or ControlledSearchAgentConfig(),
+            debug=debug,
         )
 
         self.search_tool = search_tool or SearxNGSearchTool()
@@ -458,6 +459,299 @@ class ControlledAgenticLitSearchAgent(LitBaseAgent):
 
         return recommendations
 
+    async def _generate_queries(
+        self,
+        queries: List[str],
+        iteration: int,
+        num_queries: int = 3,
+        results: Optional[List[SearchResultItem]] = None,
+        accumulated_content: str = "",
+        rubric_focus: Optional[List[str]] = None,
+    ) -> List[str]:
+        """
+        Generate queries using either initial query agent or follow-up query agent
+        based on the iteration number, with adaptive focus based on rubric analysis.
+        """
+        if iteration <= self.config.use_followup_after_iteration:
+            # Use initial query generation for early iterations
+            return await self._generate_initial_queries(
+                queries=queries,
+                iteration=iteration,
+                num_queries=num_queries,
+                results=results,
+                rubric_focus=rubric_focus,
+            )
+        else:
+            # Use follow-up query generation for later iterations
+            if accumulated_content:
+                logger.debug(
+                    f"Switching to follow-up query generation at iteration {iteration}",
+                )
+                return await self._generate_followup_queries(
+                    original_queries=queries,
+                    accumulated_content=accumulated_content,
+                    num_queries=num_queries,
+                    rubric_focus=rubric_focus,
+                )
+            else:
+                # Fallback to initial query generation if no content available
+                return await self._generate_initial_queries(
+                    queries=queries,
+                    iteration=iteration,
+                    num_queries=num_queries,
+                    results=results,
+                    rubric_focus=rubric_focus,
+                )
+
+    async def _generate_initial_queries(
+        self,
+        queries: List[str],
+        iteration: int,
+        num_queries: int = 3,
+        results: Optional[List[SearchResultItem]] = None,
+        rubric_focus: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Generate initial queries using the query_agent with rubric-based adaptations."""
+        context = ""
+        if results:
+            titles = [r.title for r in results]
+            context = f"Previous searches found: {', '.join(titles)}"
+
+        query_instruction = f"""
+        Iteration {iteration} queries : {queries}
+        Context/results so far: {context}
+        """.strip()
+
+        # Add rubric-based focus guidance
+        if rubric_focus:
+            focus_guidance = self._create_rubric_focus_guidance(rubric_focus)
+            query_instruction += f"\n\nFOCUS AREAS NEEDED: {focus_guidance}"
+
+        from akd.agents.query import QueryAgentInputSchema, QueryAgentOutputSchema
+
+        res = QueryAgentOutputSchema(queries=queries)
+        try:
+            res = await self.query_agent.arun(
+                QueryAgentInputSchema(
+                    num_queries=num_queries,
+                    query=query_instruction,
+                ),
+            )
+
+            # Apply rubric-based query modifications
+            if rubric_focus:
+                adapted_queries = self._adapt_queries_for_rubrics(
+                    res.queries,
+                    rubric_focus,
+                )
+                res.queries = adapted_queries
+
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.warning(
+                f"Error generating initial queries. Error => {str(e)}",
+            )
+        return res.queries
+
+    async def _generate_followup_queries(
+        self,
+        original_queries: List[str],
+        accumulated_content: str,
+        num_queries: int = 3,
+        rubric_focus: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Generate follow-up queries using the followup_query_agent with rubric-based adaptations."""
+        try:
+            # Enhance content with rubric-based guidance
+            enhanced_content = accumulated_content
+            if rubric_focus:
+                focus_guidance = self._create_rubric_focus_guidance(rubric_focus)
+                enhanced_content += f"\n\nFOCUS AREAS NEEDED: {focus_guidance}"
+
+            from akd.agents.query import (
+                FollowUpQueryAgentInputSchema,
+                FollowUpQueryAgentOutputSchema,
+            )
+
+            followup_input = FollowUpQueryAgentInputSchema(
+                original_queries=original_queries,
+                content=enhanced_content,
+                num_queries=num_queries,
+            )
+
+            followup_result: FollowUpQueryAgentOutputSchema = (
+                await self.followup_query_agent.arun(
+                    followup_input,
+                )
+            )
+
+            if self.debug:
+                logger.debug(
+                    f"Follow-up reasoning: {followup_result.reasoning}",
+                )
+                logger.debug(
+                    f"Identified gaps: {followup_result.original_query_gaps}",
+                )
+                if rubric_focus:
+                    logger.debug(f"Applied rubric focus: {rubric_focus}")
+
+            # Apply rubric-based query modifications
+            if rubric_focus:
+                adapted_queries = self._adapt_queries_for_rubrics(
+                    followup_result.followup_queries,
+                    rubric_focus,
+                )
+                return adapted_queries
+
+            return followup_result.followup_queries
+
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            logger.warning(
+                f"Error generating follow-up queries. Error => {str(e)}",
+            )
+            return original_queries  # Fallback to original queries
+        return original_queries
+
+    def _create_rubric_focus_guidance(self, rubric_focus: List[str]) -> str:
+        """Create human-readable guidance for rubric focus areas."""
+        guidance_map = {
+            QueryFocusStrategy.REFINE_TOPIC_SPECIFICITY.value: "Make queries more specific to the target topic and domain",
+            QueryFocusStrategy.SEARCH_COMPREHENSIVE_REVIEWS.value: "Look for systematic reviews, meta-analyses, and comprehensive surveys",
+            QueryFocusStrategy.TARGET_PEER_REVIEWED_SOURCES.value: "Focus on high-impact peer-reviewed journals and quality publications",
+            QueryFocusStrategy.SEARCH_METHODOLOGICAL_PAPERS.value: "Find papers with strong methodological approaches and validation",
+            QueryFocusStrategy.ADD_RECENT_YEAR_FILTERS.value: "Prioritize recent publications (last 2-3 years)",
+            QueryFocusStrategy.ADJUST_QUERY_SCOPE.value: "Refine the scope to match the research question boundaries",
+        }
+
+        guidance_list = [guidance_map.get(focus, focus) for focus in rubric_focus]
+        return "; ".join(guidance_list)
+
+    def _prioritize_rubric_focus(self, rubric_focus: List[str]) -> List[str]:
+        """Prioritize rubric focus areas to avoid query over-complexity."""
+        if not rubric_focus:
+            return []
+
+        # Priority order for rubric fixes (most critical first)
+        priority_order = [
+            QueryFocusStrategy.REFINE_TOPIC_SPECIFICITY.value,  # Most important - improves relevance
+            QueryFocusStrategy.TARGET_PEER_REVIEWED_SOURCES.value,  # High impact - improves quality
+            QueryFocusStrategy.SEARCH_COMPREHENSIVE_REVIEWS.value,  # Good for depth
+            QueryFocusStrategy.ADD_RECENT_YEAR_FILTERS.value,  # Simple but effective
+            QueryFocusStrategy.SEARCH_METHODOLOGICAL_PAPERS.value,  # Specific improvement
+            QueryFocusStrategy.ADJUST_QUERY_SCOPE.value,  # General fallback
+        ]
+
+        # Return top 2-3 priorities to avoid complexity
+        prioritized = []
+        for priority in priority_order:
+            if priority in rubric_focus:
+                prioritized.append(priority)
+                if len(prioritized) >= 2:  # Limit to 2 adaptations per query
+                    break
+
+        return prioritized
+
+    def _adapt_queries_for_rubrics(
+        self,
+        queries: List[str],
+        rubric_focus: List[str],
+    ) -> List[str]:
+        """Apply rubric-specific adaptations to queries with smart prioritization."""
+        # Prioritize focus areas to avoid over-complexity
+        prioritized_focus = self._prioritize_rubric_focus(rubric_focus)
+
+        if self.debug:
+            logger.debug(
+                f"Prioritized rubric focus (from {len(rubric_focus)} to {len(prioritized_focus)}): {prioritized_focus}",
+            )
+
+        adapted_queries = []
+        for i, query in enumerate(queries):
+            # Apply different adaptations to different queries for variety
+            focus_for_this_query = (
+                prioritized_focus[i % len(prioritized_focus)]
+                if prioritized_focus
+                else None
+            )
+
+            if focus_for_this_query:
+                adapted_query = self._apply_single_focus_adaptation(
+                    query,
+                    focus_for_this_query,
+                )
+                adapted_queries.append(adapted_query)
+            else:
+                adapted_queries.append(query)  # Keep original if no focus
+
+        # Always include at least one original query as fallback
+        if queries[0] not in adapted_queries:
+            adapted_queries.append(queries[0])
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_queries = []
+        for query in adapted_queries:
+            if query not in seen:
+                unique_queries.append(query)
+                seen.add(query)
+
+        return unique_queries
+
+    def _apply_single_focus_adaptation(self, query: str, focus: str) -> str:
+        """Apply a single, clean adaptation based on rubric focus."""
+        if focus == QueryFocusStrategy.REFINE_TOPIC_SPECIFICITY.value:
+            # Make query more specific without complex syntax
+            return f"{query} specific detailed"
+
+        elif focus == QueryFocusStrategy.SEARCH_COMPREHENSIVE_REVIEWS.value:
+            return f"{query} review OR survey OR meta-analysis"
+
+        elif focus == QueryFocusStrategy.TARGET_PEER_REVIEWED_SOURCES.value:
+            return f"{query} journal peer-reviewed"
+
+        elif focus == QueryFocusStrategy.SEARCH_METHODOLOGICAL_PAPERS.value:
+            return f"{query} methodology approach"
+
+        elif focus == QueryFocusStrategy.ADD_RECENT_YEAR_FILTERS.value:
+            return f"{query} 2020..2025"
+
+        elif focus == QueryFocusStrategy.ADJUST_QUERY_SCOPE.value:
+            return f'"{query}" specific'
+
+        return query
+
+    def _calculate_dynamic_batch_size(self, iteration: int, previous_criteria) -> int:
+        """Calculate adaptive batch size based on rubric performance."""
+        base_size = self.config.max_results_per_iteration
+
+        # First iteration uses base size
+        if iteration <= 1:
+            return base_size
+
+        # If we have rubric analysis from previous iteration
+        if (
+            hasattr(previous_criteria, "rubric_analysis")
+            and previous_criteria.rubric_analysis
+        ):
+            rubric_count = previous_criteria.rubric_analysis.positive_rubric_count
+
+            # If doing very poorly (0-1 positive rubrics), search more aggressively
+            if rubric_count <= 1:
+                return min(base_size * 2, 20)  # Double the search, cap at 20
+
+            # If doing poorly (2 positive rubrics), search slightly more
+            elif rubric_count == 2:
+                return int(base_size * 1.5)
+
+            # If doing well (4+ positive rubrics), can be more conservative
+            elif rubric_count >= 4:
+                return max(base_size // 2, 5)  # Half the search, minimum 5
+
+        return base_size
+
     def _learn_from_iteration(
         self,
         iteration: int,
@@ -484,6 +778,7 @@ class ControlledAgenticLitSearchAgent(LitBaseAgent):
         iteration = 0
         all_results = []
         current_results = []
+        content_so_far = ""
 
         while not (
             criteria := await self._should_stop(
@@ -500,16 +795,41 @@ class ControlledAgenticLitSearchAgent(LitBaseAgent):
             if self.debug:
                 logger.info(f"🔄 ITERATION {iteration}")
 
-            # For this simplified version, we'll use the basic search functionality
-            # The full implementation would include all the query generation and adaptation logic
+            remaining_needed = desired_max_results - len(all_results)
+            # Dynamic batch sizing: adjust based on previous rubric performance
+            dynamic_batch_size = self._calculate_dynamic_batch_size(iteration, criteria)
+            search_limit = min(remaining_needed, dynamic_batch_size)
+
+            current_queries = queries
+            if iteration > 0:
+                # Get rubric focus from previous iteration's stopping criteria
+                rubric_focus = None
+                if (
+                    hasattr(criteria, "recommended_query_focus")
+                    and criteria.recommended_query_focus
+                ):
+                    rubric_focus = criteria.recommended_query_focus
+
+                logger.debug(f"Rubric focus for iteration {iteration}: {rubric_focus}")
+
+                current_queries = await self._generate_queries(
+                    iteration=iteration,
+                    num_queries=3,
+                    queries=queries,
+                    results=all_results,
+                    accumulated_content=content_so_far,  # Pass accumulated content
+                    rubric_focus=rubric_focus,  # Pass rubric focus for adaptive queries
+                )
+
+            logger.debug(
+                f"Generated queries (iteration {iteration}): {current_queries}",
+            )
+
             from akd.tools.search._base import SearchToolInputSchema
 
             search_input = SearchToolInputSchema(
-                queries=queries,
-                max_results=min(
-                    desired_max_results - len(all_results),
-                    self.config.max_results_per_iteration,
-                ),
+                queries=current_queries,
+                max_results=search_limit,
                 category=params.category,
             )
 
@@ -522,14 +842,54 @@ class ControlledAgenticLitSearchAgent(LitBaseAgent):
                 existing_results=all_results,
             )
 
+            # Fallback mechanism: If adapted queries return no results, try original queries
+            if not current_results and iteration > 1 and current_queries != queries:
+                if self.debug:
+                    logger.debug(
+                        f"No results from adapted queries, falling back to original queries: {queries}",
+                    )
+
+                fallback_input = SearchToolInputSchema(
+                    queries=queries,  # Use original queries
+                    max_results=search_limit,
+                    category=params.category,
+                )
+
+                fallback_result = await self.search_tool.arun(
+                    self.search_tool.input_schema(**fallback_input.model_dump()),
+                )
+
+                current_results = self._deduplicate_results(
+                    new_results=fallback_result.results,
+                    existing_results=all_results,
+                )
+
+                if current_results and self.debug:
+                    logger.debug(
+                        f"Fallback successful: found {len(current_results)} results",
+                    )
+
             all_results.extend(current_results)
+
+            # Update accumulated content after each iteration
+            new_content = self._accumulate_content(current_results)
+            if new_content:
+                content_so_far += "\n" + new_content if content_so_far else new_content
 
             # Learn from this iteration if we have rubric analysis
             if hasattr(criteria, "rubric_analysis") and criteria.rubric_analysis:
                 self._learn_from_iteration(
                     iteration,
-                    queries,
+                    current_queries,
                     criteria.rubric_analysis,
+                )
+
+            if self.debug:
+                logger.debug(
+                    f"Content accumulated so far (chars): {len(content_so_far)}",
+                )
+                logger.debug(
+                    f"Current iteration results: {len(current_results)}",
                 )
 
         logger.debug(f"Final Stopping Criteria :: {criteria}")
@@ -543,7 +903,7 @@ class ControlledAgenticLitSearchAgent(LitBaseAgent):
                     "title": result.title,
                     "content": result.content,
                     "category": result.category,
-                }
+                },
             )
 
         return LitSearchAgentOutputSchema(
