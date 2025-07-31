@@ -14,6 +14,7 @@ from .searxng_search import (
     SearxNGSearchTool,
     SearxNGSearchToolInputSchema,
     SearxNGSearchToolOutputSchema,
+    SearxNGSearchToolConfig,
 )
 from .semantic_scholar_search import (
     SemanticScholarSearchTool,

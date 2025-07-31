@@ -4,6 +4,9 @@ import numpy as np
 from loguru import logger
 from pydantic import HttpUrl, TypeAdapter
 from sentence_transformers import SentenceTransformer
+import openai
+import os
+import tiktoken
 
 HttpUrlAdapter = TypeAdapter(HttpUrl)
 
@@ -90,3 +93,53 @@ class Embedder:
         except (ValueError, AttributeError, TypeError):
             logger.warning(f"Failed to parse embedding: {emb_str}")
             return np.zeros(self.embedding_dimensions)
+
+
+class OpenAIEmbedder(Embedder):
+    """Embedder using OpenAI's API."""
+
+    def __init__(
+        self,
+        model_name: str = "text-embedding-3-small",
+        api_key: str = None,
+        debug: bool = False,
+    ):
+        self.model_name = model_name
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.client = openai.OpenAI(api_key=self.api_key)
+        self.debug = debug
+
+    def truncate_text(
+        self, text: str, max_tokens: int = 8192, buffer: int = 200
+    ) -> str:
+        """Use tiktoken to truncate text to a maximum number of tokens."""
+        enc = tiktoken.encoding_for_model(self.model_name)
+        tokens = enc.encode(text)
+        if len(tokens) > max_tokens:
+            return enc.decode(tokens[:max_tokens])
+        return text
+
+    def embed_texts(self, texts: list[str], batch_size: int = 32) -> np.ndarray:
+        if isinstance(texts, str):
+            texts = [texts]
+
+        # Ensure all elements are non-null strings
+        texts = [
+            str(t)
+            if t is not None and str(t).strip() != ""
+            else "No ReadMe or Description"
+            for t in texts
+        ]
+
+        if not texts:
+            raise ValueError("No valid input texts provided for embedding.")
+
+        texts = [self.truncate_text(text) for text in texts]
+        response = self.client.embeddings.create(
+            input=texts,
+            model=self.model_name,
+        )
+        return np.array([d.embedding for d in response.data])
+
+    def get_embedding_dimensions(self) -> int:
+        return len(self.embed_texts(["dimension check"])[0])
