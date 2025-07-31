@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import instructor
 import openai
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
@@ -18,10 +18,10 @@ from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 class BaseAgentConfig(BaseConfig):
     """Configuration class for LangBaseAgent."""
 
-    api_key: Optional[str] = None
-    model_name: Optional[str] = None
+    api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
+    model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
     temperature: float = 0.0
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
 
 
 class BaseAgent[
@@ -154,7 +154,8 @@ class LangBaseAgent[
         """
         response_model = response_model or self.output_schema
         structured_client = self.client.with_structured_output(
-            response_model, method="function_calling"
+            response_model,
+            method="function_calling",
         )
 
         # Format messages using the prompt template
@@ -222,7 +223,7 @@ class InstructorBaseAgent[
         # Create the OpenAI client
         self.client = instructor.from_openai(
             openai.AsyncOpenAI(
-                api_key=CONFIG.model_config_settings.api_keys.openai,
+                api_key=self.api_key or CONFIG.model_config_settings.api_keys.openai,
             ),
         )
 
@@ -290,6 +291,7 @@ class InstructorBaseAgent[
         response = await self.client.chat.completions.create(
             messages=messages,
             model=self.model_name,
+            temperature=self.temperature,
             response_model=instructor_model,
         )
 
