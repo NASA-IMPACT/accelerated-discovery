@@ -3,7 +3,7 @@ from enum import Enum, auto
 from functools import lru_cache
 from typing import Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import AnyUrl, BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,6 +38,10 @@ class ModelConfigSettings(BaseSettings):
     temperature: float = 0.0
     max_tokens: int = 120_000_000
     api_keys: ApiKeys = ApiKeys()
+    base_url: AnyUrl | None = Field(
+        default=AnyUrl(os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")),
+        description="Base URL for the model provider API",
+    )
     default_no_answer: str = "Answer not found"
 
 

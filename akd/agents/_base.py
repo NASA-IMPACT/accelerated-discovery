@@ -8,7 +8,7 @@ import openai
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
+from pydantic import AnyUrl, BaseModel, Field
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
@@ -18,6 +18,7 @@ from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 class BaseAgentConfig(BaseConfig):
     """Configuration class for LangBaseAgent."""
 
+    base_url: AnyUrl | None = Field(default=CONFIG.model_config_settings.base_url)
     api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
     model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
     temperature: float = 0.0
@@ -95,20 +96,13 @@ class LangBaseAgent[
         config: BaseAgentConfig | None = None,
         debug: bool = False,
     ) -> None:
-        config = config or BaseAgentConfig(
-            api_key=CONFIG.model_config_settings.api_keys.openai,
-            model_name=CONFIG.model_config_settings.model_name,
-            temperature=CONFIG.model_config_settings.temperature,
-            system_prompt=DEFAULT_SYSTEM_PROMPT,
-            debug=debug,
-        )
-
         super().__init__(config=config, debug=debug)
 
         # Create the OpenAI client
         self.client = ChatOpenAI(
-            api_key=self.api_key or CONFIG.model_config_settings.api_keys.openai,  # type: ignore
-            model=self.model_name or CONFIG.model_config_settings.model_name,  # type: ignore
+            api_key=self.api_key,
+            model=self.model_name,
+            base_url=str(self.base_url),
             temperature=self.temperature,  # type: ignore
         )
 
@@ -120,7 +114,7 @@ class LangBaseAgent[
             [
                 {
                     "role": "system",
-                    "content": self.system_prompt or DEFAULT_SYSTEM_PROMPT,
+                    "content": self.system_prompt,
                 },
                 MessagesPlaceholder(variable_name="memory"),
             ],
@@ -210,20 +204,13 @@ class InstructorBaseAgent[
         config: BaseAgentConfig | None = None,
         debug: bool = False,
     ) -> None:
-        config = config or BaseAgentConfig(
-            api_key=CONFIG.model_config_settings.api_keys.openai,
-            model_name=CONFIG.model_config_settings.model_name,
-            temperature=CONFIG.model_config_settings.temperature,
-            system_prompt=DEFAULT_SYSTEM_PROMPT,
-            debug=debug,
-        )
-
         super().__init__(config=config, debug=debug)
 
         # Create the OpenAI client
         self.client = instructor.from_openai(
             openai.AsyncOpenAI(
-                api_key=self.api_key or CONFIG.model_config_settings.api_keys.openai,
+                api_key=self.api_key,
+                base_url=str(self.base_url),
             ),
         )
 
