@@ -1,4 +1,10 @@
-from ._base import ScraperToolInputSchema, ScraperToolOutputSchema
+from ._base import (
+    ScrapedMetadata,
+    ScraperToolBase,
+    ScraperToolConfig,
+    ScraperToolInputSchema,
+    ScraperToolOutputSchema,
+)
 from .omni import DoclingScraper, DoclingScraperConfig, OmniScraperInputSchema
 from .pdf_scrapers import PDFScraperInputSchema, SimplePDFScraper
 from .web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
@@ -13,4 +19,7 @@ __all__ = [
     "DoclingScraper",
     "DoclingScraperConfig",
     "OmniScraperInputSchema",
+    "ScrapedMetadata",
+    "ScraperToolBase",
+    "ScraperToolConfig",
 ]
