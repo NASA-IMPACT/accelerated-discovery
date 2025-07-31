@@ -34,6 +34,7 @@ __all__ = [
     "SearxNGSearchTool",
     "SearxNGSearchToolInputSchema",
     "SearxNGSearchToolOutputSchema",
+    "SearxNGSearchToolConfig",
     # Semantic Scholar
     "SemanticScholarSearchTool",
     "SemanticScholarSearchToolOutputSchema",
