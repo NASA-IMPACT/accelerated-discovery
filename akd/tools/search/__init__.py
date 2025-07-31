@@ -19,6 +19,7 @@ from .searxng_search import (
 from .semantic_scholar_search import (
     SemanticScholarSearchTool,
     SemanticScholarSearchToolConfig,
+    SemanticScholarSearchToolInputSchema,
     SemanticScholarSearchToolOutputSchema,
 )
 
@@ -38,6 +39,7 @@ __all__ = [
     "SearxNGSearchToolConfig",
     # Semantic Scholar
     "SemanticScholarSearchTool",
+    "SemanticScholarSearchToolInputSchema",
     "SemanticScholarSearchToolOutputSchema",
     "SemanticScholarSearchToolConfig",
 ]
