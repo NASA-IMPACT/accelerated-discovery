@@ -5,6 +5,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
+from loguru import logger
 from openinference.semconv.trace import SpanAttributes
 from opentelemetry import trace
 from phoenix.otel import register
@@ -75,8 +76,8 @@ async def websocket_endpoint(websocket: WebSocket):
         ]
     while True:
         msg_str = await websocket.receive_text()
-        # sink = WebSocketSink(websocket)
-        # logger.add(sink, format="{message}", level="INFO")
+        sink = WebSocketSink(websocket)
+        logger.add(sink, format="{message}", level="INFO")
         # logger.info("################Loguru logs##############")
         user_message = Message.model_validate(json.loads(msg_str))
         await websocket.send_text(f"UserMessage: {user_message.message}")
