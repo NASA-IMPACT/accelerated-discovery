@@ -1,5 +1,6 @@
 import asyncio
 import networkx as nx
+import os
 from typing import List, Tuple
 
 from pydantic.fields import Field
@@ -38,7 +39,7 @@ class GapOutputSchema(OutputSchema):
 
 class GapAgentConfig(BaseAgentConfig):
     """Configuration for Gap Agent"""
-    docling_scraper_config: DoclingScraperConfig = Field(..., 
+    docling_config: DoclingScraperConfig = Field(..., 
                                                          description="Configuration for Docling Scraper.")
     
     s2_tool_config: SemanticScholarSearchToolConfig = Field(..., 
@@ -56,11 +57,16 @@ class GapAgent(BaseAgent):
         self,
     ) -> None:
         super()._post_init()
-        self.docling_scraper = DoclingScraper(self.config.docling_scraper_config)
-        self.semantic_search_tool = SemanticScholarSearchTool.from_params(api_key=self.config.s2_tool_config.api_key,
-                                                             debug=self.config.s2_tool_config.debug,
-                                                             external_id=self.config.s2_tool_config.external_id,
-                                                             fields=self.config.s2_tool_config.fields,)
+        docling_config = self.config.docling_config if self.config.docling_config else DoclingScraperConfig(do_table_structure=True, 
+                                                                                                                            pdf_mode='accurate', 
+                                                                                                                            export_type='html', 
+                                                                                                                            debug=False)
+        s2_tool_config = self.config.s2_tool_config if self.config.s2_tool_config else SemanticScholarSearchToolConfig(debug=False,
+                                                                                                                  external_id="ARXIV",
+                                                                                                                  fields = ["paperId", "externalIds", "url", "title", "abstract", "year", "authors", "isOpenAccess", "openAccessPdf"])
+        self.docling_scraper = DoclingScraper(docling_config)
+        self.semantic_search_tool = SemanticScholarSearchTool(s2_tool_config)
+
         self.llm = ChatOpenAI(model_name=self.config.model_name,
                               temperature=self.config.temperature,
                               api_key=self.config.api_key)
