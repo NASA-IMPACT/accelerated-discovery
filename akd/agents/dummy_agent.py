@@ -1,5 +1,6 @@
 ###Dummy agent used to test websocket connections
 
+import asyncio
 import json
 import os
 from typing import Annotated, cast
@@ -11,6 +12,7 @@ from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+from loguru import logger
 from typing_extensions import TypedDict
 
 load_dotenv()
@@ -28,6 +30,11 @@ llm = init_chat_model(os.environ["FAST_LLM"])
 @tool
 async def get_weather(city: str) -> str:
     """Get weather for location."""
+
+    for i in range(5):
+        logger.info(f"Progress: step {i}")
+        await asyncio.sleep(1)
+
     return f"It's always sunny in {city}!"
 
 

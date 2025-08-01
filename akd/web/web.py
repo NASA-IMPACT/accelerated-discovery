@@ -1,9 +1,13 @@
+import asyncio
 import json
 
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import HTMLResponse
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
+from openinference.semconv.trace import SpanAttributes
+from opentelemetry import trace
+from phoenix.otel import register
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
@@ -29,8 +33,21 @@ class Message(BaseModel):
     message: str
 
 
+# configure the Phoenix tracer
+tracer_provider = register(
+    project_name="akd",  # Default is 'default'
+    auto_instrument=True,  # See 'Trace all calls made to a library' below
+    endpoint="http://localhost:6006/v1/traces",
+)
+tracer = tracer_provider.get_tracer(__name__)
+
+
 # uvicorn akd.web.web:app --reload
 @app.websocket("/ws")
+@tracer.start_as_current_span(
+    name="agent",
+    attributes={SpanAttributes.OPENINFERENCE_SPAN_KIND: "agent"},
+)
 async def websocket_endpoint(websocket: WebSocket):
     """
     The websocket endpoint that handles the communication between the browser and the agent.
@@ -39,7 +56,12 @@ async def websocket_endpoint(websocket: WebSocket):
     To run `uvicorn akd.web.web:app --reload`
     """
     await websocket.accept()
-    thread_id = websocket.query_params.get("thread_id")
+    thread_id = websocket.query_params.get("thread_id", "")
+    print(thread_id)
+    current_span = trace.get_current_span()
+    current_span.set_attribute(SpanAttributes.SESSION_ID, thread_id)
+    # current_span.set_attribute(SpanAttributes.INPUT_VALUE, "Connected")
+    # current_span.set_attribute(SpanAttributes.OUTPUT_VALUE, "Output value")
 
     graph = get_graph_builder().compile(checkpointer=memory)
     config = {"configurable": {"thread_id": thread_id}}
@@ -53,18 +75,24 @@ async def websocket_endpoint(websocket: WebSocket):
         ]
     while True:
         msg_str = await websocket.receive_text()
+        # sink = WebSocketSink(websocket)
+        # logger.add(sink, format="{message}", level="INFO")
+        # logger.info("################Loguru logs##############")
         user_message = Message.model_validate(json.loads(msg_str))
         await websocket.send_text(f"UserMessage: {user_message.message}")
+        current_span.set_attribute(SpanAttributes.INPUT_VALUE, user_message.message)
         await websocket.send_text("Agent thinking...")
         await stream_graph_updates(
             user_message.message,
             graph,
             websocket,
             config["configurable"],
+            current_span,
         )
         await websocket.send_text(
             "##END##",
         )  # denoting end of conversation from the agent.
+        # logger.remove(sink)
 
 
 async def get_past_messages(config: dict, graph: CompiledStateGraph) -> list[Message]:
@@ -90,11 +118,30 @@ async def get_past_messages(config: dict, graph: CompiledStateGraph) -> list[Mes
     return return_messages
 
 
+# Custom sink to send logs to WebSocket
+class WebSocketSink:
+    def __init__(self, websocket: WebSocket):
+        self.websocket = websocket
+        self.lock = asyncio.Lock()
+
+    async def _send(self, message: str):
+        async with self.lock:
+            try:
+                await self.websocket.send_text(message)
+            except Exception:
+                pass  # Log or ignore if the client is disconnected
+
+    def __call__(self, message: str):
+        # Schedule the async task from this sync method
+        asyncio.create_task(self._send(message))
+
+
 async def stream_graph_updates(
     user_input: str,
     graph: CompiledStateGraph,
     websocket: WebSocket,
     config=None,
+    current_span=None,
 ):
     """
     Run a graph with the user input and stream the graph updates over websocket.
@@ -124,9 +171,17 @@ async def stream_graph_updates(
                     await websocket.send_text(
                         f"{type(message).__name__}: {message.content}",
                     )
+                    current_span.set_attribute(
+                        SpanAttributes.LLM_OUTPUT_MESSAGES,
+                        f"{type(message).__name__}: {message.content}",
+                    )
                     if hasattr(message, "tool_calls") and message.tool_calls:
                         for tool_call in message.tool_calls:
                             await websocket.send_text(
+                                f"Tool Call ==> name : {tool_call['name']}, args: {tool_call['args']}",
+                            )
+                            current_span.set_attribute(
+                                SpanAttributes.LLM_OUTPUT_MESSAGES,
                                 f"Tool Call ==> name : {tool_call['name']}, args: {tool_call['args']}",
                             )
 
