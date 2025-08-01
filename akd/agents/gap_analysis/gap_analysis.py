@@ -85,8 +85,11 @@ class GapAgent(BaseAgent):
             List[PaperDataItem]: A list of paper data items retrieved from the Semantic Scholar tool.
         """
         arxiv_ids = [res.url.path.split("/")[-1].split("v")[0] for res in search_results]
-        paper_items = await self.semantic_search_tool.fetch_paper_by_external_id(SemanticScholarSearchToolInputSchema(queries=arxiv_ids))    
-        return paper_items
+        paper_items = await self.semantic_search_tool.fetch_paper_by_external_id(SemanticScholarSearchToolInputSchema(queries=arxiv_ids))   
+        fetched_paper_ids = [paper_item.external_id for paper_item in paper_items]
+        skipped_ids = (set(arxiv_ids)) - set(fetched_paper_ids)
+        search_results = [search_results[i] for i in range(len(search_results)) if arxiv_ids[i] not in skipped_ids] 
+        return paper_items, search_results
 
 
     async def _fetch_parsed_pdfs(self, search_results: List[SearchResultItem]) -> List[str]:
@@ -164,25 +167,6 @@ class GapAgent(BaseAgent):
         return G
 
 
-    def _clean_results(self, 
-                       paper_items: List[PaperDataItem],
-                       search_results: List[SearchResultItem]) -> Tuple[List[PaperDataItem], List[SearchResultItem]]:
-        """
-        Removes entries from paper items and search results that correspond to failed or empty paper retrievals.
-
-        Args:
-            paper_items (List[PaperDataItem]): A list of paper metadata items, some of which may be None.
-            search_results (List[SearchResultItem]): A list of search results aligned with the paper items.
-
-        Returns:
-            Tuple[List[PaperDataItem], List[SearchResultItem]]: Filtered lists with None entries removed, maintaining alignment.
-        """
-        empty_result_idxs = [i for i in range(len(paper_items)) if paper_items[i] is None]
-        paper_items = [item for i, item in enumerate(paper_items) if i not in empty_result_idxs]
-        search_results = [item for i, item in enumerate(search_results) if i not in empty_result_idxs]
-        return paper_items, search_results
-
-
     async def get_response_async(
         self,
         params: GapInputSchema,
@@ -201,8 +185,7 @@ class GapAgent(BaseAgent):
         """
         search_results = params.search_results
         gap = params.gap
-        paper_items = await self._fetch_paper_items(search_results)
-        paper_items, search_results = self._clean_results(paper_items, search_results)
+        paper_items, search_results = await self._fetch_paper_items(search_results)
         parsed_pdfs = await self._fetch_parsed_pdfs(search_results=search_results)
         parsed_papers = await self._fetch_parsed_papers(parsed_pdfs, paper_items)
         G = await self.create_graph(parsed_papers=parsed_papers)
