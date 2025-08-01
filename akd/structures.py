@@ -201,9 +201,9 @@ class PaperDataItem(BaseModel):
         ...,
         description="Tldr version of the paper.",
     )
-    doi: Optional[str] = Field(
+    external_id: Optional[str] = Field(
         ...,
-        description="The DOI of the paper from the query."
+        description="The external id of the paper from the query."
     )
 
 
