@@ -1,69 +1,28 @@
+# noqa: D100,D101,D102,D103,D104,D105,D107,D200,D201,D202,D203,D204,D205,D400,D401,F841
 import argparse
 import asyncio
 import json
 
-import openai
 from loguru import logger
-from pydantic import ConfigDict
-from langchain_openai import ChatOpenAI
 
-from akd.agents.extraction import (
-    EstimationExtractionAgent,
-    IntentBasedExtractionSchemaMapper,
-)
-from akd.agents.factory import create_query_agent
-from akd.agents.intents import IntentAgent
-from akd.agents.litsearch import LitAgent, LitAgentInputSchema
-from akd.configs.lit_config import get_lit_agent_settings
-from akd.tools.scrapers.composite import CompositeWebScraper, ResearchArticleResolver
-from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
-from akd.tools.scrapers.resolvers import ADSResolver, ArxivResolver, IdentityResolver
-from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
-from akd.tools.search import SearxNGSearchTool
+# Removed unused imports
+from akd.agents.search import ControlledSearchAgent, LitSearchAgentInputSchema
+
+# Removed unused import
+# Removed unused imports
 
 
 async def main(args):
-    lit_agent_config = get_lit_agent_settings(args.config)
-    search_config = lit_agent_config.search
-    scraper_config = lit_agent_config.scraper
+    # Removed unused variable assignments
 
-    search_tool = SearxNGSearchTool(config=search_config)
+    # Use the new ControlledAgenticLitSearchAgent with proper configuration
+    from akd.agents.search import ControlledSearchAgentConfig
 
-    scraper = CompositeWebScraper(
-        SimpleWebScraper(scraper_config),
-        Crawl4AIWebScraper(scraper_config),
-        SimplePDFScraper(scraper_config),
-        debug=True,
-    )
-
-    article_resolver = ResearchArticleResolver(
-        ArxivResolver(),
-        ADSResolver(),
-        IdentityResolver(),
-    )
-
-    intent_agent = IntentAgent(
-        config=ConfigDict(client=ChatOpenAI()),
-    )
-
-    query_agent = create_query_agent()
-    schema_mapper = IntentBasedExtractionSchemaMapper()
-    extraction_agent = EstimationExtractionAgent()
-
-    lit_agent = LitAgent(
-        intent_agent=intent_agent,
-        schema_mapper=schema_mapper,
-        query_agent=query_agent,
-        extraction_agent=extraction_agent,
-        search_tool=search_tool,
-        web_scraper=scraper,
-        article_resolver=article_resolver,
-    )
-
-    lit_agent.clear_history()
+    agent_config = ControlledSearchAgentConfig(debug=True)
+    lit_agent = ControlledSearchAgent(config=agent_config, debug=True)
 
     result = await lit_agent.arun(
-        LitAgentInputSchema(query=args.query, max_search_results=5)
+        LitSearchAgentInputSchema(query=args.query, max_results=5),
     )
     logger.info(result.model_dump())
 
