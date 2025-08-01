@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 from urllib.parse import urljoin
 
 import aiohttp
@@ -73,6 +73,7 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
         gt=0,
         le=50,
     )
+    external_id: Optional[Literal["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]] = Field(default="DOI")
     debug: bool = False
 
     @field_validator("api_key", mode="before")
@@ -111,6 +112,7 @@ class SemanticScholarSearchTool(
         fields: Optional[List[str]] = None,
         results_per_page: int = 100,
         max_pages_per_query: int = 5,
+        external_id: str = "DOI",
         debug: bool = False,
     ) -> SemanticScholarSearchTool:
         """Creates an instance from specific parameters."""
@@ -120,6 +122,7 @@ class SemanticScholarSearchTool(
             "max_results": max_results,
             "results_per_page": results_per_page,
             "max_pages_per_query": max_pages_per_query,
+            "external_id": external_id,
             "debug": debug,
         }
         if fields:
@@ -147,7 +150,7 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = urljoin(self.config.base_url, "graph/v1/paper/search")
+        search_url = urljoin(str(self.config.base_url), "graph/v1/paper/search")
         params = {
             "query": query,
             "offset": offset,
@@ -209,7 +212,7 @@ class SemanticScholarSearchTool(
     def _parse_paper(
         self,
         item: Dict[str, Any],
-        doi: Optional[str],
+        external_id: Optional[str],
     ) -> Optional[PaperDataItem]:
         """Parses a single paper from the Semantic Scholar API response."""
         if not item or not item.get("paperId"):
@@ -241,22 +244,23 @@ class SemanticScholarSearchTool(
                 references=item.get("references"),
                 embedding=item.get("embedding"),
                 tldr=item.get("tldr"),
-                doi=doi or None,
+                external_id=external_id or None,
             )
             if self.debug:
                 logger.debug(
-                    f"Processed paper with DOI {doi}",
+                    f"Processed paper with External ID {external_id}",
                 )
             return paper_item
         except Exception as e:
             logger.debug(
-                f"Could not parse response to paper object for doi {doi}: {str(e)}",
+                f"Could not parse response to paper object for External ID {external_id}: {str(e)}",
             )
 
-    async def _fetch_paper_by_doi(
+    async def _fetch_paper_by_external_id(
         self,
         session: aiohttp.ClientSession,
         query: str,
+        external_id: str = 'DOI',
     ) -> list[PaperDataItem]:
         """
         Fetches a single page of search results from Semantic Scholar.
@@ -270,7 +274,7 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = urljoin(self.config.base_url, "graph/v1/paper/search")
+        search_url = urljoin(str(self.config.base_url), f"graph/v1/paper/{external_id}:{query}")
         params = {
             "fields": ",".join(self.config.fields),
         }
@@ -302,7 +306,7 @@ class SemanticScholarSearchTool(
                     logger.debug(
                         f"Received {len(data.get('data', []))} items. Total: {data.get('total')}, Offset: {data.get('offset')}, Next: {data.get('next')}",
                     )
-                return [self._parse_paper(item=data, doi=query)]
+                return [self._parse_paper(item=data, external_id=query)]
 
         except aiohttp.ClientResponseError as e:
             logger.error(
@@ -520,13 +524,13 @@ class SemanticScholarSearchTool(
 
         return final_results
 
-    async def doi_to_paper(
+    async def fetch_paper_by_external_id(
         self,
         params: SemanticScholarSearchToolInputSchema,
         **kwargs,
     ) -> list[PaperDataItem]:
         """
-        Fetches a paper based on it's DOI.
+        Fetches a paper from Semantic Scholar using an external ID.
 
         Args:
             params: Input parameters including queries and category.
@@ -536,9 +540,10 @@ class SemanticScholarSearchTool(
         """
         async with aiohttp.ClientSession() as session:
             tasks = [
-                self._fetch_paper_by_doi(
+                self._fetch_paper_by_external_id(
                     session,
                     query,
+                    kwargs.get("external_id", self.config.external_id)
                 )
                 for query in params.queries
             ]
