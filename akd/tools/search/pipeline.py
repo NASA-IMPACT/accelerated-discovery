@@ -40,16 +40,6 @@ class FullTextSearchPipelineConfig(SearchToolConfig):
         description="Timeout in seconds for individual scraping operations",
     )
 
-    # Content processing configuration
-    max_content_length: int = Field(
-        default=100_000,
-        description="Maximum length of scraped content to include",
-    )
-    content_truncation_strategy: str = Field(
-        default="end",
-        description="How to truncate content if it exceeds max_length: 'end', 'middle', 'start'",
-    )
-
     # Error handling configuration
     fail_on_scraping_errors: bool = Field(
         default=False,
@@ -170,10 +160,6 @@ class FullTextSearchPipeline(SearchTool):
             if scraper_output.content and scraper_output.content.strip():
                 content = scraper_output.content.strip()
 
-                # Apply content length limits
-                if len(content) > self.max_content_length:
-                    content = self._truncate_content(content)
-
                 if self.debug:
                     logger.debug(
                         f"Successfully scraped {len(content)} characters from {url}",
@@ -193,19 +179,6 @@ class FullTextSearchPipeline(SearchTool):
             if self.debug:
                 logger.warning(f"Failed to scrape {url}: {e}")
             return None
-
-    def _truncate_content(self, content: str) -> str:
-        """Truncate content according to the configured strategy."""
-        if len(content) <= self.max_content_length:
-            return content
-
-        if self.content_truncation_strategy == "start":
-            return "..." + content[-(self.max_content_length - 3) :]
-        elif self.content_truncation_strategy == "middle":
-            half = (self.max_content_length - 5) // 2
-            return content[:half] + " ... " + content[-half:]
-        else:  # "end" (default)
-            return content[: self.max_content_length - 3] + "..."
 
     async def _process_single_result(
         self,
