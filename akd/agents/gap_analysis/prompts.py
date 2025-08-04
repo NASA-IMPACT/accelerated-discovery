@@ -223,3 +223,40 @@ summarise_answer_prompt = ChatPromptTemplate.from_messages(
         ("user", "Query: {query}\nSources and context:\n{attributed_answer_list}"),
     ]
 )
+
+# =============================================================================
+# Gap-to-Query map
+# =============================================================================
+
+knowledge_gap_query = """Does the literature demonstrate a lack of comprehensive understanding or up-to-date insights into the topic? \
+Are there areas where foundational knowledge is missing, outdated, or fragmented? \
+Does the research acknowledge uncertainties, ambiguities, or areas still poorly understood? \
+Are researchers calling for further conceptual or descriptive exploration?"""
+
+evidence_gap_query = """Is there a shortage of robust empirical evidence—such as experiments, trials, longitudinal studies, or real-world data—to support, challenge, or validate the core claims made in the literature? \
+Are theoretical assertions made without sufficient quantitative or qualitative backing? \
+Do review papers or authors explicitly note the need for more primary data collection or stronger empirical validation?"""
+
+theoretical_gap_query = """Do existing theories fail to account for emerging or unexplained phenomena discussed in the literature? \
+Are there inconsistencies between theoretical models and real-world observations? \
+Are researchers using outdated frameworks? \
+Is there a call for new conceptual models, paradigms, or revisions to current theories?"""
+
+methodological_gap_query = """Are the methods used in existing research inadequate, inappropriate, or poorly aligned with the research questions posed? \
+Do authors critique the limitations of current methods? \
+Is there a need for innovation in research design, sampling, measurement, or analysis?"""
+
+population_gap_query = """Are particular demographic, cultural, social, or identity-based groups underrepresented or entirely missing in the reviewed research? \
+Do authors acknowledge this underrepresentation or suggest a need for more inclusive sampling?"""
+
+geographical_gap_query = """Is the research concentrated in a limited set of countries, regions, or contexts, neglecting how the phenomenon may differ elsewhere? \
+Are global or comparative perspectives missing? \
+Do authors indicate that findings may not generalize beyond certain locations? \
+Is there a call for more region-specific or cross-cultural research?"""
+
+gap_query_map = {"knowledge": knowledge_gap_query,
+                 "evidence": evidence_gap_query,
+                 "theoretical": theoretical_gap_query,
+                 "methodological": methodological_gap_query,
+                 "population": population_gap_query,
+                 "geographical": geographical_gap_query}

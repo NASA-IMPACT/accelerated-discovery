@@ -1,9 +1,7 @@
 import asyncio
 import networkx as nx
-import os
-from typing import List, Tuple
-
-from pydantic.fields import Field
+from typing import List
+from loguru import logger
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
@@ -19,17 +17,18 @@ from akd.tools.search import (SemanticScholarSearchTool,
 from akd.structures import SearchResultItem, PaperDataItem
 
 from langchain_openai import ChatOpenAI
+from pydantic.fields import Field
 
 from .parsing_utils import parse_html, group_section_titles, create_sections_from_parsed_html
 from .graph_utils import add_paper_to_graph, select_nodes, generate_final_answer
 from .structures import ParsedPaper
+from .prompts import gap_query_map
 
  
 class GapInputSchema(InputSchema):
     """Input schema for gap agent"""
     search_results: List[SearchResultItem] = Field(..., description="List of SearchResultItems.")
     gap: str = Field(..., description="Type of gap to investigate.")
-    # pre-selected gap, or user-defined
 
 
 class GapOutputSchema(OutputSchema):
@@ -39,11 +38,9 @@ class GapOutputSchema(OutputSchema):
 
 class GapAgentConfig(BaseAgentConfig):
     """Configuration for Gap Agent"""
-    docling_config: DoclingScraperConfig = Field(..., 
-                                                         description="Configuration for Docling Scraper.")
+    docling_config: DoclingScraperConfig = Field(..., description="Configuration for Docling Scraper.")
     
-    s2_tool_config: SemanticScholarSearchToolConfig = Field(..., 
-                                                         description="Configuration for S2 Tool.")
+    s2_tool_config: SemanticScholarSearchToolConfig = Field(..., description="Configuration for S2 Tool.")
 
 
 
@@ -184,11 +181,20 @@ class GapAgent(BaseAgent):
             OutputSchema: The response from the language model.
         """
         search_results = params.search_results
-        gap = params.gap
+        if self.debug:
+            if params.gap not in gap_query_map.keys():
+                logger.debug(f"You have running the gap agent with your own defined gap. Please ensure you have described the gap you want to investigate in detail.")
+            else:
+                logger.debug(f"Running gap analysis to investigate {params.gap} gap.")
+        gap = gap_query_map[params.gap] if params.gap in gap_query_map.keys() else params.gap
         paper_items, search_results = await self._fetch_paper_items(search_results)
+        if self.debug:
+            logger.debug(f"Fetch {len(paper_items)} papers from semantic scholar.")
         parsed_pdfs = await self._fetch_parsed_pdfs(search_results=search_results)
         parsed_papers = await self._fetch_parsed_papers(parsed_pdfs, paper_items)
         G = await self.create_graph(parsed_papers=parsed_papers)
+        if self.debug:
+            logger.debug(f"Created {G}")
         selected_nodes = await select_nodes(G, query=gap, llm=self.llm)
         output = await generate_final_answer(G, query=gap, all_selected_nodes=selected_nodes, llm=self.llm)
         return GapOutputSchema(output=output.content)
