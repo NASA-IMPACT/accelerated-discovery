@@ -66,6 +66,11 @@ class SearchResultItem(IOSchema):
         None,
         description="Tags for the search result",
     )
+
+    authors: list[str] | None = Field(
+        None,
+        description="List of authors for DOI resolution by title and author",
+    )
     extra: dict[str, Any] | None = Field(
         None,
         description="Extra information from the search result",

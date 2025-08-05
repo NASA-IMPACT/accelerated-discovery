@@ -245,7 +245,7 @@ class TestDOIResolver:
             doi="invalid-doi",
         )
 
-        with pytest.raises(ValueError, match="Failed to resolve URL with DOIResolver"):
+        with pytest.raises(ValueError, match="Failed to resolve with DOIResolver"):
             await resolver.arun(input_schema)
 
     @pytest.mark.asyncio
@@ -253,7 +253,7 @@ class TestDOIResolver:
         """Test that arun fails when no DOI is provided."""
         input_schema = ResolverInputSchema(url="https://example.com")
 
-        with pytest.raises(ValueError, match="Failed to resolve URL with DOIResolver"):
+        with pytest.raises(ValueError, match="Failed to resolve with DOIResolver"):
             await resolver.arun(input_schema)
 
 
@@ -399,7 +399,7 @@ class TestPDFUrlResolver:
         """Test that arun fails when no PDF URL is provided."""
         with pytest.raises(
             ValueError,
-            match="Failed to resolve URL with PDFUrlResolver",
+            match="Failed to resolve with PDFUrlResolver",
         ):
             await resolver.arun(input_without_pdf)
 

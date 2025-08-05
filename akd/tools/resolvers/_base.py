@@ -6,11 +6,12 @@ import requests
 from loguru import logger
 from pydantic import Field, HttpUrl
 
+from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools import BaseTool, BaseToolConfig
 
 
-class ResolverInputSchema(SearchResultItem):
+class ResolverInputSchema(SearchResultItem, InputSchema):
     """
     Enhanced input schema for resolver with search result data.
     TThis is directly inherited from SearchResultItem
@@ -36,14 +37,8 @@ class ResolverInputSchema(SearchResultItem):
         description="Query used to obtain the search result",
     )
 
-    # Additional field needed for DOI resolution by title+author
-    authors: list[str] | None = Field(
-        None,
-        description="List of authors for DOI resolution by title and author",
-    )
 
-
-class ResolverOutputSchema(SearchResultItem):
+class ResolverOutputSchema(SearchResultItem, OutputSchema):
     """Output schema for resolver"""
 
     # Override to make title optional for resolver output
@@ -59,7 +54,7 @@ class ResolverOutputSchema(SearchResultItem):
 
     resolver: Optional[str] = Field(
         None,
-        description="Resolver used to resolve the url",
+        description="Resolver used to resolve the search result",
     )
 
 
@@ -168,7 +163,7 @@ class BaseArticleResolver(BaseTool[ResolverInputSchema, ResolverOutputSchema]):
 
         # If resolution failed, raise an error
         if resolved_result is None:
-            raise ValueError(f"Failed to resolve URL with {self.__class__.__name__}")
+            raise ValueError(f"Failed to resolve with {self.__class__.__name__}")
 
         # Post-validate the resolved URL if available
         if resolved_result.url:
