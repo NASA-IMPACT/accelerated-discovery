@@ -7,6 +7,7 @@ against a predefined source whitelist.
 """
 
 from __future__ import annotations
+from rapidfuzz.fuzz import token_set_ratio
 
 import json
 import re
@@ -107,6 +108,16 @@ class SourceValidatorConfig(BaseToolConfig):
         description="User agent for API requests",
     )
     debug: bool = Field(default=False, description="Enable debug logging")
+
+    use_fuzzy_match: bool = Field(
+        default=False,
+        description="Enable fuzzy matching of journal titles",
+    )
+
+    fuzzy_threshold: int = Field(
+        default=87,
+        description="Fuzzy matching threshold (0-100) for journal titles",
+    )
 
 
 class SourceValidator(
@@ -334,18 +345,22 @@ class SourceValidator(
                 # Exact title match
                 if source_title == whitelisted_title:
                     return True, category_name, 1.0
+                
+                 # if (
+                #     whitelisted_title in source_title
+                #     or source_title in whitelisted_title
+                # ):
+                #     # Check if it's a meaningful match (not just common words)
+                #     if len(whitelisted_title) > 10 or len(source_title) > 10:
+                #         return True, category_name, 0.8
+                    
 
-                # Fuzzy title match (partial match)
-                if (
-                    whitelisted_title in source_title
-                    or source_title in whitelisted_title
-                ):
-                    # Check if it's a meaningful match (not just common words)
-                    if len(whitelisted_title) > 10 or len(source_title) > 10:
-                        return True, category_name, 0.8
+                if self.config.use_fuzzy_match:
+                    fuzzy_score_set = token_set_ratio(source_title, whitelisted_title)
+                    if fuzzy_score_set >= self.config.fuzzy_threshold:  # You can adjust this threshold
+                        return True, category_name, fuzzy_score_set / 100.0  # Normalize to [0, 1]
 
-                # TODO: Could add ISSN matching here if we had ISSN data in whitelist
-
+               
         return False, None, 0.0
 
     async def _validate_single_result(
