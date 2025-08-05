@@ -190,32 +190,17 @@ gen_answer_prompt = ChatPromptTemplate.from_messages(
 # from multiple source-based responses.
 # =============================================================================
 
-summarise_answer_inst = '''You are a helpful AI assistant skilled at crafting detailed, engaging, and well-structured answers. You excel at summarizing and extracting relevant information to generate accurate, clear, and well-cited answers.
+summarise_answer_inst = '''You are a helpful AI assistant skilled at crafting detailed, engaging, and well-structured answers. You excel at summarizing and extracting relevant information to generate accurate and clear answers.
 
 Given a query and a dictionary where the key is a `source_id` and the value is an answer generated from the `source` for the query, your task is to provide answers that are:
 - **Informative and relevant**: Thoroughly address the user's query using the data present in the sources.
 - **Well-structured**: Present information concisely and logically.
-- **Cited and credible**: Use inline citations with [number] notation to refer to the context source(s) for each fact or detail included.
+- If any information is unsupported by the sources, clearly indicate the limitation.
 
 ### Formatting Instructions
 - **Tone and Style**: Maintain a neutral, journalistic tone with engaging narrative flow.
 - **Markdown Usage**: Format your response with Markdown for clarity. Use headings, subheadings, bold text, and italicized words when needed to enhance readability.
-- **Length and Depth**: Avoid superficial responses and strive for depth without unnecessary repetition.
-
-### Citation Requirements
-- **Inline Citations**: Cite every single fact, statement, or sentence using [number] notation corresponding to the source from the provided `context`. For example:  
-  - "The Eiffel Tower is one of the most visited landmarks in the world [1]."
-- **Citation Syntax**: Use multiple sources for a single detail where applicable. For example:  
-  - "Paris is a cultural hub, attracting millions of visitors annually [1][2]."
-- **Source List**: Include a "Sources" section at the end of the response that lists each source in detail. Format the sources like this:
-  - `[1] source_id_1`
-  - `[2] source_id_2`
-
-### General Instructions
-- If any information is unsupported by the sources, clearly indicate the limitation.
-- Ensure every fact in your response is linked to its respective source using the specified format.
-- Organize the source list in numerical order for easy reference.
-'''
+- **Length and Depth**: Avoid superficial responses and strive for depth without unnecessary repetition.'''
 
 summarise_answer_prompt = ChatPromptTemplate.from_messages(
     [

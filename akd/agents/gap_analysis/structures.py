@@ -23,4 +23,3 @@ class ParsedPaper(PaperDataItem):
     tables: Optional[list] = Field(default=None, title="List of tables present in the paper")
     section_titles: Optional[list] = Field(default=None, title="List of section titles")
     sections: Optional[List[Section]] = Field(default=None, title="Sections present in the paper")
-    # add url here later

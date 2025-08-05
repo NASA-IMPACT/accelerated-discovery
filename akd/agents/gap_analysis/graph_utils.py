@@ -280,6 +280,37 @@ async def select_nodes(G: nx.Graph,
     return all_selected_nodes
 
 
+def format_attributed_answers(G: nx.Graph, attributed_answers: Dict[str, str]) -> Dict[str, Dict[str, str]]:
+    """
+    Formats attributed answers with metadata from the graph.
+
+    Args:
+        G (networkx.Graph): The graph containing paper and section nodes.
+        attributed_answers (Dict[str, str]): A dictionary mapping source node IDs to generated content.
+
+    Returns:
+        Dict[str, Dict[str, str]]: A dictionary where each key is a source ID and the value is a dictionary 
+        containing the paper title, section title, URL, and the associated content.
+    """
+    attributed_content = {}
+    for source_id, content in attributed_answers.items():
+        section_title_id = source_id.strip().split(" ")[-1]
+        source_paper_id = section_title_id.split('_')[0]
+        title = G.nodes[source_paper_id]['title']
+        if section_title_id not in G.nodes:
+            continue
+        section_data = G.nodes[section_title_id]
+        if 'section_title' in section_data.keys():
+            section_title = section_data['section_title']
+        else:
+            section_title = section_data['subsection_title']
+        attributed_content[source_id] = {"title": title,
+                                "section_title": section_title,
+                                "url": G.nodes[source_paper_id]['url'],
+                                "content": content}
+    return attributed_content
+
+
 async def generate_final_answer(G: nx.Graph, 
                                 query: str,
                                 all_selected_nodes: List[List[str]],
@@ -313,12 +344,13 @@ async def generate_final_answer(G: nx.Graph,
     all_answers = await asyncio.gather(*[
         local_answer_chain.abatch(answer_prompt_data) for answer_prompt_data in all_answer_prompt_data
     ])
-    attributed_answers = []
+    attributed_answers = {}
     for answers, selected_nodes in zip(all_answers, all_selected_nodes):
         for node_id, answer in zip(selected_nodes, answers):
-            attributed_answers.append({node_id: answer.content})
+            attributed_answers.update({node_id: answer.content})
     output = await final_answer_chain.ainvoke(input={'query': query, "attributed_answer_list": attributed_answers})
-    return output
+    attributed_source_answers = format_attributed_answers(G, attributed_answers)
+    return output, attributed_source_answers
 
 
 def format_final_answer(G: nx.Graph, output: str) -> str:
