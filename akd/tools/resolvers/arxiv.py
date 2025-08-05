@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import HttpUrl
 
-from ._base import BaseArticleResolver, ResolverInputSchema
+from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
 
 
 class ArxivResolver(BaseArticleResolver):
@@ -16,13 +16,23 @@ class ArxivResolver(BaseArticleResolver):
             raise RuntimeError("Not a valid arxiv url")
         return True
 
-    async def resolve(self, params: ResolverInputSchema) -> Optional[HttpUrl]:
+    async def resolve(
+        self,
+        params: ResolverInputSchema,
+    ) -> Optional[ResolverOutputSchema]:
         """Convert arXiv URL to PDF URL"""
         url = str(params.url)
         try:
             self.validate_url(url)
             paper_id = url.split("/")[-1]
-            return HttpUrl(f"https://arxiv.org/pdf/{paper_id}.pdf")
+            pdf_url = HttpUrl(f"https://arxiv.org/pdf/{paper_id}.pdf")
+
+            return ResolverOutputSchema(
+                url=pdf_url,
+                title=params.title,
+                query=params.query,
+                resolver=self.__class__.__name__,
+            )
         except RuntimeError:
             # Not a valid arxiv URL
             return None

@@ -6,28 +6,57 @@ import requests
 from loguru import logger
 from pydantic import Field, HttpUrl
 
-from akd._base import InputSchema, OutputSchema
+from akd.structures import SearchResultItem
 from akd.tools import BaseTool, BaseToolConfig
 
 
-class ResolverInputSchema(InputSchema):
-    """Enhanced input schema for resolver with multiple URL sources"""
+class ResolverInputSchema(SearchResultItem):
+    """
+    Enhanced input schema for resolver with search result data.
+    TThis is directly inherited from SearchResultItem
+    to ensure compatibility with existing search result structures.
+    It includes fields like url, title, query, doi, pdf_url, and authors.
 
-    url: HttpUrl = Field(..., description="Primary URL to resolve")
-    pdf_url: Optional[HttpUrl] = Field(
+    SearchResultItem is used to ensure that the resolver can handle
+    the same structure as search results, allowing for seamless integration.
+
+    The implementations can resolve:
+    - URLs (full text url)
+    - DOIs (doi if not present)
+    """
+
+    # Override to make title optional for resolver input
+    title: str | None = Field(
         None,
-        description="Direct PDF URL if available from search result",
+        description="Title of the article if available from search result",
     )
-    doi: Optional[str] = Field(
+    # Override to make query optional for resolver input
+    query: str | None = Field(
         None,
-        description="DOI identifier if available from search result",
+        description="Query used to obtain the search result",
+    )
+
+    # Additional field needed for DOI resolution by title+author
+    authors: list[str] | None = Field(
+        None,
+        description="List of authors for DOI resolution by title and author",
     )
 
 
-class ResolverOutputSchema(OutputSchema):
+class ResolverOutputSchema(SearchResultItem):
     """Output schema for resolver"""
 
-    url: HttpUrl = Field(..., description="Resolved output url")
+    # Override to make title optional for resolver output
+    title: str | None = Field(
+        None,
+        description="Title of the resolved article if available",
+    )
+    # Override to make query optional for resolver output
+    query: str | None = Field(
+        None,
+        description="Original query used to obtain the search result",
+    )
+
     resolver: Optional[str] = Field(
         None,
         description="Resolver used to resolve the url",
@@ -73,10 +102,10 @@ class BaseArticleResolver(BaseTool[ResolverInputSchema, ResolverOutputSchema]):
         }
 
     @abstractmethod
-    async def resolve(self, params: ResolverInputSchema) -> HttpUrl | None:
+    async def resolve(self, params: ResolverInputSchema) -> ResolverOutputSchema | None:
         """
         Resolve URL using all available information from input parameters.
-        Returns None if resolution fails or is not possible.
+        Returns ResolverOutputSchema with resolved data, or None if resolution fails.
         """
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -135,16 +164,18 @@ class BaseArticleResolver(BaseTool[ResolverInputSchema, ResolverOutputSchema]):
         **kwargs,
     ) -> ResolverOutputSchema:
         self.validate_url(params.url)
-        resolved_url = await self.resolve(params)
+        resolved_result = await self.resolve(params)
 
         # If resolution failed, raise an error
-        if resolved_url is None:
+        if resolved_result is None:
             raise ValueError(f"Failed to resolve URL with {self.__class__.__name__}")
 
-        # Post-validate the resolved URL
-        await self._post_validate_url(resolved_url)
+        # Post-validate the resolved URL if available
+        if resolved_result.url:
+            await self._post_validate_url(resolved_result.url)
 
-        return ResolverOutputSchema(
-            url=resolved_url,
-            resolver=self.__class__.__name__,
-        )
+        # Ensure resolver field is set
+        if not resolved_result.resolver:
+            resolved_result.resolver = self.__class__.__name__
+
+        return resolved_result

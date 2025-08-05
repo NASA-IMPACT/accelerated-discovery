@@ -4,7 +4,7 @@ from typing import Optional, Union
 from loguru import logger
 from pydantic import HttpUrl
 
-from ._base import BaseArticleResolver, ResolverInputSchema
+from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
 
 
 class PDFUrlResolver(BaseArticleResolver):
@@ -17,12 +17,19 @@ class PDFUrlResolver(BaseArticleResolver):
         """PDFUrlResolver accepts any URL"""
         return True
 
-    async def resolve(self, params: ResolverInputSchema) -> HttpUrl | None:
+    async def resolve(self, params: ResolverInputSchema) -> ResolverOutputSchema | None:
         """
-        Priority: pdf_url (if available) -> url (fallback)
-        Returns the preferred URL directly.
+        Priority: pdf_url (if available) -> None if not available
+        Returns the preferred PDF URL with metadata.
         """
-        return params.pdf_url
+        if params.pdf_url:
+            return ResolverOutputSchema(
+                url=params.pdf_url,
+                title=params.title,
+                query=params.query,
+                resolver=self.__class__.__name__,
+            )
+        return None
 
 
 class DOIResolver(BaseArticleResolver):
@@ -43,7 +50,10 @@ class DOIResolver(BaseArticleResolver):
         doi_pattern = r"^10\.\d+/\S+$"
         return bool(re.match(doi_pattern, doi.strip()))
 
-    async def resolve(self, params: ResolverInputSchema) -> Optional[HttpUrl]:
+    async def resolve(
+        self,
+        params: ResolverInputSchema,
+    ) -> Optional[ResolverOutputSchema]:
         """
         Priority: doi (construct and validate URL) -> None if invalid
         Validates DOI format and constructs DOI URL if available.
@@ -56,8 +66,14 @@ class DOIResolver(BaseArticleResolver):
                     logger.debug(f"Invalid DOI format: {params.doi}")
                 return None
 
-            # Construct and return DOI URL
-            return HttpUrl(f"https://doi.org/{params.doi}")
+            # Construct and return DOI URL with metadata
+            return ResolverOutputSchema(
+                url=HttpUrl(f"https://doi.org/{params.doi}"),
+                title=params.title,
+                query=params.query,
+                doi=params.doi,
+                resolver=self.__class__.__name__,
+            )
         else:
             # No DOI provided - return None instead of falling back
             if self.debug:

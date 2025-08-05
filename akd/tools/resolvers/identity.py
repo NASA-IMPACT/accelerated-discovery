@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 from pydantic import HttpUrl
 
-from ._base import BaseArticleResolver, ResolverInputSchema
+from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
 
 
 class IdentityResolver(BaseArticleResolver):
@@ -15,6 +15,15 @@ class IdentityResolver(BaseArticleResolver):
         """Identity resolver accepts any URL"""
         return True
 
-    async def resolve(self, params: ResolverInputSchema) -> Optional[HttpUrl]:
-        """Return the primary URL as-is"""
-        return HttpUrl(str(params.url))
+    async def resolve(
+        self,
+        params: ResolverInputSchema,
+    ) -> Optional[ResolverOutputSchema]:
+        """Return the primary URL as-is with preserved metadata"""
+        return ResolverOutputSchema(
+            url=params.url,
+            title=params.title,
+            query=params.query,
+            doi=params.doi,
+            resolver=self.__class__.__name__,
+        )

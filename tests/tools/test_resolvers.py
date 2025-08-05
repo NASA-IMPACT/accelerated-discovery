@@ -31,19 +31,39 @@ class TestResolverInputSchema:
         """Test creating valid input schema."""
         schema = ResolverInputSchema(
             url="https://example.com",
+            title="Test Paper",
+            query="test query",
             pdf_url="https://example.com/paper.pdf",
             doi="10.1000/182",
+            authors=["John Doe", "Jane Smith"],
         )
         assert str(schema.url) == "https://example.com/"  # HttpUrl normalizes
+        assert schema.title == "Test Paper"
+        assert schema.query == "test query"
         assert str(schema.pdf_url) == "https://example.com/paper.pdf"
         assert schema.doi == "10.1000/182"
+        assert schema.authors == ["John Doe", "Jane Smith"]
 
     def test_minimal_input_schema(self):
         """Test input schema with only required url field."""
         schema = ResolverInputSchema(url="https://example.com")
         assert str(schema.url) == "https://example.com/"  # HttpUrl normalizes
+        assert schema.title is None
+        assert schema.query is None
         assert schema.pdf_url is None
         assert schema.doi is None
+        assert schema.authors is None
+
+    def test_input_schema_with_authors(self):
+        """Test input schema with authors field for CrossRefDOIResolver support."""
+        schema = ResolverInputSchema(
+            url="https://example.com",
+            title="Deep Learning for Scientific Discovery",
+            authors=["John Doe", "Jane Smith", "Bob Johnson"],
+        )
+        assert str(schema.url) == "https://example.com/"
+        assert schema.title == "Deep Learning for Scientific Discovery"
+        assert schema.authors == ["John Doe", "Jane Smith", "Bob Johnson"]
 
     def test_invalid_url_format(self):
         """Test that invalid URLs are rejected by pydantic."""
@@ -74,7 +94,9 @@ class TestIdentityResolver:
     async def test_resolve_returns_same_url(self, resolver, basic_input):
         """Test that resolve returns the same URL."""
         result = await resolver.resolve(basic_input)
-        assert str(result) == str(basic_input.url)
+        assert isinstance(result, ResolverOutputSchema)
+        assert str(result.url) == str(basic_input.url)
+        assert result.resolver == "IdentityResolver"
 
     @pytest.mark.asyncio
     async def test_arun_with_mocked_validation(self, resolver, basic_input):
@@ -170,7 +192,10 @@ class TestDOIResolver:
         )
 
         result = await resolver.resolve(input_schema)
-        assert str(result) == "https://doi.org/10.1000/182"
+        assert isinstance(result, ResolverOutputSchema)
+        assert str(result.url) == "https://doi.org/10.1000/182"
+        assert result.doi == "10.1000/182"
+        assert result.resolver == "DOIResolver"
 
     @pytest.mark.asyncio
     async def test_resolve_with_invalid_doi(self, resolver):
@@ -255,7 +280,9 @@ class TestArxivResolver:
         """Test ArXiv abs URL resolution to PDF URL."""
         input_schema = ResolverInputSchema(url="https://arxiv.org/abs/2411.08181")
         result = await resolver.resolve(input_schema)
-        assert str(result) == "https://arxiv.org/pdf/2411.08181.pdf"
+        assert isinstance(result, ResolverOutputSchema)
+        assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
+        assert result.resolver == "ArxivResolver"
 
     @pytest.mark.asyncio
     async def test_resolve_different_arxiv_papers(self, resolver):
@@ -272,7 +299,9 @@ class TestArxivResolver:
         for input_url, expected_pdf in test_cases:
             input_schema = ResolverInputSchema(url=input_url)
             result = await resolver.resolve(input_schema)
-            assert str(result) == expected_pdf
+            assert isinstance(result, ResolverOutputSchema)
+            assert str(result.url) == expected_pdf
+            assert result.resolver == "ArxivResolver"
 
     @pytest.mark.asyncio
     async def test_resolve_non_arxiv_returns_none(self, resolver):
@@ -338,8 +367,10 @@ class TestPDFUrlResolver:
     async def test_resolve_prioritizes_pdf_url(self, resolver, input_with_pdf):
         """Test that resolve prioritizes pdf_url over primary url."""
         result = await resolver.resolve(input_with_pdf)
-        assert str(result) == str(input_with_pdf.pdf_url)
-        assert str(result) == "https://arxiv.org/pdf/2411.08181.pdf"
+        assert isinstance(result, ResolverOutputSchema)
+        assert str(result.url) == str(input_with_pdf.pdf_url)
+        assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
+        assert result.resolver == "PDFUrlResolver"
 
     @pytest.mark.asyncio
     async def test_resolve_returns_none_without_pdf(self, resolver, input_without_pdf):

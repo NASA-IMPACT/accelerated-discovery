@@ -19,9 +19,14 @@ class ResearchArticleResolver(BaseArticleResolver):
         """Composite resolver accepts any URL that at least one sub-resolver accepts"""
         return True
 
-    async def resolve(self, url: str | HttpUrl) -> str:
+    async def resolve(self, params: ResolverInputSchema) -> ResolverOutputSchema | None:
         """This method is not used in composite resolver - see _arun instead"""
-        return str(url)
+        return ResolverOutputSchema(
+            url=params.url,
+            title=params.title,
+            query=params.query,
+            resolver=self.__class__.__name__,
+        )
 
     async def _arun(
         self,

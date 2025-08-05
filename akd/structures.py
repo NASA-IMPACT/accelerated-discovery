@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, computed_field
 
+from akd._base import IOSchema
+
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
 
@@ -26,7 +28,8 @@ except ImportError:
 # Search and Data Models
 # =============================================================================
 
-class SearchResultItem(BaseModel):
+
+class SearchResultItem(IOSchema):
     """Represents a single search result item with metadata."""
 
     # Required fields
@@ -101,6 +104,7 @@ class ResearchData(BaseModel):
 
 class PaperDataItem(BaseModel):
     """Represents a single paper data object retrieved from Semantic Scholar."""
+
     paper_id: Optional[str] = Field(
         ...,
         description="Semantic Scholar’s primary unique identifier for a paper.",
@@ -109,7 +113,7 @@ class PaperDataItem(BaseModel):
         ...,
         description="Semantic Scholar’s secondary unique identifier for a paper.",
     )
-    external_ids: Optional[object]  = Field(
+    external_ids: Optional[object] = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )
@@ -203,7 +207,7 @@ class PaperDataItem(BaseModel):
     )
     external_id: Optional[str] = Field(
         ...,
-        description="The external id of the paper from the query."
+        description="The external id of the paper from the query.",
     )
 
 

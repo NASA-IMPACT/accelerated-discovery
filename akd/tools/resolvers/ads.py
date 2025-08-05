@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from loguru import logger
 from pydantic import HttpUrl
 
-from ._base import BaseArticleResolver, ResolverInputSchema
+from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
 
 
 class ADSResolver(BaseArticleResolver):
@@ -17,7 +17,10 @@ class ADSResolver(BaseArticleResolver):
             raise RuntimeError("Not a valid ADS URL")
         return True
 
-    async def resolve(self, params: ResolverInputSchema) -> Optional[HttpUrl]:
+    async def resolve(
+        self,
+        params: ResolverInputSchema,
+    ) -> Optional[ResolverOutputSchema]:
         """
         Resolve a NASA ADS URL to its DOI or direct PDF link.
 
@@ -25,7 +28,7 @@ class ADSResolver(BaseArticleResolver):
             params: ResolverInputSchema containing the NASA ADS URL to resolve
 
         Returns:
-            Optional[HttpUrl]: The DOI URL or direct PDF URL if found, None otherwise
+            Optional[ResolverOutputSchema]: The resolved result with DOI URL or direct PDF URL if found, None otherwise
         """
         url = str(params.url)
         try:
@@ -48,7 +51,13 @@ class ADSResolver(BaseArticleResolver):
             doi_tag = soup.find("meta", {"name": "citation_doi"})
             if doi_tag:
                 doi = doi_tag["content"]
-                return HttpUrl(f"https://doi.org/{doi}")
+                return ResolverOutputSchema(
+                    url=HttpUrl(f"https://doi.org/{doi}"),
+                    title=params.title,
+                    query=params.query,
+                    doi=doi,
+                    resolver=self.__class__.__name__,
+                )
 
             # Look for the bibcode in meta tags
             bibcode_tag = soup.find("meta", {"name": "citation_bibcode"})
@@ -59,7 +68,12 @@ class ADSResolver(BaseArticleResolver):
                 # Verify the PDF URL works
                 pdf_response = self.session.head(pdf_url)
                 if pdf_response.status_code == 200:
-                    return HttpUrl(pdf_url)
+                    return ResolverOutputSchema(
+                        url=HttpUrl(pdf_url),
+                        title=params.title,
+                        query=params.query,
+                        resolver=self.__class__.__name__,
+                    )
 
             # If no DOI or direct PDF found, look for other PDF links
             pdf_links = [
@@ -70,7 +84,12 @@ class ADSResolver(BaseArticleResolver):
 
             if pdf_links:
                 # Return the first PDF link, making it an absolute URL if needed
-                return HttpUrl(urljoin(url, pdf_links[0]))
+                return ResolverOutputSchema(
+                    url=HttpUrl(urljoin(url, pdf_links[0])),
+                    title=params.title,
+                    query=params.query,
+                    resolver=self.__class__.__name__,
+                )
 
             # If no PDF found, return None
             if self.debug:
