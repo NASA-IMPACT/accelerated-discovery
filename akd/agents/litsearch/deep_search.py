@@ -136,6 +136,8 @@ class DeepLitSearchAgent(LitBaseAgent):
         self,
         config: DeepLitSearchAgentConfig | None = None,
         search_tool=None,
+        query_agent: QueryAgent | None = None,
+        followup_query_agent: FollowUpQueryAgent | None = None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
         debug: bool = False,
     ) -> None:
@@ -147,6 +149,10 @@ class DeepLitSearchAgent(LitBaseAgent):
         self.semantic_scholar_tool = (
             SemanticScholarSearchTool() if self.config.use_semantic_scholar else None
         )
+
+        # Initialize query agents
+        self.query_agent = query_agent or QueryAgent()
+        self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
 
         # Initialize relevancy agent
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
@@ -337,13 +343,12 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     async def _generate_initial_queries(self, instructions: str) -> List[str]:
         """Generate initial search queries from research instructions."""
-        query_agent = QueryAgent()
         query_input = QueryAgentInputSchema(
             query=instructions,
             num_queries=5,  # More queries for comprehensive coverage
         )
 
-        query_output = await query_agent.arun(query_input)
+        query_output = await self.query_agent.arun(query_input)
 
         if self.debug:
             logger.info("🧠 DeepLitSearchAgent - INITIAL QUERIES GENERATED:")
@@ -555,7 +560,6 @@ class DeepLitSearchAgent(LitBaseAgent):
         instructions: str,
     ) -> List[str]:
         """Generate refined queries based on current results."""
-        followup_agent = FollowUpQueryAgent()
 
         # Create content summary from results
         content = "\n\n".join(
@@ -576,7 +580,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             num_queries=3,
         )
 
-        followup_output = await followup_agent.arun(followup_input)
+        followup_output = await self.followup_query_agent.arun(followup_input)
 
         if self.debug:
             logger.info("🔄 DeepLitSearchAgent - REFINED QUERIES GENERATED:")
