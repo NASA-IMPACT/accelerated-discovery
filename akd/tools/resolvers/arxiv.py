@@ -7,7 +7,8 @@ from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchem
 
 class ArxivResolver(BaseArticleResolver):
     """
-    Resolver for arXiv papers that converts arXiv URLs to direct PDF links.
+    Resolver for arXiv papers that converts arXiv URLs to direct PDF links
+    and resolves DOI when not provided using the standard arXiv DOI format.
     """
 
     def validate_url(self, url: HttpUrl | str):
@@ -20,17 +21,23 @@ class ArxivResolver(BaseArticleResolver):
         self,
         params: ResolverInputSchema,
     ) -> Optional[ResolverOutputSchema]:
-        """Convert arXiv URL to PDF URL"""
+        """Convert arXiv URL to PDF URL and resolve DOI when not provided"""
         url = str(params.url)
         try:
             self.validate_url(url)
             paper_id = url.split("/")[-1]
             pdf_url = HttpUrl(f"https://arxiv.org/pdf/{paper_id}.pdf")
 
+            # Resolve DOI if not provided using standard arXiv DOI format
+            doi = params.doi
+            if params.doi is None:
+                doi = f"10.48550/arXiv.{paper_id}"
+
             return ResolverOutputSchema(
                 url=pdf_url,
                 title=params.title,
                 query=params.query,
+                doi=doi,
                 resolver=self.__class__.__name__,
             )
         except RuntimeError:
