@@ -29,9 +29,7 @@ class ArxivResolver(BaseArticleResolver):
             pdf_url = HttpUrl(f"https://arxiv.org/pdf/{paper_id}.pdf")
 
             # Resolve DOI if not provided using standard arXiv DOI format
-            doi = params.doi
-            if params.doi is None:
-                doi = f"10.48550/arXiv.{paper_id}"
+            doi = params.doi or f"10.48550/arXiv.{paper_id}"
 
             return ResolverOutputSchema(
                 url=pdf_url,
