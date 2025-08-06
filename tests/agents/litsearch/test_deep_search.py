@@ -21,6 +21,7 @@ from akd.agents.relevancy import (
 )
 from akd.structures import SearchResultItem
 from akd.agents.query import QueryAgentOutputSchema, FollowUpQueryAgentOutputSchema
+from akd.configs.project import get_project_settings
 
 
 class TestDeepLitSearchAgentConfig:
@@ -1138,6 +1139,237 @@ class TestDeepLitSearchAgentCoreMethods:
         assert agent.query_agent is not None
         assert agent.followup_query_agent is not None
         assert agent.relevancy_agent is not None
+
+
+class TestDeepLitSearchAgentRealLLM:
+    """Integration tests that make real LLM calls."""
+
+    @pytest.fixture(scope="class")
+    def project_config(self):
+        """Get project configuration with API keys."""
+        return get_project_settings()
+
+    @pytest.fixture(scope="class") 
+    def api_key_available(self, project_config):
+        """Check if API keys are available for testing."""
+        openai_key = project_config.model_config_settings.api_keys.openai
+        anthropic_key = project_config.model_config_settings.api_keys.anthropic
+        
+        if not openai_key and not anthropic_key:
+            pytest.skip("No API keys available. Set OPENAI_API_KEY or ANTHROPIC_API_KEY to run integration tests.")
+        
+        return True
+
+    @pytest.fixture(scope="class")
+    def integration_config(self):
+        """Create configuration for integration tests."""
+        return DeepLitSearchAgentConfig(
+            max_research_iterations=1,  # Limit to reduce API costs
+            quality_threshold=0.5,      # Lower threshold for testing
+            auto_clarify=False,         # Disable to simplify tests
+            use_semantic_scholar=False, # Disable to focus on LLM testing
+            enable_per_link_assessment=False,  # Disable for simpler tests
+            enable_full_content_scraping=False,  # Disable to reduce complexity
+            debug=False
+        )
+
+    @pytest.fixture(scope="class")
+    def agent(self, api_key_available, integration_config):
+        """Create agent for integration tests."""
+        return DeepLitSearchAgent(config=integration_config)
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_query_generation_with_real_llm(self, agent, project_config):
+        """Test that real LLM generates meaningful queries."""
+        if not project_config.model_config_settings.api_keys.openai:
+            pytest.skip("OpenAI API key required for this test")
+            
+        instructions = "Research machine learning applications in climate science"
+        
+        # Generate initial queries using real LLM
+        queries = await agent._generate_initial_queries(instructions)
+        
+        # Validate that we got reasonable queries
+        assert len(queries) > 0, "Should generate at least one query"
+        assert len(queries) <= 10, "Should not generate too many queries"
+        
+        # Check that queries are relevant and non-empty
+        for query in queries:
+            assert isinstance(query, str), "Each query should be a string"
+            assert len(query.strip()) > 5, f"Query too short: '{query}'"
+            
+            # Check for relevant keywords
+            query_lower = query.lower()
+            climate_keywords = ['climate', 'machine learning', 'ml', 'ai']
+            has_relevant_keyword = any(keyword in query_lower for keyword in climate_keywords)
+            assert has_relevant_keyword, f"Query should contain relevant keywords: '{query}'"
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_relevancy_assessment_with_real_llm(self, agent, project_config):
+        """Test that real LLM performs meaningful relevancy assessment."""
+        if not project_config.model_config_settings.api_keys.openai:
+            pytest.skip("OpenAI API key required for this test")
+            
+        # Create mock search results for relevancy assessment
+        mock_results = [
+            SearchResultItem(
+                query="machine learning climate",
+                url="https://example.com/high-relevance",
+                title="Machine Learning Applications in Climate Modeling",
+                content="This paper presents machine learning techniques for climate prediction using deep neural networks.",
+                category="science"
+            ),
+            SearchResultItem(
+                query="machine learning climate", 
+                url="https://example.com/low-relevance",
+                title="Introduction to Basic Programming",
+                content="This tutorial covers basic programming concepts like variables and loops in Python.",
+                category="tutorial"
+            )
+        ]
+        
+        query = "machine learning applications in climate science"
+        
+        # Evaluate quality using real LLM
+        quality_score = await agent._evaluate_research_quality(mock_results, query)
+        
+        # Validate assessment
+        assert isinstance(quality_score, float), "Quality score should be a float"
+        assert 0.0 <= quality_score <= 1.0, f"Quality score should be between 0 and 1: {quality_score}"
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio  
+    async def test_refined_query_generation_with_real_llm(self, agent, project_config):
+        """Test refined query generation based on previous results."""
+        if not project_config.model_config_settings.api_keys.openai:
+            pytest.skip("OpenAI API key required for this test")
+            
+        previous_queries = ["machine learning climate change"]
+        
+        mock_results = [
+            SearchResultItem(
+                query="machine learning climate change",
+                url="https://example.com/1", 
+                title="Deep Learning for Climate Pattern Recognition",
+                content="Recent advances in neural networks for climate modeling.",
+                category="science"
+            )
+        ]
+        
+        instructions = "Focus on deep learning applications for climate modeling"
+        
+        # Generate refined queries using real LLM
+        refined_queries = await agent._generate_refined_queries(
+            previous_queries, mock_results, instructions
+        )
+        
+        # Validate refined queries
+        assert len(refined_queries) > 0, "Should generate refined queries"
+        
+        for query in refined_queries:
+            assert isinstance(query, str), "Each refined query should be a string"
+            assert len(query.strip()) > 5, f"Refined query too short: '{query}'"
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    @pytest.mark.slow
+    async def test_end_to_end_workflow_with_report_output(self, project_config):
+        """Test complete end-to-end workflow and print the full research report."""
+        if not project_config.model_config_settings.api_keys.openai:
+            pytest.skip("OpenAI API key required for this test")
+        
+        print("\n" + "="*80)
+        print("🔬 END-TO-END RESEARCH WORKFLOW TEST")
+        print("="*80)
+        
+        # Configure agent for complete workflow
+        config = DeepLitSearchAgentConfig(
+            max_research_iterations=2,
+            quality_threshold=0.6,
+            auto_clarify=False,
+            use_semantic_scholar=False,
+            enable_per_link_assessment=False,
+            enable_full_content_scraping=False,
+            debug=True
+        )
+        
+        agent = DeepLitSearchAgent(config=config)
+        
+        # Simple test query
+        query = "transformer neural networks attention mechanisms"
+        print(f"🔍 Research Query: '{query}'")
+        print("⏳ Executing complete research workflow...")
+        
+        input_params = LitSearchAgentInputSchema(
+            query=query,
+            max_results=5
+        )
+        
+        # Run complete workflow
+        result = await agent._arun(input_params)
+        
+        # Validate structure
+        assert len(result.results) > 0, "Should return results"
+        
+        # Print comprehensive results
+        print(f"\n📊 RESULTS SUMMARY")
+        print(f"Total results: {len(result.results)}")
+        print(f"Iterations performed: {getattr(result, 'iterations_performed', 'N/A')}")
+        
+        # Print research report if available
+        first_result = result.results[0]
+        if first_result.get("url") == "deep-research://report":
+            print(f"\n📑 RESEARCH REPORT")
+            print("-" * 60)
+            print(f"Title: {first_result.get('title', 'N/A')}")
+            print(f"Quality Score: {first_result.get('quality_score', 'N/A')}")
+            
+            content = first_result.get("content", "")
+            print(f"\nContent ({len(content)} chars):")
+            print(content[:800] + "..." if len(content) > 800 else content)
+            
+            key_findings = first_result.get("key_findings", [])
+            if key_findings:
+                print(f"\n🔍 KEY FINDINGS ({len(key_findings)}):")
+                for i, finding in enumerate(key_findings[:3], 1):
+                    print(f"  {i}. {finding}")
+            
+            sources = first_result.get("sources_consulted", [])
+            if sources:
+                print(f"\n📚 SOURCES CONSULTED ({len(sources)}):")
+                for i, source in enumerate(sources[:3], 1):
+                    print(f"  {i}. {source}")
+                    
+            citations = first_result.get("citations", [])
+            if citations:
+                print(f"\n📝 CITATIONS ({len(citations)}):")
+                for i, citation in enumerate(citations[:2], 1):
+                    print(f"  {i}. {citation}")
+        
+        # Print search results
+        search_results = result.results[1:] if len(result.results) > 1 else []
+        if search_results:
+            print(f"\n🔎 SEARCH RESULTS ({len(search_results)}):")
+            for i, item in enumerate(search_results[:3], 1):
+                title = item.get("title", "N/A")
+                url = item.get("url", "N/A")
+                print(f"  {i}. {title}")
+                print(f"     URL: {url}")
+                
+                content = item.get("content", "")
+                if content:
+                    preview = content[:150] + "..." if len(content) > 150 else content
+                    print(f"     Preview: {preview}")
+                print()
+        
+        print("✅ End-to-end workflow completed successfully!")
+        print("="*80)
+        
+        # Test assertions
+        assert isinstance(result.results[0].get("content"), str), "Report should have content"
+        assert len(result.results[0].get("content", "")) > 100, "Report should have substantial content"
 
 
 if __name__ == "__main__":
