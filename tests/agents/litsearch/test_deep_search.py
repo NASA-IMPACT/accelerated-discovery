@@ -148,6 +148,41 @@ class TestDeepLitSearchAgent:
         
         assert agent.query_agent is mock_query_agent
         assert agent.followup_query_agent is mock_followup_agent
+    
+    @pytest.mark.asyncio
+    async def test_dependency_injection_workflow(self):
+        """Test that dependency-injected query agents are used in workflow."""
+        
+        # Mock both query agents
+        mock_query_agent = AsyncMock()
+        mock_followup_agent = AsyncMock()
+        
+        # Mock their outputs
+        mock_query_agent.arun.return_value = QueryAgentOutputSchema(
+            queries=["injected query 1", "injected query 2"]
+        )
+        mock_followup_agent.arun.return_value = FollowUpQueryAgentOutputSchema(
+            followup_queries=["refined injected query 1"]
+        )
+        
+        # Create agent with injected agents
+        agent = DeepLitSearchAgent(
+            query_agent=mock_query_agent,
+            followup_query_agent=mock_followup_agent
+        )
+        
+        # Test initial query generation uses injected agent
+        initial_queries = await agent._generate_initial_queries("test instructions")
+        assert initial_queries == ["injected query 1", "injected query 2"]
+        mock_query_agent.arun.assert_called_once()
+        
+        # Test refined query generation uses injected agent  
+        mock_results = [SearchResultItem(query="test", url="http://test.com", title="Test", content="Test content")]
+        refined_queries = await agent._generate_refined_queries(
+            ["previous"], mock_results, "instructions"
+        )
+        assert refined_queries == ["refined injected query 1"]
+        mock_followup_agent.arun.assert_called_once()
 
 
 class TestDeepLitSearchAgentComponents:
@@ -251,19 +286,18 @@ class TestDeepLitSearchAgentQueryGeneration:
                 "climate-resilient urban infrastructure"
             ]
         )
+        mock_query_agent.arun.return_value = mock_query_output
         
-        with patch('akd.agents.query.QueryAgent', return_value=mock_query_agent):
-            mock_query_agent.arun.return_value = mock_query_output
-            
-            agent = DeepLitSearchAgent()
-            instructions = "Research urban climate adaptation strategies with focus on recent developments"
-            
-            queries = await agent._generate_initial_queries(instructions)
-            
-            assert len(queries) == 5
-            assert "climate change urban adaptation strategies" in queries
-            assert "urban resilience climate impacts" in queries
-            mock_query_agent.arun.assert_called_once()
+        # Create agent with injected mock query agent
+        agent = DeepLitSearchAgent(query_agent=mock_query_agent)
+        instructions = "Research urban climate adaptation strategies with focus on recent developments"
+        
+        queries = await agent._generate_initial_queries(instructions)
+        
+        assert len(queries) == 5
+        assert "climate change urban adaptation strategies" in queries
+        assert "urban resilience climate impacts" in queries
+        mock_query_agent.arun.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_generate_refined_queries(self):
@@ -277,31 +311,30 @@ class TestDeepLitSearchAgentQueryGeneration:
                 "nature-based urban adaptation solutions"
             ]
         )
+        mock_followup_agent.arun.return_value = mock_followup_output
         
-        with patch('akd.agents.query.FollowUpQueryAgent', return_value=mock_followup_agent):
-            mock_followup_agent.arun.return_value = mock_followup_output
-            
-            agent = DeepLitSearchAgent()
-            
-            previous_queries = ["climate adaptation", "urban planning"]
-            mock_results = [
-                SearchResultItem(
-                    query="test",
-                    url="http://example.com/1",
-                    title="Urban Climate Adaptation",
-                    content="This paper discusses various adaptation strategies for urban environments in the context of climate change.",
-                    category="science"
-                )
-            ]
-            instructions = "Research urban climate adaptation"
-            
-            refined_queries = await agent._generate_refined_queries(
-                previous_queries, mock_results, instructions
+        # Create agent with injected mock followup agent
+        agent = DeepLitSearchAgent(followup_query_agent=mock_followup_agent)
+        
+        previous_queries = ["climate adaptation", "urban planning"]
+        mock_results = [
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="Urban Climate Adaptation",
+                content="This paper discusses various adaptation strategies for urban environments in the context of climate change.",
+                category="science"
             )
-            
-            assert len(refined_queries) == 3
-            assert "urban climate adaptation best practices" in refined_queries
-            mock_followup_agent.arun.assert_called_once()
+        ]
+        instructions = "Research urban climate adaptation"
+        
+        refined_queries = await agent._generate_refined_queries(
+            previous_queries, mock_results, instructions
+        )
+        
+        assert len(refined_queries) == 3
+        assert "urban climate adaptation best practices" in refined_queries
+        mock_followup_agent.arun.assert_called_once()
 
 
 class TestDeepLitSearchAgentSearchExecution:
