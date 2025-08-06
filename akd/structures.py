@@ -26,6 +26,7 @@ except ImportError:
 # Search and Data Models
 # =============================================================================
 
+
 class SearchResultItem(BaseModel):
     """Represents a single search result item with metadata."""
 
@@ -63,6 +64,12 @@ class SearchResultItem(BaseModel):
         None,
         description="Tags for the search result",
     )
+
+    score: float | None = Field(
+        None,
+        description="Relevance score of the search result",
+    )
+
     extra: dict[str, Any] | None = Field(
         None,
         description="Extra information from the search result",
@@ -75,6 +82,10 @@ class SearchResultItem(BaseModel):
         if self.published_date:
             return f"{self.title} - (Published {self.published_date})"
         return self.title
+
+    @computed_field
+    def relevancy_score(self) -> float | None:
+        return self.score
 
 
 class ResearchData(BaseModel):
@@ -101,6 +112,7 @@ class ResearchData(BaseModel):
 
 class PaperDataItem(BaseModel):
     """Represents a single paper data object retrieved from Semantic Scholar."""
+
     paper_id: Optional[str] = Field(
         ...,
         description="Semantic Scholar’s primary unique identifier for a paper.",
@@ -109,7 +121,7 @@ class PaperDataItem(BaseModel):
         ...,
         description="Semantic Scholar’s secondary unique identifier for a paper.",
     )
-    external_ids: Optional[object]  = Field(
+    external_ids: Optional[object] = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )
@@ -202,8 +214,7 @@ class PaperDataItem(BaseModel):
         description="Tldr version of the paper.",
     )
     external_id: Optional[str] = Field(
-        ...,
-        description="The external id of the paper from the query."
+        ..., description="The external id of the paper from the query."
     )
 
 
