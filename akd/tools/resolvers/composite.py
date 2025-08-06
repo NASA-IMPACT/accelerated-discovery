@@ -21,12 +21,9 @@ class ResearchArticleResolver(BaseArticleResolver):
 
     async def resolve(self, params: ResolverInputSchema) -> ResolverOutputSchema | None:
         """This method is not used in composite resolver - see _arun instead"""
-        return ResolverOutputSchema(
-            url=params.url,
-            title=params.title,
-            query=params.query,
-            resolver=self.__class__.__name__,
-        )
+        result = ResolverOutputSchema(**params.model_dump())
+        result.resolver = self.__class__.__name__
+        return result
 
     async def _arun(
         self,
@@ -37,10 +34,8 @@ class ResearchArticleResolver(BaseArticleResolver):
         Try each resolver in sequence until one succeeds.
         Returns the result from the first successful resolver.
         """
-        output = ResolverOutputSchema(
-            url=params.url,
-            resolver=self.__class__.__name__,
-        )
+        output = ResolverOutputSchema(**params.model_dump())
+        output.resolver = self.__class__.__name__
 
         for resolver in self.resolvers:
             resolver_name = resolver.__class__.__name__

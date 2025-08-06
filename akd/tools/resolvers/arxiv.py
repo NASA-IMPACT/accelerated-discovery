@@ -31,13 +31,11 @@ class ArxivResolver(BaseArticleResolver):
             # Resolve DOI if not provided using standard arXiv DOI format
             doi = params.doi or f"10.48550/arXiv.{paper_id}"
 
-            return ResolverOutputSchema(
-                url=pdf_url,
-                title=params.title,
-                query=params.query,
-                doi=doi,
-                resolver=self.__class__.__name__,
-            )
+            result = ResolverOutputSchema(**params.model_dump())
+            result.url = pdf_url
+            result.doi = doi
+            result.resolver = self.__class__.__name__
+            return result
         except RuntimeError:
             # Not a valid arxiv URL
             return None

@@ -23,12 +23,10 @@ class PDFUrlResolver(BaseArticleResolver):
         Returns the preferred PDF URL with metadata.
         """
         if params.pdf_url:
-            return ResolverOutputSchema(
-                url=params.pdf_url,
-                title=params.title,
-                query=params.query,
-                resolver=self.__class__.__name__,
-            )
+            result = ResolverOutputSchema(**params.model_dump())
+            result.url = params.pdf_url
+            result.resolver = self.__class__.__name__
+            return result
         return None
 
 
@@ -67,13 +65,10 @@ class DOIResolver(BaseArticleResolver):
                 return None
 
             # Construct and return DOI URL with metadata
-            return ResolverOutputSchema(
-                url=HttpUrl(f"https://doi.org/{params.doi}"),
-                title=params.title,
-                query=params.query,
-                doi=params.doi,
-                resolver=self.__class__.__name__,
-            )
+            result = ResolverOutputSchema(**params.model_dump())
+            result.url = HttpUrl(f"https://doi.org/{params.doi}")
+            result.resolver = self.__class__.__name__
+            return result
         else:
             # No DOI provided - return None instead of falling back
             if self.debug:
