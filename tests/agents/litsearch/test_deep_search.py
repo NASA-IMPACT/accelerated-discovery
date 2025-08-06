@@ -337,8 +337,100 @@ class TestDeepLitSearchAgentQueryGeneration:
         mock_followup_agent.arun.assert_called_once()
 
 
+class TestDeepLitSearchAgentQualityEvaluation:
+    """Test research quality evaluation methods."""
+    
+    @pytest.mark.asyncio
+    async def test_evaluate_research_quality_empty_results(self):
+        """Test quality evaluation with empty results."""
+        agent = DeepLitSearchAgent()
+        
+        quality_score = await agent._evaluate_research_quality([], "test query")
+        
+        assert quality_score == 0.0
+
+    @pytest.mark.asyncio
+    async def test_evaluate_research_quality_with_results(self):
+        """Test quality evaluation with mock results."""
+        # Mock relevancy agent
+        mock_relevancy_agent = AsyncMock()
+        mock_rubric_output = MultiRubricRelevancyOutputSchema(
+            topic_alignment=TopicAlignmentLabel.ALIGNED,
+            content_depth=ContentDepthLabel.COMPREHENSIVE,
+            evidence_quality=EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE,
+            methodological_relevance=MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND,
+            recency_relevance=RecencyRelevanceLabel.CURRENT,
+            scope_relevance=ScopeRelevanceLabel.IN_SCOPE,
+            reasoning_steps=["High quality assessment"]
+        )
+        mock_relevancy_agent.arun.return_value = mock_rubric_output
+        
+        agent = DeepLitSearchAgent(relevancy_agent=mock_relevancy_agent)
+        
+        results = [
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="High Quality Paper",
+                content="Comprehensive research with strong methodology",
+                category="science"
+            )
+        ]
+        
+        quality_score = await agent._evaluate_research_quality(results, "test query")
+        
+        assert quality_score == 1.0  # 6/6 positive rubrics
+        mock_relevancy_agent.arun.assert_called_once()
+
+
 class TestDeepLitSearchAgentSearchExecution:
     """Test search execution and result processing."""
+    
+    def test_deduplicate_results(self):
+        """Test result deduplication by URL and title."""
+        agent = DeepLitSearchAgent()
+        
+        existing_results = [
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="Paper 1",
+                content="Content 1"
+            ),
+            SearchResultItem(
+                query="test",
+                url="http://example.com/2",
+                title="Paper 2",
+                content="Content 2"
+            )
+        ]
+        
+        new_results = [
+            SearchResultItem(  # Duplicate URL
+                query="test",
+                url="http://example.com/1",
+                title="Paper 1 Updated",
+                content="Updated content"
+            ),
+            SearchResultItem(  # Duplicate title (case insensitive)
+                query="test",
+                url="http://example.com/3",
+                title="PAPER 2",
+                content="Different content"
+            ),
+            SearchResultItem(  # Truly new result
+                query="test",
+                url="http://example.com/4",
+                title="Paper 3",
+                content="New content"
+            )
+        ]
+        
+        deduplicated = agent._deduplicate_results(new_results, existing_results)
+        
+        assert len(deduplicated) == 1
+        assert deduplicated[0].url == "http://example.com/4"
+        assert deduplicated[0].title == "Paper 3"
     
     @pytest.mark.asyncio
     async def test_execute_searches_primary_tool_only(self):
@@ -981,6 +1073,71 @@ class TestDeepLitSearchAgentErrorHandling:
         # Should still return results
         assert len(result.results) >= 1
         assert result.results[0]["content"] == "Fallback report"
+
+
+class TestDeepLitSearchAgentCoreMethods:
+    """Test core private methods for better coverage."""
+    
+    def test_config_edge_cases(self):
+        """Test configuration edge cases and validation."""
+        # Test with maximum values
+        config = DeepLitSearchAgentConfig(
+            max_research_iterations=10,
+            quality_threshold=1.0,
+            max_clarifying_rounds=5,
+            min_relevancy_score=1.0,
+            full_content_threshold=1.0
+        )
+        assert config.max_research_iterations == 10
+        assert config.quality_threshold == 1.0
+        assert config.max_clarifying_rounds == 5
+        assert config.min_relevancy_score == 1.0
+        assert config.full_content_threshold == 1.0
+
+    @pytest.mark.asyncio  
+    async def test_fetch_full_content_for_high_relevancy_disabled(self):
+        """Test full content fetching when disabled in config."""
+        config = DeepLitSearchAgentConfig(
+            enable_full_content_scraping=False
+        )
+        agent = DeepLitSearchAgent(config=config)
+        
+        mock_results = [
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="Paper 1", 
+                content="Initial content",
+                category="science"
+            )
+        ]
+        
+        # Should return results unchanged when disabled
+        enhanced_results = await agent._fetch_full_content_for_high_relevancy(mock_results)
+        
+        assert len(enhanced_results) == 1
+        assert enhanced_results[0].content == "Initial content"
+
+    def test_initialization_edge_cases(self):
+        """Test edge cases in initialization."""
+        # Test with all optional tools disabled
+        config = DeepLitSearchAgentConfig(
+            use_semantic_scholar=False,
+            enable_per_link_assessment=False,
+            enable_full_content_scraping=False
+        )
+        agent = DeepLitSearchAgent(config=config)
+        
+        # Verify optional tools are None when disabled
+        assert agent.semantic_scholar_tool is None
+        assert agent.link_relevancy_assessor is None
+        assert agent.web_scraper is None
+        assert agent.pdf_scraper is None
+        
+        # But core agents should still exist
+        assert agent.query_agent is not None
+        assert agent.followup_query_agent is not None
+        assert agent.relevancy_agent is not None
 
 
 if __name__ == "__main__":
