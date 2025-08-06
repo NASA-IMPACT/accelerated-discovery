@@ -185,7 +185,9 @@ class DeepLitSearchAgent(LitBaseAgent):
                     debug=debug,
                 )
         else:
-            self.link_relevancy_assessor = link_relevancy_assessor  # Could be None or an injected instance
+            self.link_relevancy_assessor = (
+                link_relevancy_assessor  # Could be None or an injected instance
+            )
 
         # Initialize scrapers for full content fetching
         if self.config.enable_full_content_scraping:
@@ -197,9 +199,15 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         # Initialize embedded components
         self.triage_component = triage_component or TriageComponent(debug=debug)
-        self.clarification_component = clarification_component or ClarificationComponent(debug=debug)
-        self.instruction_component = instruction_component or InstructionBuilderComponent(debug=debug)
-        self.research_synthesis_component = research_synthesis_component or ResearchSynthesisComponent(debug=debug)
+        self.clarification_component = (
+            clarification_component or ClarificationComponent(debug=debug)
+        )
+        self.instruction_component = (
+            instruction_component or InstructionBuilderComponent(debug=debug)
+        )
+        self.research_synthesis_component = (
+            research_synthesis_component or ResearchSynthesisComponent(debug=debug)
+        )
 
         # Track research state
         self.research_history = []
@@ -382,10 +390,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         """Execute searches using available search tools."""
         all_results = []
 
-        # Search with primary tool
-        from akd.tools.search._base import SearchToolInputSchema
-
-        search_input = SearchToolInputSchema(
+        search_input = self.search_tool.input_schema(
             queries=queries,
             max_results=20,
             category="science",
