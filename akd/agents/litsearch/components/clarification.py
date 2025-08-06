@@ -80,7 +80,7 @@ class ClarificationComponent:
         if self.debug:
             logger.debug(f"Generated {len(clarifying_output.clarifying_questions)} questions")
 
-        # In a real implementation, this would interact with the user
+        #TODO: In live AKD workflow, this would be an interrupt / interaction with the user
         # For now, we'll use mock answers or default responses
         clarifications = []
         for question in clarifying_output.clarifying_questions:
