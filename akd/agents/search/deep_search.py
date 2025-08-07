@@ -54,6 +54,30 @@ from .components import (
 )
 
 
+class DeepSearchResultItem(SearchResultItem):
+    """
+    Extended SearchResultItem to include additional fields for deep research.
+    This class can be used to store additional metadata like relevancy scores,
+    full content fetching status, etc.
+
+    Note:
+        - Needed for LinkRelevancyAssessor and DeepLitSearchAgent to handle additional metadata and processing.
+    """
+
+    should_fetch_full_content: bool = Field(
+        False,
+        description="Whether to fetch full content for this result",
+    )
+    query_alignment_details: Dict[str, Any] | None = Field(
+        default_factory=lambda: {},
+        description="Details on how this result aligns with the original query",
+    )
+    relevancy_assessment: Dict[str, Any] | None = Field(
+        default_factory=lambda: {},
+        description="Relevancy assessment details for this result",
+    )
+
+
 class DeepLitSearchAgentConfig(LitSearchAgentConfig):
     """
     Configuration for the DeepLitSearchAgent that implements multi-agent deep research.
@@ -384,9 +408,9 @@ class DeepLitSearchAgent(LitBaseAgent):
     async def _execute_searches(
         self,
         queries: List[str],
-        original_query: str = None,
+        original_query: str | None = None,
         is_reformulated: bool = False,
-    ) -> List[SearchResultItem]:
+    ) -> List[DeepSearchResultItem]:
         """Execute searches using available search tools."""
         all_results = []
 
@@ -409,6 +433,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             ss_results = await self.semantic_scholar_tool.arun(ss_input)
             all_results.extend(ss_results.results)
 
+        all_results = list(map(lambda r: DeepSearchResultItem(**r.dict()), all_results))
         # Apply per-link relevancy assessment if enabled
         if self.link_relevancy_assessor and all_results:
             if self.debug:
@@ -451,8 +476,8 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     async def _fetch_full_content_for_high_relevancy(
         self,
-        results: List[SearchResultItem],
-    ) -> List[SearchResultItem]:
+        results: List[DeepSearchResultItem],
+    ) -> List[DeepSearchResultItem]:
         """Fetch full content for results marked as high-relevancy."""
         high_relevancy_results = [
             r for r in results if getattr(r, "should_fetch_full_content", False)
@@ -508,9 +533,9 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     def _deduplicate_results(
         self,
-        new_results: List[SearchResultItem],
-        existing_results: List[SearchResultItem],
-    ) -> List[SearchResultItem]:
+        new_results: List[DeepSearchResultItem],
+        existing_results: List[DeepSearchResultItem],
+    ) -> List[DeepSearchResultItem]:
         """Remove duplicate results based on URL and title."""
         existing_urls = {r.url for r in existing_results}
         existing_titles = {r.title.lower() for r in existing_results if r.title}
@@ -525,7 +550,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     async def _evaluate_research_quality(
         self,
-        results: List[SearchResultItem],
+        results: List[DeepSearchResultItem],
         query: str,
     ) -> float:
         """Evaluate the quality of research results."""
