@@ -186,7 +186,8 @@ class LinkRelevancyAssessor(BaseTool):
         return hashlib.md5(key_string.encode()).hexdigest()
 
     def _calculate_relevancy_score(
-        self, assessment: MultiRubricRelevancyOutputSchema
+        self,
+        assessment: MultiRubricRelevancyOutputSchema,
     ) -> float:
         """Calculate a numeric relevancy score from multi-rubric assessment."""
         weights = self.config.scoring_weights
@@ -220,22 +221,22 @@ class LinkRelevancyAssessor(BaseTool):
         if self.debug:
             logger.debug("🧮 RELEVANCY SCORE BREAKDOWN:")
             logger.debug(
-                f"  📍 Topic alignment: {assessment.topic_alignment.value} -> {topic_score:.2f} * {weights.topic_alignment_weight:.2f} = {weighted_scores[0]:.3f}"
+                f"  📍 Topic alignment: {assessment.topic_alignment.value} -> {topic_score:.2f} * {weights.topic_alignment_weight:.2f} = {weighted_scores[0]:.3f}",
             )
             logger.debug(
-                f"  📊 Content depth: {assessment.content_depth.value} -> {depth_score:.2f} * {weights.content_depth_weight:.2f} = {weighted_scores[1]:.3f}"
+                f"  📊 Content depth: {assessment.content_depth.value} -> {depth_score:.2f} * {weights.content_depth_weight:.2f} = {weighted_scores[1]:.3f}",
             )
             logger.debug(
-                f"  🏆 Evidence quality: {assessment.evidence_quality.value} -> {evidence_score:.2f} * {weights.evidence_quality_weight:.2f} = {weighted_scores[2]:.3f}"
+                f"  🏆 Evidence quality: {assessment.evidence_quality.value} -> {evidence_score:.2f} * {weights.evidence_quality_weight:.2f} = {weighted_scores[2]:.3f}",
             )
             logger.debug(
-                f"  🔬 Methodological: {assessment.methodological_relevance.value} -> {method_score:.2f} * {weights.methodological_relevance_weight:.2f} = {weighted_scores[3]:.3f}"
+                f"  🔬 Methodological: {assessment.methodological_relevance.value} -> {method_score:.2f} * {weights.methodological_relevance_weight:.2f} = {weighted_scores[3]:.3f}",
             )
             logger.debug(
-                f"  ⏰ Recency: {assessment.recency_relevance.value} -> {recency_score:.2f} * {weights.recency_relevance_weight:.2f} = {weighted_scores[4]:.3f}"
+                f"  ⏰ Recency: {assessment.recency_relevance.value} -> {recency_score:.2f} * {weights.recency_relevance_weight:.2f} = {weighted_scores[4]:.3f}",
             )
             logger.debug(
-                f"  🎯 Scope: {assessment.scope_relevance.value} -> {scope_score:.2f} * {weights.scope_relevance_weight:.2f} = {weighted_scores[5]:.3f}"
+                f"  🎯 Scope: {assessment.scope_relevance.value} -> {scope_score:.2f} * {weights.scope_relevance_weight:.2f} = {weighted_scores[5]:.3f}",
             )
             logger.debug(f"  ✅ TOTAL SCORE: {total_score:.3f}")
 
@@ -254,7 +255,7 @@ class LinkRelevancyAssessor(BaseTool):
         """Assess relevancy for a single search result."""
         if not result.content:
             # No content to assess, assign low relevancy
-            result.relevancy_score = 0.1
+            result.score = 0.1
             result.should_fetch_full_content = False
             return result
 
@@ -283,7 +284,7 @@ class LinkRelevancyAssessor(BaseTool):
             except Exception as e:
                 logger.warning(f"Error assessing relevancy for {result.url}: {e}")
                 # Assign default low relevancy on error
-                result.relevancy_score = 0.2
+                result.score = 0.2
                 result.should_fetch_full_content = False
                 return result
 
@@ -291,7 +292,7 @@ class LinkRelevancyAssessor(BaseTool):
         relevancy_score = self._calculate_relevancy_score(assessment)
 
         # Update result with relevancy metadata
-        result.relevancy_score = relevancy_score
+        result.score = relevancy_score
         result.relevancy_assessment = assessment.model_dump()
         result.should_fetch_full_content = (
             relevancy_score >= self.full_content_threshold
@@ -300,7 +301,7 @@ class LinkRelevancyAssessor(BaseTool):
         if self.debug:
             logger.debug(
                 f"Assessed {result.url}: score={relevancy_score:.2f}, "
-                f"should_fetch={result.should_fetch_full_content}"
+                f"should_fetch={result.should_fetch_full_content}",
             )
 
         return result
@@ -332,7 +333,9 @@ class LinkRelevancyAssessor(BaseTool):
             if reformulated_query and reformulated_query != original_query:
                 reformulated_tasks = [
                     self._assess_single_result(
-                        result, reformulated_query, domain_context
+                        result,
+                        reformulated_query,
+                        domain_context,
                     )
                     for result in batch_results
                 ]
@@ -341,11 +344,12 @@ class LinkRelevancyAssessor(BaseTool):
 
                 # Compare scores and keep better alignment
                 for orig_result, reform_result in zip(
-                    batch_results, reformulated_results
+                    batch_results,
+                    reformulated_results,
                 ):
                     if reform_result.relevancy_score > orig_result.relevancy_score:
                         # Use reformulated query assessment
-                        orig_result.relevancy_score = reform_result.relevancy_score
+                        orig_result.score = reform_result.relevancy_score
                         orig_result.relevancy_assessment = (
                             reform_result.relevancy_assessment
                         )
@@ -373,7 +377,8 @@ class LinkRelevancyAssessor(BaseTool):
         return assessed_results
 
     def _create_assessment_summary(
-        self, results: List[SearchResultItem]
+        self,
+        results: List[SearchResultItem],
     ) -> Dict[str, Any]:
         """Create summary statistics of the relevancy assessment."""
         if not results:
@@ -397,14 +402,14 @@ class LinkRelevancyAssessor(BaseTool):
             "min_relevancy_score": min(scores) if scores else 0.0,
             "max_relevancy_score": max(scores) if scores else 0.0,
             "high_relevancy_count": len(
-                [r for r in results if r.should_fetch_full_content]
+                [r for r in results if r.should_fetch_full_content],
             ),
             "filtered_count": len(
                 [
                     r
                     for r in assessed_results
                     if r.relevancy_score >= self.min_relevancy_score
-                ]
+                ],
             ),
             "cache_hits": len(self._assessment_cache) if self.enable_caching else 0,
         }
