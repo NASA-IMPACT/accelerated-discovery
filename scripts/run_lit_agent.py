@@ -21,8 +21,10 @@ from akd.tools.vector_db_tool import VectorDBTool, VectorDBToolConfig
 
 
 async def main(args):
-    search_config = SearxNGSearchToolConfig(max_results=3)
-    search_tool = SearxNGSearchTool(config=search_config)
+    # search_config = SearxNGSearchToolConfig(max_results=3)
+    search_tool = SearxNGSearchTool(
+        # config=search_config
+        )
 
     scraper = CompositeScraper(
         SimpleWebScraper(),
@@ -39,6 +41,7 @@ async def main(args):
 
     text_splitter = TextSplitterTool()
     vector_db_config = VectorDBToolConfig(
+        db_path="./",
         collection_name="lit_agent_demo",
     )
     vector_db_tool = VectorDBTool(config=vector_db_config)
