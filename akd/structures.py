@@ -8,7 +8,14 @@ organized into logical sections for better maintainability.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, computed_field
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
@@ -86,6 +93,12 @@ class SearchResultItem(BaseModel):
     @computed_field
     def relevancy_score(self) -> float | None:
         return self.score
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, v):
+        """Convert None to empty string for content field."""
+        return v if v is not None else ""
 
 
 class ResearchData(BaseModel):
