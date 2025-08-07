@@ -8,7 +8,14 @@ organized into logical sections for better maintainability.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, computed_field
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 from akd._base import IOSchema
 
@@ -42,8 +49,8 @@ class SearchResultItem(IOSchema):
         None,
         description="The PDF URL of the search paper",
     )
-    content: str | None = Field(
-        None,
+    content: str = Field(
+        default="",
         description="The content snippet of the search result",
     )
     category: str | None = Field(
@@ -71,6 +78,12 @@ class SearchResultItem(IOSchema):
         None,
         description="List of authors for DOI resolution by title and author",
     )
+
+    score: float | None = Field(
+        None,
+        description="Relevance score of the search result",
+    )
+
     extra: dict[str, Any] | None = Field(
         None,
         description="Extra information from the search result",
@@ -83,6 +96,16 @@ class SearchResultItem(IOSchema):
         if self.published_date:
             return f"{self.title} - (Published {self.published_date})"
         return self.title
+
+    @computed_field
+    def relevancy_score(self) -> float | None:
+        return self.score
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, v):
+        """Convert None to empty string for content field."""
+        return v if v is not None else ""
 
 
 class ResearchData(BaseModel):
