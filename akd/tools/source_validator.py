@@ -7,7 +7,7 @@ against a predefined source whitelist.
 """
 
 from __future__ import annotations
-from rapidfuzz.fuzz import token_set_ratio
+from rapidfuzz.fuzz import token_set_ratio, token_sort_ratio, ratio
 
 import json
 import re
@@ -21,9 +21,17 @@ from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.utils import get_akd_root
+from enum import Enum
 
 if TYPE_CHECKING:
     pass
+
+
+
+class FuzzyMatchMethod(str, Enum):
+    token_set = "token_set"
+    token_sort = "token_sort"
+    ratio = "ratio"
 
 
 class SourceInfo(BaseModel):
@@ -115,9 +123,16 @@ class SourceValidatorConfig(BaseToolConfig):
     )
 
     fuzzy_threshold: int = Field(
-        default=87,
-        description="Fuzzy matching threshold (0-100) for journal titles",
+        default=90,
+        description="Fuzzy matching threshold (0-100) for journal titles (default is 90)",
     )
+
+    fuzzy_match_method: FuzzyMatchMethod = Field(
+        default=FuzzyMatchMethod.token_set,
+        description="Fuzzy matching method: token_set (default), token_sort, or ratio",
+    )
+
+
 
 
 class SourceValidator(
@@ -310,6 +325,18 @@ class SourceValidator(
             url=original_url,
         )
 
+
+    def get_fuzzy_scorer(self):
+        """
+        Returns the appropriate RapidFuzz scorer based on method name.
+        """
+        scorer_map = {
+        "token_set": token_set_ratio,
+        "token_sort": token_sort_ratio,
+        "ratio": ratio,
+        }
+        return scorer_map.get(self.config.fuzzy_match_method, token_set_ratio)
+
     def _validate_against_whitelist(
         self,
         source_info: SourceInfo,
@@ -346,19 +373,20 @@ class SourceValidator(
                 if source_title == whitelisted_title:
                     return True, category_name, 1.0
                 
-                 # if (
-                #     whitelisted_title in source_title
-                #     or source_title in whitelisted_title
-                # ):
-                #     # Check if it's a meaningful match (not just common words)
-                #     if len(whitelisted_title) > 10 or len(source_title) > 10:
-                #         return True, category_name, 0.8
-                    
-
+                
                 if self.config.use_fuzzy_match:
-                    fuzzy_score_set = token_set_ratio(source_title, whitelisted_title)
-                    if fuzzy_score_set >= self.config.fuzzy_threshold:  # You can adjust this threshold
-                        return True, category_name, fuzzy_score_set / 100.0  # Normalize to [0, 1]
+                    scorer = self.get_fuzzy_scorer()
+                    fuzzy_score = scorer(source_title, whitelisted_title)
+                    if fuzzy_score >= self.config.fuzzy_threshold:  # You can adjust this threshold
+                        return True, category_name, fuzzy_score / 100.0  # Normalize to [0, 1]
+
+                elif (
+                    whitelisted_title in source_title
+                    or source_title in whitelisted_title
+                ):
+                    # Check if it's a meaningful match (not just common words)
+                    if len(whitelisted_title) > 10 or len(source_title) > 10:
+                        return True, category_name, 0.8
 
                
         return False, None, 0.0
