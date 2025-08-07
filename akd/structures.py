@@ -40,8 +40,8 @@ class SearchResultItem(BaseModel):
         None,
         description="The PDF URL of the search paper",
     )
-    content: str | None = Field(
-        None,
+    content: str = Field(
+        default="",
         description="The content snippet of the search result",
     )
     category: str | None = Field(
@@ -214,7 +214,8 @@ class PaperDataItem(BaseModel):
         description="Tldr version of the paper.",
     )
     external_id: Optional[str] = Field(
-        ..., description="The external id of the paper from the query."
+        ...,
+        description="The external id of the paper from the query.",
     )
 
 
