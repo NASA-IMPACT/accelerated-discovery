@@ -78,7 +78,10 @@ class AspectSearchAgent(BaseAgent):
                          generate_question.bind(llm=self.llm), 
                          retry=RetryPolicy(max_attempts=self.config.retry_attempts))
         builder.add_node("answer_question", 
-                         generate_answer.bind(llm=self.llm, search_tool=self.search_tool, max_context_len=self.config.max_ctx_len), 
+                         generate_answer.bind(llm=self.llm, 
+                                              search_tool=self.search_tool, 
+                                              search_category=self.config.category,
+                                              max_context_len=self.config.max_ctx_len), 
                          retry=RetryPolicy(max_attempts=self.config.retry_attempts))
         builder.add_conditional_edges("answer_question", 
                                       route_messages.bind(max_turns=self.config.max_turns))

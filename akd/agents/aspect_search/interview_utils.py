@@ -120,11 +120,9 @@ async def survey_subjects(topic: str,
     Returns:
         List[Perspectives]: List of generated perspectives derived from Wikipedia content about related subjects.
     """
-    # Expand topics
     expand_chain = gen_related_topics_prompt | llm.with_structured_output(
             RelatedSubjects
     )
-    # Generate perspectives
     gen_perspectives_chain = gen_perspectives_prompt | llm.with_structured_output(
         Perspectives
     )
@@ -170,6 +168,7 @@ async def generate_answer(
         state: InterviewState,
         llm: ChatOpenAI,
         search_tool: SearchTool,
+        search_category: str = None,
         name: str = "Subject_Matter_Expert",
         max_ctx_len: int = 15000,
         **kwargs
@@ -195,7 +194,7 @@ async def generate_answer(
     swapped_state = swap_roles(state, name)
     queries = await gen_queries_chain.ainvoke(swapped_state)
     query_results = await search_tool.arun(
-        search_tool.input_schema(queries=queries["parsed"].queries, category=kwargs.get("category", None))
+        search_tool.input_schema(queries=queries["parsed"].queries, category=search_category)
     )
     formatted_query_results = {
         str(res.url): res.content for res in query_results.results
