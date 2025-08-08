@@ -1,0 +1,1221 @@
+{
+  "categories": {
+    "ES": {
+      "AGU Advances": [
+        "2576-604X"
+      ],
+      "Community Science": [
+        "2692-9430"
+      ],
+      "Earth and Space Science": [
+        "2333-5084"
+      ],
+      "Earth's Future": [],
+      "Geochemistry, Geophysics, Geosystems (G-Cubed)": [
+        "1525-2027"
+      ],
+      "GeoHealth": [
+        "2471-1403"
+      ],
+      "Geophysical Research Letters (GRL)": [
+        "0094-8276",
+        "1944-8007"
+      ],
+      "JGR: Machine Learning and Computation": [],
+      "Journal of Advances in Modeling Earth Systems (JAMES)": [
+        "1942-2466"
+      ],
+      "Perspectives of Earth and Space Scientists": [
+        "2637-6989"
+      ],
+      "Space Weather": [
+        "1542-7390"
+      ],
+      "Water Resources Research": [
+        "0043-1397",
+        "1944-7973"
+      ],
+      "Global Biogeochemical Cycles": [
+        "0886-6236",
+        "1944-9224"
+      ],
+      "Journal of Geophysical Research: Atmospheres": [
+        "0148-0227",
+        "2169-897X",
+        "2169-8996"
+      ],
+      "Journal of Geophysical Research: Biogeosciences": [
+        "2169-8953",
+        "2169-8961"
+      ],
+      "Journal of Geophysical Research: Earth Surface": [
+        "2169-9003",
+        "2169-9011"
+      ],
+      "Journal of Geophysical Research: Oceans": [
+        "0148-0227"
+      ],
+      "Journal of Geophysical Research: Planets": [
+        "0148-0227",
+        "2169-9097",
+        "2169-9100"
+      ],
+      "Journal of Geophysical Research: Solid Earth": [
+        "0148-0227",
+        "2169-9313",
+        "2169-9356"
+      ],
+      "Journal of Geophysical Research: Space Physics": [
+        "0148-0227",
+        "2169-9380",
+        "2169-9402"
+      ],
+      "Paleoceanography and Paleoclimatology": [
+        "2572-4517",
+        "2572-4525"
+      ],
+      "Radio Science": [
+        "0048-6604",
+        "1944-799X"
+      ],
+      "Reviews of Geophysics": [
+        "1944-9208",
+        "8755-1209"
+      ],
+      "Tectonics": [
+        "0278-7407",
+        "1944-9194"
+      ],
+      "Water Resources Research (WRR)": [
+        "0043-1397",
+        "1944-7973"
+      ],
+      "Global Biogeochemical Cycles (GBC)": [
+        "0886-6236",
+        "1944-9224"
+      ],
+      "Advances in Statistical Climatology, Meteorology and Oceanography (ASCMO)": [
+        "2364-3587"
+      ],
+      "Annales Geophysicae (ANGEO)": [
+        "0992-7689",
+        "1432-0576"
+      ],
+      "Atmospheric Chemistry and Physics (ACP)": [
+        "1680-7324"
+      ],
+      "Atmospheric Measurement Techniques (AMT)": [
+        "1867-8548"
+      ],
+      "Biogeosciences (BG)": [
+        "1726-4189"
+      ],
+      "Climate of the Past (CP)": [
+        "1814-9332"
+      ],
+      "Earth Surface Dynamics (ESurf)": [
+        "2196-632X"
+      ],
+      "Earth System Dynamics (ESD)": [
+        "2190-4987"
+      ],
+      "Earth System Science Data (ESSD)": [
+        "1866-3516"
+      ],
+      "Geochronology (GChron)": [
+        "2628-3719"
+      ],
+      "Geoscience Communication (GC)": [
+        "2569-7110"
+      ],
+      "Geoscientific Instrumentation, Methods and Data Systems (GI)": [
+        "2193-0864"
+      ],
+      "Geoscientific Model Development (GMD)": [
+        "1991-9603"
+      ],
+      "History of Geo- and Space Sciences (HGSS)": [
+        "2190-5029"
+      ],
+      "Hydrology and Earth System Sciences (HESS)": [
+        "1607-7938"
+      ],
+      "Natural Hazards and Earth System Sciences (NHESS)": [
+        "1684-9981"
+      ],
+      "Nonlinear Processes in Geophysics (NPG)": [
+        "1607-7946"
+      ],
+      "Ocean Science (OS)": [
+        "1812-0792"
+      ],
+      "SOIL": [
+        "2199-398X"
+      ],
+      "Solid Earth (SE)": [],
+      "The Cryosphere (TC)": [
+        "1994-0424"
+      ],
+      "Weather and Climate Dynamics (WCD)": [
+        "2698-4016"
+      ],
+      "Applied Geochemistry": [
+        "0883-2927"
+      ],
+      "Chemical Geology": [
+        "0009-2541"
+      ],
+      "Computers & Geosciences": [
+        "0098-3004"
+      ],
+      "Earth and Planetary Science Letters (EPSL)": [
+        "0012-821X"
+      ],
+      "Earth-Science Reviews": [
+        "0012-8252"
+      ],
+      "Geochimica et Cosmochimica Acta (GCA)": [
+        "0016-7037"
+      ],
+      "Geomorphology": [
+        "0169-555X"
+      ],
+      "Global and Planetary Change": [
+        "0921-8181"
+      ],
+      "Journal of Hydrology": [
+        "2306-5338",
+        "2330-7609"
+      ],
+      "Journal of Hydrology X": [
+        "2306-5338",
+        "2330-7609"
+      ],
+      "Journal of Structural Geology": [],
+      "Journal of Volcanology and Geothermal Research": [
+        "0377-0273"
+      ],
+      "Marine Geology": [
+        "0025-3227"
+      ],
+      "Precambrian Research": [
+        "0301-9268"
+      ],
+      "Quaternary Science Reviews": [
+        "0277-3791"
+      ],
+      "Remote Sensing of Environment": [
+        "0034-4257"
+      ],
+      "Science of Remote Sensing": [
+        "2666-0172"
+      ],
+      "Tectonophysics": [
+        "0040-1951"
+      ],
+      "Atmospheric Research": [
+        "0169-8095"
+      ],
+      "Atmospheric Environment": [
+        "1352-2310"
+      ],
+      "Agricultural and Forest Meteorology": [
+        "0168-1923"
+      ],
+      "Dynamics of Atmospheres and Oceans": [
+        "0377-0265"
+      ],
+      "Forest Ecology and Management": [
+        "0378-1127"
+      ],
+      "Journal of Atmospheric and Solar-Terrestrial Physics (JASTP)": [
+        "2500-0535"
+      ],
+      "Urban Climate": [
+        "2212-0955"
+      ],
+      "Weather and Climate Extremes": [
+        "2212-0947"
+      ],
+      "Advances in Space Research": [
+        "0273-1177"
+      ],
+      "Journal of Aerosol Science": [],
+      "Cold Regions Science and Technology": [
+        "0165-232X"
+      ],
+      "Atmospheric Environment: X": [
+        "1352-2310"
+      ],
+      "Nature Geoscience": [
+        "1752-0894",
+        "1752-0908"
+      ],
+      "Nature Climate Change": [
+        "1758-678X",
+        "1758-6798"
+      ],
+      "Nature Reviews Earth & Environment": [
+        "2662-138X"
+      ],
+      "Communications Earth & Environment": [
+        "2662-4435"
+      ],
+      "npj Climate and Atmospheric Science": [
+        "2397-3722"
+      ],
+      "Scientific Reports": [
+        "2045-2322"
+      ],
+      "Scientific Data": [
+        "2052-4463"
+      ],
+      "Bulletin of Engineering Geology and the Environment": [
+        "1435-9529",
+        "1435-9537"
+      ],
+      "Bulletin of Volcanology": [
+        "0258-8900",
+        "1432-0819"
+      ],
+      "Climate Dynamics": [
+        "0930-7575",
+        "1432-0894"
+      ],
+      "Environmental Earth Sciences": [
+        "1866-6280",
+        "1866-6299"
+      ],
+      "Hydrogeology Journal": [],
+      "Journal of Geodesy": [],
+      "Landslides": [
+        "0285-2926",
+        "1884-3956"
+      ],
+      "Mineralium Deposita": [
+        "0026-4598",
+        "1432-1866"
+      ],
+      "Earth, Planets and Space": [
+        "1880-5981"
+      ],
+      "Geoscience Letters": [
+        "2196-4092"
+      ],
+      "Journal of Applied Volcanology": [
+        "2191-5040"
+      ],
+      "Boundary-Layer Meteorology": [
+        "0006-8314",
+        "1573-1472"
+      ],
+      "Theoretical and Applied Climatology": [
+        "0177-798X",
+        "1434-4483"
+      ],
+      "Advances in Atmospheric Sciences": [
+        "0256-1530",
+        "1861-9533"
+      ],
+      "Meteorology and Atmospheric Physics": [
+        "0177-7971",
+        "1436-5065"
+      ],
+      "Modeling Earth Systems and Environment": [
+        "2363-6203",
+        "2363-6211"
+      ],
+      "Terrestrial, Atmospheric and Oceanic Sciences": [
+        "1017-0839"
+      ],
+      "Atmospheric Science Letters": [
+        "1530-261X"
+      ],
+      "Earth Surface Processes and Landforms": [
+        "0197-9337",
+        "1096-9837"
+      ],
+      "Geo: Geography and Environment": [
+        "2054-4049"
+      ],
+      "Geological Journal": [
+        "0016-7568",
+        "1469-5081"
+      ],
+      "International Journal of Climatology": [],
+      "Meteorological Applications": [
+        "1350-4827",
+        "1469-8080"
+      ],
+      "WIREs Water (Wiley Interdisciplinary Reviews: Water)": [
+        "2049-1948"
+      ],
+      "Journal Name": [],
+      "Quarterly Journal of the Royal Meteorological Society (QJRMS)": [
+        "0035-9009",
+        "1477-870X"
+      ],
+      "Weather": [
+        "0043-1656",
+        "1477-8696"
+      ],
+      "Geoscience Data Journal": [
+        "2049-6060"
+      ],
+      "Climate Resilience and Sustainability": [
+        "2692-4587"
+      ],
+      "WIREs Climate Change": [
+        "1757-7780",
+        "1757-7799"
+      ],
+      "Remote Sensing in Ecology and Conservation": [
+        "2056-3485"
+      ],
+      "Advances in Meteorology": [
+        "1687-9309",
+        "1687-9317"
+      ],
+      "Geology": [
+        "0091-7613",
+        "1943-2682"
+      ],
+      "GSA Bulletin": [
+        "0016-7606",
+        "1943-2674"
+      ],
+      "Geosphere": [
+        "1553-040X"
+      ],
+      "Environmental & Engineering Geoscience": [
+        "1078-7275"
+      ],
+      "GSA Today": [
+        "1052-5173"
+      ],
+      "Acta Agriculturae Scandinavica, Section B — Soil & Plant Science": [
+        "0906-4710",
+        "1651-1913"
+      ],
+      "Alcheringa: An Australasian Journal of Palaeontology": [
+        "0311-5518",
+        "1752-0754"
+      ],
+      "All Earth": [
+        "2766-9645"
+      ],
+      "Annals of GIS": [
+        "1947-5683",
+        "1947-5691"
+      ],
+      "Arctic, Antarctic, and Alpine Research": [
+        "1523-0430",
+        "1938-4246"
+      ],
+      "Australian Journal of Earth Sciences": [
+        "0812-0099",
+        "1440-0952"
+      ],
+      "GIScience & Remote Sensing": [
+        "1548-1603",
+        "1943-7226"
+      ],
+      "International Geology Review": [
+        "0020-6814",
+        "1938-2839"
+      ],
+      "International Journal of Digital Earth": [],
+      "International Journal of Remote Sensing": [
+        "2072-4292",
+        "2315-4675"
+      ],
+      "Physical Geography": [
+        "0272-3646",
+        "1930-0557"
+      ],
+      "Tellus Series A: Dynamic Meteorology and Oceanography": [
+        "1600-0870"
+      ],
+      "Tellus Series B: Chemical and Physical Meteorology": [
+        "0280-6509",
+        "1600-0889"
+      ],
+      "Atmospheric and Oceanic Science Letters (AOSL)": [
+        "1674-2834",
+        "2376-6123"
+      ],
+      "Applied Earth Science": [
+        "0371-7453",
+        "1743-2758"
+      ],
+      "All Earth (formerly Geodinamica Acta)": [
+        "0985-3111",
+        "1778-3593"
+      ],
+      "Journal of the Geological Society": [
+        "0435-4052",
+        "2041-4722"
+      ],
+      "Quarterly Journal of Engineering Geology and Hydrogeology": [
+        "0204-7934",
+        "2738-6996"
+      ],
+      "Earth Science, Systems and Society (ES3)": [
+        "2634-730X"
+      ],
+      "Petroleum Geoscience": [
+        "1354-0793",
+        "2041-496X"
+      ],
+      "Geoenergy": [
+        "2755-1725"
+      ],
+      "Canadian Journal of Earth Sciences": [
+        "0008-4077",
+        "1480-3313"
+      ],
+      "PALAIOS": [
+        "0883-1351",
+        "1938-5323"
+      ],
+      "Journal of Sedimentary Research": [
+        "1527-1404",
+        "1938-3681"
+      ],
+      "Journal of Sedimentary Research (JSR)": [
+        "2500-7858"
+      ],
+      "Lithosphere": [
+        "1941-8264",
+        "1947-4253"
+      ],
+      "Arctic Science": [
+        "2368-7460"
+      ],
+      "Journal of Selected Topics in Applied Earth Observation and Remote Sensing": [
+        "1939-1404",
+        "2151-1535"
+      ],
+      "Transactions on Geoscience and Remote Sensing": [
+        "2523-2592"
+      ],
+      "Bulletin of the American Meteorological Society (BAMS)": [
+        "1895-9091",
+        "1896-530X"
+      ],
+      "Journal of the Atmospheric Sciences (JAS)": [
+        "2502-1869"
+      ],
+      "Journal of Climate (JCLI)": [
+        "2225-1154"
+      ],
+      "Journal of Hydrometeorology (JHM)": [],
+      "Journal of Physical Oceanography (JPO)": [
+        "0928-5105",
+        "1573-160X"
+      ],
+      "Monthly Weather Review (MWR)": [
+        "0027-0644",
+        "1520-0493"
+      ],
+      "Weather and Forecasting (WAF)": [],
+      "Weather, Climate, and Society (WCAS)": [
+        "1948-8327",
+        "1948-8335"
+      ],
+      "Journal of Applied Meteorology and Climatology (JAMC)": [
+        "1558-8424",
+        "1558-8432"
+      ],
+      "Journal of Atmospheric and Oceanic Technology (JTECH)": [
+        "0739-0572",
+        "1520-0426"
+      ],
+      "Artificial Intelligence for the Earth Systems (AIES)": [
+        "2769-7525"
+      ],
+      "Earth Interactions (EI)": []
+    },
+    "Helio": {
+      "Advances in Space Research": [
+        "0273-1177"
+      ],
+      "Annales Geophysicae": [
+        "0992-7689",
+        "1432-0576"
+      ],
+      "Astronomy & Astrophysics": [
+        "0004-6361",
+        "1432-0746"
+      ],
+      "Journal of Space Weather and Space Climate": [
+        "2115-7251"
+      ],
+      "The Astronomical Journal": [
+        "2167-2857",
+        "2167-2865"
+      ],
+      "The Astrophysical Journal": [
+        "1990-3413",
+        "1990-3421"
+      ],
+      "The Astrophysical Journal Letters": [
+        "2041-8205",
+        "2041-8213"
+      ],
+      "The Astrophysical Journal Supplement Series": [
+        "0067-0049",
+        "1538-4365"
+      ],
+      "New Journal of Physics": [],
+      "Earth and Space Science": [
+        "2333-5084"
+      ],
+      "Earth, Planets and Space": [
+        "1343-8832",
+        "1880-5981"
+      ],
+      "Geophysical Research Letters": [
+        "0094-8276",
+        "1944-8007"
+      ],
+      "Journal of Atmospheric and Solar-Terrestrial Physics": [
+        "2500-0535"
+      ],
+      "Journal of Astronomical Instrumentation": [
+        "2251-1717",
+        "2251-1725"
+      ],
+      "Journal of Cosmology and Astroparticle Physics": [
+        "1475-7516"
+      ],
+      "Journal of Geophysical Research: Space Physics": [
+        "0148-0227",
+        "2169-9380",
+        "2169-9402"
+      ],
+      "Living Reviews in Solar Physics": [
+        "1614-4961",
+        "2367-3648"
+      ],
+      "Monthly Notices of the Royal Astronomical Society": [
+        "0035-8711",
+        "1365-2966"
+      ],
+      "Nature Astronomy": [
+        "2397-3366"
+      ],
+      "Physics of Plasmas": [
+        "1070-664X",
+        "1089-7674"
+      ],
+      "Planetary and Space Science": [
+        "0032-0633"
+      ],
+      "Radio Science": [
+        "0048-6604",
+        "1944-799X"
+      ],
+      "Reviews of Geophysics": [
+        "1944-9208",
+        "8755-1209"
+      ],
+      "Solar Physics": [
+        "0038-0938",
+        "1573-093X"
+      ],
+      "Space Science Reviews": [
+        "0038-6308",
+        "1572-9672"
+      ],
+      "Space Weather": [
+        "1542-7390"
+      ]
+    },
+    "Astro": {
+      "The Astrophysical Journal": [
+        "1990-3413",
+        "1990-3421"
+      ],
+      "The Astrophysical Journal Letters": [
+        "2041-8205",
+        "2041-8213"
+      ],
+      "The Astrophysical Journal Supplement Series": [
+        "0067-0049",
+        "1538-4365"
+      ],
+      "The Astronomical Journal": [
+        "2167-2857",
+        "2167-2865"
+      ],
+      "The Planetary Science Journal": [
+        "2191-2521"
+      ],
+      "Monthly Notices of the Royal Astronomical Society": [
+        "0035-8711",
+        "1365-2966"
+      ],
+      "Monthly Notices of the Royal Astronomical Society: Letters": [
+        "1745-3925",
+        "1745-3933"
+      ],
+      "Astronomy & Astrophysics": [
+        "0004-6361",
+        "1432-0746"
+      ],
+      "Nature Astronomy*": [
+        "2397-3366"
+      ],
+      "Annual Review of Astronomy and Astrophysics": [
+        "0066-4146",
+        "1545-4282"
+      ],
+      "The Astronomy and Astrophysics Review*": [
+        "0935-4956",
+        "1432-0754"
+      ],
+      "Publications of the Astronomical Society of the Pacific": [
+        "0004-6280",
+        "1538-3873"
+      ],
+      "RAS Techniques and Instruments": [
+        "2752-8200"
+      ],
+      "Nature Physics*": [
+        "1745-2473",
+        "1745-2481"
+      ],
+      "Nature Communications": [
+        "2041-1723"
+      ],
+      "New Astronomy*": [
+        "1384-1076"
+      ],
+      "New Astronomy Reviews*": [
+        "1387-6473"
+      ],
+      "Astroparticle Physics*": [
+        "0927-6505"
+      ],
+      "Journal of Cosmology and Astroparticle Physics (JCAP)": [],
+      "Journal of High Energy Astrophysics (JHEAP)": [],
+      "Physics of the Dark Universe*": [
+        "2212-6864"
+      ],
+      "Advances in Space Research*": [
+        "0273-1177"
+      ],
+      "Astrophysics and Space Science*": [
+        "0004-640X",
+        "1572-946X"
+      ],
+      "Celestial Mechanics and Dynamical Astronomy*": [
+        "0923-2958",
+        "1572-9478"
+      ],
+      "Experimental Astronomy*": [
+        "0922-6435",
+        "1572-9508"
+      ],
+      "General Relativity and Gravitation*": [
+        "0001-7701",
+        "1572-9532"
+      ],
+      "Journal of Astrophysics and Astronomy": [
+        "0004-6361",
+        "1432-0746"
+      ],
+      "Living Reviews in Relativity": [
+        "1433-8351",
+        "2367-3613"
+      ],
+      "Living Reviews in Solar Physics": [
+        "1614-4961",
+        "2367-3648"
+      ],
+      "Space Science Reviews*": [
+        "0038-6308",
+        "1572-9672"
+      ],
+      "Solar Physics*": [
+        "0038-0938",
+        "1573-093X"
+      ],
+      "Astronomische Nachrichten*": [
+        "0004-6337",
+        "1521-3994"
+      ],
+      "Advances in Physics: Astronomy, Astrophysics and Particle Physics": [
+        "2994-0842"
+      ],
+      "Journal of Astronomical Instrumentation*": [
+        "2251-1717",
+        "2251-1725"
+      ],
+      "Astronomy and Computing*": [
+        "2213-1337"
+      ],
+      "The Open Journal of Astrophysics": [
+        "2565-6120"
+      ],
+      "Research in Astronomy and Astrophysics (RAA)": [
+        "1674-4527"
+      ],
+      "Annales Geophysicae": [
+        "0992-7689",
+        "1432-0576"
+      ],
+      "Physics of Plasmas*": [
+        "1070-664X",
+        "1089-7674"
+      ],
+      "Physical Review Letters": [
+        "0031-9007",
+        "1079-7114"
+      ]
+    },
+    "planet": {
+      "Planetary Science Journal (PSJ)": [
+        "2191-2521"
+      ],
+      "The Astronomical Journal (AJ)*": [
+        "3049-2742"
+      ],
+      "The Astrophysical Journal (ApJ)*": [
+        "2600-8971"
+      ],
+      "The Astrophysical Journal Letters (ApJL)*": [
+        "2041-8205",
+        "2041-8213"
+      ],
+      "The Astrophysical Journal Supplement Series (ApJS)": [
+        "0067-0049",
+        "1538-4365"
+      ],
+      "Earth and Space Science*": [
+        "2333-5084"
+      ],
+      "Geochemistry, Geophysics, Geosystems (G3)*": [
+        "1525-2027"
+      ],
+      "Geophysical Research Letters (GRL)*": [
+        "0094-8276",
+        "1944-8007"
+      ],
+      "Journal of Geophysical Research: Planets*": [
+        "0148-0227",
+        "2169-9097",
+        "2169-9100"
+      ],
+      "Reviews of Geophysics*": [
+        "1944-9208",
+        "8755-1209"
+      ],
+      "Space Weather*": [
+        "1542-7390"
+      ],
+      "Annual Review of Astronomy and Astrophysics*": [
+        "0066-4146",
+        "1545-4282"
+      ],
+      "Annual Review of Earth and Planetary Sciences*": [
+        "0084-6597"
+      ],
+      "Advances in Space Research (ASR)*": [
+        "0273-1177"
+      ],
+      "Astronomy and Computing*": [
+        "2213-1337"
+      ],
+      "Earth and Planetary Science Letters (EPSL)*": [
+        "0012-821X"
+      ],
+      "Geochimica et Cosmochimica Acta (GCA)*": [
+        "0016-7037"
+      ],
+      "Icarus*": [
+        "0019-1035"
+      ],
+      "New Astronomy*": [
+        "1384-1076"
+      ],
+      "New Astronomy Reviews*": [
+        "1387-6473"
+      ],
+      "Planetary and Space Science*": [
+        "0032-0633"
+      ],
+      "Annales Geophysicae (ANGEO)*": [
+        "0992-7689",
+        "1432-0576"
+      ],
+      "Solid Earth (SE)*": [],
+      "Geology*": [
+        "0091-7613",
+        "1943-2682"
+      ],
+      "GSA Bulletin*": [
+        "0016-7606",
+        "1943-2674"
+      ],
+      "IOP Publishing": [
+        "0953-1513",
+        "1741-4857",
+        "2836-1008"
+      ],
+      "Journal of Cosmology and Astroparticle Physics (JCAP)*": [],
+      "Publications of the Astronomical Society of the Pacific (PASP)*": [
+        "0004-6280",
+        "1538-3873"
+      ],
+      "Research in Astronomy and Astrophysics (RAA)*": [
+        "1674-4527"
+      ],
+      "Maynooth Academic Publishing": [],
+      "The Open Journal of Astrophysics": [
+        "2565-6120"
+      ],
+      "Communications Earth & Environment*": [
+        "2662-4435"
+      ],
+      "Nature Astronomy*": [
+        "2397-3366"
+      ],
+      "Nature Communications*": [
+        "2041-1723"
+      ],
+      "Nature Geoscience*": [
+        "1752-0894",
+        "1752-0908"
+      ],
+      "Astronomy & Astrophysics (A&A)*": [
+        "0004-6361",
+        "1432-0746"
+      ],
+      "Geophysical Journal International (GJI)*": [
+        "0956-540X",
+        "1365-246X"
+      ],
+      "Monthly Notices of the Royal Astronomical Society (MNRAS)*": [
+        "0035-8711",
+        "1365-2966"
+      ],
+      "RAS Techniques and Instruments (RASTI)*": [
+        "2752-8200"
+      ],
+      "Astrophysics and Space Science*": [
+        "0004-640X",
+        "1572-946X"
+      ],
+      "Celestial Mechanics and Dynamical Astronomy*": [
+        "0923-2958",
+        "1572-9478"
+      ],
+      "Earth, Moon, and Planets (Now Discover Space)": [
+        "0167-9295",
+        "1573-0794"
+      ],
+      "Earth, Planets and Space (EPS)*": [
+        "1343-8832",
+        "1880-5981"
+      ],
+      "Experimental Astronomy*": [
+        "0922-6435",
+        "1572-9508"
+      ],
+      "Journal of Astrophysics and Astronomy*": [
+        "0004-6361",
+        "1432-0746"
+      ],
+      "Living Reviews in Solar Physics": [
+        "1614-4961",
+        "2367-3648"
+      ],
+      "Astrophysics": [
+        "0571-7132",
+        "0571-7256",
+        "1573-8191"
+      ],
+      "Solar Physics*": [
+        "0038-0938",
+        "1573-093X"
+      ],
+      "Space Science Reviews*": [
+        "0038-6308",
+        "1572-9672"
+      ],
+      "The Astronomy and Astrophysics Review*": [
+        "0935-4956",
+        "1432-0754"
+      ],
+      "Advances in Physics: Astronomy, Astrophysics and Particle Physics": [
+        "2994-0842"
+      ],
+      "NRIAG Journal of Astronomy and Geophysics*": [
+        "2090-9977"
+      ],
+      "Astronomische Nachrichten (AN)*": [
+        "0004-6337",
+        "1521-3994"
+      ],
+      "Meteoritics & Planetary Science*": [
+        "1086-9379",
+        "1945-5100"
+      ],
+      "Journal of Astronomical Instrumentation (JAI)*": [
+        "2089-970X",
+        "2337-5124"
+      ],
+      "Journal of Geophysics": [
+        "0016-8033",
+        "1942-2156"
+      ]
+    },
+    "Bio": {
+      "Acta Astronautica*": [
+        "0094-5765"
+      ],
+      "Advances in Space Research": [
+        "0273-1177"
+      ],
+      "Aerospace Medicine and Human Performance": [
+        "2375-6314",
+        "2375-6322"
+      ],
+      "Astrobiology": [
+        "1531-1074",
+        "1557-8070"
+      ],
+      "Astroparticle Physics*": [
+        "0927-6505"
+      ],
+      "Astronomy & Astrophysics": [
+        "0004-6361",
+        "1432-0746"
+      ],
+      "Astronomy and Computing*": [
+        "2213-1337"
+      ],
+      "Astrophysics and Space Science": [
+        "0004-640X",
+        "1572-946X"
+      ],
+      "Biophysical Journal: Cell Press": [
+        "1848-4123"
+      ],
+      "Communications Earth & Environment": [
+        "2662-4435"
+      ],
+      "Communications Physics": [
+        "2399-3650"
+      ],
+      "Cellular and Molecular Life Sciences": [
+        "1420-682X",
+        "1420-9071"
+      ],
+      "Earth and Planetary Science Letters": [
+        "0012-821X"
+      ],
+      "Earth, Moon, and Planets*": [
+        "0167-9295",
+        "1573-0794"
+      ],
+      "Earth and Planetary Science": [
+        "2810-9732"
+      ],
+      "Earth and Space Science": [
+        "2333-5084"
+      ],
+      "Experimental Astronomy*": [
+        "0922-6435",
+        "1572-9508"
+      ],
+      "The FASEB Journal": [
+        "2573-9832"
+      ],
+      "Frontiers in Plant Science": [
+        "1664-462X"
+      ],
+      "Frontiers in Genetics": [
+        "1664-8021"
+      ],
+      "General Relativity and Gravitation": [
+        "0001-7701",
+        "1572-9532"
+      ],
+      "Geochemistry, Geophysics, Geosystems": [
+        "1525-2027"
+      ],
+      "Geochimica et Cosmochimica Acta*": [
+        "0016-7037"
+      ],
+      "Geology": [
+        "0091-7613",
+        "1943-2682"
+      ],
+      "Geophysical Journal International": [
+        "0956-540X",
+        "1365-246X"
+      ],
+      "Geophysical Research Letters": [
+        "0094-8276",
+        "1944-8007"
+      ],
+      "GSA Bulletin": [
+        "0016-7606",
+        "1943-2674"
+      ],
+      "Gravitational and Space Research": [
+        "2332-7774"
+      ],
+      "Icarus*": [
+        "0019-1035"
+      ],
+      "Journal of Astronomical Instrumentation": [
+        "2251-1717",
+        "2251-1725"
+      ],
+      "Journal of Atmospheric and Solar-Terrestrial Physics": [
+        "2500-0535"
+      ],
+      "Journal of Cosmology and Astroparticle Physics": [
+        "1475-7516"
+      ],
+      "Journal of Geophysical Research: Planets": [
+        "0148-0227",
+        "2169-9097",
+        "2169-9100"
+      ],
+      "Journal of Geophysical Research: Space Physics": [
+        "0148-0227",
+        "2169-9380",
+        "2169-9402"
+      ],
+      "Journal of High Energy Astrophysics*": [],
+      "Life Sciences in Space Research": [
+        "0169-6149",
+        "1573-0875"
+      ],
+      "Living Reviews in Relativity": [
+        "1433-8351",
+        "2367-3613"
+      ],
+      "Living Reviews in Solar Physics": [
+        "1614-4961",
+        "2367-3648"
+      ],
+      "Meteoritics and Planetary Science": [
+        "1086-9379",
+        "1945-5100"
+      ],
+      "Monthly Notices of the Royal Astronomical Society": [
+        "0035-8711",
+        "1365-2966"
+      ],
+      "Nature*": [
+        "0028-0836",
+        "1476-4687"
+      ],
+      "Nature Astronomy*": [
+        "2397-3366"
+      ],
+      "Nature Communications": [
+        "2041-1723"
+      ],
+      "Nature Geoscience*": [
+        "1752-0894",
+        "1752-0908"
+      ],
+      "Nature Physics*": [
+        "1745-2473",
+        "1745-2481"
+      ],
+      "New Astronomy*": [
+        "1384-1076"
+      ],
+      "npj Microgravity": [
+        "2373-8065"
+      ],
+      "NRIAG Journal of Astronomy and Geophysics": [
+        "2090-9977"
+      ],
+      "Physics of Fluids": [
+        "1070-6631",
+        "1089-7666"
+      ],
+      "Physics of Plasmas": [
+        "1070-664X",
+        "1089-7674"
+      ],
+      "Physics of the Dark Universe*": [
+        "2212-6864"
+      ],
+      "Planetary and Space Science": [
+        "0032-0633"
+      ],
+      "PNAS": [
+        "2752-6542"
+      ],
+      "Radio Science": [
+        "0048-6604",
+        "1944-799X"
+      ],
+      "RAS Techniques and Instruments": [
+        "2752-8200"
+      ],
+      "Research in Astronomy and Astrophysics": [
+        "1674-4527"
+      ],
+      "Review of Geophysics": [
+        "0016-8033",
+        "1942-2156"
+      ],
+      "Science": [],
+      "Science Advances": [
+        "2375-2548"
+      ],
+      "Solar Physics": [
+        "0038-0938",
+        "1573-093X"
+      ],
+      "Solid Earth": [
+        "1869-9529"
+      ],
+      "Space Science Reviews": [
+        "0038-6308",
+        "1572-9672"
+      ],
+      "Space Weather": [
+        "1542-7390"
+      ],
+      "The Astronomical Journal": [
+        "2167-2857",
+        "2167-2865"
+      ],
+      "The Astrophysical Journal": [
+        "1990-3413",
+        "1990-3421"
+      ],
+      "The Astrophysical Journal Letters": [
+        "2041-8205",
+        "2041-8213"
+      ],
+      "The Astrophysical Journal Supplement Series": [
+        "0067-0049",
+        "1538-4365"
+      ],
+      "The Open Journal of Astrophysics": [
+        "2565-6120"
+      ],
+      "The Planetary Science Journal": [
+        "2191-2521"
+      ]
+    },
+    "non-Peer-Rev": {}
+  },
+  "metadata": {
+    "source": "/Users/mramasub/work/accelerated-discovery/docs/pubs_whitelist.json",
+    "generated_at": "2025-08-08T17:42:43.215152+00:00"
+  }
+}

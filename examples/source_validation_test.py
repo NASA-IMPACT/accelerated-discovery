@@ -208,15 +208,17 @@ class JournalValidationPipeline:
                 print("   Status: ⚠️ NOT WHITELISTED")
                 print(f"   Confidence: {result.confidence_score:.2f}")
 
-            if result.journal_info:
-                ji = result.journal_info
-                print(f"   Journal: {ji.title}")
+            if result.source_info:
+                ji = result.source_info
+                print(f"   Venue: {ji.title}")
                 print(f"   Publisher: {ji.publisher or 'Unknown'}")
                 print(f"   DOI: {ji.doi}")
                 print(f"   Open Access: {ji.is_open_access or 'Unknown'}")
                 print(f"   Original URL: {ji.url}")
                 if ji.issn:
                     print(f"   ISSN: {', '.join(ji.issn)}")
+            if result.matched_issn:
+                print(f"   Matched ISSN: {result.matched_issn}")
 
         print("\n" + "=" * 80)
 
@@ -660,7 +662,7 @@ async def demo_enhanced_doi_resolution():
     # Show DOI resolution statistics
     total_cases = len(test_cases)
     resolved_cases = sum(
-        1 for result in validation_data["results"] if result.journal_info
+        1 for result in validation_data["results"] if result.source_info
     )
 
     print("\nDOI RESOLUTION STATISTICS:")

@@ -39,6 +39,11 @@ from akd.tools.search.semantic_scholar_search import (
     SemanticScholarSearchTool,
     SemanticScholarSearchToolInputSchema,
 )
+from akd.tools.source_validator import (
+    SourceValidator,
+    SourceValidatorInputSchema,
+    create_source_validator,
+)
 
 from ._base import (
     LitBaseAgent,
@@ -141,6 +146,30 @@ class DeepLitSearchAgentConfig(LitSearchAgentConfig):
         description="Enable scraping of full content for high-relevancy links",
     )
 
+    # ISSN whitelist filtering
+    enable_issn_whitelist_filter: bool = Field(
+        default=False,
+        description=(
+            "When true, discard search results whose CrossRef ISSN does not match the ISSN whitelist."
+        ),
+    )
+    issn_whitelist_file_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional path to docs/issn_whitelist.json. If None, tool default is used."
+        ),
+    )
+    issn_validation_timeout_seconds: int = Field(
+        default=25,
+        ge=1,
+        description="Timeout for CrossRef lookups used during ISSN validation (seconds)",
+    )
+    issn_validation_max_concurrency: int = Field(
+        default=8,
+        ge=1,
+        description="Max concurrent CrossRef requests for ISSN validation",
+    )
+
 
 class DeepLitSearchAgent(LitBaseAgent):
     """
@@ -220,6 +249,20 @@ class DeepLitSearchAgent(LitBaseAgent):
         else:
             self.web_scraper = web_scraper  # Could be None or an injected instance
             self.pdf_scraper = pdf_scraper  # Could be None or an injected instance
+
+        # Initialize ISSN whitelist validator if enabled
+        self._issn_validator: SourceValidator | None = None
+        if self.config.enable_issn_whitelist_filter:
+            try:
+                self._issn_validator = create_source_validator(
+                    whitelist_file_path=self.config.issn_whitelist_file_path,
+                    timeout_seconds=self.config.issn_validation_timeout_seconds,
+                    max_concurrent_requests=self.config.issn_validation_max_concurrency,
+                    debug=debug,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize ISSN whitelist validator: {e}")
+                self._issn_validator = None
 
         # Initialize embedded components
         self.triage_component = triage_component or TriageComponent(debug=debug)
@@ -434,6 +477,28 @@ class DeepLitSearchAgent(LitBaseAgent):
             all_results.extend(ss_results.results)
 
         all_results = list(map(lambda r: DeepSearchResultItem(**r.dict()), all_results))
+
+        # Optional ISSN whitelist filtering
+        if self._issn_validator and all_results:
+            try:
+                input_payload = SourceValidatorInputSchema(search_results=all_results)
+                validation_output = await self._issn_validator.arun(input_payload)
+                # Keep only items that passed the whitelist
+                filtered: List[DeepSearchResultItem] = []
+                for item, v in zip(all_results, validation_output.validated_results):
+                    if v.is_whitelisted:
+                        filtered.append(item)
+                if self.debug:
+                    logger.debug(
+                        "ISSN whitelist filter: kept %d of %d results",
+                        len(filtered),
+                        len(all_results),
+                    )
+                all_results = filtered
+            except Exception as e:
+                logger.warning(
+                    f"ISSN whitelist filtering failed; proceeding unfiltered: {e}"
+                )
         # Apply per-link relevancy assessment if enabled
         if self.link_relevancy_assessor and all_results:
             if self.debug:
