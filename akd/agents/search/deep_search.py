@@ -88,6 +88,11 @@ class DeepLitSearchAgentConfig(LitSearchAgentConfig):
     Configuration for the DeepLitSearchAgent that implements multi-agent deep research.
     """
 
+    # Allow forward compatibility by accepting additional fields without failing
+    # This helps when notebooks or scripts pass newer config keys (e.g., ISSN options)
+    # before the installed library is updated.
+    model_config = {"extra": "allow"}
+
     # Research parameters
     max_research_iterations: int = Field(
         default=5,
