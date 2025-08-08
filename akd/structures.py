@@ -8,7 +8,14 @@ organized into logical sections for better maintainability.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, computed_field
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
@@ -26,6 +33,7 @@ except ImportError:
 # Search and Data Models
 # =============================================================================
 
+
 class SearchResultItem(BaseModel):
     """Represents a single search result item with metadata."""
 
@@ -39,8 +47,8 @@ class SearchResultItem(BaseModel):
         None,
         description="The PDF URL of the search paper",
     )
-    content: str | None = Field(
-        None,
+    content: str = Field(
+        default="",
         description="The content snippet of the search result",
     )
     category: str | None = Field(
@@ -63,6 +71,12 @@ class SearchResultItem(BaseModel):
         None,
         description="Tags for the search result",
     )
+
+    score: float | None = Field(
+        None,
+        description="Relevance score of the search result",
+    )
+
     extra: dict[str, Any] | None = Field(
         None,
         description="Extra information from the search result",
@@ -75,6 +89,16 @@ class SearchResultItem(BaseModel):
         if self.published_date:
             return f"{self.title} - (Published {self.published_date})"
         return self.title
+
+    @computed_field
+    def relevancy_score(self) -> float | None:
+        return self.score
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, v):
+        """Convert None to empty string for content field."""
+        return v if v is not None else ""
 
 
 class ResearchData(BaseModel):
@@ -101,6 +125,7 @@ class ResearchData(BaseModel):
 
 class PaperDataItem(BaseModel):
     """Represents a single paper data object retrieved from Semantic Scholar."""
+
     paper_id: Optional[str] = Field(
         ...,
         description="Semantic Scholar’s primary unique identifier for a paper.",
@@ -109,7 +134,7 @@ class PaperDataItem(BaseModel):
         ...,
         description="Semantic Scholar’s secondary unique identifier for a paper.",
     )
-    external_ids: Optional[object]  = Field(
+    external_ids: Optional[object] = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )
@@ -203,7 +228,7 @@ class PaperDataItem(BaseModel):
     )
     external_id: Optional[str] = Field(
         ...,
-        description="The external id of the paper from the query."
+        description="The external id of the paper from the query.",
     )
 
 
