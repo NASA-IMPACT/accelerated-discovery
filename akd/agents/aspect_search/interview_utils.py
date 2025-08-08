@@ -1,4 +1,5 @@
 import json
+from typing import List, Dict
 
 from langchain_core.runnables import chain as as_runnable
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -25,18 +26,18 @@ from .prompts import (gen_answer_prompt,
 # Interview helper functions.
 # =============================================================================
 
-def format_name(name):
+def format_name(name: str) -> str:
     return "".join([char if char.isalnum() or char in "_-" else "_" for char in name])
 
 
-def format_doc(doc, max_wiki_ctx_len=1000):
+def format_doc(doc: Dict, max_wiki_ctx_len: int = 1000) -> str:
     related = "- ".join(doc.metadata["categories"])
     return f"### {doc.metadata['title']}\n\nSummary: {doc.page_content}\n\nRelated\n{related}"[
         :max_wiki_ctx_len
     ]
 
 
-def format_docs(docs, max_wiki_ctx_len):
+def format_docs(docs: List[Dict], max_wiki_ctx_len: int = 1000) -> str:
     return "\n\n".join(format_doc(doc, max_wiki_ctx_len) for doc in docs)
 
 
@@ -45,7 +46,18 @@ def tag_with_name(ai_message: AIMessage, name: str):
     return ai_message
 
 
-def swap_roles(state: InterviewState, name: str):
+def swap_roles(state: InterviewState, name: str) -> Dict:
+    """
+    Switches the sender roles in an interview transcript so that AI messages 
+    from other participants are converted into human messages.
+
+    Args:
+        state (InterviewState): Current interview state containing the conversation messages.
+        name (str): The participant name whose AI messages should remain unchanged.
+
+    Returns:
+        Dict: Updated state dictionary.
+    """
     converted = []
     for i in range(len(state["messages"])):
         clean_name = format_name(state["messages"][i].name)
@@ -63,17 +75,29 @@ def swap_roles(state: InterviewState, name: str):
 
 def route_messages(state: InterviewState, 
                     name: str = "Subject_Matter_Expert",
-                    max_turns: int = 3):
-        messages = state["messages"]
-        num_responses = len(
-            [m for m in messages if isinstance(m, AIMessage) and m.name == name]
-        )
-        if num_responses >= max_turns:
-            return END
-        last_question = messages[-2]
-        if last_question.content.endswith("Thank you so much for your help!"):
-            return END
-        return "ask_question"
+                    max_turns: int = 3) -> str:
+    """
+    Routes the interview flow by checking a participant's response count and 
+    recent message content.
+
+    Args:
+        state (InterviewState): Current interview state.
+        name (str, optional): Participant to track.
+        max_turns (int, optional): Max responses allowed.
+
+    Returns:
+        str: "ask_question" to continue or END to stop.
+    """
+    messages = state["messages"]
+    num_responses = len(
+        [m for m in messages if isinstance(m, AIMessage) and m.name == name]
+    )
+    if num_responses >= max_turns:
+        return END
+    last_question = messages[-2]
+    if last_question.content.endswith("Thank you so much for your help!"):
+        return END
+    return "ask_question"
 
 
 @as_runnable
@@ -81,7 +105,21 @@ async def survey_subjects(topic: str,
                           llm: ChatOpenAI, 
                           wikipedia_retriever: WikipediaRetriever, 
                           max_docs: int = 3,
-                          max_wiki_ctx_len: int = 1500):
+                          max_wiki_ctx_len: int = 1500) -> List[Perspectives]:
+    """
+    Expands a topic into related subjects, retrieves relevant Wikipedia content, 
+    and generates multiple perspectives using a language model.
+
+    Args:
+        topic (str): The topic to generate perspectives for
+        llm (ChatOpenAI): Language model used to generate related topics and structured perspectives.
+        wikipedia_retriever (WikipediaRetriever): Tool for fetching Wikipedia articles about related subjects.
+        max_docs (int, optional): Number of Wikipedia documents to include in the analysis.
+        max_wiki_ctx_len (int, optional): Maximum context length (in characters) of each wiki document.
+
+    Returns:
+        List[Perspectives]: List of generated perspectives derived from Wikipedia content about related subjects.
+    """
     # Expand topics
     expand_chain = gen_related_topics_prompt | llm.with_structured_output(
             RelatedSubjects
@@ -104,7 +142,17 @@ async def survey_subjects(topic: str,
 
 
 @as_runnable
-async def generate_question(state: InterviewState, llm: ChatOpenAI):
+async def generate_question(state: InterviewState, llm: ChatOpenAI) -> Dict:
+    """
+    Generates the next interview question using the editor's persona.
+
+    Args:
+        state (InterviewState): Current interview state.
+        llm (ChatOpenAI): Language model for question generation.
+
+    Returns:
+        Dict[str, List]: Generated question as a message.
+    """
     editor = state["editor"]
     print(f"{editor.name} is speaking now")
     gn_chain = (
@@ -125,7 +173,21 @@ async def generate_answer(
         name: str = "Subject_Matter_Expert",
         max_ctx_len: int = 15000,
         **kwargs
-    ):
+    ) -> Dict:
+    """
+    Generates an answer with citations by creating search queries, retrieving 
+    results, and generating responses.
+
+    Args:
+        state (InterviewState): Current interview state.
+        llm (ChatOpenAI): Language model for generating queries and answers.
+        search_tool (SearchTool): Tool for retrieving search results.
+        name (str, optional): AI participant name. Defaults to "Subject_Matter_Expert".
+        max_ctx_len (int, optional): Max context length for search data. Defaults to 15000.
+
+    Returns:
+        Dict: Generated answer message, cited references, and search results.
+    """
     gen_answer_chain = gen_answer_prompt | llm.with_structured_output(
         AnswerWithCitations, include_raw=True
     ).with_config(run_name="GenerateAnswer")
