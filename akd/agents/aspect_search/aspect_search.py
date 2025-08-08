@@ -96,7 +96,7 @@ class AspectSearchAgent(BaseAgent):
         )
 
 
-    async def _get_perspectives(self, topic: str) -> List[Perspectives]:
+    async def get_perspectives(self, topic: str) -> List[Perspectives]:
         """
         Retrieves structured perspectives on a topic using related Wikipedia content.
 
@@ -126,7 +126,7 @@ class AspectSearchAgent(BaseAgent):
         Returns:
             List[Dict]: Interview results containing exchanged messages for each editor.
         """
-        perspectives = await self._get_perspectives(topic)
+        perspectives = await self.get_perspectives(topic)
         editors = perspectives.editors
         initial_states = []
         for editor in editors:
