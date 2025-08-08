@@ -1,5 +1,6 @@
+import asyncio
 from loguru import logger
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
@@ -25,14 +26,14 @@ from akd.tools.search import SearchTool, SearchResultItem, SearxNGSearchTool
 
 class AspectSearchInputSchema(InputSchema):
     """Input schema for aspect search agent"""
-    topic: str = Field(..., description="Topic to search for.")
+    topic: Union[str, List[str]] = Field(..., description="Topic to search for.")
 
 
 class AspectSearchOutputSchema(OutputSchema):
     """Output schema for aspect search agent"""
-    search_results: List[SearchResultItem] = Field(None, description="List of search results returned by the search engine after the interviews.")
-    references: Dict[str, str] = Field(None, description="List of references.")
-    perspectives: Perspectives = Field(None, description="List of perspectives used to explore the topic.")
+    search_results: Union[List[SearchResultItem], List[List[SearchResultItem]]] = Field(None, description="List of search results returned by the search engine after the interviews.")
+    references: Union[Dict[str, str], List[Dict[str, str]]] = Field(None, description="List of references.")
+    perspectives: Union[Perspectives, List[Perspectives]] = Field(None, description="List of perspectives used to explore the topic.")
 
 
 class AspectSearchConfig(BaseAgentConfig):
@@ -152,7 +153,12 @@ class AspectSearchAgent(BaseAgent):
                 messages = interview['messages']
                 for message in messages:
                     logger.debug(f"{message.name}: {message.content}")
-        return interview_results, perspectives
+        search_results = []
+        references = {}
+        for interview in interview_results:
+            search_results = update_search_results(search_results, interview['search_results'])
+            references = update_references(references, interview['references'])
+        return search_results, references, perspectives
 
 
     async def get_response_async(
@@ -171,15 +177,22 @@ class AspectSearchAgent(BaseAgent):
         Returns:
             OutputSchema: The response from the language model.
         """
-        interview_results, perspectives = await self._conduct_interviews(topic=params.topic)
-        search_results = []
-        references = {}
-        for interview in interview_results:
-            search_results = update_search_results(search_results, interview['search_results'])
-            references = update_references(references, interview['references'])
-        return AspectSearchOutputSchema(search_results=search_results, 
-                                        references=references,
-                                        perspectives=perspectives)
+        topics = [params.topic] if isinstance(params.topic, str) else params.topic
+        results = await asyncio.gather(*(self._conduct_interviews(topic=topic) for topic in topics))
+        search_results, references, perspectives = zip(*results)
+
+        if isinstance(params.topic, str):
+            return AspectSearchOutputSchema(
+                search_results=search_results[0],
+                references=references[0],
+                perspectives=perspectives[0],
+            )
+
+        return AspectSearchOutputSchema(
+            search_results=list(search_results),
+            references=list(references),
+            perspectives=list(perspectives),
+        )
 
     
     async def _arun(self, params: AspectSearchInputSchema, **kwargs) -> AspectSearchOutputSchema:
