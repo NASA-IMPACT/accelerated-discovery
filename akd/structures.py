@@ -8,7 +8,14 @@ organized into logical sections for better maintainability.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, computed_field
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
@@ -26,44 +33,51 @@ except ImportError:
 # Search and Data Models
 # =============================================================================
 
+
 class SearchResultItem(BaseModel):
     """Represents a single search result item with metadata."""
 
     # Required fields
-    url: HttpUrl = Field(..., description="The URL of the search result")
+    url: AnyUrl = Field(..., description="The URL of the search result")
     title: str = Field(..., description="The title of the search result")
     query: str = Field(..., description="The query used to obtain the search result")
 
     # Optional metadata
-    pdf_url: Optional[HttpUrl] = Field(
+    pdf_url: AnyUrl | None = Field(
         None,
         description="The PDF URL of the search paper",
     )
-    content: Optional[str] = Field(
-        None,
+    content: str = Field(
+        default="",
         description="The content snippet of the search result",
     )
-    category: Optional[str] = Field(
+    category: str | None = Field(
         None,
         description="Category of the search result",
     )
-    doi: Optional[str] = Field(
+    doi: str | None = Field(
         None,
         description="Digital Object Identifier (DOI) of the search result",
     )
-    published_date: Optional[str] = Field(
+    published_date: str | None = Field(
         None,
         description="Publication date for the search result",
     )
-    engine: Optional[str] = Field(
+    engine: str | None = Field(
         None,
         description="Engine that fetched the search result",
     )
-    tags: Optional[List[str]] = Field(
+    tags: list[str] | None = Field(
         None,
         description="Tags for the search result",
     )
-    extra: Optional[Dict[str, Any]] = Field(
+
+    score: float | None = Field(
+        None,
+        description="Relevance score of the search result",
+    )
+
+    extra: dict[str, Any] | None = Field(
         None,
         description="Extra information from the search result",
     )
@@ -75,6 +89,16 @@ class SearchResultItem(BaseModel):
         if self.published_date:
             return f"{self.title} - (Published {self.published_date})"
         return self.title
+
+    @computed_field
+    def relevancy_score(self) -> float | None:
+        return self.score
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, v):
+        """Convert None to empty string for content field."""
+        return v if v is not None else ""
 
 
 class ResearchData(BaseModel):
@@ -93,7 +117,7 @@ class ResearchData(BaseModel):
         ...,
         description="Mission/Instrument/Model the data is derived from (e.g., HLS, MERRA-2)",
     )
-    data_url: Optional[HttpUrl] = Field(
+    data_url: Optional[AnyUrl] = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )
@@ -101,6 +125,7 @@ class ResearchData(BaseModel):
 
 class PaperDataItem(BaseModel):
     """Represents a single paper data object retrieved from Semantic Scholar."""
+
     paper_id: Optional[str] = Field(
         ...,
         description="Semantic Scholar’s primary unique identifier for a paper.",
@@ -109,7 +134,7 @@ class PaperDataItem(BaseModel):
         ...,
         description="Semantic Scholar’s secondary unique identifier for a paper.",
     )
-    external_ids: Optional[object]  = Field(
+    external_ids: Optional[object] = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )
@@ -201,9 +226,9 @@ class PaperDataItem(BaseModel):
         ...,
         description="Tldr version of the paper.",
     )
-    doi: Optional[str] = Field(
+    external_id: Optional[str] = Field(
         ...,
-        description="The DOI of the paper from the query."
+        description="The external id of the paper from the query.",
     )
 
 

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Literal, Optional
 import requests
 import json
+import time
 
 import numpy as np
 import pandas as pd
@@ -17,7 +18,7 @@ from sentence_transformers import CrossEncoder
 from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
-from akd.tools.misc import Embedder, HttpUrlAdapter
+from akd.tools.misc import Embedder, HttpUrlAdapter, OpenAIEmbedder
 from akd.tools.search import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
@@ -106,6 +107,23 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
                 f"Output must be an instance of {self.output_schema.__name__}",
             )
         return output
+
+    def _deduplicate_results(
+        self,
+        results: list[SearchResultItem],
+        key: str = "url",
+    ) -> list[SearchResultItem]:
+        """
+        Deduplicate results based on a unique key (default is URL).
+        """
+        seen = set()
+        deduped = []
+        for result in results:
+            val = str(getattr(result, key, ""))
+            if val and val not in seen:
+                seen.add(val)
+                deduped.append(result)
+        return deduped
 
     def _sort_results(
         self,
@@ -218,7 +236,8 @@ class CombinedCodeSearchTool(CodeSearchTool):
                 result.extra["score"] = score
 
             # Sort results by score
-            return self._sort_results(results, sort_by="score")
+            deduped = self._deduplicate_results(results, key="url")
+            return self._sort_results(deduped, sort_by="score")
         except Exception as e:
             logger.error(f"Reranking failed: {e}")
             return results
@@ -234,6 +253,8 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
         "CODE_SEARCH_FILE_ID",
         "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O",
     )
+    embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
+    wait_time: int = 1
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     remove_embedding_column: bool = True
     text_column: str = "text"
@@ -270,7 +291,12 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
             logger.info("Loading data and embedding model...")
             self.repo_data = pd.read_csv(self.config.data_file)
-            self.embedder = Embedder(self.config.embedding_model_name)
+            if self.config.embedder_type == "sentence-transformers":
+                self.embedder = Embedder(self.config.embedding_model_name)
+            elif self.config.embedder_type == "openai":
+                self.embedder = OpenAIEmbedder(
+                    model_name=self.config.embedding_model_name
+                )
 
             if self.config.embeddings_column not in self.repo_data.columns:
                 logger.warning(
@@ -355,7 +381,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             return
 
         logger.info(
-            f"Generating embeddings for {len(self.repo_data)} texts in batches of {batch_size}..."
+            f"Generating embeddings for {len(self.repo_data)} texts in batches of {batch_size} using {self.config.embedder_type}..."
         )
 
         # Get texts to embed
@@ -374,6 +400,10 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 batch_size=batch_size,
             )
             embeddings.extend(batch_embeddings)
+
+            if self.config.embedder_type == "openai":
+                # Wait for 1 second between batches to avoid rate limit
+                time.sleep(self.config.wait_time)
 
         # Store embeddings in memory
         self.repo_data[self.config.embeddings_column] = embeddings
@@ -480,14 +510,19 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             for result in all_results_data
         ]
         try:
-            formatted_results = self._sort_results(
-                formatted_results,
+            deduped = self._deduplicate_results(formatted_results, key="url")
+        except Exception as e:
+            logger.error(f"Error deduplicating results: {e}")
+
+        try:
+            sorted_results = self._sort_results(
+                deduped,
                 sort_by="score",
             )
         except Exception as e:
             logger.error(f"Error sorting repo list by score: {e}")
 
-        return self.output_schema(results=formatted_results, category="technology")
+        return self.output_schema(results=sorted_results, category="technology")
 
 
 class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
@@ -595,7 +630,19 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
             )
 
         # Call the parent's _arun method with the modified parameters
-        return await super()._arun(params=params, max_results=max_results, **kwargs)
+        output = await super()._arun(params=params, max_results=max_results, **kwargs)
+
+        try:
+            deduped = self._deduplicate_results(output.results, key="url")
+        except Exception as e:
+            logger.error(f"Error deduplicating results: {e}")
+
+        try:
+            sorted_results = self._sort_results(deduped, sort_by="score")
+        except Exception as e:
+            logger.error(f"Error sorting repo list by score: {e}")
+
+        return self.output_schema(results=sorted_results, category="technology")
 
 
 class SDECodeSearchToolConfig(CodeSearchToolConfig):
@@ -692,10 +739,15 @@ class SDECodeSearchTool(CodeSearchTool):
             for result in all_results_data
         ]
         try:
-            formatted_results = self._sort_results(
-                formatted_results,
+            deduped = self._deduplicate_results(formatted_results, key="url")
+        except Exception as e:
+            logger.error(f"Error deduplicating results: {e}")
+
+        try:
+            sorted_results = self._sort_results(
+                deduped,
                 sort_by="score",
             )
         except Exception as e:
             logger.error(f"Error sorting repo list by score: {e}")
-        return self.output_schema(results=formatted_results, category="technology")
+        return self.output_schema(results=sorted_results, category="technology")

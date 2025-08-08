@@ -1,87 +1,89 @@
 import os
 import re
-import tempfile
-from typing import Any, Dict, List, Optional, Tuple, Union
-from urllib.parse import urlparse
+from urllib.parse import unquote
 
 import fitz
-import httpx
-import requests
-from loguru import logger
 from markdownify import markdownify
-from pydantic import Field, FilePath, HttpUrl
+from pydantic import AnyUrl, Field, field_validator
 
-from .web_scrapers import (
-    WebpageMetadata,
-    WebpageScraperToolInputSchema,
-    WebpageScraperToolOutputSchema,
-    WebScraperToolBase,
+from ._base import (
+    PDFScraper,
+    ScrapedMetadata,
+    ScraperToolInputSchema,
+    ScraperToolOutputSchema,
+    WebScraperToolConfig,
 )
 
 
-class PdfMetadata(WebpageMetadata):
-    url: Union[HttpUrl, FilePath] = Field(
+class PDFScraperInputSchema(ScraperToolInputSchema):
+    """
+    Input schema for the PDFScraper tool.
+
+    Accepts both web URLs and local file paths. File paths are automatically
+    converted to file:// URLs for proper validation.
+
+    Examples:
+        - Web URL: "https://example.com/file.pdf"
+        - Local file: "/Users/name/document.pdf"
+        - Relative file: "./documents/file.pdf"
+    """
+
+    url: AnyUrl = Field(
         ...,
-        description="The URL or local file path of the search result",
+        description="The URL or local file path of the PDF to scrape.",
     )
-    pdf_url: Optional[Union[HttpUrl, FilePath]] = Field(
-        None,
-        description="The PDF URL or local file path of the search paper",
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def convert_file_path_to_url(cls, v):
+        """
+        Convert file paths to file:// URLs for proper Pydantic validation.
+
+        Args:
+            v: Input value (URL string or file path)
+
+        Returns:
+            str: Properly formatted URL
+        """
+        if not isinstance(v, str):
+            return v
+
+        # Check if it's already a URL (has a scheme)
+        if any(
+            v.lower().startswith(scheme)
+            for scheme in ["http://", "https://", "file://"]
+        ):
+            return v
+
+        # Convert file path to file:// URL
+        if os.path.isabs(v):
+            # Absolute path
+            # Handle Windows paths by converting backslashes to forward slashes
+            normalized_path = v.replace("\\", "/")
+            if normalized_path.startswith("/"):
+                return f"file://{normalized_path}"
+            else:
+                # Windows absolute path like C:/path
+                return f"file:///{normalized_path}"
+        else:
+            # Relative path
+            return f"file://{v}"
+
+
+class PDFScraperToolConfig(WebScraperToolConfig):
+    chunk_size: int = Field(
+        8192,
+        description="The size of each chunk of PDF to process while downloading the PDF (in bytes).",
     )
-    title: str = Field(
-        ...,
-        description="The title of the search result",
-    )
-    content: Optional[str] = Field(
-        None,
-        description="The content snippet of the search result",
-    )
-    query: str = Field(
-        ...,
-        description="The query used to obtain the search result",
-    )
-    category: Optional[str] = Field(
-        None,
-        description="Category of the search result",
-    )
-    doi: Optional[str] = Field(
-        None,
-        description="Digital Object Identifier (DOI) of the pdf",
-    )
-    published_date: Optional[str] = Field(
-        None,
-        description="Publication date for the pdf",
-    )
-    engine: Optional[str] = Field(
-        None,
-        description="Engine that fetched the search result",
-    )
-    tags: Optional[List[str]] = Field(
-        None,
-        description="Tags for the search result",
-    )
-    extra: Optional[Dict[str, Any]] = Field(
-        None,
-        description="Extra information from the search result",
+    accept_header: str = Field(
+        default="application/pdf,application/octet-stream,text/html,application/xhtml+xml,*/*;q=0.8",
+        description="Accept header for HTTP requests with PDF as primary target.",
     )
 
 
-class PDFScraperToolInputSchema(WebpageScraperToolInputSchema):
-    """
-    Input schema for the PDFScraper
-    """
-
-    url: Union[HttpUrl, FilePath] = Field(..., description="Path of the pdf")
-
-
-class SimplePDFScraper(WebScraperToolBase):
-    """
-    Tool for extracting content from PDF files
-    and converting it to markdown format.
-    """
-
-    input_schema: PDFScraperToolInputSchema
-    output_schema: WebpageScraperToolOutputSchema
+class SimplePDFScraper(PDFScraper):
+    input_schema = PDFScraperInputSchema
+    config_schema = PDFScraperToolConfig
 
     async def _fetch_pdf_text(self, pdf_path: str) -> str:
         """
@@ -100,7 +102,7 @@ class SimplePDFScraper(WebScraperToolBase):
         except Exception as e:
             raise RuntimeError(f"Error extracting text from PDF: {e}")
 
-    async def _extract_metadata(self, path: str) -> PdfMetadata:
+    async def _extract_metadata(self, path: str) -> ScrapedMetadata:
         """
         Extracts metadata from a PDF file.
         """
@@ -112,11 +114,11 @@ class SimplePDFScraper(WebScraperToolBase):
                 if metadata.get("keywords")
                 else None
             )
-            return PdfMetadata(
-                url=path if path.startswith("http") else FilePath(path),
-                pdf_url=FilePath(path)
-                if not path.startswith("http")
-                else HttpUrl(path),
+            return ScrapedMetadata(
+                url=self._path_to_file_url(path),
+                pdf_url=path
+                if path.startswith("http")
+                else self._path_to_file_url(path),
                 query=str(path),
                 title=metadata.pop("title", None),
                 published_date=metadata.pop("creationDate", None),
@@ -143,95 +145,25 @@ class SimplePDFScraper(WebScraperToolBase):
 
     @staticmethod
     def _is_url(val) -> bool:
-        res = True
-        try:
-            _ = HttpUrl(val)
-        except Exception:
-            res = False
-        return res
+        """Check if a value is a web URL (http or https)."""
+        val_lower = str(val).lower()
+        return val_lower.startswith(("http://", "https://"))
 
-    @staticmethod
-    async def _is_pdf(val: str) -> bool:
+    def _path_to_file_url(self, path: str) -> str:
         """
-        Determines if a URL or file path points to a PDF.
+        Convert local file path to file:// URL or return web URL as-is.
 
         Args:
-            val: URL or file path to check
+            path: Local file path or web URL
 
         Returns:
-            bool: True if the value points to a PDF
+            str: file:// URL for local paths, original URL for web URLs
         """
-        val_lower = val.lower()
+        if self._is_url(path):
+            return path
+        return f"file://{os.path.abspath(path)}"
 
-        # Handle local file paths
-        if not val_lower.startswith(("http://", "https://")):
-            return val_lower.endswith(".pdf")
-
-        # Parse URL to check path component
-        try:
-            parsed = urlparse(val_lower)
-            path = parsed.path
-
-            # Check common PDF URL patterns
-            if path.endswith(".pdf") or "/pdf" in path:
-                return True
-
-            # For uncertain cases, check content-type header
-            async with httpx.AsyncClient() as client:
-                response = await client.head(
-                    val,
-                    timeout=10.0,
-                    follow_redirects=True,
-                )
-                content_type = response.headers.get("content-type", "").lower()
-                return "application/pdf" in content_type
-
-        except Exception:
-            # Fallback to basic pattern matching if HTTP request fails
-            try:
-                parsed = urlparse(val_lower)
-                return parsed.path.endswith(".pdf") or "/pdf" in parsed.path
-            except Exception:
-                return False
-
-    async def _download_pdf_from_url(
-        self,
-        url: str,
-    ) -> Tuple[str, tempfile.NamedTemporaryFile]:
-        """
-        Downloads a PDF from a URL and returns the path to the temporary file.
-
-        Args:
-            url: The URL of the PDF to download
-
-        Returns:
-            tuple[str, tempfile.NamedTemporaryFile]:
-                containing the local path to the downloaded file
-                and the temporary file object
-
-        Raises:
-            RuntimeError: If there is an error downloading the PDF
-        """
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        headers = {
-            "User-Agent": self.user_agent,
-            "Accept": "application/pdf",
-        }
-        try:
-            response = requests.get(url, stream=True, headers=headers)
-            response.raise_for_status()
-
-            logger.debug(f"Downloading PDF at {temp_file.name}")
-            with open(temp_file.name, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            return temp_file.name, temp_file
-        except Exception as e:
-            os.unlink(temp_file.name)
-            raise RuntimeError(f"Error downloading PDF from URL: {e}")
-
-    async def _process_pdf(self, path: str) -> tuple[str, PdfMetadata]:
+    async def _process_pdf(self, path: str) -> tuple[str, ScrapedMetadata]:
         """
         Processes a PDF file, extracting text and metadata.
 
@@ -257,8 +189,9 @@ class SimplePDFScraper(WebScraperToolBase):
 
     async def _arun(
         self,
-        params: WebpageScraperToolInputSchema,
-    ) -> WebpageScraperToolOutputSchema:
+        params: PDFScraperInputSchema,
+        **kwargs,
+    ) -> ScraperToolOutputSchema:
         """
         Runs the PDF scraper with a functional approach.
 
@@ -270,16 +203,21 @@ class SimplePDFScraper(WebScraperToolBase):
         """
         path = str(params.url)
         pdf_path = str(params.url)
-        if not await self._is_pdf(path):
+        if not await self.is_pdf(path):
             raise RuntimeError(f"{path} is not a valid pdf.")
         temp_file = None
         try:
             # Handle URL vs local file path
             if self._is_url(path):
                 pdf_path, temp_file = await self._download_pdf_from_url(path)
+            else:
+                pdf_path = unquote(params.url.path)
             markdown_content, metadata = await self._process_pdf(pdf_path)
-            metadata.url = metadata.pdf_url = path
-            return WebpageScraperToolOutputSchema(
+            # Update metadata URLs to use proper format (file:// for local files, original for web URLs)
+            file_url = self._path_to_file_url(path)
+            metadata.url = file_url
+            metadata.pdf_url = file_url
+            return ScraperToolOutputSchema(
                 content=markdown_content,
                 metadata=metadata,
             )
