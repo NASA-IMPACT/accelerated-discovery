@@ -73,6 +73,7 @@ def swap_roles(state: InterviewState, name: str) -> Dict:
 # Core interview functions.
 # =============================================================================
 
+@as_runnable
 def route_messages(state: InterviewState, 
                     name: str = "Subject_Matter_Expert",
                     max_turns: int = 3) -> str:
@@ -105,7 +106,7 @@ async def survey_subjects(topic: str,
                           llm: ChatOpenAI, 
                           wikipedia_retriever: WikipediaRetriever, 
                           max_docs: int = 3,
-                          max_wiki_ctx_len: int = 1500) -> List[Perspectives]:
+                          max_wiki_ctx_len: int = 1500) -> Perspectives:
     """
     Expands a topic into related subjects, retrieves relevant Wikipedia content, 
     and generates multiple perspectives using a language model.
@@ -118,7 +119,7 @@ async def survey_subjects(topic: str,
         max_wiki_ctx_len (int, optional): Maximum context length (in characters) of each wiki document.
 
     Returns:
-        List[Perspectives]: List of generated perspectives derived from Wikipedia content about related subjects.
+        Perspectives: List of generated perspectives derived from Wikipedia content about related subjects.
     """
     expand_chain = gen_related_topics_prompt | llm.with_structured_output(
             RelatedSubjects
@@ -152,7 +153,6 @@ async def generate_question(state: InterviewState, llm: ChatOpenAI) -> Dict:
         Dict[str, List]: Generated question as a message.
     """
     editor = state["editor"]
-    print(f"{editor.name} is speaking now")
     gn_chain = (
         RunnableLambda(swap_roles).bind(name=editor.name)
         | gen_qn_prompt.partial(persona=editor.persona)

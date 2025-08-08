@@ -10,7 +10,7 @@ from langgraph.graph import END, StateGraph, START
 from langchain_community.retrievers import WikipediaRetriever
 from langchain_openai import ChatOpenAI
 
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 from akd.agents.aspect_search.interview_utils import (generate_question, 
                                                       generate_answer,
@@ -32,10 +32,12 @@ class AspectSearchOutputSchema(OutputSchema):
     """Output schema for aspect search agent"""
     search_results: List[SearchResultItem] = Field(None, description="List of search results returned by the search engine after the interviews.")
     references: Dict[str, str] = Field(None, description="List of references.")
+    perspectives: Perspectives = Field(None, description="List of perspectives used to explore the topic.")
 
 
 class AspectSearchConfig(BaseAgentConfig):
     """Configuration for Aspect Search Agent"""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     retry_attempts: Optional[int] = Field(default=3, 
                                 description="Number of retry attempts.")
     num_editors: Optional[int] = Field(default=3, 
@@ -64,8 +66,8 @@ class AspectSearchAgent(BaseAgent):
     ) -> None:
         super()._post_init()
 
-        self.llm= ChatOpenAI(
-             model=self.config.llm, temperature=self.config.llm, api_key=self.config.api_key
+        self.llm = ChatOpenAI(
+             model=self.config.model_name, temperature=self.config.temperature, api_key=self.config.api_key
         )
 
         self.wikipedia_retriever = WikipediaRetriever(load_all_available_meta=True, 
@@ -104,11 +106,12 @@ class AspectSearchAgent(BaseAgent):
             List[Perspectives]: Structured viewpoints generated from Wikipedia information 
             related to the topic.
         """
-        return await survey_subjects.ainvoke(topic, 
+        perspectives = await survey_subjects.ainvoke(topic, 
                                              llm=self.llm, 
                                              wikipedia_retriever=self.wikipedia_retriever,
                                              max_docs=self.config.top_n_wiki_results,
                                              max_wiki_ctx_len=self.config.max_wiki_ctx_len)
+        return Perspectives(editors=perspectives.editors[:self.num_editors])
 
 
     async def _conduct_interviews(self, topic: str) -> List[Dict]:
@@ -123,7 +126,7 @@ class AspectSearchAgent(BaseAgent):
             List[Dict]: Interview results containing exchanged messages for each editor.
         """
         perspectives = await self._get_perspectives(topic)
-        editors = perspectives.editors[:self.config.num_editors]  
+        editors = perspectives.editors
         initial_states = []
         for editor in editors:
             initial_states.append(
@@ -149,7 +152,7 @@ class AspectSearchAgent(BaseAgent):
                 messages = interview['messages']
                 for message in messages:
                     logger.debug(f"{message.name}: {message.content}")
-        return interview_results
+        return interview_results, perspectives
 
 
     async def get_response_async(
@@ -168,13 +171,15 @@ class AspectSearchAgent(BaseAgent):
         Returns:
             OutputSchema: The response from the language model.
         """
-        interview_results = await self._conduct_interviews(topic=params.topic)
+        interview_results, perspectives = await self._conduct_interviews(topic=params.topic)
         search_results = []
         references = {}
         for interview in interview_results:
             search_results = update_search_results(search_results, interview['search_results'])
             references = update_references(references, interview['references'])
-        return AspectSearchOutputSchema(search_results=search_results, references=references)
+        return AspectSearchOutputSchema(search_results=search_results, 
+                                        references=references,
+                                        perspectives=perspectives)
 
     
     async def _arun(self, params: AspectSearchInputSchema, **kwargs) -> AspectSearchOutputSchema:
