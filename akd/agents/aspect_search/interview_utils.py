@@ -1,10 +1,14 @@
+import json
+
 from langchain_core.runnables import chain as as_runnable
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
+from langchain_openai import ChatOpenAI
+from langchain_community.retrievers import WikipediaRetriever
+from langgraph.graph import END
 
-import json
+from akd.tools.search import SearchTool
 
-from akd.tools.search import SearxNGSearchToolInputSchema
 from .structures import (RelatedSubjects,
                          InterviewState,
                          Perspectives,
@@ -17,33 +21,67 @@ from .prompts import (gen_answer_prompt,
                       gen_qn_prompt)
 
 
-# add comment
-
-def format_conversation(interview_state):
-    messages = interview_state["messages"]
-    convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
-    return f'Conversation with {interview_state["editor"].name}\n\n' + convo
+# =============================================================================
+# Interview helper functions.
+# =============================================================================
 
 def format_name(name):
-    print(name)
     return "".join([char if char.isalnum() or char in "_-" else "_" for char in name])
 
 
-def format_doc(doc, max_length=1000):
+def format_doc(doc, max_wiki_ctx_len=1000):
     related = "- ".join(doc.metadata["categories"])
     return f"### {doc.metadata['title']}\n\nSummary: {doc.page_content}\n\nRelated\n{related}"[
-        :max_length
+        :max_wiki_ctx_len
     ]
 
 
-def format_docs(docs):
-    return "\n\n".join(format_doc(doc) for doc in docs)
+def format_docs(docs, max_wiki_ctx_len):
+    return "\n\n".join(format_doc(doc, max_wiki_ctx_len) for doc in docs)
 
 
-# add comment
+def tag_with_name(ai_message: AIMessage, name: str):
+    ai_message.name = name
+    return ai_message
+
+
+def swap_roles(state: InterviewState, name: str):
+    converted = []
+    for i in range(len(state["messages"])):
+        clean_name = format_name(state["messages"][i].name)
+        state["messages"][i].name = clean_name
+        message = state["messages"][i]
+        if isinstance(message, AIMessage) and message.name != name:
+            message = HumanMessage(**message.model_dump(exclude={"type"}))
+        converted.append(message)
+    return {"messages": converted}
+
+
+# =============================================================================
+# Core interview functions.
+# =============================================================================
+
+def route_messages(state: InterviewState, 
+                    name: str = "Subject_Matter_Expert",
+                    max_turns: int = 3):
+        messages = state["messages"]
+        num_responses = len(
+            [m for m in messages if isinstance(m, AIMessage) and m.name == name]
+        )
+        if num_responses >= max_turns:
+            return END
+        last_question = messages[-2]
+        if last_question.content.endswith("Thank you so much for your help!"):
+            return END
+        return "ask_question"
+
 
 @as_runnable
-async def survey_subjects(topic: str, llm, wikipedia_retriever):
+async def survey_subjects(topic: str, 
+                          llm: ChatOpenAI, 
+                          wikipedia_retriever: WikipediaRetriever, 
+                          max_docs: int = 3,
+                          max_wiki_ctx_len: int = 1500):
     # Expand topics
     expand_chain = gen_related_topics_prompt | llm.with_structured_output(
             RelatedSubjects
@@ -61,42 +99,12 @@ async def survey_subjects(topic: str, llm, wikipedia_retriever):
         if isinstance(docs, BaseException):
             continue
         all_docs.extend(docs)
-        # top n results
-    all_docs = all_docs[:2]
-    formatted = format_docs(all_docs)
+    formatted = format_docs(all_docs[:max_docs], max_wiki_ctx_len)
     return await gen_perspectives_chain.ainvoke({"examples": formatted, "topic": topic})
 
 
-async def get_perspectives(topic):
-    return await survey_subjects.ainvoke(topic)
-
-
-
-# ======================
-# Interview Editors
-# ======================
-
-
-def tag_with_name(ai_message: AIMessage, name: str):
-    ai_message.name = name
-    return ai_message
-
-
-def swap_roles(state: InterviewState, name: str):
-    converted = []
-    for i in range(len(state["messages"])):
-        # Name must be formatted for OpenAI
-        clean_name = format_name(state["messages"][i].name)
-        state["messages"][i].name = clean_name
-        message = state["messages"][i]
-        if isinstance(message, AIMessage) and message.name != name:
-            message = HumanMessage(**message.model_dump(exclude={"type"}))
-        converted.append(message)
-    return {"messages": converted}
-
-
 @as_runnable
-async def generate_question(state: InterviewState, llm):
+async def generate_question(state: InterviewState, llm: ChatOpenAI):
     editor = state["editor"]
     print(f"{editor.name} is speaking now")
     gn_chain = (
@@ -112,10 +120,11 @@ async def generate_question(state: InterviewState, llm):
 @as_runnable
 async def generate_answer(
         state: InterviewState,
-        llm,
-        search_tool,
+        llm: ChatOpenAI,
+        search_tool: SearchTool,
         name: str = "Subject_Matter_Expert",
-        max_str_len: int = 15000,
+        max_ctx_len: int = 15000,
+        **kwargs
     ):
     gen_answer_chain = gen_answer_prompt | llm.with_structured_output(
         AnswerWithCitations, include_raw=True
@@ -124,12 +133,12 @@ async def generate_answer(
     swapped_state = swap_roles(state, name)
     queries = await gen_queries_chain.ainvoke(swapped_state)
     query_results = await search_tool.arun(
-        SearxNGSearchToolInputSchema(queries=queries["parsed"].queries, category=None)
+        search_tool.input_schema(queries=queries["parsed"].queries, category=kwargs.get("category", None))
     )
     formatted_query_results = {
         str(res.url): res.content for res in query_results.results
     }
-    dumped = json.dumps(formatted_query_results)[:max_str_len]
+    dumped = json.dumps(formatted_query_results)[:max_ctx_len]
     ai_message: AIMessage = queries["raw"]
     tool_id = queries["raw"].tool_calls[0]["id"]
     tool_message = ToolMessage(tool_call_id=tool_id, content=dumped)

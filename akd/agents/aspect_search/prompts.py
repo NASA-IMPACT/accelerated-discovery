@@ -79,7 +79,7 @@ Stay true to your specific perspective:
 
 # =============================================================================
 # Generates detailed, well-cited answers to support a Wikipedia writer
-#  with source URLs in footnotes.
+# with source URLs in footnotes.
 # =============================================================================
 
 gen_answer_prompt = ChatPromptTemplate.from_messages(
