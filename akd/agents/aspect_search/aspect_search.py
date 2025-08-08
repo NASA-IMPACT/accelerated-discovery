@@ -17,6 +17,7 @@ from akd.agents.aspect_search.interview_utils import (generate_question,
                                                       survey_subjects,
                                                       route_messages)
 from akd.agents.aspect_search.structures import (InterviewState,
+                                                 Perspectives,
                                                  update_references, 
                                                  update_search_results)
 from akd.tools.search import SearchTool, SearchResultItem, SearxNGSearchTool
@@ -24,7 +25,7 @@ from akd.tools.search import SearchTool, SearchResultItem, SearxNGSearchTool
 
 class AspectSearchInputSchema(InputSchema):
     """Input schema for aspect search agent"""
-    topic: str = Field(..., description="List of topics to search for.")
+    topic: str = Field(..., description="Topic to search for.")
 
 
 class AspectSearchOutputSchema(OutputSchema):
@@ -89,7 +90,17 @@ class AspectSearchAgent(BaseAgent):
         )
 
 
-    async def _get_perspectives(self, topic):
+    async def _get_perspectives(self, topic: str) -> List[Perspectives]:
+        """
+        Retrieves structured perspectives on a topic using related Wikipedia content.
+
+        Args:
+            topic (str): The subject to analyze.
+
+        Returns:
+            List[Perspectives]: Structured viewpoints generated from Wikipedia information 
+            related to the topic.
+        """
         return await survey_subjects.ainvoke(topic, 
                                              llm=self.llm, 
                                              wikipedia_retriever=self.wikipedia_retriever,
@@ -97,7 +108,17 @@ class AspectSearchAgent(BaseAgent):
                                              max_wiki_ctx_len=self.config.max_wiki_ctx_len)
 
 
-    async def _conduct_interviews(self, topic: str):
+    async def _conduct_interviews(self, topic: str) -> List[Dict]:
+        """
+        Runs interviews with multiple editors on a topic, initializing conversations 
+        and collecting their responses.
+
+        Args:
+            topic (str): The subject to explore.
+
+        Returns:
+            List[Dict]: Interview results containing exchanged messages for each editor.
+        """
         perspectives = await self._get_perspectives(topic)
         editors = perspectives.editors[:self.config.num_editors]  
         initial_states = []
