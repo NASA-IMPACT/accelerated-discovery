@@ -1,6 +1,6 @@
 from typing_extensions import TypedDict
 from langchain_core.messages import AnyMessage
-from typing import List, Optional, Annotated
+from typing import List, Optional, Annotated, Dict
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------
@@ -28,6 +28,14 @@ def update_editor(editor, new_editor):
         return new_editor
     return editor
 
+def update_search_results(search_results, new_search_results):
+    if not search_results:
+        search_results = []
+    for res in new_search_results:
+        if res not in search_results:
+            search_results.append(res)
+    return search_results
+
 # ---------------------------------------------------
 # Structures
 # ---------------------------------------------------
@@ -42,8 +50,8 @@ class Editor(BaseModel):
         description="Primary affiliation of the editor.",
     )
     name: str = Field(
-        description="Name of the editor.") #, pattern=r"^[a-zA-Z0-9_-]{1,64}$"
-    # )
+        description="Name of the editor."
+    ) 
     role: str = Field(
         description="Role of the editor in the context of the topic.",
     )
@@ -68,8 +76,9 @@ class RelatedSubjects(BaseModel):
 
 class InterviewState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
-    references: Annotated[Optional[dict], update_references]
+    references: Annotated[Optional[Dict], update_references]
     editor: Annotated[Optional[Editor], update_editor]
+    search_results: Annotated[Optional[List], update_search_results]
 
 
 class Queries(BaseModel):
