@@ -17,6 +17,13 @@ from ._base import (
 # Individual resolvers
 from .ads import ADSResolver
 from .arxiv import ArxivResolver
+from .crossref_doi import (
+    CrossRefDoiResolver,
+    CrossRefDoiResolverConfig,
+    CrossRefDoiResolverInputSchema,
+    CrossRefDoiResolverOutputSchema,
+    
+)
 
 # Composite resolver
 from .composite import ResearchArticleResolver
@@ -38,6 +45,12 @@ __all__ = [
     "IdentityResolver",
     "ArxivResolver",
     "ADSResolver",
+     # Cross ref DOI resolvers
+    "CrossRefDoiResolver", 
+    "CrossRefDoiResolverConfig",
+    "CrossRefDoiResolverInputSchema",
+    "CrossRefDoiResolverOutputSchema",
     # Composite resolver
     "ResearchArticleResolver",
+    
 ]
