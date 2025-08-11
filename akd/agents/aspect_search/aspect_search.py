@@ -38,7 +38,6 @@ class AspectSearchOutputSchema(OutputSchema):
 
 class AspectSearchConfig(BaseAgentConfig):
     """Configuration for Aspect Search Agent"""
-    model_config = ConfigDict(arbitrary_types_allowed=True)
     retry_attempts: Optional[int] = Field(default=3, 
                                 description="Number of retry attempts.")
     num_editors: Optional[int] = Field(default=3, 
@@ -49,7 +48,7 @@ class AspectSearchConfig(BaseAgentConfig):
                                     description="Number of wiki results to return to generate perspectives")
     max_wiki_ctx_len: int = Field(default=1500,
                                  description="Maximum length of wiki content context for perspective generation.")
-    search_tool: Optional[SearchTool] = Field(default=SearxNGSearchTool(), 
+    search_tool: Optional[object] = Field(default=SearxNGSearchTool(), 
                                     description="Search tool to use.")
     category: Optional[str] = Field(default=None, 
                           description="Category for the search tool.")
