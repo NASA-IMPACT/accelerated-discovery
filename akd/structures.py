@@ -8,7 +8,14 @@ organized into logical sections for better maintainability.
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, computed_field
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
@@ -40,8 +47,8 @@ class SearchResultItem(BaseModel):
         None,
         description="The PDF URL of the search paper",
     )
-    content: str | None = Field(
-        None,
+    content: str = Field(
+        default="",
         description="The content snippet of the search result",
     )
     category: str | None = Field(
@@ -86,6 +93,12 @@ class SearchResultItem(BaseModel):
     @computed_field
     def relevancy_score(self) -> float | None:
         return self.score
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, v):
+        """Convert None to empty string for content field."""
+        return v if v is not None else ""
 
 
 class ResearchData(BaseModel):
@@ -214,7 +227,8 @@ class PaperDataItem(BaseModel):
         description="Tldr version of the paper.",
     )
     external_id: Optional[str] = Field(
-        ..., description="The external id of the paper from the query."
+        ...,
+        description="The external id of the paper from the query.",
     )
 
 
