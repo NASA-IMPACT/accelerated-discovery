@@ -29,9 +29,9 @@ if TYPE_CHECKING:
 
 
 class FuzzyMatchMethod(str, Enum):
-    token_set = "token_set"
-    token_sort = "token_sort"
-    ratio = "ratio"
+    TOKEN_SET = "token_set"
+    TOKEN_SORT = "token_sort"
+    RATIO = "ratio"
 
 
 class SourceInfo(BaseModel):
@@ -128,8 +128,8 @@ class SourceValidatorConfig(BaseToolConfig):
     )
 
     fuzzy_match_method: FuzzyMatchMethod = Field(
-        default=FuzzyMatchMethod.token_set,
-        description="Fuzzy matching method: token_set (default), token_sort, or ratio",
+        default=FuzzyMatchMethod.TOKEN_SET,
+        description="Fuzzy matching method: TOKEN_SET (default), TOKEN_SORT, or RATIO",
     )
 
 
@@ -151,6 +151,12 @@ class SourceValidator(
     input_schema = SourceValidatorInputSchema
     output_schema = SourceValidatorOutputSchema
     config_schema = SourceValidatorConfig
+
+    scorer_map = {
+        "TOKEN_SET": token_set_ratio,
+        "TOKEN_SORT": token_sort_ratio,
+        "RATIO": ratio,
+        }
 
     def __init__(
         self,
@@ -330,12 +336,7 @@ class SourceValidator(
         """
         Returns the appropriate RapidFuzz scorer based on method name.
         """
-        scorer_map = {
-        "token_set": token_set_ratio,
-        "token_sort": token_sort_ratio,
-        "ratio": ratio,
-        }
-        return scorer_map.get(self.config.fuzzy_match_method, token_set_ratio)
+        return self.scorer_map.get(self.config.fuzzy_match_method, token_set_ratio)
 
     def _validate_against_whitelist(
         self,
