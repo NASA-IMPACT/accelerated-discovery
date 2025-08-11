@@ -11,6 +11,16 @@ from akd.tools.search import (
 
 pytest_plugins = ("pytest_asyncio",)
 
+def test_from_params_constructor():
+    """
+    Tests that the from_params classmethod correctly initializes the tool
+    and its configuration.
+    """
+    search_tool = SemanticScholarSearchTool.from_params(max_results=5, debug=True)
+    assert search_tool.config.max_results == 5
+    # Test a default value
+    assert search_tool.config.external_id == "DOI"
+
 
 @pytest.mark.asyncio
 async def test_fetch_paper_by_external_id():  # Renamed for clarity
@@ -64,6 +74,7 @@ async def test_arun():
 
 async def main():
     """Runs all the defined tests."""
+    test_from_params_constructor()
     await test_fetch_paper_by_external_id()
     await test_arun()
 
