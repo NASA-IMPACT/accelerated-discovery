@@ -64,11 +64,11 @@ class VectorDBTool(
 
     def __init__(
         self,
-        config: Optional[VectorDBToolConfig] = None,
+        config: VectorDBToolConfig | None = None,
         debug: bool = False,
     ):
         """Initializes the VectorDBTool and its ChromaDB client."""
-        config = config or self.config_schema()
+        config = config or VectorDBToolConfig()
         super().__init__(config, debug)
 
         logger.info("Initializing VectorDBTool...")

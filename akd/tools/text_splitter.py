@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -55,11 +55,12 @@ class TextSplitterTool(
 
     def __init__(
         self,
-        config: Optional[TextSplitterToolConfig] = None,
+        config: TextSplitterToolConfig | None = None,
+        # config: Optional[TextSplitterToolConfig] = None,
         debug: bool = False,
     ):
         """Initializes the TextSplitterTool."""
-        config = config or self.config_schema()
+        config = config or TextSplitterToolConfig()
         super().__init__(config, debug)
 
         logger.info("Initializing TextSplitterTool...")
