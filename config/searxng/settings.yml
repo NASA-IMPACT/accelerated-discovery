@@ -1,7 +1,7 @@
 use_default_settings: true
 
 general:
-  debug: false
+  debug: true
   instance_name: "SearxNG Standalone"
   privacypolicy_url: false
   donation_url: false
@@ -13,8 +13,8 @@ search:
   autocomplete: ""
   default_lang: "en"
   formats:
-    - html
     - json
+    - html
     - rss
 
 server:
@@ -42,28 +42,31 @@ ui:
   search_on_category_select: true
   hotkeys: default
 
-# Enable key engines for scientific research
+# Enable only science engines; disable general/news/video
 engines:
   - name: google
-    disabled: false
-    
+    disabled: true
+
+  - name: bing
+    disabled: true
+
+  - name: duckduckgo
+    disabled: true
+
+  - name: wikipedia
+    disabled: true
+
   - name: google scholar
     disabled: false
-    
-  - name: bing
-    disabled: false
-    
-  - name: duckduckgo
-    disabled: false
-    
+
   - name: arxiv
     disabled: false
-    
+
   - name: pubmed
     disabled: false
-    
+
   - name: semantic scholar
     disabled: false
-    
-  - name: wikipedia
+
+  - name: crossref
     disabled: false

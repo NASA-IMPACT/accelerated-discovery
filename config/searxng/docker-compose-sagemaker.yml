@@ -3,6 +3,8 @@ services:
     container_name: searxng
     image: searxng/searxng:latest
     restart: unless-stopped
+    networks:
+      - sagemaker
     ports:
       - "8080:8080"
     volumes:
@@ -24,8 +26,10 @@ services:
       options:
         max-size: "1m"
         max-file: "1"
-    networks:
-      - sagemaker
+
+networks:
+  sagemaker:
+    external: true
 
 volumes:
   searxng-data:
