@@ -64,7 +64,7 @@ async def test_text_splitter_with_custom_config():
     )
     doc = Document(page_content=small_text, metadata={"source": "custom.txt"})
 
-    # Use a very small chunk size to force splitting
+    # Use a small chunk size to force splitting
     custom_config = TextSplitterToolConfig(chunk_size=30, chunk_overlap=5)
     splitter_tool = TextSplitterTool(config=custom_config)
 
