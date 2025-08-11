@@ -1,0 +1,95 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "SearxNG scientific"
+  privacypolicy_url: false
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+search:
+  safe_search: 2
+  autocomplete: "duckduckgo"
+  default_lang: "en"
+  default_category: "science"
+  formats:
+    - json
+    - html
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "standalone_secret_key_12345"
+  base_url: "http://localhost:8080/"
+  image_proxy: false
+  http_protocol_version: "1.1"
+  method: "POST"
+  limiter: true
+  default_http_headers:
+    X-Content-Type-Options: nosniff
+    X-XSS-Protection: 1; mode=block
+    X-Download-Options: noopen
+    X-Robots-Tag: noindex, nofollow
+    Referrer-Policy: no-referrer
+    Access-Control-Allow-Origin: "*"
+
+ui:
+  static_use_hash: false
+  default_locale: ""
+  query_in_title: false
+  infinite_scroll: false
+  center_alignment: false
+  cache_url: "https://web.archive.org/web/"
+  search_on_category_select: true
+  hotkeys: default
+
+# HTTP client tuning for heavy usage
+outgoing:
+  request_timeout: 7.0
+  max_request_timeout: 10.0
+  pool_connections: 100
+  pool_maxsize: 50
+  enable_http2: true
+
+# Enable key engines for scientific research
+engines:
+  - name: google
+    disabled: true
+
+  - name: google scholar
+    disabled: false
+    timeout: 6.0
+
+  - name: bing
+    disabled: true
+
+  - name: duckduckgo
+    disabled: true
+
+  - name: arxiv
+    disabled: false
+    timeout: 6.0
+
+  - name: pubmed
+    disabled: false
+    timeout: 6.0
+
+  - name: semantic scholar
+    disabled: false
+    timeout: 6.0
+
+  - name: wikipedia
+    disabled: true
+
+  - name: crossref
+    disabled: false
+    timeout: 6.0
+
+  - name: doi
+    disabled: false
+    timeout: 6.0
+
+  - name: openalex
+    disabled: false
+    timeout: 6.0

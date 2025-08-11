@@ -6,7 +6,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./:/etc/searxng:ro
+      - ./settings.yml:/etc/searxng/settings.yml:ro
       - searxng-data:/var/log/searxng
     environment:
       - BIND_ADDRESS=0.0.0.0:8080
@@ -24,13 +24,7 @@ services:
       options:
         max-size: "1m"
         max-file: "1"
-    networks:
-      - sagemaker
 
 volumes:
   searxng-data:
     driver: local
-
-networks:
-  sagemaker:
-    external: true
