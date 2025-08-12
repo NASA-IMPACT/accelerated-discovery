@@ -248,16 +248,19 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     Configuration for the local repository code search tool.
     """
 
-    data_file: str = str(get_akd_root() / "docs" / "repositories_with_embeddings.csv")
+    data_file: str = str(
+        get_akd_root() / "docs" / "repositories_with_embeddings_v2.csv"
+    )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
-        "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O",
+        "1H15aL-y6DsQl-bt08cU0FaZf5NuwUzmD",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
     wait_time: int = 1
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     remove_embedding_column: bool = True
     text_column: str = "text"
+    desc_column: str = "description"
     embeddings_column: str = "embeddings"
     debug: bool = False
 
@@ -385,7 +388,15 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         )
 
         # Get texts to embed
-        texts = self.repo_data[self.config.text_column].fillna("").astype(str).tolist()
+        texts = (
+            (
+                self.repo_data[self.config.desc_column].fillna("")
+                + " "
+                + self.repo_data[self.config.text_column].fillna("")
+            )
+            .astype(str)
+            .tolist()
+        )
 
         # Process in batches
         embeddings = []
