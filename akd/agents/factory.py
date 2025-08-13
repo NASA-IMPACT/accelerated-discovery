@@ -8,6 +8,7 @@ from akd.configs.project import CONFIG
 from akd.configs.prompts import (
     DEFAULT_SYSTEM_PROMPT,
     EXTRACTION_SYSTEM_PROMPT,
+    FOLLOWUP_QUERY_SYSTEM_PROMPT,
     INTENT_SYSTEM_PROMPT,
     MULTI_RUBRIC_RELEVANCY_SYSTEM_PROMPT,
     QUERY_SYSTEM_PROMPT,
@@ -75,7 +76,7 @@ def create_followupquery_agent(
         api_key=CONFIG.model_config_settings.api_keys.openai,
         model_name=CONFIG.model_config_settings.model_name,
         temperature=CONFIG.model_config_settings.temperature,
-        system_prompt=QUERY_SYSTEM_PROMPT,  # Reuse query prompt
+        system_prompt=FOLLOWUP_QUERY_SYSTEM_PROMPT,
     )
     return FollowUpQueryAgent(config, debug=debug)
 

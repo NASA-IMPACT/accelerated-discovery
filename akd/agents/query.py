@@ -3,7 +3,8 @@ from typing import List, Literal, Optional
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import BaseAgentConfig, InstructorBaseAgent
+from akd.configs.prompts import FOLLOWUP_QUERY_SYSTEM_PROMPT
 
 
 class QueryAgentInputSchema(InputSchema):
@@ -115,3 +116,11 @@ class FollowUpQueryAgent(
 
     input_schema = FollowUpQueryAgentInputSchema
     output_schema = FollowUpQueryAgentOutputSchema
+
+    def __init__(self, config: BaseAgentConfig | None = None, debug: bool = False):
+        # Default to the follow-up specific prompt if none provided
+        if config is None:
+            config = BaseAgentConfig(system_prompt=FOLLOWUP_QUERY_SYSTEM_PROMPT)
+        elif not getattr(config, "system_prompt", None):
+            config.system_prompt = FOLLOWUP_QUERY_SYSTEM_PROMPT
+        super().__init__(config=config, debug=debug)
