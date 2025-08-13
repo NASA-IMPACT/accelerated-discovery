@@ -10,7 +10,13 @@ from pydantic import Field
 from pydantic.networks import HttpUrl
 
 from akd.structures import SearchResultItem
-from ._base import SearchTool, SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
+
+from ._base import (
+    SearchTool,
+    SearchToolConfig,
+    SearchToolInputSchema,
+    SearchToolOutputSchema,
+)
 
 
 class SearxNGSearchToolInputSchema(SearchToolInputSchema):
@@ -30,17 +36,25 @@ class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
 
 
 class SearxNGSearchToolConfig(SearchToolConfig):
-    base_url: HttpUrl = Field(default=os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"))
+    base_url: HttpUrl = Field(
+        default=os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
+    )
     max_results: int = Field(default=int(os.getenv("SEARXNG_MAX_RESULTS", "10")))
     engines: List[str] = Field(
         default_factory=lambda: os.getenv(
             "SEARXNG_ENGINES",
-            "google,arxiv,google_scholar",
+            "arxiv,google_scholar,crossref,semantic_scholar",
         ).split(",")
     )
-    max_pages: int = Field(default=int(os.getenv("SEARXNG_MAX_PAGES", "25")), gt=0, le=100)
-    results_per_page: int = Field(default=int(os.getenv("SEARXNG_RESULTS_PER_PAGE", "10")), gt=0, le=100)
-    score_cutoff: float = Field(default=float(os.getenv("SEARXNG_SCORE_CUTOFF", "0.25")), ge=0.0, le=1.0)
+    max_pages: int = Field(
+        default=int(os.getenv("SEARXNG_MAX_PAGES", "25")), gt=0, le=100
+    )
+    results_per_page: int = Field(
+        default=int(os.getenv("SEARXNG_RESULTS_PER_PAGE", "10")), gt=0, le=100
+    )
+    score_cutoff: float = Field(
+        default=float(os.getenv("SEARXNG_SCORE_CUTOFF", "0.25")), ge=0.0, le=1.0
+    )
     debug: bool = False
 
 
@@ -324,9 +338,11 @@ class SearxNGSearchTool(SearchTool):
             SearchResultItem(
                 url=result.pop("url", None),
                 pdf_url=result.pop("pdf_url", None),
-                title=result.pop("title", None) or "Untitled",  # Ensure title is never None
+                title=result.pop("title", None)
+                or "Untitled",  # Ensure title is never None
                 content=result.pop("content", None),
-                query=result.pop("query", None) or "Unknown query",  # Ensure query is never None
+                query=result.pop("query", None)
+                or "Unknown query",  # Ensure query is never None
                 category=result.pop("category", None),
                 doi=result.pop("doi", None),
                 published_date=result.pop("publishedDate", None),
