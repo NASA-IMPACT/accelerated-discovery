@@ -8,6 +8,7 @@ refer to akd/docs/deep_research_agent.md for more details.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -29,16 +30,10 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessorConfig,
     LinkRelevancyAssessorInputSchema,
 )
-from akd.tools.scrapers import (
-    ScraperToolInputSchema,
-    SimplePDFScraper,
-    SimpleWebScraper,
-)
+from akd.tools.scrapers import OmniScraperInputSchema
+from akd.tools.scrapers.composite import PrefetchingDoclingScraper
 from akd.tools.search.searxng_search import SearxNGSearchTool
-from akd.tools.search.semantic_scholar_search import (
-    SemanticScholarSearchTool,
-    SemanticScholarSearchToolInputSchema,
-)
+from akd.tools.search.semantic_scholar_search import SemanticScholarSearchTool
 from akd.tools.source_validator import (
     SourceValidator,
     SourceValidatorInputSchema,
@@ -150,29 +145,18 @@ class DeepLitSearchAgentConfig(LitSearchAgentConfig):
         default=True,
         description="Enable scraping of full content for high-relevancy links",
     )
+    content_fetch_max_concurrency: int = Field(
+        default=6,
+        ge=1,
+        description="Max concurrent fetches when downloading full content",
+    )
 
     # ISSN whitelist filtering
-    enable_issn_whitelist_filter: bool = Field(
+    source_validation: bool = Field(
         default=False,
         description=(
-            "When true, discard search results whose CrossRef ISSN does not match the ISSN whitelist."
+            "When true, validate sources (ISSN whitelist and related checks) using the intrinsic SourceValidator."
         ),
-    )
-    issn_whitelist_file_path: Optional[str] = Field(
-        default=None,
-        description=(
-            "Optional path to docs/issn_whitelist.json. If None, tool default is used."
-        ),
-    )
-    issn_validation_timeout_seconds: int = Field(
-        default=25,
-        ge=1,
-        description="Timeout for CrossRef lookups used during ISSN validation (seconds)",
-    )
-    issn_validation_max_concurrency: int = Field(
-        default=8,
-        ge=1,
-        description="Max concurrent CrossRef requests for ISSN validation",
     )
 
 
@@ -198,12 +182,13 @@ class DeepLitSearchAgent(LitBaseAgent):
         config: DeepLitSearchAgentConfig | None = None,
         search_tool=None,
         semantic_scholar_tool: SemanticScholarSearchTool | None = None,
+        search_tools: Optional[List[Any]] = None,
         query_agent: QueryAgent | None = None,
         followup_query_agent: FollowUpQueryAgent | None = None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
         link_relevancy_assessor: LinkRelevancyAssessor | None = None,
-        web_scraper: SimpleWebScraper | None = None,
-        pdf_scraper: SimplePDFScraper | None = None,
+        web_scraper=None,
+        pdf_scraper=None,
         triage_component: TriageComponent | None = None,
         clarification_component: ClarificationComponent | None = None,
         instruction_component: InstructionBuilderComponent | None = None,
@@ -216,13 +201,20 @@ class DeepLitSearchAgent(LitBaseAgent):
         self.query_agent = query_agent or QueryAgent()
         self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
 
-        # Initialize search tools
+        # Initialize search tools (generalizable list)
         self.search_tool = search_tool or SearxNGSearchTool()
         self.semantic_scholar_tool = (
             (semantic_scholar_tool or SemanticScholarSearchTool())
             if self.config.use_semantic_scholar
             else None
         )
+        # Preferred order: user-provided list, else compose from known tools
+        if search_tools is not None and len(search_tools) > 0:
+            self.search_tools: List[Any] = search_tools
+        else:
+            self.search_tools = [self.search_tool]
+            if self.semantic_scholar_tool is not None:
+                self.search_tools.append(self.semantic_scholar_tool)
 
         # Initialize relevancy agent
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
@@ -249,25 +241,20 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         # Initialize scrapers for full content fetching
         if self.config.enable_full_content_scraping:
-            self.web_scraper = web_scraper or SimpleWebScraper(debug=debug)
-            self.pdf_scraper = pdf_scraper or SimplePDFScraper(debug=debug)
+            # Use composite wrapper that handles Referer-prefetch + Docling,
+            # and falls back to PyPaperBot for stubborn 403s.
+            self.omni_scraper = PrefetchingDoclingScraper(debug=debug)
         else:
-            self.web_scraper = web_scraper  # Could be None or an injected instance
-            self.pdf_scraper = pdf_scraper  # Could be None or an injected instance
+            self.omni_scraper = None
 
-        # Initialize ISSN whitelist validator if enabled
-        self._issn_validator: SourceValidator | None = None
-        if self.config.enable_issn_whitelist_filter:
+        # Initialize source validator if enabled. The validator manages its own configuration.
+        self._source_validator: SourceValidator | None = None
+        if self.config.source_validation:
             try:
-                self._issn_validator = create_source_validator(
-                    whitelist_file_path=self.config.issn_whitelist_file_path,
-                    timeout_seconds=self.config.issn_validation_timeout_seconds,
-                    max_concurrent_requests=self.config.issn_validation_max_concurrency,
-                    debug=debug,
-                )
+                self._source_validator = create_source_validator(debug=debug)
             except Exception as e:
-                logger.warning(f"Failed to initialize ISSN whitelist validator: {e}")
-                self._issn_validator = None
+                logger.warning(f"Failed to initialize SourceValidator: {e}")
+                self._source_validator = None
 
         # Initialize embedded components
         self.triage_component = triage_component or TriageComponent(debug=debug)
@@ -462,48 +449,62 @@ class DeepLitSearchAgent(LitBaseAgent):
         """Execute searches using available search tools."""
         all_results = []
 
-        search_input = self.search_tool.input_schema(
-            queries=queries,
-            max_results=20,
-            category="science",
-        )
+        # Launch all configured search tools concurrently
+        tasks: List[asyncio.Task] = []
+        tool_names: List[str] = []
+        for tool in getattr(self, "search_tools", []):
+            try:
+                # Use each tool's own input schema to ensure compatibility
+                tool_input = tool.input_schema(
+                    queries=queries,
+                    max_results=self.search_tool.max_results,
+                    category="science",
+                )
+                tasks.append(asyncio.create_task(tool.arun(tool_input)))
+                tool_names.append(type(tool).__name__)
+            except Exception as e:
+                logger.warning(
+                    f"Skipping tool {type(tool).__name__} due to init error: {e}"
+                )
 
-        primary_results = await self.search_tool.arun(search_input)
-        all_results.extend(primary_results.results)
-
-        # Search with Semantic Scholar if enabled
-        if self.semantic_scholar_tool and self.config.use_semantic_scholar:
-            ss_input = SemanticScholarSearchToolInputSchema(
-                queries=queries,
-                max_results=20,
-                category="science",
-            )
-            ss_results = await self.semantic_scholar_tool.arun(ss_input)
-            all_results.extend(ss_results.results)
+        if tasks:
+            results_or_errors = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, res in enumerate(results_or_errors):
+                name = tool_names[idx] if idx < len(tool_names) else f"Tool#{idx}"
+                if isinstance(res, Exception):
+                    logger.warning(f"{name} failed: {res}")
+                    continue
+                try:
+                    all_results.extend(res.results)
+                except Exception as e:  # defensive against unexpected shapes
+                    logger.warning(f"{name} unexpected search result shape: {e}")
 
         all_results = list(map(lambda r: DeepSearchResultItem(**r.dict()), all_results))
 
-        # Optional ISSN whitelist filtering
-        if self._issn_validator and all_results:
+        # Optional source validation (ISSN whitelist) handled intrinsically by the validator
+        if self._source_validator and all_results:
             try:
-                input_payload = SourceValidatorInputSchema(search_results=all_results)
-                validation_output = await self._issn_validator.arun(input_payload)
-                # Keep only items that passed the whitelist
+                input_payload = SourceValidatorInputSchema(
+                    search_results=all_results,
+                )
+                validation_output = await self._source_validator.arun(input_payload)
+                # Keep only items that passed validation
                 filtered: List[DeepSearchResultItem] = []
                 for item, v in zip(all_results, validation_output.validated_results):
                     if v.is_whitelisted:
                         filtered.append(item)
                 if self.debug:
                     logger.debug(
-                        "ISSN whitelist filter: kept %d of %d results",
+                        "Source validation filter: kept %d of %d results",
                         len(filtered),
                         len(all_results),
                     )
                 all_results = filtered
             except Exception as e:
                 logger.warning(
-                    f"ISSN whitelist filtering failed; proceeding unfiltered: {e}"
+                    f"Source validation failed; dropping results due to strict validation mode: {e}"
                 )
+                all_results = []
         # Apply per-link relevancy assessment if enabled
         if self.link_relevancy_assessor and all_results:
             if self.debug:
@@ -534,12 +535,14 @@ class DeepLitSearchAgent(LitBaseAgent):
                     logger.debug(
                         f"Relevancy assessment summary: {assessment_output.assessment_summary}",
                     )
-                return assessment_output.filtered_results
+                # Do not return early. Propagate filtered results and allow
+                # full-content fetching for items flagged by the assessor.
+                all_results = assessment_output.filtered_results
             except Exception as e:
                 logger.warning(f"Error in relevancy assessment: {e}")
 
         # Fetch full content for high-relevancy results if enabled
-        if self.web_scraper and all_results:
+        if all_results and self.omni_scraper is not None:
             all_results = await self._fetch_full_content_for_high_relevancy(all_results)
 
         return all_results
@@ -561,43 +564,41 @@ class DeepLitSearchAgent(LitBaseAgent):
                 f"Fetching full content for {len(high_relevancy_results)} high-relevancy results",
             )
 
-        for result in high_relevancy_results:
-            try:
-                # Try PDF first if available
-                if hasattr(result, "pdf_url") and result.pdf_url and self.pdf_scraper:
-                    try:
-                        pdf_input = ScraperToolInputSchema(url=str(result.pdf_url))
-                        pdf_content = await self.pdf_scraper.arun(pdf_input)
-                        if pdf_content.content and len(pdf_content.content) > 500:
-                            result.content = pdf_content.content
+        semaphore = asyncio.Semaphore(self.config.content_fetch_max_concurrency)
+
+        async def fetch_one(result: DeepSearchResultItem) -> None:
+            async with semaphore:
+                try:
+                    # Prefer unified omni scraper when available (handles PDF/HTML/docs)
+                    if self.omni_scraper is not None:
+                        try:
+                            omni_input = OmniScraperInputSchema(
+                                url=str(result.pdf_url or result.url)
+                            )
+                            omni_content = await self.omni_scraper.arun(omni_input)
+                            if omni_content.content and len(omni_content.content) > len(
+                                result.content or "",
+                            ):
+                                result.content = omni_content.content
+                                if self.debug:
+                                    logger.debug(
+                                        f"Fetched omni content for {result.url} ({len(result.content)} chars)",
+                                    )
+                                return
+                        except Exception as e:
                             if self.debug:
                                 logger.debug(
-                                    f"Fetched PDF content for {result.url} ({len(result.content)} chars)",
+                                    f"Omni scraping failed for {result.url}: {e}"
                                 )
-                            continue
-                    except Exception as e:
-                        if self.debug:
-                            logger.debug(
-                                f"PDF scraping failed for {result.pdf_url}: {e}",
-                            )
 
-                # Fall back to web scraping
-                if self.web_scraper:
-                    web_input = ScraperToolInputSchema(url=str(result.url))
-                    web_content = await self.web_scraper.arun(web_input)
-                    if web_content.content and len(web_content.content) > len(
-                        result.content or "",
-                    ):
-                        result.content = web_content.content
-                        if self.debug:
-                            logger.debug(
-                                f"Fetched web content for {result.url} ({len(result.content)} chars)",
-                            )
+                    # If omni not available or failed, nothing else to try here
+                except Exception as e:
+                    if self.debug:
+                        logger.debug(f"Content fetching failed for {result.url}: {e}")
 
-            except Exception as e:
-                if self.debug:
-                    logger.debug(f"Content fetching failed for {result.url}: {e}")
-                continue
+        await asyncio.gather(
+            *(fetch_one(r) for r in high_relevancy_results), return_exceptions=True
+        )
 
         return results
 
