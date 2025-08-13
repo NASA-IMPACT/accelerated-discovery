@@ -142,35 +142,134 @@ class ResearchSynthesisComponent:
             + "\n".join(f"- {trace}" for trace in research_trace[-5:])
         )
 
-        # Create input for the agent
-        agent_input = ResearchSynthesisInputSchema(
-            query=original_query,
-            search_results=results,
-            context=context,
+        # Progressive shrinking retry strategy for context length errors
+        current_results: List[SearchResultItem] = results
+        shrink_factor: float = 0.9  # reduce by 10% on each retry
+        min_title_chars: int = 1
+        min_content_chars: int = 0
+        max_attempts: int = 12
+
+        for attempt in range(max_attempts):
+            # Create input for the agent with current results
+            agent_input = ResearchSynthesisInputSchema(
+                query=original_query,
+                search_results=current_results,
+                context=context,
+            )
+
+            try:
+                agent_output = await self._agent.arun(agent_input)
+
+                if self.debug:
+                    logger.debug("Agent synthesis completed successfully")
+                    logger.debug(f"Key findings: {len(agent_output.key_findings)}")
+                    logger.debug(
+                        f"Evidence quality: {agent_output.evidence_quality_score}"
+                    )
+
+                return agent_output
+
+            except Exception as e:
+                if self._is_context_length_error(e):
+                    if self.debug:
+                        logger.warning(
+                            "Context length exceeded during synthesis (attempt {}): shrinking results by 10% and retrying".format(
+                                attempt + 1,
+                            )
+                        )
+                    # Shrink the current results by the shrink_factor
+                    next_results: List[SearchResultItem] = self._shrink_results_by(
+                        current_results,
+                        shrink_factor,
+                        min_title_chars,
+                        min_content_chars,
+                    )
+
+                    # If shrinking no longer changes the payload meaningfully, stop retrying
+                    if self._results_size(next_results) >= self._results_size(
+                        current_results,
+                    ):
+                        break
+                    current_results = next_results
+                    continue
+
+                # Non context-length errors: log and break to fallback
+                logger.error(f"Error in agent synthesis: {e}")
+                break
+
+        # Fallback if all retries failed
+        return self._create_fallback_output(
+            results,
+            original_query,
+            quality_scores,
+            research_trace,
+            iterations_performed,
         )
 
-        try:
-            # Use the agent to synthesize the research
-            agent_output = await self._agent.arun(agent_input)
+    @staticmethod
+    def _is_context_length_error(error: Exception) -> bool:
+        """Heuristically detect context length errors from provider exceptions."""
+        msg = str(error).lower()
+        indicators = [
+            "maximum context length",
+            "context length exceeded",
+            "context_length_exceeded",
+            "too many tokens",
+            "invalid_request_error",
+        ]
+        return any(indicator in msg for indicator in indicators)
 
-            if self.debug:
-                logger.debug("Agent synthesis completed successfully")
-                logger.debug(f"Key findings: {len(agent_output.key_findings)}")
-                logger.debug(f"Evidence quality: {agent_output.evidence_quality_score}")
+    @staticmethod
+    def _shrink_results_by(
+        results: List[SearchResultItem],
+        shrink_factor: float,
+        min_title_chars: int,
+        min_content_chars: int,
+    ) -> List[SearchResultItem]:
+        """Return a new list of results with title and content shortened by shrink_factor.
 
-            # Return the agent output directly - it has the expected interface
-            return agent_output
+        - Title is guaranteed to keep at least min_title_chars if non-empty.
+        - Content may be reduced to empty string if needed.
+        """
 
-        except Exception as e:
-            logger.error(f"Error in agent synthesis: {e}")
-            # Create a simple fallback if agent fails
-            return self._create_fallback_output(
-                results,
-                original_query,
-                quality_scores,
-                research_trace,
-                iterations_performed,
+        def truncate(text: str, factor: float, min_chars: int) -> str:
+            if not text:
+                return text
+            new_len = int(len(text) * factor)
+            if len(text) > 0 and new_len < min_chars:
+                new_len = min(len(text), min_chars)
+            return text[:new_len]
+
+        shrunk: List[SearchResultItem] = []
+        for item in results:
+            new_title = truncate(item.title, shrink_factor, min_title_chars)
+            new_content = truncate(item.content, shrink_factor, min_content_chars)
+            # Keep other fields the same
+            shrunk.append(
+                SearchResultItem(
+                    url=item.url,
+                    title=new_title,
+                    query=item.query,
+                    pdf_url=item.pdf_url,
+                    content=new_content,
+                    category=item.category,
+                    doi=item.doi,
+                    published_date=item.published_date,
+                    engine=item.engine,
+                    tags=item.tags,
+                    score=item.score,
+                    extra=item.extra,
+                )
             )
+        return shrunk
+
+    @staticmethod
+    def _results_size(results: List[SearchResultItem]) -> int:
+        """Approximate size measure to detect whether shrinking is effective."""
+        total = 0
+        for r in results:
+            total += len(r.title) + len(r.content)
+        return total
 
     def _create_fallback_output(
         self,
