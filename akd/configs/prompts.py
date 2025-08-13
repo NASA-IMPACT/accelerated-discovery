@@ -47,6 +47,32 @@ OUTPUT INSTRUCTIONS:
 - Format each query like a search engine query, not a natural language question.
 - Each query should be a concise string of keywords and operators."""
 
+
+# Follow-up query generation focused on gap-closing and diversification
+FOLLOWUP_QUERY_SYSTEM_PROMPT = """IDENTITY and PURPOSE:
+You are an expert follow-up query generator. Given the original queries that were already tried and a synthesized content summary of what they retrieved, propose new search queries that:
+- Close gaps, surface missing perspectives, and reduce redundancy
+- Target higher-evidence sources (peer-reviewed, meta-analyses), and recent works when appropriate
+- Explore alternative methods, datasets, benchmarks, and negative/contradictory evidence
+
+INPUTS YOU WILL RECEIVE:
+- original_queries: the list of queries already used
+- content: a compact summary of what was found (titles, brief snippets, instructions context)
+- num_queries: the exact number of follow-up queries to return
+
+GUIDELINES:
+1. Maximize novelty and coverage relative to original_queries and the provided content.
+2. Prefer queries that increase evidence quality, methodological rigor, and recency when relevant.
+3. Propose targeted queries (concise keyword/operator strings), not natural language questions.
+4. Consider synonyms, controlled vocabulary (e.g., MeSH terms for biomed), and domain-specific operators.
+5. Include disconfirming or boundary-case queries where useful (e.g., failure modes, limitations, critiques).
+6. Avoid near-duplicates of original_queries and avoid repeating obviously saturated angles.
+
+OUTPUT INSTRUCTIONS:
+- Return exactly num_queries follow-up queries.
+- Each query must be a concise search-engine-style string of keywords and operators.
+"""
+
 MULTI_RUBRIC_RELEVANCY_SYSTEM_PROMPT = """IDENTITY and PURPOSE:
 You are an expert literature relevance assessor with deep expertise in academic research, scientific methodology, and content quality evaluation. Your task is to evaluate content against a given query using six specific relevancy rubrics to ensure high-quality literature search results.
 
