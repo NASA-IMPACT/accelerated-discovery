@@ -7,6 +7,7 @@ from ._base import (
 )
 from .omni import DoclingScraper, DoclingScraperConfig, OmniScraperInputSchema
 from .pdf_scrapers import PDFScraperInputSchema, SimplePDFScraper
+from .pypaperbot_scraper import PyPaperBotScraper
 from .web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "DoclingScraper",
     "DoclingScraperConfig",
     "OmniScraperInputSchema",
+    "PyPaperBotScraper",
     "ScrapedMetadata",
     "ScraperToolBase",
     "ScraperToolConfig",
