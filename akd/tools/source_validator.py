@@ -122,6 +122,12 @@ class SourceValidatorConfig(BaseToolConfig):
         description="User agent for API requests",
     )
     debug: bool = Field(default=False, description="Enable debug logging")
+    allow_arxiv: bool = Field(
+        default=True,
+        description=(
+            "When true, allow arXiv results to pass validation without ISSN checks."
+        ),
+    )
 
 
 class SourceValidator(
@@ -412,14 +418,82 @@ class SourceValidator(
 
         Returns a tuple (is_whitelisted, category, confidence, matched_issn).
         """
+        # Allow arXiv based on config flag (bypass ISSN checks)
+        if getattr(self.config, "allow_arxiv", False):
+            url_lower = (source_info.url or "").lower()
+            doi_lower = (source_info.doi or "").lower()
+            is_arxiv = (
+                "arxiv.org" in url_lower
+                or doi_lower.startswith("10.48550/arxiv")
+                or doi_lower.startswith("10.48550/ARXIV")
+            )
+            if is_arxiv:
+                if self.debug:
+                    journal_name = source_info.title
+                    original_url = source_info.url or ""
+                    doi_url = (
+                        f"https://doi.org/{source_info.doi}" if source_info.doi else ""
+                    )
+                    logger.debug(
+                        'Whitelist ACCEPT (arXiv override): journal="{}", doi_url="{}", url="{}"'.format(
+                            journal_name,
+                            doi_url,
+                            original_url,
+                        )
+                    )
+                return True, "arXiv", 1.0, None
+
         if not self._allowed_issn_set:
+            # Strict mode: when whitelist is empty, nothing is allowed
+            if self.debug:
+                journal_name = source_info.title
+                original_url = source_info.url or ""
+                doi_url = (
+                    f"https://doi.org/{source_info.doi}" if source_info.doi else ""
+                )
+                logger.debug(
+                    'Whitelist REJECT (empty whitelist - strict): journal="{}", doi_url="{}", url="{}", issns=[{}]'.format(
+                        journal_name,
+                        doi_url,
+                        original_url,
+                        ", ".join(source_info.issn),
+                    )
+                )
             return False, None, 0.0, None
 
         for issn in source_info.issn:
             if issn in self._allowed_issn_set:
                 category = self._issn_to_category.get(issn)
+                if self.debug:
+                    journal_name = source_info.title
+                    original_url = source_info.url or ""
+                    doi_url = (
+                        f"https://doi.org/{source_info.doi}" if source_info.doi else ""
+                    )
+                    logger.debug(
+                        'Whitelist ACCEPT: journal="{}", doi_url="{}", url="{}", matched_issn="{}", category="{}", all_issns=[{}]'.format(
+                            journal_name,
+                            doi_url,
+                            original_url,
+                            issn,
+                            category if category is not None else "",
+                            ", ".join(source_info.issn),
+                        )
+                    )
                 return True, category, 1.0, issn
 
+        if self.debug:
+            journal_name = source_info.title
+            original_url = source_info.url or ""
+            doi_url = f"https://doi.org/{source_info.doi}" if source_info.doi else ""
+            logger.debug(
+                'Whitelist REJECT: journal="{}", doi_url="{}", url="{}", issns=[{}]'.format(
+                    journal_name,
+                    doi_url,
+                    original_url,
+                    ", ".join(source_info.issn),
+                )
+            )
         return False, None, 0.0, None
 
     async def _validate_single_result(
@@ -451,6 +525,13 @@ class SourceValidator(
         # Fetch metadata from CrossRef
         crossref_data = await self._fetch_crossref_metadata(session, doi)
 
+        # Debug: surface DOI and link being validated
+        if self.debug:
+            doi_url = f"https://doi.org/{doi}"
+            logger.debug(
+                f'DOI extracted for validation: journal_doi_url="{doi_url}", original_url="{str(result.url)}"'
+            )
+
         if not crossref_data:
             validation_errors.append(
                 f"Failed to fetch metadata from CrossRef for DOI: {doi}",
@@ -467,15 +548,32 @@ class SourceValidator(
         # Parse source information
         source_info = self._parse_crossref_response(crossref_data, doi, str(result.url))
 
+        # Debug: include journal title and links
+        if self.debug:
+            parsed_doi_url = (
+                f"https://doi.org/{source_info.doi}" if source_info.doi else ""
+            )
+            original_url = source_info.url or ""
+            logger.debug(
+                'Parsed source info: journal="{}", doi_url="{}", url="{}"'.format(
+                    source_info.title,
+                    parsed_doi_url,
+                    original_url,
+                )
+            )
+
         if not source_info.issn:
             validation_errors.append("No ISSN found in CrossRef metadata")
 
-        # Validate against whitelist
-        is_whitelisted, category, confidence, matched_issn = (
-            self._validate_against_whitelist(
-                source_info,
+        # Validate against whitelist. If no whitelist is loaded (empty set),
+        # treat as non-whitelisted to avoid false positives.
+        is_whitelisted, category, confidence, matched_issn = (False, None, 0.0, None)
+        if self._allowed_issn_set:
+            is_whitelisted, category, confidence, matched_issn = (
+                self._validate_against_whitelist(
+                    source_info,
+                )
             )
-        )
 
         return ValidationResult(
             source_info=source_info,
