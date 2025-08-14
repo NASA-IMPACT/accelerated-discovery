@@ -68,7 +68,7 @@ class ADSResolver(BaseArticleResolver):
                 if pdf_response.status_code == 200:
                     result = ResolverOutputSchema(**params.model_dump())
                     result.url = HttpUrl(pdf_url)
-                    result.resolver = self.__class__.__name__
+                    result.resolvers.append(self.__class__.__name__)
                     return result
 
             # If no DOI or direct PDF found, look for other PDF links

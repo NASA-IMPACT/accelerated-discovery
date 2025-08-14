@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 import requests
@@ -52,9 +52,9 @@ class ResolverOutputSchema(SearchResultItem, OutputSchema):
         description="Original query used to obtain the search result",
     )
 
-    resolver: Optional[str] = Field(
-        None,
-        description="Resolver used to resolve the search result",
+    resolvers: List[str] = Field(
+        default_factory=list,
+        description="Resolvers used to resolve the search result",
     )
 
 
@@ -169,8 +169,8 @@ class BaseArticleResolver(BaseTool[ResolverInputSchema, ResolverOutputSchema]):
         if resolved_result.url:
             await self._post_validate_url(resolved_result.url)
 
-        # Ensure resolver field is set
-        if not resolved_result.resolver:
-            resolved_result.resolver = self.__class__.__name__
+
+        if self.__class__.__name__ not in resolved_result.resolvers:
+            resolved_result.resolvers.append(self.__class__.__name__)
 
         return resolved_result

@@ -34,7 +34,7 @@ class ArxivResolver(BaseArticleResolver):
             result = ResolverOutputSchema(**params.model_dump())
             result.url = pdf_url
             result.doi = doi
-            result.resolver = self.__class__.__name__
+            result.resolvers.append(self.__class__.__name__)
             return result
         except RuntimeError:
             # Not a valid arxiv URL

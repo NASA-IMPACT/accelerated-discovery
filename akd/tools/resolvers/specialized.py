@@ -25,7 +25,7 @@ class PDFUrlResolver(BaseArticleResolver):
         if params.pdf_url:
             result = ResolverOutputSchema(**params.model_dump())
             result.url = params.pdf_url
-            result.resolver = self.__class__.__name__
+            result.resolvers.append(self.__class__.__name__)
             return result
         return None
 
@@ -67,7 +67,7 @@ class DOIResolver(BaseArticleResolver):
             # Construct and return DOI URL with metadata
             result = ResolverOutputSchema(**params.model_dump())
             result.url = HttpUrl(f"https://doi.org/{params.doi}")
-            result.resolver = self.__class__.__name__
+            result.resolvers.append(self.__class__.__name__)
             return result
         else:
             # No DOI provided - return None instead of falling back

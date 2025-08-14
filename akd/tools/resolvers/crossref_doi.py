@@ -36,11 +36,6 @@ class CrossRefDoiResolverOutputSchema(ResolverOutputSchema):
     Inherits from ResolverOutputSchema to ensure compatibility with search results.
     """
 
-    doi: Optional[str] = Field(
-        None,
-        description="Resolved DOI of the article",
-    )
-
     # override to make url optional 
     url: Optional[HttpUrl] = Field(
         None,
@@ -202,7 +197,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
 
                 result = CrossRefDoiResolverOutputSchema(**params.model_dump())
                 result.doi = doi
-                result.resolver = self.__class__.__name__
+                result.resolvers.append(self.__class__.__name__)
                 return result
             
         except Exception as e:

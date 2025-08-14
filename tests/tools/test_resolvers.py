@@ -96,7 +96,7 @@ class TestIdentityResolver:
         result = await resolver.resolve(basic_input)
         assert isinstance(result, ResolverOutputSchema)
         assert str(result.url) == str(basic_input.url)
-        assert result.resolver == "IdentityResolver"
+        assert "IdentityResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_arun_with_mocked_validation(self, resolver, basic_input):
@@ -112,7 +112,7 @@ class TestIdentityResolver:
 
             assert isinstance(result, ResolverOutputSchema)
             assert str(result.url) == str(basic_input.url)
-            assert result.resolver == "IdentityResolver"
+            assert "IdentityResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_different_url_formats(self, resolver):
@@ -139,7 +139,7 @@ class TestIdentityResolver:
                 input_schema = ResolverInputSchema(url=input_url)
                 result = await resolver.arun(input_schema)
                 assert str(result.url) == expected_url
-                assert result.resolver == "IdentityResolver"
+                assert "IdentityResolver" in result.resolvers
 
 
 class TestDOIResolver:
@@ -195,7 +195,7 @@ class TestDOIResolver:
         assert isinstance(result, ResolverOutputSchema)
         assert str(result.url) == "https://doi.org/10.1000/182"
         assert result.doi == "10.1000/182"
-        assert result.resolver == "DOIResolver"
+        assert "DOIResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_resolve_with_invalid_doi(self, resolver):
@@ -235,7 +235,7 @@ class TestDOIResolver:
 
             assert isinstance(result, ResolverOutputSchema)
             assert str(result.url) == "https://doi.org/10.1000/182"
-            assert result.resolver == "DOIResolver"
+            assert "DOIResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_arun_fails_with_invalid_doi(self, resolver):
@@ -282,7 +282,7 @@ class TestArxivResolver:
         result = await resolver.resolve(input_schema)
         assert isinstance(result, ResolverOutputSchema)
         assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
-        assert result.resolver == "ArxivResolver"
+        assert "ArxivResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_resolve_different_arxiv_papers(self, resolver):
@@ -301,7 +301,7 @@ class TestArxivResolver:
             result = await resolver.resolve(input_schema)
             assert isinstance(result, ResolverOutputSchema)
             assert str(result.url) == expected_pdf
-            assert result.resolver == "ArxivResolver"
+            assert "ArxivResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_resolve_non_arxiv_returns_none(self, resolver):
@@ -326,7 +326,7 @@ class TestArxivResolver:
 
             assert isinstance(result, ResolverOutputSchema)
             assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
-            assert result.resolver == "ArxivResolver"
+            assert "ArxivResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_arun_fails_with_non_arxiv(self, resolver):
@@ -370,7 +370,7 @@ class TestPDFUrlResolver:
         assert isinstance(result, ResolverOutputSchema)
         assert str(result.url) == str(input_with_pdf.pdf_url)
         assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
-        assert result.resolver == "PDFUrlResolver"
+        assert "PDFUrlResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_resolve_returns_none_without_pdf(self, resolver, input_without_pdf):
@@ -392,7 +392,7 @@ class TestPDFUrlResolver:
 
             assert isinstance(result, ResolverOutputSchema)
             assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
-            assert result.resolver == "PDFUrlResolver"
+            assert "PDFUrlResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_arun_fails_without_pdf(self, resolver, input_without_pdf):
@@ -484,7 +484,7 @@ class TestResearchArticleResolver:
 
             # ArxivResolver should win since it transforms the URL
             assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
-            assert result.resolver == "ArxivResolver"
+            assert "ArxivResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_pdf_resolver_wins_when_arxiv_unavailable(
@@ -509,7 +509,7 @@ class TestResearchArticleResolver:
 
             # PDF resolver should win since ArxivResolver is not included
             assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
-            assert result.resolver == "PDFUrlResolver"
+            assert "PDFUrlResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_resolver_fallback_to_doi(self, composite_resolver):
@@ -530,7 +530,7 @@ class TestResearchArticleResolver:
 
             # DOI resolver should win since it transforms the URL
             assert str(result.url) == "https://doi.org/10.1000/182"
-            assert result.resolver == "DOIResolver"
+            assert "DOIResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_resolver_fallback_to_identity(self, composite_resolver):
@@ -548,7 +548,7 @@ class TestResearchArticleResolver:
 
             # Identity resolver should be used as fallback
             assert str(result.url) == "https://example.com/"  # HttpUrl normalizes
-            assert result.resolver == "IdentityResolver"
+            assert "IdentityResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_error_handling_continues_chain(
@@ -588,7 +588,7 @@ class TestResearchArticleResolver:
 
                 # DOI resolver should work despite PDF resolver failure
                 assert str(result.url) == "https://doi.org/10.1000/182"
-                assert result.resolver == "DOIResolver"
+                assert "DOIResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_url_transformation_detection(self, composite_resolver):
@@ -611,7 +611,7 @@ class TestResearchArticleResolver:
             # Should detect that URL was transformed and use DOI resolver
             assert str(result.url) != str(input_schema.url)
             assert str(result.url) == "https://doi.org/10.1000/182"
-            assert result.resolver == "DOIResolver"
+            assert "DOIResolver" in result.resolvers
 
 
 class TestHTTPValidation:
@@ -744,7 +744,7 @@ if __name__ == "__main__":
             print(f"   PDF URL: {test_input.pdf_url}")
             print(f"   DOI: {test_input.doi}")
             print(f"   → Resolved: {result.url}")
-            print(f"   → Via: {result.resolver}")
+            print(f"   → Via: {result.resolvers}")
 
             # Test with enhanced configuration including ArxivResolver
             print("\n🧪 Testing Enhanced Configuration...")
@@ -759,7 +759,7 @@ if __name__ == "__main__":
             enhanced_result = await enhanced_resolver.arun(test_input)
             print("✅ Enhanced Config Test:")
             print(f"   → Resolved: {enhanced_result.url}")
-            print(f"   → Via: {enhanced_result.resolver}")
+            print(f"   → Via: {enhanced_result.resolvers}")
 
             # Test DOI-only scenario
             print("\n🧪 Testing DOI-only Resolution...")
@@ -775,7 +775,7 @@ if __name__ == "__main__":
             fallback_input = ResolverInputSchema(url="https://example.com")
             result2 = await resolver.arun(fallback_input)
             print(
-                f"✅ Fallback: {fallback_input.url} → {result2.url} via {result2.resolver}",
+                f"✅ Fallback: {fallback_input.url} → {result2.url} via {result2.resolvers}",
             )
 
     asyncio.run(run_integration_test())
