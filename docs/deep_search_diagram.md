@@ -14,20 +14,23 @@ flowchart TD
     
     subgraph Iterative Research Loop
     direction TB
-        Q[Init queries<br/>QueryAgent] --> S[Search + filter<br/>SearxNG + Semantic Scholar<br/>SourceValidator<br/>LinkRelevancyAssessor]
+        Q[Init queries<br/>QueryAgent] --> S[Search + filter<br/>SearxNG + Semantic Scholar]
         Q -.-> IR1p1[QUERY_SYSTEM_PROMPT]
-        S --> SQ[Score + quality<br/>MultiRubricRelevancyAgent]
-        SQ -.-> MRP[MULTI_RUBRIC_RELEVANCY<br/>SYSTEM_PROMPT]
-        SQ -->|No - refine| R[Refine queries<br/>FollowUpQueryAgent]
-        SQ -->|loop| S
+        S --> SV{Source validation<br/>SourceValidator}
+        SV -.-> SVp[Source validation filtering]
+        SV --> PLA[Per-link relevancy scoring<br/>LinkRelevancyAssessor<br/>If score < min: drop<br/>If min ≤ score < full: keep<br/>If score ≥ full: fetch full content]
+        PLA --> ACC[Accumulate & deduplicate<br/>results across iterations]
+        ACC --> QE{Quality evaluation<br/>MultiRubricRelevancyAgent<br/>threshold check}
+        QE -.-> MRP[MULTI_RUBRIC_RELEVANCY<br/>SYSTEM_PROMPT]
+        QE -->|quality < threshold<br/>& < max iterations| R[Refine queries<br/>FollowUpQueryAgent]
+        QE -->|max iterations reached| J
         R --> S
-        R -.-> Rp[QUERY_SYSTEM_PROMPT<br/>inputs: original_queries and content]
-        S --> PLA[Per-link relevancy scoring<br/>If score < min: drop<br/>If min ≤ score < full: keep<br/>If score ≥ full: fetch full content]
+        R -.-> Rp[FOLLOWUP_QUERY_SYSTEM_PROMPT<br/>inputs: original_queries and content]
         
     end
     
     D --> Q
-    SQ -->|Yes| J[Synthesize<br/>ResearchSynthesisComponent]
+    QE -->|quality ≥ threshold| J[Synthesize<br/>ResearchSynthesisComponent]
     J -.-> Jp[DEEP_RESEARCH_AGENT_PROMPT]
     
     J --> K[Final output]
@@ -37,11 +40,14 @@ flowchart TD
     style C fill:#F3E5F5
     style D fill:#E8F5E8
     style S fill:#FFECB3
-    style SQ fill:#FFECB3
+    style ACC fill:#E8F5E8
+    style QE fill:#F3E5F5
     style J fill:#E1F5FE
     style K fill:#E1F5FE
     classDef prompt fill:#F8F9FA,stroke:#BBBBBB,color:#555555
-    class Bp,Cp,Dp,IR1p1,MRP,Jp,Rp,PLA prompt
+    classDef validation fill:#FFF3E0,stroke:#FF9800,color:#E65100
+    class Bp,Cp,Dp,IR1p1,MRP,Jp,Rp,PLA,SVp prompt
+    class SV validation
 ```
 
 ## Prompts Used
@@ -49,7 +55,8 @@ flowchart TD
 - TRIAGE_AGENT_PROMPT — used by `TriageComponent`
 - CLARIFYING_AGENT_PROMPT — used by `ClarificationComponent`
 - RESEARCH_INSTRUCTION_AGENT_PROMPT — used by `InstructionBuilderComponent`
-- QUERY_SYSTEM_PROMPT — used by `QueryAgent` and `FollowUpQueryAgent`
+- QUERY_SYSTEM_PROMPT — used by `QueryAgent`
+- FOLLOWUP_QUERY_SYSTEM_PROMPT — used by `FollowUpQueryAgent`
 - MULTI_RUBRIC_RELEVANCY_SYSTEM_PROMPT — used by `MultiRubricRelevancyAgent` for per-link scoring and iteration quality
 - DEEP_RESEARCH_AGENT_PROMPT — used by `ResearchSynthesisComponent`
 
@@ -188,7 +195,7 @@ OUTPUT INSTRUCTIONS:
 
 #### FOLLOWUP_QUERY_SYSTEM_PROMPT
 
-```
+```text
 IDENTITY and PURPOSE:
 You are an expert follow-up query generator. Given the original queries that were already tried and a synthesized content summary of what they retrieved, propose new search queries that:
 - Close gaps, surface missing perspectives, and reduce redundancy
