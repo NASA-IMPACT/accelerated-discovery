@@ -10,8 +10,6 @@ from akd.tools.fact_check import (
     FactCheckToolConfig,
 )
 
-pytestmark = pytest.mark.asyncio
-
 
 @pytest.fixture
 def mock_api_response() -> dict:
@@ -35,6 +33,7 @@ def fact_check_tool():
     return tool
 
 
+@pytest.mark.asyncio
 async def test_fact_check_tool_with_mock(mocker, mock_api_response):
     """Tests the FactCheck tool's post method. The post method is patched with a mock request."""
 

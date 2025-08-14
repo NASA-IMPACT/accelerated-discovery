@@ -45,7 +45,9 @@ class FactCheckToolConfig(BaseToolConfig):
 
     base_url: HttpUrl = Field(
         # default="http://localhost:8011",
-        default="https://factreasoner-service-app.1yhbkn094k2v.us-south.codeengine.appdomain.cloud",
+        default=HttpUrl(
+            "https://factreasoner-service-app.1yhbkn094k2v.us-south.codeengine.appdomain.cloud",
+        ),
         description="The base URL of the remote Fact-Checking and Correction Service.",
     )
 
