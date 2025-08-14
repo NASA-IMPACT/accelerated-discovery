@@ -22,11 +22,6 @@ class CrossRefDoiResolverInputSchema(ResolverInputSchema):
         ...,
         description="Title of the article to resolve DOI",
     )
-    # add authors as a required field for CrossRef DOI resolution
-    authors: list[str] = Field(
-        ...,
-        description="List of authors of the article",
-    )
 
     # overirde to make url optional for CrossRef DOI resolution
     url: Optional[HttpUrl] = Field(
@@ -55,6 +50,15 @@ class CrossRefDoiResolverOutputSchema(ResolverOutputSchema):
 
 class CrossRefDoiResolverConfig(ArticleResolverConfig):
     """Configuration for the CrossRef DOI resolver."""
+
+    def __init__(self, **kwargs):
+        kwargs["validate_resolved_url"] = False
+        super().__init__(**kwargs)
+
+    validate_resolved_url: bool = Field(
+        default=False,
+        description="Whether to validate that the resolved URL is accessible (forced False in CrossRef config)",
+    )
 
     cross_ref_api_url: str = Field(
         default="https://api.crossref.org/works",
@@ -121,7 +125,14 @@ class CrossRefDoiResolver(BaseArticleResolver):
         return result.extra.get("authors") if result.extra and result.extra.get("authors") else result.authors if result.authors else []
     
 
-    async def resolve(self, title: str, authors: list[str]) -> str | None:
+    async def resolve(self, 
+                      params: CrossRefDoiResolverInputSchema
+                      ) -> Optional[CrossRefDoiResolverOutputSchema]:
+        
+        title = params.title.strip()
+        authors = await self.get_authors_from_search_result(params)
+    
+
         if not title:
             if self.debug:
                 logger.debug("CrossRefResolver requires title to resolve DOI")
@@ -132,20 +143,20 @@ class CrossRefDoiResolver(BaseArticleResolver):
         title_norm = title.lower().strip()
         input_authors_norm = [a.lower().strip() for a in (authors or [])][:3]  # cap at 3
 
-        params = {
+        query_params = {
             "query.title": title,
             "rows": 10,
         }
         if input_authors_norm:
-            params["query.author"] = " ".join(input_authors_norm)
+            query_params["query.author"] = " ".join(input_authors_norm)
 
-        session = self.session or aiohttp.ClientSession()
+        doi = None
 
         try:
             async with (self.session or aiohttp.ClientSession()) as session:
                 async with session.get(
                     self.config.cross_ref_api_url,
-                    params=params,
+                    params=query_params,
                     headers={"User-Agent": self.config.user_agent},
                     timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds),
                 ) as resp:
@@ -180,38 +191,22 @@ class CrossRefDoiResolver(BaseArticleResolver):
                     if not authors_ok:
                         continue
 
-                    doi = (item.get("DOI") or "").strip()
+                    doi = (item.get("DOI") or None).strip()
                     if doi:
                         if self.debug:
                             logger.debug(f"Resolved DOI: {doi} for title: {title}")
-                        return doi
+                        break
 
-                if self.debug:
+                if self.debug and not doi:
                     logger.debug(f"No matching DOI found for title: {title} with authors: {authors}")
-                return None
 
+                result = CrossRefDoiResolverOutputSchema(**params.model_dump())
+                result.doi = doi
+                result.resolver = self.__class__.__name__
+                return result
+            
         except Exception as e:
             logger.error(f"Error during CrossRef resolution: {e}")
             return None
-        
-
-    
-    async def _arun(
-        self,
-        params: CrossRefDoiResolverInputSchema,
-        **kwargs,
-    ) -> CrossRefDoiResolverOutputSchema:
-        if not params.authors:
-            print("authors not provided, resolving DOI without authors")
-        doi = await self.resolve(params.title, params.authors)
-        if doi and not params.authors:
-            print("doi resolved without authors")
-
-        return CrossRefDoiResolverOutputSchema(
-            doi=doi,
-            title=params.title,
-            query= " ".join(params.authors) + " " + params.title if params.authors else params.title,
-            resolver=self.__class__.__name__,
-        )
         
         
