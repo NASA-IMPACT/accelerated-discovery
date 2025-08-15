@@ -54,6 +54,30 @@ from .components import (
 )
 
 
+class DeepSearchResultItem(SearchResultItem):
+    """
+    Extended SearchResultItem to include additional fields for deep research.
+    This class can be used to store additional metadata like relevancy scores,
+    full content fetching status, etc.
+
+    Note:
+        - Needed for LinkRelevancyAssessor and DeepLitSearchAgent to handle additional metadata and processing.
+    """
+
+    should_fetch_full_content: bool = Field(
+        False,
+        description="Whether to fetch full content for this result",
+    )
+    query_alignment_details: Dict[str, Any] | None = Field(
+        default_factory=lambda: {},
+        description="Details on how this result aligns with the original query",
+    )
+    relevancy_assessment: Dict[str, Any] | None = Field(
+        default_factory=lambda: {},
+        description="Relevancy assessment details for this result",
+    )
+
+
 class DeepLitSearchAgentConfig(LitSearchAgentConfig):
     """
     Configuration for the DeepLitSearchAgent that implements multi-agent deep research.
@@ -139,16 +163,31 @@ class DeepLitSearchAgent(LitBaseAgent):
         self,
         config: DeepLitSearchAgentConfig | None = None,
         search_tool=None,
+        semantic_scholar_tool: SemanticScholarSearchTool | None = None,
+        query_agent: QueryAgent | None = None,
+        followup_query_agent: FollowUpQueryAgent | None = None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
+        link_relevancy_assessor: LinkRelevancyAssessor | None = None,
+        web_scraper: SimpleWebScraper | None = None,
+        pdf_scraper: SimplePDFScraper | None = None,
+        triage_component: TriageComponent | None = None,
+        clarification_component: ClarificationComponent | None = None,
+        instruction_component: InstructionBuilderComponent | None = None,
+        research_synthesis_component: ResearchSynthesisComponent | None = None,
         debug: bool = False,
     ) -> None:
         """Initialize the DeepLitSearchAgent with embedded components."""
         super().__init__(config=config or DeepLitSearchAgentConfig(), debug=debug)
 
+        self.query_agent = query_agent or QueryAgent()
+        self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
+
         # Initialize search tools
         self.search_tool = search_tool or SearxNGSearchTool()
         self.semantic_scholar_tool = (
-            SemanticScholarSearchTool() if self.config.use_semantic_scholar else None
+            (semantic_scholar_tool or SemanticScholarSearchTool())
+            if self.config.use_semantic_scholar
+            else None
         )
 
         # Initialize relevancy agent
@@ -156,32 +195,43 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         # Initialize link relevancy assessor if enabled
         if self.config.enable_per_link_assessment:
-            assessor_config = LinkRelevancyAssessorConfig(
-                min_relevancy_score=self.config.min_relevancy_score,
-                full_content_threshold=self.config.full_content_threshold,
-                debug=debug,
-            )
-            self.link_relevancy_assessor = LinkRelevancyAssessor(
-                config=assessor_config,
-                relevancy_agent=self.relevancy_agent,
-                debug=debug,
-            )
+            if link_relevancy_assessor is not None:
+                self.link_relevancy_assessor = link_relevancy_assessor
+            else:
+                assessor_config = LinkRelevancyAssessorConfig(
+                    min_relevancy_score=self.config.min_relevancy_score,
+                    full_content_threshold=self.config.full_content_threshold,
+                    debug=debug,
+                )
+                self.link_relevancy_assessor = LinkRelevancyAssessor(
+                    config=assessor_config,
+                    relevancy_agent=self.relevancy_agent,
+                    debug=debug,
+                )
         else:
-            self.link_relevancy_assessor = None
+            self.link_relevancy_assessor = (
+                link_relevancy_assessor  # Could be None or an injected instance
+            )
 
         # Initialize scrapers for full content fetching
         if self.config.enable_full_content_scraping:
-            self.web_scraper = SimpleWebScraper(debug=debug)
-            self.pdf_scraper = SimplePDFScraper(debug=debug)
+            self.web_scraper = web_scraper or SimpleWebScraper(debug=debug)
+            self.pdf_scraper = pdf_scraper or SimplePDFScraper(debug=debug)
         else:
-            self.web_scraper = None
-            self.pdf_scraper = None
+            self.web_scraper = web_scraper  # Could be None or an injected instance
+            self.pdf_scraper = pdf_scraper  # Could be None or an injected instance
 
         # Initialize embedded components
-        self.triage_component = TriageComponent(debug=debug)
-        self.clarification_component = ClarificationComponent(debug=debug)
-        self.instruction_component = InstructionBuilderComponent(debug=debug)
-        self.research_synthesis_component = ResearchSynthesisComponent(debug=debug)
+        self.triage_component = triage_component or TriageComponent(debug=debug)
+        self.clarification_component = (
+            clarification_component or ClarificationComponent(debug=debug)
+        )
+        self.instruction_component = (
+            instruction_component or InstructionBuilderComponent(debug=debug)
+        )
+        self.research_synthesis_component = (
+            research_synthesis_component or ResearchSynthesisComponent(debug=debug)
+        )
 
         # Track research state
         self.research_history = []
@@ -341,13 +391,12 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     async def _generate_initial_queries(self, instructions: str) -> List[str]:
         """Generate initial search queries from research instructions."""
-        query_agent = QueryAgent()
         query_input = QueryAgentInputSchema(
             query=instructions,
             num_queries=5,  # More queries for comprehensive coverage
         )
 
-        query_output = await query_agent.arun(query_input)
+        query_output = await self.query_agent.arun(query_input)
 
         if self.debug:
             logger.info("🧠 DeepLitSearchAgent - INITIAL QUERIES GENERATED:")
@@ -359,24 +408,19 @@ class DeepLitSearchAgent(LitBaseAgent):
     async def _execute_searches(
         self,
         queries: List[str],
-        original_query: str = None,
+        original_query: str | None = None,
         is_reformulated: bool = False,
-    ) -> List[SearchResultItem]:
+    ) -> List[DeepSearchResultItem]:
         """Execute searches using available search tools."""
         all_results = []
 
-        # Search with primary tool
-        from akd.tools.search._base import SearchToolInputSchema
-
-        search_input = SearchToolInputSchema(
+        search_input = self.search_tool.input_schema(
             queries=queries,
             max_results=20,
             category="science",
         )
 
-        primary_results = await self.search_tool.arun(
-            self.search_tool.input_schema(**search_input.model_dump()),
-        )
+        primary_results = await self.search_tool.arun(search_input)
         all_results.extend(primary_results.results)
 
         # Search with Semantic Scholar if enabled
@@ -389,6 +433,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             ss_results = await self.semantic_scholar_tool.arun(ss_input)
             all_results.extend(ss_results.results)
 
+        all_results = list(map(lambda r: DeepSearchResultItem(**r.dict()), all_results))
         # Apply per-link relevancy assessment if enabled
         if self.link_relevancy_assessor and all_results:
             if self.debug:
@@ -431,8 +476,8 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     async def _fetch_full_content_for_high_relevancy(
         self,
-        results: List[SearchResultItem],
-    ) -> List[SearchResultItem]:
+        results: List[DeepSearchResultItem],
+    ) -> List[DeepSearchResultItem]:
         """Fetch full content for results marked as high-relevancy."""
         high_relevancy_results = [
             r for r in results if getattr(r, "should_fetch_full_content", False)
@@ -488,9 +533,9 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     def _deduplicate_results(
         self,
-        new_results: List[SearchResultItem],
-        existing_results: List[SearchResultItem],
-    ) -> List[SearchResultItem]:
+        new_results: List[DeepSearchResultItem],
+        existing_results: List[DeepSearchResultItem],
+    ) -> List[DeepSearchResultItem]:
         """Remove duplicate results based on URL and title."""
         existing_urls = {r.url for r in existing_results}
         existing_titles = {r.title.lower() for r in existing_results if r.title}
@@ -505,7 +550,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     async def _evaluate_research_quality(
         self,
-        results: List[SearchResultItem],
+        results: List[DeepSearchResultItem],
         query: str,
     ) -> float:
         """Evaluate the quality of research results."""
@@ -559,8 +604,6 @@ class DeepLitSearchAgent(LitBaseAgent):
         instructions: str,
     ) -> List[str]:
         """Generate refined queries based on current results."""
-        followup_agent = FollowUpQueryAgent()
-
         # Create content summary from results
         content = "\n\n".join(
             [
@@ -580,7 +623,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             num_queries=3,
         )
 
-        followup_output = await followup_agent.arun(followup_input)
+        followup_output = await self.followup_query_agent.arun(followup_input)
 
         if self.debug:
             logger.info("🔄 DeepLitSearchAgent - REFINED QUERIES GENERATED:")

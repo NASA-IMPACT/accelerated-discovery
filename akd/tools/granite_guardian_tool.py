@@ -1,11 +1,13 @@
 import json
+import os
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from urllib.parse import urljoin
 
 import requests
 from loguru import logger
 from ollama import chat
-from pydantic import model_validator
+from pydantic import HttpUrl, model_validator
 from pydantic.fields import Field
 from typing_extensions import Self
 
@@ -91,6 +93,9 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     Configuration for Granite Guardian Tool.
     """
 
+    ollama_base_url: HttpUrl = Field(
+        default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")),
+    )
     model: GuardianModelID = Field(
         default=GuardianModelID.GUARDIAN_8B,
         description="Granite Guardian model to use.",
@@ -133,6 +138,7 @@ class GraniteGuardianTool(
     async def _arun(
         self,
         params: GraniteGuardianInputSchema,
+        **kwargs,
     ) -> GraniteGuardianOutputSchema:
         self.risk_type = params.risk_type or self.default_risk_type
 
@@ -215,8 +221,9 @@ class GraniteGuardianTool(
         return outputs
 
     def _ollama_server_gen(self, messages):
+        url = urljoin(str(self.config.ollama_base_url), "/api/chat")
         r = requests.post(
-            "http://0.0.0.0:11435/api/chat",
+            url,
             json={
                 "model": self.model,
                 "messages": messages,
