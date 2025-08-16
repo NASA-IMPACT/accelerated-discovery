@@ -24,62 +24,72 @@ class ResearchArticleResolver(BaseArticleResolver):
         result = ResolverOutputSchema(**params.model_dump())
         result.resolvers.append(self.__class__.__name__)
         return result
-    
+
     async def _arun(
-        self,
-        params: ResolverInputSchema,
-        **kwargs,
-        ) -> ResolverOutputSchema:
+    self,
+    params: ResolverInputSchema,
+    **kwargs,
+    ) -> ResolverOutputSchema:
         """
         Run resolvers sequentially.
-        Stop only when we have BOTH:
-          1) a transformed URL (different from params.url), and
-          2) a DOI.
-        Otherwise keep going, merging partial improvements.
+        Stop only when BOTH are satisfied:
+          1) URL is transformed (different from params.url, or any URL if original was None)
+          2) DOI is present
+
+        Once the URL is transformed, do NOT replace it again.
         """
         output = ResolverOutputSchema(**params.model_dump())
-
         orig_url_str = str(params.url) if getattr(params, "url", None) else None
 
         def has_transformed_url(url) -> bool:
-            if not orig_url_str and url:
-                return True
-            return bool(orig_url_str and url and str(url) != orig_url_str)
+            if not url:
+                return False
+            if not orig_url_str:
+                return True  # any URL counts if we started with None
+            return str(url) != orig_url_str
 
-        def has_doi(doi) -> bool:
-            return bool(doi)
+        
+        # Track satisfaction across resolvers
+        url_ok = False
+        doi_ok = False 
 
         for resolver in self.resolvers:
+            if url_ok and doi_ok:
+                break
+
             resolver_name = resolver.__class__.__name__
             try:
                 if self.debug:
                     logger.debug(f"Trying resolver={resolver_name} for url={params.url}")
 
                 result = await resolver.arun(params)
+
                 if not result:
                     continue
 
-                output.resolvers.extend(result.resolvers)
+                # TODO:: this will call most of the resolvers: doi until resolved by crossref, so we should do something about this 
+                if not url_ok and getattr(result, "url", None):
+                    if output.url is None or has_transformed_url(result.url):
+                        output.url = result.url
+                        url_ok = has_transformed_url(output.url)
+                        output.resolvers.extend(result.resolvers)
 
-                if result.url and (output.url is None or has_transformed_url(result.url)):
-                    output.url = result.url
-                    
-                if getattr(result, "doi", None) and not getattr(output, "doi", None):
-                    output.doi = result.doi
+                if not doi_ok and getattr(result, "doi", None):
+                    if not getattr(output, "doi", None):
+                        output.doi = result.doi
+                        doi_ok = True
+                        output.resolvers.extend(result.resolvers)
 
-                if not output.authors and result.authors:
+                if not getattr(output, "authors", None) and getattr(result, "authors", None):
                     output.authors = result.authors
 
-                # Stop only when BOTH conditions are satisfied
-                if has_transformed_url(getattr(output, "url", None)) and has_doi(getattr(output, "doi", None)):
+                if url_ok and doi_ok:
                     if self.debug:
                         logger.debug(
                             f"Stopping after {resolver_name}: "
-                            f"transformed URL={output.url}, DOI={output.doi}"
+                            f"Transformed URL={output.url}, DOI={output.doi}"
                         )
                     break
-
-                # Otherwise, continue to try next resolver
 
             except Exception as e:
                 if self.debug:
