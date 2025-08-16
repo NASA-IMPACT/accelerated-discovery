@@ -36,6 +36,8 @@ class OmniScraperInputSchema(ScraperToolInputSchema):
 
 
 class OmniScrapedMetadata(ScrapedMetadata):
+    """Metadata for OmniScraper tools, extending the base scraped metadata."""
+
     url: HttpUrl | FilePath | FileUrl = Field(
         ...,
         description="The URL or file path of the scraped document.",
