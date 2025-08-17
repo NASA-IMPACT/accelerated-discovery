@@ -1,0 +1,36 @@
+{
+  "family": "searxng-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "searxng",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/searxng:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp",
+          "hostPort": 8080
+        }
+      ],
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/searxng",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "environment": [
+        {
+          "name": "BIND_ADDRESS",
+          "value": "0.0.0.0:8080"
+        }
+      ]
+    }
+  ]
+}
