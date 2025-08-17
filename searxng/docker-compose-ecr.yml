@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  searxng:
+    image: 350996086543.dkr.ecr.us-east-1.amazonaws.com/searxng:latest
+    container_name: searxng-ecr
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - BIND_ADDRESS=0.0.0.0:8080
+      - BASE_URL=http://localhost:8080/
+      - MORTY_URL=
+      - MORTY_KEY=
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "1"
+    volumes:
+      - searxng-data:/var/log/searxng
+
+volumes:
+  searxng-data:
+    driver: local

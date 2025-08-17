@@ -25,7 +25,7 @@ server:
   image_proxy: false
   http_protocol_version: "1.1"
   method: "POST"
-  limiter: true
+  limiter: false
   default_http_headers:
     X-Content-Type-Options: nosniff
     X-XSS-Protection: 1; mode=block
