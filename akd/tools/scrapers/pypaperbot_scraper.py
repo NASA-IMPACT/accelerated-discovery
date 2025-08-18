@@ -244,19 +244,23 @@ class PyPaperBotScraper(ScraperToolBase):
     def _extract_query_from_url(self, url: str) -> Optional[str]:
         """Extract a reasonable search query from URL for Google Scholar search."""
         import re
-        
-        # arXiv URLs: extract paper ID and format as search query
-        arxiv_match = re.search(r'arxiv\.org/abs/(\d{4}\.\d{4,5})', url, re.IGNORECASE)
+
+        # arXiv URLs: extract paper ID and format as search query (handles both /abs/ and /pdf/)
+        arxiv_match = re.search(
+            r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5})", url, re.IGNORECASE
+        )
         if arxiv_match:
             arxiv_id = arxiv_match.group(1)
             return f"arXiv:{arxiv_id}"
-        
+
         # PubMed URLs: extract PMID
-        pubmed_match = re.search(r'pubmed\.ncbi\.nlm\.nih\.gov/(\d+)', url, re.IGNORECASE)
+        pubmed_match = re.search(
+            r"pubmed\.ncbi\.nlm\.nih\.gov/(\d+)", url, re.IGNORECASE
+        )
         if pubmed_match:
             pmid = pubmed_match.group(1)
             return f"PMID {pmid}"
-        
+
         # For other URLs, skip query search as they likely won't work well
         # with Google Scholar search
         return None
