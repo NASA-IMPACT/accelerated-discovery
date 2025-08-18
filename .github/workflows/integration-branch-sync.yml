@@ -1,0 +1,43 @@
+name: Integration Branch Sync
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [develop]
+
+jobs:
+  sync-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: integration
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge PR branch into integration
+        run: |
+          git fetch origin ${{ github.head_ref }}
+          git merge origin/${{ github.head_ref }} --no-ff -m "Auto-merge PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration for testing"
+
+      - name: Push integration branch
+        run: git push origin integration
+
+      - name: Create issue on merge conflict
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Integration branch merge conflict',
+              body: `Automatic merge of PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration failed.\n\nPlease resolve conflicts manually:\n\`\`\`bash\ngit checkout integration\ngit merge origin/${{ github.head_ref }}\n# resolve conflicts\ngit push origin integration\n\`\`\``,
+              labels: ['integration', 'conflict']
+            })
