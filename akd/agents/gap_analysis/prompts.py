@@ -149,7 +149,10 @@ Select all relations that may provide direct, supporting, or contextual informat
 - Use your general knowledge of how scientific papers usually structure their information.
 - Only include titles where you are reasonably certain the answer to the query would be found.
 - If none of the relations are likely to contain the answer, return an empty list.
-- Your output must be exactly a Python-style list.
+- Your output must be **valid JSON** — that means:
+  - Use double quotes around all strings
+  - No trailing commas
+  - Output should be a JSON array of strings
 
 ## Example
 

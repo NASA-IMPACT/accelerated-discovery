@@ -201,7 +201,7 @@ class GapAgent(BaseAgent):
         search_results = params.search_results
         if self.debug:
             if params.gap not in gap_query_map.keys():
-                logger.debug(f"You have running the gap agent with your own defined gap. Please ensure you have described the gap you want to investigate in detail.")
+                logger.debug(f"You are running the gap agent with your own defined gap. Please ensure you have described the gap you want to investigate in detail.")
             else:
                 logger.debug(f"Running gap analysis to investigate {params.gap} gap.")
         gap = gap_query_map[params.gap] if params.gap in gap_query_map.keys() else params.gap
