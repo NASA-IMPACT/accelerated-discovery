@@ -1,5 +1,4 @@
 from loguru import logger
-from pydantic import HttpUrl
 
 from ._base import (
     ScrapedMetadata,
@@ -7,7 +6,8 @@ from ._base import (
     ScraperToolInputSchema,
     ScraperToolOutputSchema,
 )
-from .resolvers import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
+
+# Note: ResearchArticleResolver has been moved to akd.tools.resolvers.composite
 
 
 class CompositeScraper(ScraperToolBase):
@@ -96,41 +96,4 @@ class CompositeScraper(ScraperToolBase):
         return result
 
 
-class ResearchArticleResolver(BaseArticleResolver):
-    def __init__(self, *resolvers: BaseArticleResolver, debug: bool = False) -> None:
-        super().__init__(debug=debug)
-        self.resolvers = resolvers
-
-    async def validate_url(self, url: HttpUrl | str) -> bool:
-        return super().validate_url(url)
-
-    async def resolve(self, url: str | HttpUrl) -> ResolverOutputSchema:
-        original_url = str(url)
-        rname = self.__class__.__name__
-        output = ResolverOutputSchema(
-            url=original_url,
-            resolver=rname,
-        )
-        for resolver in self.resolvers:
-            rname = resolver.__class__.__name__
-            try:
-                logger.debug(f"Using resolver={rname} for url={original_url}")
-                output = await resolver.arun(ResolverInputSchema(url=original_url))
-                if not output.url:
-                    raise ValueError("Resolver failure")
-                if output.url:
-                    break
-            except Exception:
-                logger.error(f"Error using resolver={rname}")
-        return output
-
-    async def _arun(
-        self,
-        params: ResolverInputSchema,
-        **kwargs,
-    ) -> ResolverOutputSchema:
-        output = await self.resolve(params.url)
-        if not output.url:
-            output.url = params.url
-            output.resolver = self.__class__.__name__
-        return output
+# ResearchArticleResolver has been moved to akd.tools.resolvers.composite
