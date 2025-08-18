@@ -145,8 +145,11 @@ class DoclingScraper(OmniScraper):
             format_options.update(custom_options)
 
         if self.debug:
+            opts_str = str(format_options)
+            if len(opts_str) > 100:
+                opts_str = f"{opts_str[:100]}..."
             logger.debug(
-                f"Docling format options :: {format_options}",
+                f"Docling format options :: {opts_str}",
             )
 
         self.doc_converter = DocumentConverter(
@@ -221,15 +224,24 @@ class DoclingScraper(OmniScraper):
             path = unquote(params.url.path)
         try:
             content, meta = await self._process_document(path)
-            return ScraperToolOutputSchema(content=content, metadata=meta)
-
+            if isinstance(content, str) and content.strip():
+                return ScraperToolOutputSchema(content=content, metadata=meta)
         except FileNotFoundError as e:
-            # local file was missing
             raise RuntimeError(f"[File Not Found] {e}")
+        except Exception as _e:
+            pass
 
-        except RuntimeError as e:
-            # issues during conversion
-            raise RuntimeError(f"[Conversion Error] {e}")
+        try:
+            # Lazy import to avoid circular dependency: pypaperbot_scraper imports omni for Docling classes
+            from akd.tools.scrapers.pypaperbot_scraper import (
+                PyPaperBotScraper,  # type: ignore
+            )
 
-        except Exception as e:
-            raise RuntimeError(f"[Internal Error] Failed to scrape {path}") from e
+            fallback = PyPaperBotScraper(debug=self.debug)
+            pb_out = await fallback.arun(ScraperToolInputSchema(url=str(params.url)))
+            if pb_out.content and pb_out.content.strip():
+                return pb_out
+        except Exception:
+            pass
+
+        raise RuntimeError(f"[Internal Error] Failed to scrape {path}")
