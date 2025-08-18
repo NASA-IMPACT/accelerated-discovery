@@ -39,22 +39,12 @@ class ResearchArticleResolver(BaseArticleResolver):
         Once the URL is transformed, do NOT replace it again.
         """
         output = ResolverOutputSchema(**params.model_dump())
-        orig_url_str = str(params.url) if getattr(params, "url", None) else None
 
-        def has_transformed_url(url) -> bool:
-            if not url:
-                return False
-            if not orig_url_str:
-                return True  # any URL counts if we started with None
-            return str(url) != orig_url_str
-
-        
-        # Track satisfaction across resolvers
-        url_ok = False
-        doi_ok = False 
+        is_url_resolved = bool(getattr(params, "resolved_url", None))
+        is_doi_resolved = bool(getattr(params, "doi", None)) 
 
         for resolver in self.resolvers:
-            if url_ok and doi_ok:
+            if is_url_resolved and is_doi_resolved:
                 break
 
             resolver_name = resolver.__class__.__name__
@@ -68,22 +58,22 @@ class ResearchArticleResolver(BaseArticleResolver):
                     continue
 
                 # TODO:: this will call most of the resolvers: doi until resolved by crossref, so we should do something about this 
-                if not url_ok and getattr(result, "url", None):
-                    if output.url is None or has_transformed_url(result.url):
-                        output.url = result.url
-                        url_ok = has_transformed_url(output.url)
-                        output.resolvers.extend(result.resolvers)
+                if (not is_url_resolved and getattr(result, "resolved_url", None)):
+                    if output.url is None:
+                        output.url = result.resolved_url
+                    output.resolved_url = result.resolved_url
+                    is_url_resolved = True 
+                    output.resolvers.extend(result.resolvers)
 
-                if not doi_ok and getattr(result, "doi", None):
-                    if not getattr(output, "doi", None):
+                if not is_doi_resolved and getattr(result, "doi", None):
                         output.doi = result.doi
-                        doi_ok = True
+                        is_doi_resolved = True
                         output.resolvers.extend(result.resolvers)
 
                 if not getattr(output, "authors", None) and getattr(result, "authors", None):
                     output.authors = result.authors
 
-                if url_ok and doi_ok:
+                if is_url_resolved and is_doi_resolved:
                     if self.debug:
                         logger.debug(
                             f"Stopping after {resolver_name}: "

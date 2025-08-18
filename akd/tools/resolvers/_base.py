@@ -57,6 +57,11 @@ class ResolverOutputSchema(SearchResultItem, OutputSchema):
         description="Resolvers used to resolve the search result",
     )
 
+    resolved_url: HttpUrl | None = Field(
+        None,
+        description="Resolved URL of the article, if available",
+    )
+
 
 class ArticleResolverConfig(BaseToolConfig):
     """Configuration for the resolver"""

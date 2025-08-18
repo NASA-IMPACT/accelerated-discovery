@@ -52,9 +52,9 @@ class ADSResolver(BaseArticleResolver):
             if doi_tag:
                 doi = doi_tag["content"]
                 result = ResolverOutputSchema(**params.model_dump())
-                result.url = HttpUrl(f"https://doi.org/{doi}")
+                result.resolved_url = HttpUrl(f"https://doi.org/{doi}")
                 result.doi = doi
-                result.resolver = self.__class__.__name__
+                result.resolvers.append(self.__class__.__name__)
                 return result
 
             # Look for the bibcode in meta tags
@@ -67,7 +67,7 @@ class ADSResolver(BaseArticleResolver):
                 pdf_response = self.session.head(pdf_url)
                 if pdf_response.status_code == 200:
                     result = ResolverOutputSchema(**params.model_dump())
-                    result.url = HttpUrl(pdf_url)
+                    result.resolved_url = HttpUrl(pdf_url)
                     result.resolvers.append(self.__class__.__name__)
                     return result
 
@@ -81,8 +81,8 @@ class ADSResolver(BaseArticleResolver):
             if pdf_links:
                 # Return the first PDF link, making it an absolute URL if needed
                 result = ResolverOutputSchema(**params.model_dump())
-                result.url = HttpUrl(urljoin(url, pdf_links[0]))
-                result.resolver = self.__class__.__name__
+                result.resolved_url = HttpUrl(urljoin(url, pdf_links[0]))
+                result.resolvers.append(self.__class__.__name__)
                 return result
 
             # If no PDF found, return None
