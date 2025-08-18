@@ -5,8 +5,15 @@ from ._base import (
     ScraperToolInputSchema,
     ScraperToolOutputSchema,
 )
+from .composite import (
+    CompositeScraper,
+    ResearchArticleResolver,
+)
+from .pypaperbot_scraper import PyPaperBotScraperConfig
+from .waterfall import WaterfallScraper, WaterfallScraperConfig
 from .omni import DoclingScraper, DoclingScraperConfig, OmniScraperInputSchema
 from .pdf_scrapers import PDFScraperInputSchema, SimplePDFScraper
+from .pypaperbot_scraper import PyPaperBotScraper
 from .web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 
 __all__ = [
@@ -19,6 +26,12 @@ __all__ = [
     "DoclingScraper",
     "DoclingScraperConfig",
     "OmniScraperInputSchema",
+    "PyPaperBotScraper",
+    "PyPaperBotScraperConfig",
+    "CompositeScraper",
+    "WaterfallScraper",
+    "WaterfallScraperConfig",
+    "ResearchArticleResolver",
     "ScrapedMetadata",
     "ScraperToolBase",
     "ScraperToolConfig",
