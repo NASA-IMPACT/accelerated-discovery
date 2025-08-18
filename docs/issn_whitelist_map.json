@@ -1,0 +1,311 @@
+{
+  "metadata": {
+    "description": "ISSN to journal name mapping for source validation",
+    "purpose": "Maps ISSNs to human-readable journal names for reporting and debugging",
+    "last_updated": "2025-08-17",
+    "total_entries": 45,
+    "format": "ISSN -> Journal metadata mapping"
+  },
+  "issn_map": {
+    "0094-8276": {
+      "name": "Geophysical Research Letters",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": false
+    },
+    "1944-8007": {
+      "name": "Geophysical Research Letters",
+      "publisher": "AGU/Wiley", 
+      "category": "Earth_Sciences",
+      "open_access": false
+    },
+    "2169-9313": {
+      "name": "Journal of Geophysical Research: Atmospheres",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences", 
+      "open_access": false
+    },
+    "2169-9356": {
+      "name": "Journal of Geophysical Research: Atmospheres",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": false
+    },
+    "1525-2027": {
+      "name": "Geochemistry, Geophysics, Geosystems",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": true
+    },
+    "2576-604X": {
+      "name": "AGU Advances",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": true
+    },
+    "2333-5084": {
+      "name": "Earth and Space Science",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": true
+    },
+    "2328-4277": {
+      "name": "Earth's Future",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": true
+    },
+    "2471-1403": {
+      "name": "GeoHealth",
+      "publisher": "AGU/Wiley", 
+      "category": "Earth_Sciences",
+      "open_access": true
+    },
+    "1942-2466": {
+      "name": "Journal of Advances in Modeling Earth Systems",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": true
+    },
+    "2769-1904": {
+      "name": "JGR: Machine Learning and Computation",
+      "publisher": "AGU/Wiley",
+      "category": "Earth_Sciences",
+      "open_access": true
+    },
+    "0004-637X": {
+      "name": "The Astrophysical Journal",
+      "publisher": "AAS/IOP",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "1538-4357": {
+      "name": "The Astrophysical Journal",
+      "publisher": "AAS/IOP",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "0067-0049": {
+      "name": "The Astrophysical Journal Supplement Series",
+      "publisher": "AAS/IOP",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "1538-4365": {
+      "name": "The Astrophysical Journal Supplement Series",
+      "publisher": "AAS/IOP",
+      "category": "Astronomy", 
+      "open_access": false
+    },
+    "0004-6361": {
+      "name": "Astronomy & Astrophysics",
+      "publisher": "EDP Sciences",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "1432-0746": {
+      "name": "Astronomy & Astrophysics",
+      "publisher": "EDP Sciences",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "0035-8711": {
+      "name": "Monthly Notices of the Royal Astronomical Society",
+      "publisher": "Oxford University Press",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "1365-2966": {
+      "name": "Monthly Notices of the Royal Astronomical Society",
+      "publisher": "Oxford University Press",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "0004-6280": {
+      "name": "The Astronomical Journal",
+      "publisher": "AAS/IOP",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "1538-3881": {
+      "name": "The Astronomical Journal", 
+      "publisher": "AAS/IOP",
+      "category": "Astronomy",
+      "open_access": false
+    },
+    "0031-9007": {
+      "name": "Physical Review Letters",
+      "publisher": "American Physical Society",
+      "category": "Physics",
+      "open_access": false
+    },
+    "1079-7114": {
+      "name": "Physical Review Letters",
+      "publisher": "American Physical Society",
+      "category": "Physics",
+      "open_access": false
+    },
+    "1550-7998": {
+      "name": "Physical Review D",
+      "publisher": "American Physical Society",
+      "category": "Physics",
+      "open_access": false
+    },
+    "2470-0010": {
+      "name": "Physical Review D",
+      "publisher": "American Physical Society",
+      "category": "Physics",
+      "open_access": false
+    },
+    "2470-0029": {
+      "name": "Physical Review E",
+      "publisher": "American Physical Society",
+      "category": "Physics",
+      "open_access": false
+    },
+    "0034-6861": {
+      "name": "Reviews of Modern Physics",
+      "publisher": "American Physical Society",
+      "category": "Physics",
+      "open_access": false
+    },
+    "1539-0756": {
+      "name": "Reviews of Modern Physics",
+      "publisher": "American Physical Society",
+      "category": "Physics",
+      "open_access": false
+    },
+    "0370-2693": {
+      "name": "Physics Letters B",
+      "publisher": "Elsevier",
+      "category": "Physics",
+      "open_access": false
+    },
+    "1873-2445": {
+      "name": "Physics Letters B",
+      "publisher": "Elsevier",
+      "category": "Physics",
+      "open_access": false
+    },
+    "0028-0836": {
+      "name": "Nature",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "1476-4687": {
+      "name": "Nature",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "1745-2473": {
+      "name": "Nature Physics",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "1745-2481": {
+      "name": "Nature Physics",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "1758-678X": {
+      "name": "Nature Geoscience",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "1758-6798": {
+      "name": "Nature Geoscience",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "1561-633X": {
+      "name": "Nature Astronomy",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "1476-4660": {
+      "name": "Nature Materials",
+      "publisher": "Nature Publishing Group",
+      "category": "Nature_Journals",
+      "open_access": false
+    },
+    "0002-7863": {
+      "name": "Journal of the American Chemical Society",
+      "publisher": "American Chemical Society",
+      "category": "Chemistry",
+      "open_access": false
+    },
+    "1520-5126": {
+      "name": "Journal of the American Chemical Society",
+      "publisher": "American Chemical Society",
+      "category": "Chemistry",
+      "open_access": false
+    },
+    "1433-7851": {
+      "name": "Angewandte Chemie International Edition",
+      "publisher": "Wiley-VCH",
+      "category": "Chemistry",
+      "open_access": false
+    },
+    "1521-3773": {
+      "name": "Angewandte Chemie International Edition",
+      "publisher": "Wiley-VCH",
+      "category": "Chemistry",
+      "open_access": false
+    },
+    "0003-2700": {
+      "name": "Analytical Chemistry",
+      "publisher": "American Chemical Society",
+      "category": "Chemistry",
+      "open_access": false
+    },
+    "1520-6882": {
+      "name": "Analytical Chemistry",
+      "publisher": "American Chemical Society",
+      "category": "Chemistry",
+      "open_access": false
+    },
+    "0036-8075": {
+      "name": "Science",
+      "publisher": "American Association for the Advancement of Science",
+      "category": "Biology",
+      "open_access": false
+    },
+    "1095-9203": {
+      "name": "Science",
+      "publisher": "American Association for the Advancement of Science",
+      "category": "Biology",
+      "open_access": false
+    },
+    "0092-8674": {
+      "name": "Cell",
+      "publisher": "Elsevier",
+      "category": "Biology",
+      "open_access": false
+    },
+    "1097-4172": {
+      "name": "Cell",
+      "publisher": "Elsevier",
+      "category": "Biology",
+      "open_access": false
+    },
+    "1087-0156": {
+      "name": "Nature Biotechnology",
+      "publisher": "Nature Publishing Group",
+      "category": "Biology",
+      "open_access": false
+    },
+    "1546-1696": {
+      "name": "Nature Biotechnology",
+      "publisher": "Nature Publishing Group",
+      "category": "Biology",
+      "open_access": false
+    }
+  }
+}

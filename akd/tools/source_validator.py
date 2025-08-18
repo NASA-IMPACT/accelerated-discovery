@@ -1,16 +1,18 @@
 """
-Source validation tool for validating research sources against a controlled whitelist.
+ISSN-based source validation tool.
 
 This tool processes raw links from search engines (Semantic Scholar, SearxNG),
-extracts DOIs, fetches source metadata from CrossRef API, and validates
-against a predefined source whitelist.
+extracts DOIs, fetches source metadata from the CrossRef API, and validates
+the publication venue by comparing its ISSNs (print/electronic) against a
+configured ISSN whitelist. This simplifies whitelist management by relying on
+stable identifiers rather than fuzzy title matching.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import aiohttp
 from loguru import logger
@@ -21,16 +23,15 @@ from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.utils import get_akd_root
 
-if TYPE_CHECKING:
-    pass
-
 
 class SourceInfo(BaseModel):
     """Schema for source information from CrossRef API."""
 
-    title: str = Field(..., description="Source title")
+    title: str = Field(..., description="Source title (journal/proceedings)")
     publisher: Optional[str] = Field(None, description="Publisher name")
-    issn: Optional[List[str]] = Field(None, description="List of ISSNs")
+    issn: List[str] = Field(
+        default_factory=list, description="List of normalized ISSNs"
+    )
     is_open_access: Optional[bool] = Field(None, description="Open access status")
     doi: str = Field(..., description="DOI of the article")
     url: Optional[str] = Field(None, description="Original URL")
@@ -43,10 +44,14 @@ class ValidationResult(BaseModel):
         None,
         description="Source information from CrossRef",
     )
-    is_whitelisted: bool = Field(..., description="Whether source is in whitelist")
+    is_whitelisted: bool = Field(..., description="Whether venue ISSN is in whitelist")
     whitelist_category: Optional[str] = Field(
         None,
-        description="Category from whitelist (e.g., ES, Bio, etc.)",
+        description="Category from whitelist (if provided)",
+    )
+    matched_issn: Optional[str] = Field(
+        None,
+        description="The specific ISSN that matched the whitelist, if any",
     )
     validation_errors: List[str] = Field(
         default_factory=list,
@@ -67,7 +72,11 @@ class SourceValidatorInputSchema(InputSchema):
     )
     whitelist_file_path: Optional[str] = Field(
         None,
-        description="Path to source whitelist JSON file. If None, uses default path.",
+        description=(
+            "Path to ISSN whitelist JSON file. Accepts either a flat list of ISSNs, "
+            "an object with 'issn' list, or a category map {category: [issns...]}. "
+            "If None, uses default path."
+        ),
     )
 
 
@@ -90,9 +99,12 @@ class SourceValidatorConfig(BaseToolConfig):
     )
     whitelist_file_path: Optional[str] = Field(
         default_factory=lambda: str(
-            get_akd_root() / "docs" / "pubs_whitelist.json",
+            get_akd_root() / "docs" / "issn_whitelist.json",
         ),
-        description="Path to source whitelist JSON file",
+        description=(
+            "Path to ISSN whitelist JSON file. Can be a flat list of ISSNs, "
+            "an object with key 'issn', or a category map {category: [issns...]}."
+        ),
     )
     timeout_seconds: int = Field(
         default=30,
@@ -107,6 +119,12 @@ class SourceValidatorConfig(BaseToolConfig):
         description="User agent for API requests",
     )
     debug: bool = Field(default=False, description="Enable debug logging")
+    allow_arxiv: bool = Field(
+        default=True,
+        description=(
+            "When true, allow arXiv results to pass validation without ISSN checks."
+        ),
+    )
 
 
 class SourceValidator(
@@ -136,8 +154,10 @@ class SourceValidator(
         config.debug = debug
         super().__init__(config, debug)
 
-        # Load whitelist on initialization
-        self._whitelist = self._load_whitelist()
+        # Load whitelist on initialization (ISSN-based)
+        self._allowed_issn_set: Set[str] = set()
+        self._issn_to_category: Dict[str, str] = {}
+        self._load_whitelist()
 
         # DOI extraction patterns
         self._doi_patterns = [
@@ -152,50 +172,82 @@ class SourceValidator(
             r"[\?&]doi=([^&\s]+)",
         ]
 
-    def _load_whitelist(self) -> Dict[str, Any]:
-        """Load source whitelist from JSON file."""
-        whitelist_path = (
-            self.config.whitelist_file_path
-            or get_akd_root() / "docs" / "pubs_whitelist.json"
+    def _load_whitelist(self) -> None:
+        whitelist_path = self.config.whitelist_file_path or str(
+            get_akd_root() / "docs" / "issn_whitelist.json"
         )
 
         try:
             with open(whitelist_path, "r", encoding="utf-8") as f:
-                whitelist_data = json.load(f)
+                raw = json.load(f)
+
+            allowed_issn: Set[str] = set()
+            issn_to_category: Dict[str, str] = {}
+
+            if isinstance(raw, list):
+                for value in raw:
+                    if value is not None:
+                        norm = self._normalize_issn(str(value))
+                        if norm:
+                            allowed_issn.add(norm)
+            elif isinstance(raw, dict):
+                if "issn" in raw and isinstance(raw["issn"], list):
+                    for value in raw["issn"]:
+                        if value is not None:
+                            norm = self._normalize_issn(str(value))
+                            if norm:
+                                allowed_issn.add(norm)
+                if "categories" in raw and isinstance(raw["categories"], dict):
+                    for category, values in raw["categories"].items():
+                        if isinstance(values, list):
+                            for value in values:
+                                if value is not None:
+                                    norm = self._normalize_issn(str(value))
+                                    if norm:
+                                        allowed_issn.add(norm)
+                                        issn_to_category[norm] = str(category)
+                for key, value in raw.items():
+                    if key not in {"issn", "categories"} and isinstance(value, list):
+                        for v in value:
+                            if v is not None:
+                                norm = self._normalize_issn(str(v))
+                                if norm:
+                                    allowed_issn.add(norm)
+                                    issn_to_category[norm] = str(key)
+            else:
+                raise ValueError("Unsupported ISSN whitelist format")
+
+            self._allowed_issn_set = allowed_issn
+            self._issn_to_category = issn_to_category
 
             if self.debug:
                 logger.info(
-                    f"Loaded whitelist with {len(whitelist_data.get('data', {}))} categories",
+                    f"Loaded {len(self._allowed_issn_set)} ISSNs in {len(set(issn_to_category.values()))} categories"
                 )
-
-            return whitelist_data
+        except FileNotFoundError:
+            logger.warning(f"ISSN whitelist not found: {whitelist_path}")
+            self._allowed_issn_set = set()
+            self._issn_to_category = {}
         except Exception as e:
-            logger.error(f"Failed to load whitelist from {whitelist_path}: {e}")
-            return {"data": {}, "metadata": {}}
+            logger.error(f"Failed to load whitelist: {e}")
+            self._allowed_issn_set = set()
+            self._issn_to_category = {}
+
+    @staticmethod
+    def _normalize_issn(issn: str) -> Optional[str]:
+        if not issn:
+            return None
+        candidate = re.sub(r"[^0-9xX]", "", issn).upper()
+        return f"{candidate[:4]}-{candidate[4:]}" if len(candidate) == 8 else None
 
     def _extract_doi_from_url(self, url: str) -> Optional[str]:
-        """
-        Extract DOI from URL using multiple patterns.
-
-        Args:
-            url: URL to extract DOI from
-
-        Returns:
-            Extracted DOI or None if not found
-        """
-        url_str = str(url).strip()
-
         for pattern in self._doi_patterns:
-            matches = re.findall(pattern, url_str, re.IGNORECASE)
+            matches = re.findall(pattern, str(url).strip(), re.IGNORECASE)
             if matches:
                 doi = matches[0] if isinstance(matches[0], str) else matches[0][0]
-                # Clean up the DOI
                 doi = doi.strip().rstrip(".,;)")
-                # Ensure DOI starts with 10.
-                if not doi.startswith("10."):
-                    continue
-                return doi
-
+                if doi.startswith("10."):
+                    return doi
         return None
 
     async def _fetch_crossref_metadata(
@@ -203,16 +255,6 @@ class SourceValidator(
         session: aiohttp.ClientSession,
         doi: str,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Fetch source metadata from CrossRef API.
-
-        Args:
-            session: aiohttp session
-            doi: DOI to fetch metadata for
-
-        Returns:
-            Metadata dictionary or None if failed
-        """
         url = f"{self.config.crossref_base_url}/{doi}"
         headers = {"User-Agent": self.config.user_agent, "Accept": "application/json"}
 
@@ -227,19 +269,14 @@ class SourceValidator(
                     return data.get("message", {})
                 elif response.status == 404:
                     if self.debug:
-                        logger.warning(f"DOI not found in CrossRef: {doi}")
+                        logger.debug(f"DOI not found: {doi}")
                     return None
                 else:
-                    logger.warning(
-                        f"CrossRef API error {response.status} for DOI: {doi}",
-                    )
+                    logger.warning(f"CrossRef error {response.status}: {doi}")
                     return None
-
-        except aiohttp.ClientError as e:
-            logger.warning(f"Network error fetching CrossRef data for {doi}: {e}")
-            return None
         except Exception as e:
-            logger.error(f"Unexpected error fetching CrossRef data for {doi}: {e}")
+            if self.debug:
+                logger.warning(f"CrossRef fetch failed {doi}: {e}")
             return None
 
     def _parse_crossref_response(
@@ -248,44 +285,33 @@ class SourceValidator(
         doi: str,
         original_url: str,
     ) -> SourceInfo:
-        """
-        Parse CrossRef API response into SourceInfo.
-
-        Args:
-            data: CrossRef API response data
-            doi: Original DOI
-            original_url: Original URL
-
-        Returns:
-            SourceInfo object
-        """
-        # Extract source title
         container_title = data.get("container-title", [])
         title = container_title[0] if container_title else "Unknown Source"
-
-        # Extract publisher
         publisher = data.get("publisher")
 
-        # Extract ISSNs
-        issn_data = data.get("ISSN", [])
-        issn_list = (
-            issn_data
-            if isinstance(issn_data, list)
-            else [issn_data]
-            if issn_data
-            else []
-        )
+        issn_values = []
+        if isinstance(data.get("ISSN"), list):
+            issn_values.extend(str(v) for v in data["ISSN"])
+        elif data.get("ISSN"):
+            issn_values.append(str(data["ISSN"]))
 
-        # Extract open access information
+        for item in data.get("issn-type", []):
+            if isinstance(item, dict) and item.get("value"):
+                issn_values.append(str(item["value"]))
+
+        normalized_issn = []
+        for raw in issn_values:
+            norm = self._normalize_issn(raw)
+            if norm and norm not in normalized_issn:
+                normalized_issn.append(norm)
+
         is_open_access = None
-        license_info = data.get("license", [])
-        if license_info:
-            # Check for common open access license indicators
-            for license_item in license_info:
-                license_url = license_item.get("URL", "").lower()
+        for license_item in data.get("license", []):
+            if isinstance(license_item, dict):
+                license_url = str(license_item.get("URL", "")).lower()
                 if any(
-                    oa_indicator in license_url
-                    for oa_indicator in ["creativecommons", "cc-by", "open", "public"]
+                    oa in license_url
+                    for oa in ["creativecommons", "cc-by", "open", "public"]
                 ):
                     is_open_access = True
                     break
@@ -293,7 +319,7 @@ class SourceValidator(
         return SourceInfo(
             title=title,
             publisher=publisher,
-            issn=issn_list,
+            issn=normalized_issn,
             is_open_access=is_open_access,
             doi=doi,
             url=original_url,
@@ -302,51 +328,37 @@ class SourceValidator(
     def _validate_against_whitelist(
         self,
         source_info: SourceInfo,
-    ) -> tuple[bool, Optional[str], float]:
-        """
-        Validate source against whitelist.
+    ) -> Tuple[bool, Optional[str], float, Optional[str]]:
+        if getattr(self.config, "allow_arxiv", False):
+            url_lower = (source_info.url or "").lower()
+            doi_lower = (source_info.doi or "").lower()
+            is_arxiv = "arxiv.org" in url_lower or doi_lower.startswith(
+                ("10.48550/arxiv", "10.48550/ARXIV")
+            )
+            if is_arxiv:
+                if self.debug:
+                    logger.debug(f"ACCEPT (arXiv): {source_info.title}")
+                return True, "arXiv", 1.0, None
 
-        Args:
-            source_info: Source information from CrossRef
-
-        Returns:
-            Tuple of (is_whitelisted, category, confidence_score)
-        """
-        if not self._whitelist.get("data"):
-            return False, None, 0.0
-
-        source_title = source_info.title.lower().strip()
-
-        # Search through all categories in whitelist
-        for category_name, category_data in self._whitelist["data"].items():
-            sources = category_data.get("journals", [])
-
-            for source_entry in sources:
-                if not source_entry or not isinstance(source_entry, dict):
-                    continue
-
-                whitelisted_title = (
-                    (source_entry.get("Journal Name") or "").lower().strip()
+        if not self._allowed_issn_set:
+            if self.debug:
+                logger.debug(
+                    f"REJECT (empty whitelist): {source_info.title} issns={source_info.issn}"
                 )
-                if not whitelisted_title:
-                    continue
+            return False, None, 0.0, None
 
-                # Exact title match
-                if source_title == whitelisted_title:
-                    return True, category_name, 1.0
+        for issn in source_info.issn:
+            if issn in self._allowed_issn_set:
+                category = self._issn_to_category.get(issn)
+                if self.debug:
+                    logger.debug(
+                        f"ACCEPT: {source_info.title} matched_issn={issn} category={category}"
+                    )
+                return True, category, 1.0, issn
 
-                # Fuzzy title match (partial match)
-                if (
-                    whitelisted_title in source_title
-                    or source_title in whitelisted_title
-                ):
-                    # Check if it's a meaningful match (not just common words)
-                    if len(whitelisted_title) > 10 or len(source_title) > 10:
-                        return True, category_name, 0.8
-
-                # TODO: Could add ISSN matching here if we had ISSN data in whitelist
-
-        return False, None, 0.0
+        if self.debug:
+            logger.debug(f"REJECT: {source_info.title} issns={source_info.issn}")
+        return False, None, 0.0, None
 
     async def _validate_single_result(
         self,
@@ -369,12 +381,16 @@ class SourceValidator(
                 source_info=None,
                 is_whitelisted=False,
                 whitelist_category=None,
+                matched_issn=None,
                 validation_errors=validation_errors,
                 confidence_score=0.0,
             )
 
         # Fetch metadata from CrossRef
         crossref_data = await self._fetch_crossref_metadata(session, doi)
+
+        if self.debug:
+            logger.debug(f"Validating DOI: {doi} from {result.url}")
 
         if not crossref_data:
             validation_errors.append(
@@ -384,6 +400,7 @@ class SourceValidator(
                 source_info=None,
                 is_whitelisted=False,
                 whitelist_category=None,
+                matched_issn=None,
                 validation_errors=validation_errors,
                 confidence_score=0.0,
             )
@@ -391,15 +408,23 @@ class SourceValidator(
         # Parse source information
         source_info = self._parse_crossref_response(crossref_data, doi, str(result.url))
 
-        # Validate against whitelist
-        is_whitelisted, category, confidence = self._validate_against_whitelist(
-            source_info,
-        )
+        if self.debug:
+            logger.debug(f"Parsed: {source_info.title} issns={source_info.issn}")
+
+        if not source_info.issn:
+            validation_errors.append("No ISSN found in CrossRef metadata")
+
+        is_whitelisted, category, confidence, matched_issn = (False, None, 0.0, None)
+        if self._allowed_issn_set:
+            is_whitelisted, category, confidence, matched_issn = (
+                self._validate_against_whitelist(source_info)
+            )
 
         return ValidationResult(
             source_info=source_info,
             is_whitelisted=is_whitelisted,
             whitelist_category=category,
+            matched_issn=matched_issn,
             validation_errors=validation_errors,
             confidence_score=confidence,
         )
@@ -407,25 +432,11 @@ class SourceValidator(
     async def _arun(
         self,
         params: SourceValidatorInputSchema,
-        **kwargs,
     ) -> SourceValidatorOutputSchema:
-        """
-        Run the source validation tool.
-
-        Args:
-            params: Input parameters
-
-        Returns:
-            Validation results
-        """
-        # Update whitelist path if provided
         if params.whitelist_file_path:
             self.config.whitelist_file_path = params.whitelist_file_path
-            self._whitelist = self._load_whitelist()
+            self._load_whitelist()
 
-        validated_results = []
-
-        # Create aiohttp session with semaphore for concurrent requests
         connector = aiohttp.TCPConnector(limit=self.config.max_concurrent_requests)
         timeout = aiohttp.ClientTimeout(total=self.config.timeout_seconds)
 
@@ -433,48 +444,40 @@ class SourceValidator(
             connector=connector,
             timeout=timeout,
         ) as session:
-            # Process results concurrently but with limited concurrency
             import asyncio
 
             semaphore = asyncio.Semaphore(self.config.max_concurrent_requests)
 
-            async def validate_with_semaphore(
-                result: Any,
-            ) -> ValidationResult:
+            async def validate_with_semaphore(result: Any) -> ValidationResult:
                 async with semaphore:
                     return await self._validate_single_result(session, result)
 
-            # Process all results concurrently
             tasks = [
                 validate_with_semaphore(result) for result in params.search_results
             ]
-            validated_results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Handle any exceptions
-            final_results = []
-            for i, result in enumerate(validated_results):
+            validated_results = []
+            for i, result in enumerate(results):
                 if isinstance(result, Exception):
-                    logger.error(f"Error validating result {i}: {result}")
-                    final_results.append(
+                    logger.error(f"Validation error {i}: {result}")
+                    validated_results.append(
                         ValidationResult(
                             source_info=None,
                             is_whitelisted=False,
                             whitelist_category=None,
+                            matched_issn=None,
                             validation_errors=[f"Validation error: {str(result)}"],
                             confidence_score=0.0,
-                        ),
+                        )
                     )
                 else:
-                    final_results.append(result)
+                    validated_results.append(result)
 
-            validated_results = final_results
+        total = len(validated_results)
+        whitelisted = sum(1 for r in validated_results if r.is_whitelisted)
+        errors = sum(1 for r in validated_results if r.validation_errors)
 
-        # Generate summary statistics
-        total_results = len(validated_results)
-        whitelisted_count = sum(1 for r in validated_results if r.is_whitelisted)
-        error_count = sum(1 for r in validated_results if r.validation_errors)
-
-        # Category breakdown
         category_counts = {}
         for result in validated_results:
             if result.whitelist_category:
@@ -483,16 +486,13 @@ class SourceValidator(
                 )
 
         summary = {
-            "total_processed": total_results,
-            "whitelisted_count": whitelisted_count,
-            "whitelisted_percentage": (whitelisted_count / total_results * 100)
-            if total_results > 0
-            else 0,
-            "error_count": error_count,
+            "total_processed": total,
+            "whitelisted_count": whitelisted,
+            "whitelisted_percentage": (whitelisted / total * 100) if total > 0 else 0,
+            "error_count": errors,
             "category_breakdown": category_counts,
-            "avg_confidence": sum(r.confidence_score for r in validated_results)
-            / total_results
-            if total_results > 0
+            "avg_confidence": sum(r.confidence_score for r in validated_results) / total
+            if total > 0
             else 0,
         }
 
@@ -511,18 +511,6 @@ def create_source_validator(
     max_concurrent_requests: int = 10,
     debug: bool = False,
 ) -> SourceValidator:
-    """
-    Factory function to create a source validator tool.
-
-    Args:
-        whitelist_file_path: Path to source whitelist JSON file
-        timeout_seconds: Timeout for API requests
-        max_concurrent_requests: Maximum concurrent requests
-        debug: Enable debug logging
-
-    Returns:
-        Configured SourceValidator instance
-    """
     config = SourceValidatorConfig(
         whitelist_file_path=whitelist_file_path,
         timeout_seconds=timeout_seconds,
