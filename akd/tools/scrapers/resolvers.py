@@ -2,6 +2,8 @@ from abc import abstractmethod
 from typing import Optional, Union
 from urllib.parse import urljoin
 
+import re
+
 import requests
 from bs4 import BeautifulSoup
 from loguru import logger
@@ -169,3 +171,91 @@ class ADSResolver(BaseArticleResolver):
         except Exception as e:
             logger.error(f"Error resolving ADS URL: {e}")
             return None
+
+
+class UnpaywallResolver(BaseArticleResolver):
+    """Resolver for finding open access versions via Unpaywall API."""
+
+    def validate_url(self, url: HttpUrl | str) -> bool:
+        """Check if this URL contains a DOI that can be resolved via Unpaywall."""
+        url_str = str(url)
+        # Look for DOI patterns in the URL
+        doi_patterns = [
+            r'10\.\d{4,}/[^\s"<>#]+',  # Standard DOI format
+            r'/doi/(?:full/|pdf/|pdfdirect/)?(10\.[^/?#]+)',  # DOI in path
+        ]
+        
+        for pattern in doi_patterns:
+            if re.search(pattern, url_str, re.IGNORECASE):
+                return True
+        return False
+
+    def _extract_doi_from_url(self, url: str) -> Optional[str]:
+        """Extract DOI from URL using pattern matching."""
+        doi_patterns = [
+            r'10\.\d{4,}/[^\s"<>#]+',  # Standard DOI format
+            r'/doi/(?:full/|pdf/|pdfdirect/)?(10\.[^/?#]+)',  # DOI in path
+        ]
+        
+        for pattern in doi_patterns:
+            match = re.search(pattern, url, re.IGNORECASE)
+            if match:
+                # Return the full DOI or the captured group
+                return match.group(1) if match.groups() else match.group(0)
+        return None
+
+    async def resolve(self, url: HttpUrl | str) -> str:
+        """
+        Resolve a DOI URL to its open access version via Unpaywall API.
+        
+        Args:
+            url (str): The URL containing a DOI to resolve
+            
+        Returns:
+            str: The open access PDF URL if found, otherwise the original URL
+        """
+        url_str = str(url)
+        doi = self._extract_doi_from_url(url_str)
+        
+        if not doi:
+            if self.config.debug:
+                logger.debug(f"No DOI found in URL: {url_str}")
+            return url_str
+            
+        try:
+            # Query Unpaywall API
+            unpaywall_url = f"https://api.unpaywall.org/v2/{doi}?email=research@example.com"
+            response = self.session.get(unpaywall_url, headers=self.headers, timeout=10)
+            
+            if response.status_code != 200:
+                if self.config.debug:
+                    logger.debug(f"Unpaywall API returned {response.status_code} for DOI: {doi}")
+                return url_str
+                
+            data = response.json()
+            
+            # Check if paper is open access and has a PDF URL
+            if data.get('is_oa', False):
+                best_oa_location = data.get('best_oa_location')
+                if best_oa_location and best_oa_location.get('url_for_pdf'):
+                    pdf_url = best_oa_location['url_for_pdf']
+                    if self.config.debug:
+                        logger.debug(f"Found open access PDF via Unpaywall: {pdf_url}")
+                    return pdf_url
+                    
+                # Fallback to host URL if no direct PDF
+                if best_oa_location and best_oa_location.get('host_type') in ['publisher', 'repository']:
+                    oa_url = best_oa_location.get('url')
+                    if oa_url:
+                        if self.config.debug:
+                            logger.debug(f"Found open access version via Unpaywall: {oa_url}")
+                        return oa_url
+            
+            if self.config.debug:
+                logger.debug(f"No open access version found for DOI: {doi}")
+            return url_str
+            
+        except Exception as e:
+            if self.config.debug:
+                logger.debug(f"Error querying Unpaywall for DOI {doi}: {e}")
+            return url_str
