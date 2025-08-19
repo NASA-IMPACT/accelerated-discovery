@@ -73,7 +73,7 @@ jobs:
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: integration-coverage-report
           path: ${{ vars.CDK_WORKING_DIRECTORY }}/coverage.xml
