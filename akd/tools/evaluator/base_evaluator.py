@@ -1,6 +1,6 @@
 from collections import deque
 from enum import Enum
-from typing import Iterable, List, Optional, Set
+from typing import Iterable, List, Optional, Set, Tuple
 
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
@@ -202,54 +202,134 @@ class LLMEvaluator(BaseTool):
 
     async def _arun(self, params: LLMEvaluatorInputSchema) -> LLMEvaluatorOutputSchema:
         self.metrics = params.metrics or self.metrics
-        test_case_results = []
-        all_scores = []
 
         # Case 1: No search_results: simple evaluation
         if not params.search_results:
-            # Only enforce when user didn't supply search_results; the model_validator
-            # already enforced base presence, but this ensures metric-specific needs.
+            all_scores, test_case_results = self._process_simple_inputs(params)
 
-            available_params = self._present_params_available(params)
+        # Case 2: With search_results: possibly multiple LLMTestCases in future
+        else:
+            all_scores, test_case_results = self._process_search_results(params)
 
-            problems = []
-            for m in self.metrics:
-                required = self._collect_metric_required_params(m.value)
-                if not required:
-                    # Could not introspect; optionally warn instead of failing hard.
-                    # problems.append(f"Warning: could not determine required params for metric '{getattr(m, 'name', type(m).__name__)}'; skipping strict check.")
-                    continue
+        avg_score = sum(all_scores) / len(all_scores) if all_scores else 0.0
+        return LLMEvaluatorOutputSchema(
+            score=avg_score,
+            test_case_results=test_case_results,
+            success=avg_score >= self.threshold,
+        )
 
-                missing = required - available_params
-                if missing:
-                    m_name = getattr(m, "name", type(m).__name__)
-                    problems.append(
-                        f"Metric '{m_name}' requires {self._pretty_missing(missing)}, "
-                        f"but they are missing from the provided input.",
-                    )
+    def _process_simple_inputs(
+        self,
+        params,
+    ) -> Tuple[List[float], List[TestCaseEvaluationResult]]:
+        test_case_results = []
+        all_scores = []
 
-            if problems:
-                raise ValueError(
-                    "Input does not satisfy the selected metrics:\n- "
-                    + "\n- ".join(problems)
-                    + "\n\nSupply the missing fields, remove the offending metrics, or provide a 'search_results'.",
+        # Only enforce when user didn't supply search_results; the model_validator
+        # already enforced base presence, but this ensures metric-specific needs.
+
+        available_params = self._present_params_available(params)
+
+        problems = []
+        for m in self.metrics:
+            required = self._collect_metric_required_params(m.value)
+            if not required:
+                # Could not introspect; optionally warn instead of failing hard.
+                # problems.append(f"Warning: could not determine required params for metric '{getattr(m, 'name', type(m).__name__)}'; skipping strict check.")
+                continue
+
+            missing = required - available_params
+            if missing:
+                m_name = getattr(m, "name", type(m).__name__)
+                problems.append(
+                    f"Metric '{m_name}' requires {self._pretty_missing(missing)}, "
+                    f"but they are missing from the provided input.",
                 )
 
-            params_dict = params.model_dump(exclude_none=True)
-            filtered_params = {
-                self.field_mapping[key]: value
-                for key, value in params_dict.items()
-                if key in self.field_mapping
-            }
-            # for some reason LLMTestCase requires 'input' and 'actual output', even if unused by the metrics
-            filtered_params.setdefault("input", "")
-            filtered_params.setdefault("actual_output", "")
-            test_case = LLMTestCase(**filtered_params)
-            metric_evals = []
+        if problems:
+            raise ValueError(
+                "Input does not satisfy the selected metrics:\n- "
+                + "\n- ".join(problems)
+                + "\n\nSupply the missing fields, remove the offending metrics, or provide a 'search_results'.",
+            )
 
-            for m in self.metrics:
-                metric = m.value
-                metric.measure(test_case)
+        params_dict = params.model_dump(exclude_none=True)
+        filtered_params = {
+            self.field_mapping[key]: value
+            for key, value in params_dict.items()
+            if key in self.field_mapping
+        }
+        # for some reason LLMTestCase requires 'input' and 'actual output', even if unused by the metrics
+        filtered_params.setdefault("input", "")
+        filtered_params.setdefault("actual_output", "")
+        test_case = LLMTestCase(**filtered_params)
+        metric_evals = []
+
+        for m in self.metrics:
+            metric = m.value
+            metric.measure(test_case)
+            metric_evals.append(
+                SingleEvaluationOutputSchema(
+                    score=metric.score,
+                    reason=metric.reason,
+                    metric=metric.name,
+                ),
+            )
+            all_scores.append(metric.score)
+
+        test_case_results.append(
+            TestCaseEvaluationResult(
+                test_case_index=0,
+                test_case_input=test_case.input,
+                actual_output=test_case.actual_output,
+                retrieval_context=test_case.retrieval_context or [],
+                metric_evaluations=metric_evals,
+            ),
+        )
+
+        return all_scores, test_case_results
+
+    def _process_search_results(
+        self,
+        params,
+    ) -> Tuple[List[float], List[TestCaseEvaluationResult]]:
+        test_case_results = []
+        all_scores = []
+
+        # --- Temporary warnings for unsupported metrics (TODO: design new metrics for SearchResultItem) ---
+        unsupported_metrics = [
+            m for m in self.metrics if m is not EvalMetricDefinition.STRUCTURE
+        ]
+        if unsupported_metrics:
+            metric_names = [
+                getattr(m, "name", type(m).__name__) for m in unsupported_metrics
+            ]
+            warning_msg = (
+                f"Warning: The following metrics are not fully supported with search_results "
+                f"and will be skipped or may behave unexpectedly: {', '.join(metric_names)}"
+            )
+            logger.warning(warning_msg)
+
+        # --- Structure-based case ---
+        if EvalMetricDefinition.STRUCTURE in self.metrics or any(
+            ["structure" in m.name.lower() for m in self.metrics],
+        ):
+            # for now, the STRUCTURE metric is the only suitable one for search_results
+            for sr in params.search_results:
+                sections_test_case = LLMTestCase(
+                    input=sr.query,
+                    actual_output="",
+                    retrieval_context=[sr.content],
+                    expected_output=params.reference,
+                )
+                metric_evals = []
+
+                # metric = EvalMetricDefinition.STRUCTURE.value
+                metric = next(
+                    (m.value for m in self.metrics if "structure" in m.name.lower()),
+                    None,
+                )
+                metric.measure(sections_test_case)
                 metric_evals.append(
                     SingleEvaluationOutputSchema(
                         score=metric.score,
@@ -259,82 +339,17 @@ class LLMEvaluator(BaseTool):
                 )
                 all_scores.append(metric.score)
 
-            test_case_results.append(
-                TestCaseEvaluationResult(
-                    test_case_index=0,
-                    test_case_input=test_case.input,
-                    actual_output=test_case.actual_output,
-                    retrieval_context=test_case.retrieval_context or [],
-                    metric_evaluations=metric_evals,
-                ),
-            )
-
-        # Case 2: With search_results: possibly multiple LLMTestCases in future
-        else:
-            # --- Temporary warnings for unsupported metrics (TODO: design new metrics for SearchResultItem) ---
-            unsupported_metrics = [
-                m for m in self.metrics if m is not EvalMetricDefinition.STRUCTURE
-            ]
-            if unsupported_metrics:
-                metric_names = [
-                    getattr(m, "name", type(m).__name__) for m in unsupported_metrics
-                ]
-                warning_msg = (
-                    f"Warning: The following metrics are not fully supported with search_results "
-                    f"and will be skipped or may behave unexpectedly: {', '.join(metric_names)}"
+                test_case_results.append(
+                    TestCaseEvaluationResult(
+                        test_case_index=len(test_case_results),
+                        test_case_input=sections_test_case.input,
+                        actual_output=sections_test_case.actual_output,
+                        retrieval_context=sections_test_case.retrieval_context or [],
+                        metric_evaluations=metric_evals,
+                    ),
                 )
-                logger.warning(warning_msg)
 
-            # --- Structure-based case ---
-            if EvalMetricDefinition.STRUCTURE in self.metrics or any(
-                ["structure" in m.name.lower() for m in self.metrics],
-            ):
-                # for now, the STRUCTURE metric is the only suitable one for search_results
-                for sr in params.search_results:
-                    sections_test_case = LLMTestCase(
-                        input=sr.query,
-                        actual_output="",
-                        retrieval_context=[sr.content],
-                        expected_output=params.reference,
-                    )
-                    metric_evals = []
-
-                    # metric = EvalMetricDefinition.STRUCTURE.value
-                    metric = next(
-                        (
-                            m.value
-                            for m in self.metrics
-                            if "structure" in m.name.lower()
-                        ),
-                        None,
-                    )
-                    metric.measure(sections_test_case)
-                    metric_evals.append(
-                        SingleEvaluationOutputSchema(
-                            score=metric.score,
-                            reason=metric.reason,
-                            metric=metric.name,
-                        ),
-                    )
-                    all_scores.append(metric.score)
-
-                    test_case_results.append(
-                        TestCaseEvaluationResult(
-                            test_case_index=len(test_case_results),
-                            test_case_input=sections_test_case.input,
-                            actual_output=sections_test_case.actual_output,
-                            retrieval_context=sections_test_case.retrieval_context
-                            or [],
-                            metric_evaluations=metric_evals,
-                        ),
-                    )
-
-        avg_score = sum(all_scores) / len(all_scores) if all_scores else 0.0
-        return LLMEvaluatorOutputSchema(
-            score=avg_score,
-            test_case_results=test_case_results,
-            success=avg_score >= self.threshold,
-        )
+        return all_scores, test_case_results
 
     def _reverse_field_mapping(self, field_mapping: dict[str, str]) -> dict[str, str]:
         # e.g. {"input":"input","output":"actual_output"} -> {"input":"input","actual_output":"output"}
