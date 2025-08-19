@@ -94,24 +94,16 @@ class ContentCondensationComponent(LangBaseAgent):
         if original_tokens <= target_tokens:
             return result
 
-        prompt = f"""Research Question: {research_question}
-
-Source Title: {result.title or "Unknown"}
-Source URL: {result.url}
-
-Full Content:
-{result.content}
-
-Extract only the information from this content that directly addresses the research question. 
-Target approximately {target_tokens} tokens. If no relevant content exists, respond with "[NO RELEVANT CONTENT]"."""
+        prompt = CONTENT_CONDENSATION_PROMPT.format(
+            research_question=research_question,
+            source_title=result.title or "Unknown",
+            source_url=result.url,
+            content=result.content,
+            target_tokens=target_tokens,
+        )
 
         try:
-            response = await self.client.ainvoke(
-                [
-                    {"role": "system", "content": CONTENT_CONDENSATION_PROMPT},
-                    {"role": "user", "content": prompt},
-                ]
-            )
+            response = await self.client.ainvoke([{"role": "user", "content": prompt}])
 
             condensed_content = response.content.strip()
 
