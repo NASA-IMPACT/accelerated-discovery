@@ -3,7 +3,7 @@ from typing import Literal, Optional, Union
 
 import aiohttp
 from loguru import logger
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, field_validator
 from rapidfuzz import fuzz
 
 from akd.structures import SearchResultItem
@@ -50,10 +50,6 @@ class CrossRefDoiResolverOutputSchema(ResolverOutputSchema):
 
 class CrossRefDoiResolverConfig(ArticleResolverConfig):
     """Configuration for the CrossRef DOI resolver."""
-
-    def __init__(self, **kwargs):
-        kwargs["validate_resolved_url"] = False
-        super().__init__(**kwargs)
 
     validate_resolved_url: bool = Field(
         default=False,
@@ -111,6 +107,11 @@ class CrossRefDoiResolverConfig(ArticleResolverConfig):
         default="CrossRefResolver/1.0",
         description="User agent for HTTP requests",
     )
+
+    @field_validator("validate_resolved_url")
+    @classmethod
+    def force_validate_url_false(cls, v):
+        return False  # Always return False regardless of input
 
 
 class CrossRefDoiResolver(BaseArticleResolver):
