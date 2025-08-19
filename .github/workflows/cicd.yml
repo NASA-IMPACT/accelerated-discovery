@@ -20,7 +20,7 @@ jobs:
         if: github.base_ref == 'staging' && github.head_ref != 'development' || github.base_ref == 'production' && github.head_ref != 'staging'
         run: |
           echo "ERROR: You can only merge to staging from development and to production from staging"
-          exit 1   
+          exit 1
 
   define-environment:
     name: Set ✨ environment ✨
@@ -42,6 +42,41 @@ jobs:
 
     outputs:
       env_name: ${{ steps.define_environment.outputs.env_name }}
+
+  test-coverage:
+    name: Run Tests with Coverage 🧪
+    needs: [define-environment]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: "true"
+          submodules: "recursive"
+
+      - name: Set up python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov
+        working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest --cov=akd --cov-report=term-missing --cov-report=xml tests/
+        working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: ${{ vars.CDK_WORKING_DIRECTORY }}/coverage.xml
 
   check-tags:
     name: Validate CFN Template ✅
@@ -89,7 +124,7 @@ jobs:
           export PATH=~/.guard/bin:$PATH
           chmod +r cfn-guard/enforce-tags.guard
           cfn-guard validate -d ${{ vars.PATH_TO_CFN_TEMPLATE }} -r cfn-guard/enforce-tags.guard
-  
+
   deploy:
     name: Deploy to ${{ needs.define-environment.outputs.env_name }} 🚀
     concurrency: ${{ needs.define-environment.outputs.env_name }}
