@@ -1,14 +1,19 @@
+import os
+from typing import Literal, Optional, Union
+
 import aiohttp
 from loguru import logger
-from typing import Optional, Union
-from pydantic import HttpUrl
+from pydantic import Field, HttpUrl
 from rapidfuzz import fuzz
 
-
-from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema, ArticleResolverConfig
-from pydantic import Field
-
 from akd.structures import SearchResultItem
+
+from ._base import (
+    ArticleResolverConfig,
+    BaseArticleResolver,
+    ResolverInputSchema,
+    ResolverOutputSchema,
+)
 
 
 class CrossRefDoiResolverInputSchema(ResolverInputSchema):
@@ -36,7 +41,7 @@ class CrossRefDoiResolverOutputSchema(ResolverOutputSchema):
     Inherits from ResolverOutputSchema to ensure compatibility with search results.
     """
 
-    # override to make url optional 
+    # override to make url optional
     url: Optional[HttpUrl] = Field(
         None,
         description="URL of the article",
@@ -56,7 +61,7 @@ class CrossRefDoiResolverConfig(ArticleResolverConfig):
     )
 
     cross_ref_api_url: str = Field(
-        default="https://api.crossref.org/works",
+        default=os.getenv("CROSS_REF_API_URL", "https://api.crossref.org/works"),
         description="Base URL for CrossRef API",
     )
 
@@ -70,7 +75,7 @@ class CrossRefDoiResolverConfig(ArticleResolverConfig):
         description="Fuzzy matching threshold for title matching",
     )
 
-    fuzzy_score_method: str = Field(
+    fuzzy_score_method: Literal["token_set", "token_sort", "ratio"] = Field(
         default="token_set",
         description="Fuzzy score method: ratio, token_sort, token_set",
     )
@@ -79,8 +84,6 @@ class CrossRefDoiResolverConfig(ArticleResolverConfig):
         default="CrossRefResolver/1.0",
         description="User agent for HTTP requests",
     )
-
-    
 
 
 class CrossRefDoiResolver(BaseArticleResolver):
@@ -111,38 +114,46 @@ class CrossRefDoiResolver(BaseArticleResolver):
             "token_sort": fuzz.token_sort_ratio,
             "ratio": fuzz.ratio,
         }.get(method, fuzz.token_set_ratio)
-    
 
-    async def get_authors_from_search_result(self, result: SearchResultItem) -> list[str]:
+    async def get_authors_from_search_result(
+        self,
+        result: SearchResultItem,
+    ) -> list[str]:
         """
         Extract authors from search result. Utility function to be used if needed.
         """
-        return result.extra.get("authors") if result.extra and result.extra.get("authors") else result.authors if result.authors else []
-    
+        return (
+            result.extra.get("authors")
+            if result.extra and result.extra.get("authors")
+            else result.authors
+            if result.authors
+            else []
+        )
 
-    async def resolve(self, 
-                      params: CrossRefDoiResolverInputSchema
-                      ) -> Optional[CrossRefDoiResolverOutputSchema]:
-        
+    async def resolve(
+        self,
+        params: CrossRefDoiResolverInputSchema,
+    ) -> Optional[CrossRefDoiResolverOutputSchema]:
         # if doi is already present, return it
         if getattr(params, "doi", None):
             if self.debug:
                 logger.debug(f"DOI already present: {params.doi}")
             return CrossRefDoiResolverOutputSchema(**params.model_dump())
-        
+
         title = params.title.strip()
         authors = await self.get_authors_from_search_result(params)
-    
 
         if not title:
             if self.debug:
                 logger.debug("CrossRefResolver requires title to resolve DOI")
             return None
 
-        scorer     = self.get_fuzzy_scorer()
-        threshold  = self.config.fuzzy_threshold
+        scorer = self.get_fuzzy_scorer()
+        threshold = self.config.fuzzy_threshold
         title_norm = title.lower().strip()
-        input_authors_norm = [a.lower().strip() for a in (authors or [])][:3]  # cap at 3
+        input_authors_norm = [a.lower().strip() for a in (authors or [])][
+            :3
+        ]  # cap at 3
 
         query_params = {
             "query.title": title,
@@ -154,7 +165,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         doi = None
 
         try:
-            async with (self.session or aiohttp.ClientSession()) as session:
+            async with self.session or aiohttp.ClientSession() as session:
                 async with session.get(
                     self.config.cross_ref_api_url,
                     params=query_params,
@@ -178,14 +189,19 @@ class CrossRefDoiResolver(BaseArticleResolver):
 
                     # authors from CrossRef
                     result_authors = self.build_author_names(item.get("author", []))
-                    result_authors_norm = [a.lower().strip() for a in result_authors][:3]
+                    result_authors_norm = [a.lower().strip() for a in result_authors][
+                        :3
+                    ]
 
                     # if no input authors, title match is enough
                     authors_ok = True
                     if input_authors_norm:
                         # each input author must fuzzily match at least one result author
                         authors_ok = all(
-                            any(scorer(inp, cand) >= threshold for cand in result_authors_norm)
+                            any(
+                                scorer(inp, cand) >= threshold
+                                for cand in result_authors_norm
+                            )
                             for inp in input_authors_norm
                         )
 
@@ -199,15 +215,15 @@ class CrossRefDoiResolver(BaseArticleResolver):
                         break
 
                 if self.debug and not doi:
-                    logger.debug(f"No matching DOI found for title: {title} with authors: {authors}")
+                    logger.debug(
+                        f"No matching DOI found for title: {title} with authors: {authors}",
+                    )
 
                 result = CrossRefDoiResolverOutputSchema(**params.model_dump())
                 result.doi = doi
                 result.resolvers.append(self.__class__.__name__)
                 return result
-            
+
         except Exception as e:
             logger.error(f"Error during CrossRef resolution: {e}")
             return None
-        
-        
