@@ -212,6 +212,13 @@ class AbstractBase[
             )
         return output
 
+    def _truncate_for_debug(self, obj: Any, max_length: int = 250) -> str:
+        """Truncate object representation for debug logging."""
+        obj_str = str(obj)
+        if len(obj_str) <= max_length:
+            return obj_str
+        return obj_str[:max_length] + "..."
+
     async def arun(
         self,
         params: InSchema,
@@ -229,7 +236,7 @@ class AbstractBase[
         params = self._validate_input(params)
         if self.debug:
             logger.debug(
-                f"Running {self.__class__.__name__} with params: {params}",
+                f"Running {self.__class__.__name__} with params: {self._truncate_for_debug(params)}",
             )
         output = None
         try:
@@ -345,6 +352,13 @@ class UnrestrictedAbstractBase[
             raise TypeError("output must be an instance of pydantic BaseModel")
         return cast(OutSchema, output)
 
+    def _truncate_for_debug(self, obj: Any, max_length: int = 250) -> str:
+        """Truncate object representation for debug logging."""
+        obj_str = str(obj)
+        if len(obj_str) <= max_length:
+            return obj_str
+        return obj_str[:max_length] + "..."
+
     async def arun(
         self,
         params: InSchema,
@@ -362,7 +376,7 @@ class UnrestrictedAbstractBase[
         params = self._validate_input(params)
         if self.debug:
             logger.debug(
-                f"Running {self.__class__.__name__} with params: {params}",
+                f"Running {self.__class__.__name__} with params: {self._truncate_for_debug(params)}",
             )
         output = None
         try:
