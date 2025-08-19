@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Dict, List, Optional, Self
 
 import yaml
@@ -16,6 +15,7 @@ from akd._base import InputSchema, OutputSchema
 from akd.agents import InstructorBaseAgent
 from akd.agents._base import BaseAgentConfig
 from akd.configs.prompts import RISK_SYSTEM_PROMPT
+from akd.utils import get_akd_root
 
 
 class RiskAgentInputSchema(InputSchema):
@@ -91,7 +91,12 @@ class RiskAgentConfig(BaseAgentConfig):
     """Configuration for the RiskAgent."""
 
     system_prompt: str = RISK_SYSTEM_PROMPT
-    default_risk_yaml_path: str = str(Path(__file__).parent / "risk_atlas_data.yaml")
+    risk_yaml_path: Optional[str] = Field(
+        default_factory=lambda: str(
+            get_akd_root() / "akd/agents/risk/risk_atlas_data.yaml",
+        ),
+        description="Path to source Risk Atlas yaml file.",
+    )
 
 
 class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]):
@@ -129,26 +134,23 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
     ) -> None:
         """Initialize the RiskAgent with configuration."""
         config = config or RiskAgentConfig()
-        self.config = config
         super().__init__(config=config, debug=debug)
+        self._risk_map = self.load_risks_from_yaml(config.risk_yaml_path)
 
-    @classmethod
-    def load_risks_from_yaml(cls, path: str) -> Dict[str, str]:
+    @staticmethod
+    def load_risks_from_yaml(path: str) -> Dict[str, str]:
         """
         Load risks from YAML file and return a dict of {risk_id: description}
         """
-        if cls._risk_map is not None:
-            return cls._risk_map
 
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
-        cls._risk_map = {
+        return {
             risk["id"]: risk["description"]
             for risk in data.get("risks", [])
             if "id" in risk and "description" in risk
         }
-        return cls._risk_map
 
     def build_dag_from_criteria(
         self,
@@ -225,11 +227,8 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
         params: RiskAgentInputSchema,
         **kwargs,
     ) -> RiskAgentOutputSchema:
-        # Load risk definitions
-        risk_map = self.load_risks_from_yaml(self.config.default_risk_yaml_path)
-
         # Validate risk_ids
-        unknown_ids = [r for r in params.risk_ids if r not in risk_map]
+        unknown_ids = [r for r in params.risk_ids if r not in self._risk_map]
         if unknown_ids:
             raise ValueError(f"Unknown risk IDs provided: {unknown_ids}")
 
@@ -239,7 +238,7 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
             self.memory.clear()
 
             # Combine risk definition and conversation into one user message
-            risk_description = risk_map[risk_id]
+            risk_description = self._risk_map[risk_id]
 
             conversation_text = "\n".join(
                 f"Turn {i + 1}:\nUser: {inp}\nModel: {outp}"
