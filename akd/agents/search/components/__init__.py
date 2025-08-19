@@ -5,14 +5,18 @@ This module contains internal components that are embedded within literature sea
 providing deep integration of research workflow capabilities.
 """
 
-from .triage import TriageComponent
-from .clarification import ClarificationComponent  
+from .clarification import ClarificationComponent
+from .content_condensation import ContentCondensationComponent
+from .content_condenser import ContentCondenser
 from .instruction_builder import InstructionBuilderComponent
 from .research_synthesis import ResearchSynthesisComponent
+from .triage import TriageComponent
 
 __all__ = [
     "TriageComponent",
     "ClarificationComponent",
-    "InstructionBuilderComponent", 
+    "InstructionBuilderComponent",
     "ResearchSynthesisComponent",
+    "ContentCondensationComponent",
+    "ContentCondenser",
 ]

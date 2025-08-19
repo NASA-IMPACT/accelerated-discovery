@@ -29,11 +29,9 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessorConfig,
     LinkRelevancyAssessorInputSchema,
 )
-from akd.tools.scrapers import (
-    ScraperToolInputSchema,
-    SimplePDFScraper,
-    SimpleWebScraper,
-)
+from akd.tools.scrapers import OmniScraperInputSchema
+from akd.tools.scrapers.resolvers import UnpaywallResolver
+from akd.tools.scrapers.waterfall import WaterfallScraper
 from akd.tools.search.searxng_search import SearxNGSearchTool
 from akd.tools.search.semantic_scholar_search import (
     SemanticScholarSearchTool,
@@ -215,8 +213,31 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         # Initialize scrapers for full content fetching
         if self.config.enable_full_content_scraping:
-            self.web_scraper = web_scraper or SimpleWebScraper(debug=debug)
-            self.pdf_scraper = pdf_scraper or SimplePDFScraper(debug=debug)
+            # Use waterfall scraper with intelligent URL resolution using existing resolvers,
+            # publisher patterns, prefetching, and fallback strategies for comprehensive content extraction.
+            from akd.tools.scrapers import DoclingScraper, PyPaperBotScraper
+            from akd.tools.scrapers.resolvers import (
+                ADSResolver,
+                ArxivResolver,
+                IdentityResolver,
+            )
+
+            # Create resolvers with Unpaywall for DOI resolution to open access versions
+            resolvers = [
+                ArxivResolver(debug=debug),
+                ADSResolver(debug=debug),
+                UnpaywallResolver(debug=debug),
+                IdentityResolver(
+                    debug=debug
+                ),  # Always resolves to original URL as fallback
+            ]
+
+            self.omni_scraper = WaterfallScraper(
+                DoclingScraper(debug=debug),
+                PyPaperBotScraper(debug=debug),
+                resolvers=resolvers,
+                debug=debug,
+            )
         else:
             self.web_scraper = web_scraper  # Could be None or an injected instance
             self.pdf_scraper = pdf_scraper  # Could be None or an injected instance
@@ -242,17 +263,30 @@ class DeepLitSearchAgent(LitBaseAgent):
         if self.debug:
             logger.debug(f"Starting triage for query: {query}")
 
-        triage_output = await self.triage_component.process(query)
+        try:
+            triage_output = await self.triage_component.process(query)
 
-        if self.debug:
-            logger.debug(f"Triage decision: {triage_output.routing_decision}")
-            logger.debug(f"Reasoning: {triage_output.reasoning}")
+            if self.debug:
+                logger.debug(f"Triage decision: {triage_output.routing_decision}")
+                logger.debug(f"Reasoning: {triage_output.reasoning}")
 
-        return {
-            "routing_decision": triage_output.routing_decision,
-            "needs_clarification": triage_output.needs_clarification,
-            "reasoning": triage_output.reasoning,
-        }
+            return {
+                "routing_decision": triage_output.routing_decision,
+                "needs_clarification": triage_output.needs_clarification,
+                "reasoning": triage_output.reasoning,
+            }
+        except Exception as e:
+            if self.debug:
+                logger.warning(
+                    f"Triage component failed: {e}. Using fallback behavior."
+                )
+
+            # Fallback: assume no clarification needed, proceed with research
+            return {
+                "routing_decision": "research",
+                "needs_clarification": False,
+                "reasoning": "Triage component failed - proceeding with fallback behavior",
+            }
 
     async def _handle_clarification(
         self,
@@ -337,6 +371,15 @@ class DeepLitSearchAgent(LitBaseAgent):
             new_results = self._deduplicate_results(search_results, all_results)
             all_results.extend(new_results)
 
+            # Cap total results to prevent memory issues
+            if len(all_results) > 50:
+                all_results = all_results[:50]
+
+                if self.debug:
+                    logger.debug(
+                        f"Capped results: keeping first {len(all_results)} results"
+                    )
+
             # Evaluate quality
             if new_results:
                 quality_score = await self._evaluate_research_quality(
@@ -414,26 +457,64 @@ class DeepLitSearchAgent(LitBaseAgent):
         """Execute searches using available search tools."""
         all_results = []
 
-        search_input = self.search_tool.input_schema(
-            queries=queries,
-            max_results=20,
-            category="science",
+        # Launch all configured search tools concurrently
+        tasks: List[asyncio.Task] = []
+        tool_names: List[str] = []
+        for tool in getattr(self, "search_tools", []):
+            try:
+                # Use each tool's own input schema to ensure compatibility
+                tool_input = tool.input_schema(
+                    queries=queries,
+                    max_results=self.search_tool.max_results,
+                    category="science",
+                )
+                tasks.append(asyncio.create_task(tool.arun(tool_input)))
+                tool_names.append(type(tool).__name__)
+            except Exception as e:
+                logger.warning(
+                    f"Skipping tool {type(tool).__name__} due to init error: {e}"
+                )
+
+        if tasks:
+            results_or_errors = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, res in enumerate(results_or_errors):
+                name = tool_names[idx] if idx < len(tool_names) else f"Tool#{idx}"
+                if isinstance(res, Exception):
+                    logger.warning(f"{name} failed: {res}")
+                    continue
+                try:
+                    all_results.extend(res.results)
+                except Exception as e:  # defensive against unexpected shapes
+                    logger.warning(f"{name} unexpected search result shape: {e}")
+
+        all_results = list(
+            map(lambda r: DeepSearchResultItem(**r.model_dump()), all_results)
         )
 
-        primary_results = await self.search_tool.arun(search_input)
-        all_results.extend(primary_results.results)
-
-        # Search with Semantic Scholar if enabled
-        if self.semantic_scholar_tool and self.config.use_semantic_scholar:
-            ss_input = SemanticScholarSearchToolInputSchema(
-                queries=queries,
-                max_results=20,
-                category="science",
-            )
-            ss_results = await self.semantic_scholar_tool.arun(ss_input)
-            all_results.extend(ss_results.results)
-
-        all_results = list(map(lambda r: DeepSearchResultItem(**r.dict()), all_results))
+        # Optional source validation (ISSN whitelist) handled intrinsically by the validator
+        if self._source_validator and all_results:
+            try:
+                input_payload = SourceValidatorInputSchema(
+                    search_results=all_results,
+                )
+                validation_output = await self._source_validator.arun(input_payload)
+                # Keep only items that passed validation
+                filtered: List[DeepSearchResultItem] = []
+                for item, v in zip(all_results, validation_output.validated_results):
+                    if v.is_whitelisted:
+                        filtered.append(item)
+                if self.debug:
+                    logger.debug(
+                        "Source validation filter: kept %d of %d results",
+                        len(filtered),
+                        len(all_results),
+                    )
+                all_results = filtered
+            except Exception as e:
+                logger.warning(
+                    f"Source validation failed; dropping results due to strict validation mode: {e}"
+                )
+                all_results = []
         # Apply per-link relevancy assessment if enabled
         if self.link_relevancy_assessor and all_results:
             if self.debug:
