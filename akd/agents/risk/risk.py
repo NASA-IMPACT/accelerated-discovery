@@ -17,8 +17,6 @@ from akd.agents import InstructorBaseAgent
 from akd.agents._base import BaseAgentConfig
 from akd.configs.prompts import RISK_SYSTEM_PROMPT
 
-default_risk_yaml_path = Path(__file__).parent / "risk_atlas_data.yaml"
-
 
 class RiskAgentInputSchema(InputSchema):
     """
@@ -93,6 +91,7 @@ class RiskAgentConfig(BaseAgentConfig):
     """Configuration for the RiskAgent."""
 
     system_prompt: str = RISK_SYSTEM_PROMPT
+    default_risk_yaml_path: str = str(Path(__file__).parent / "risk_atlas_data.yaml")
 
 
 class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]):
@@ -119,6 +118,7 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
 
     input_schema = RiskAgentInputSchema
     output_schema = RiskAgentOutputSchema
+    config_schema = RiskAgentConfig
 
     _risk_map: Optional[Dict[str, str]] = None  # Cached risk ID -> description mapping
 
@@ -129,10 +129,11 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
     ) -> None:
         """Initialize the RiskAgent with configuration."""
         config = config or RiskAgentConfig()
+        self.config = config
         super().__init__(config=config, debug=debug)
 
     @classmethod
-    def load_risks_from_yaml(cls, path: str = default_risk_yaml_path) -> Dict[str, str]:
+    def load_risks_from_yaml(cls, path: str) -> Dict[str, str]:
         """
         Load risks from YAML file and return a dict of {risk_id: description}
         """
@@ -225,7 +226,7 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
         **kwargs,
     ) -> RiskAgentOutputSchema:
         # Load risk definitions
-        risk_map = self.load_risks_from_yaml()
+        risk_map = self.load_risks_from_yaml(self.config.default_risk_yaml_path)
 
         # Validate risk_ids
         unknown_ids = [r for r in params.risk_ids if r not in risk_map]
