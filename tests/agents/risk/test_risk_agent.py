@@ -5,6 +5,7 @@ import pytest
 from akd.agents.risk.risk import (
     Criterion,
     RiskAgent,
+    RiskAgentConfig,
     RiskAgentInputSchema,
     RiskCriteriaOutputSchema,
 )
@@ -77,7 +78,8 @@ def test_criterion_model():
 
 
 def test_load_risks_from_yaml():
-    risks = RiskAgent.load_risks_from_yaml()
+    config = RiskAgentConfig()
+    risks = RiskAgent.load_risks_from_yaml(config.default_risk_yaml_path)
     assert isinstance(risks, dict)
     assert "atlas-prompt-leaking" in risks
     assert isinstance(risks["atlas-prompt-leaking"], str)
