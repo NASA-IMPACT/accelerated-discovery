@@ -93,6 +93,11 @@ class CrossRefDoiResolverConfig(ArticleResolverConfig):
         )
     )
 
+    max_candidates: int = Field(
+        default=10,
+        description="Maximum number of results to process from CrossRef API response",
+    )
+
     author_fuzzy_method: Literal[
         "token_set",
         "token_sort",
@@ -310,8 +315,10 @@ class CrossRefDoiResolver(BaseArticleResolver):
         best_match = None
         best_score = 0
 
-        for item in items[:10]:  # Limit to first 10 results
-            result_title = (item.get("title") or [""])[0]
+        for item in items[
+            : self.max_candidates
+        ]:  # Limit to first max_candidates results
+            result_title = item.get("title", [""])[0]
             if not result_title:
                 if self.debug:
                     logger.debug("Skipping item with no title")
@@ -393,7 +400,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
 
         query_params = {
             "query.title": title,
-            "rows": 10,
+            "rows": self.max_candidates,
         }
         if authors:
             priority_authors = self.select_priority_authors(authors)
