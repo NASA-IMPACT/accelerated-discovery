@@ -12,6 +12,12 @@ from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd.configs.prompts import DEEP_RESEARCH_AGENT_PROMPT
 from akd.structures import SearchResultItem
 
+from .content_condensation import (
+    ContentCondensationComponent,
+    ContentCondensationConfig,
+    ContentCondensationInputSchema,
+)
+
 
 class ResearchSynthesisInputSchema(InputSchema):
     """Input schema for the ResearchSynthesisAgent."""
@@ -98,10 +104,58 @@ class ResearchSynthesisComponent:
         self,
         config: Optional[ResearchSynthesisAgentConfig] = None,
         debug: bool = False,
+        condensation_component: Optional[ContentCondensationComponent] = None,
     ):
         self.debug = debug
-        # Create the internal agent
         self._agent = ResearchSynthesisAgent(config=config, debug=debug)
+
+        if condensation_component is not None:
+            self._condensation_component = condensation_component
+        else:
+            # Create default condensation component
+            condensation_config = ContentCondensationConfig(
+                model_name="gpt-4o-mini", temperature=0.1, debug=debug
+            )
+            self._condensation_component = ContentCondensationComponent(
+                config=condensation_config, debug=debug
+            )
+
+    async def _condense_content_for_synthesis(
+        self,
+        results: List[SearchResultItem],
+        research_question: str,
+        max_tokens: int = None,
+    ) -> List[SearchResultItem]:
+        """
+        Condense content in search results to focus only on information
+        relevant to the research question.
+        """
+        if max_tokens is None:
+            max_tokens = self._agent.config.max_tokens
+
+        try:
+            condensation_input = ContentCondensationInputSchema(
+                research_question=research_question,
+                search_results=results,
+                max_tokens=max_tokens,
+            )
+
+            condensation_output = await self._condensation_component.arun(
+                condensation_input
+            )
+
+            if self.debug:
+                logger.debug(
+                    f"Content condensation: {condensation_output.total_tokens_reduced} tokens reduced, "
+                    f"compression ratio: {condensation_output.compression_ratio:.3f}"
+                )
+
+            return condensation_output.condensed_results
+
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Error in content condensation: {e}")
+            return results
 
     async def synthesize(
         self,
@@ -142,7 +196,27 @@ class ResearchSynthesisComponent:
             + "\n".join(f"- {trace}" for trace in research_trace[-5:])
         )
 
-        # Create input for the agent
+        # Use simple content condensation
+        if self.debug:
+            logger.debug("Using content condensation for synthesis")
+
+        try:
+            managed_results = await self._condense_content_for_synthesis(
+                results=results,
+                research_question=original_query,
+                max_tokens=self._agent.config.max_tokens,
+            )
+
+            if self.debug:
+                logger.debug(
+                    f"Content condensation: {len(results)} -> {len(managed_results)} results"
+                )
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Content condensation failed, using fallback: {e}")
+            managed_results = results[:10]  # Simple fallback: take first 10 results
+
+        # Single synthesis attempt with properly sized content
         agent_input = ResearchSynthesisInputSchema(
             query=original_query,
             search_results=results,
@@ -162,15 +236,38 @@ class ResearchSynthesisComponent:
             return agent_output
 
         except Exception as e:
-            logger.error(f"Error in agent synthesis: {e}")
-            # Create a simple fallback if agent fails
-            return self._create_fallback_output(
-                results,
-                original_query,
-                quality_scores,
-                research_trace,
-                iterations_performed,
-            )
+            if self._is_context_length_error(e):
+                if self.debug:
+                    logger.error("Context length still exceeded after condensation.")
+
+                # Emergency fallback: try with even fewer results
+                emergency_results = managed_results[:5]
+                emergency_input = ResearchSynthesisInputSchema(
+                    query=original_query,
+                    search_results=emergency_results,
+                    context=context,
+                )
+
+                try:
+                    return await self._agent.arun(emergency_input)
+                except Exception as emergency_e:
+                    if self.debug:
+                        logger.error(f"Emergency fallback also failed: {emergency_e}")
+                    raise emergency_e
+            else:
+                # Non context-length errors: log and fallback
+                if self.debug:
+                    logger.error(f"Error in agent synthesis: {e}")
+                # Fall through to fallback
+
+        # Fallback if all retries failed
+        return self._create_fallback_output(
+            results,
+            original_query,
+            quality_scores,
+            research_trace,
+            iterations_performed,
+        )
 
     def _create_fallback_output(
         self,
