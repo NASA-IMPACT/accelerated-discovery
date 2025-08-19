@@ -199,6 +199,17 @@ OUTPUT INSTRUCTIONS:
 - Err on the side of clarity - better to clarify than to research the wrong thing
 - Consider the research domain (scientific, technical, historical, etc.)"""
 
+CONTENT_CONDENSATION_PROMPT = """Research Question: {research_question}
+
+Source Title: {source_title}
+Source URL: {source_url}
+
+Full Content:
+{content}
+
+Extract only the information from this content that directly addresses the research question. 
+Target approximately {target_tokens} tokens. If no relevant content exists, respond with "[NO RELEVANT CONTENT]"."""
+
 DEEP_RESEARCH_AGENT_PROMPT = """IDENTITY and PURPOSE:
 You are an expert deep research agent with advanced capabilities in scientific literature search, synthesis, and analysis. You perform comprehensive, iterative research to produce high-quality, evidence-based reports.
 
