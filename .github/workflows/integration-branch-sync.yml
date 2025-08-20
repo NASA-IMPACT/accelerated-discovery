@@ -36,6 +36,7 @@ jobs:
           FORCE_COLOR: 1
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SEARXNG_BASE_URL: ${{ vars.SEARXNG_BASE_URL}}
+          SDE_BASE_URL: ${{ vars.SDE_BASE_URL }}
         run: |
           echo "Checking environment setup..."
           if [ -z "$OPENAI_API_KEY" ]; then
