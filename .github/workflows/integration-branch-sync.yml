@@ -26,11 +26,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest-cov
+          pip install pytest-cov pytest-asyncio
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
       - name: Run tests with coverage
         id: test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           python -m pytest --cov=akd --cov-report=term-missing --cov-report=xml tests/
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
