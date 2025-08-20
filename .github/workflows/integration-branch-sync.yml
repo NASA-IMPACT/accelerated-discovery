@@ -49,12 +49,36 @@ jobs:
           echo "Using SearxNG instance: $SEARXNG_BASE_URL"
           set +e  # Don't exit on command failure
 
-          python -m pytest tests/ -v
+          # Capture test output for parsing
+          python -m pytest tests/ -v --cov --cov-report=xml --cov-report=term > test_output.log 2>&1
           test_exit_code=$?
+
+          # Display the output
+          cat test_output.log
 
           echo ""
           echo "📊 Test Results Summary:"
           echo "Exit code: $test_exit_code"
+
+          # Extract test results from pytest output
+          if [ -f test_output.log ]; then
+            # Extract passed/failed counts from pytest summary
+            failed_count=$(grep -E "= [0-9]+ failed" test_output.log | sed -E 's/.*= ([0-9]+) failed.*/\1/' || echo "0")
+            passed_count=$(grep -E "[0-9]+ passed" test_output.log | sed -E 's/.*([0-9]+) passed.*/\1/' || echo "0")
+
+            # Extract coverage percentage from coverage report
+            coverage_percent=$(grep -E "TOTAL.*[0-9]+%" test_output.log | awk '{print $(NF)}' | sed 's/%//' || echo "0")
+
+            echo "Extracted metrics:"
+            echo "- Passed tests: $passed_count"
+            echo "- Failed tests: $failed_count"
+            echo "- Coverage: $coverage_percent%"
+
+            # Set outputs for GitHub Actions
+            echo "passed_tests=$passed_count" >> $GITHUB_OUTPUT
+            echo "failed_tests=$failed_count" >> $GITHUB_OUTPUT
+            echo "coverage_percent=$coverage_percent" >> $GITHUB_OUTPUT
+          fi
 
           # Check for coverage files
           if [ -f coverage.xml ]; then
@@ -92,12 +116,22 @@ jobs:
           script: |
             const testResult = '${{ steps.test.outputs.test_result }}';
             const exitCode = '${{ steps.test.outputs.test_exit_code }}';
+            const passedTests = '${{ steps.test.outputs.passed_tests }}' || '0';
+            const failedTests = '${{ steps.test.outputs.failed_tests }}' || '0';
+            const coveragePercent = '${{ steps.test.outputs.coverage_percent }}' || '0';
+
             const outcome = testResult === 'success' ? '✅ Tests passed' : `❌ Tests failed (exit code: ${exitCode})`;
+
+            let testSummary = '';
+            if (passedTests !== '0' || failedTests !== '0') {
+              testSummary = `\n\n## 📊 Test Results\n- **Passed**: ${passedTests}\n- **Failed**: ${failedTests}\n- **Coverage**: ${coveragePercent}%`;
+            }
+
             github.rest.issues.createComment({
               issue_number: ${{ github.event.pull_request.number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${outcome}\n\nBranch: \`${{ github.head_ref }}\`\nPR: #${{ github.event.pull_request.number }}\nCommit: ${{ github.sha }}\n\n📊 Coverage report should be available in the workflow logs above.`
+              body: `${outcome}${testSummary}\n\nBranch: \`${{ github.head_ref }}\`\nPR: #${{ github.event.pull_request.number }}\nCommit: ${{ github.sha }}\n\n📋 Full coverage report and logs are available in the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
             })
 
   sync-integration:
