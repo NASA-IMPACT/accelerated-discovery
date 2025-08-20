@@ -147,7 +147,12 @@ async def test_github_code_search(github_tool):
 async def test_sde_api():
     url = "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    payload = {"filters": {}, "page": 0, "pageSize": 1, "search_term": "test"}
+    payload = {
+        "page": 0,
+        "pageSize": 1,
+        "search_term": "test",
+        "search_type": "keyword",
+    }
 
     response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=5)
     assert response.status_code == 200
@@ -161,8 +166,7 @@ async def test_sde_api():
 @pytest.mark.asyncio
 async def test_sde_code_search(sde_tool):
     input_params = CodeSearchToolInputSchema(
-        queries=["weather prediction"],
-        max_results=5,
+        queries=["weather prediction"], max_results=5, search_mode="keyword"
     )
     # Input structure validation
     assert input_params.queries == ["weather prediction"]
