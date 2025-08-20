@@ -31,9 +31,11 @@ jobs:
       - name: Run tests with coverage
         id: test
         env:
+          PYTHONUNBUFFERED: 1
+          FORCE_COLOR: 1
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python -m pytest --cov=akd --cov-report=term-missing --cov-report=xml tests/
+          python -m pytest tests/ -v
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
       - name: Upload coverage reports
