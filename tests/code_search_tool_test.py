@@ -1,26 +1,26 @@
-import sys
+import json
 import os
+import sys
+
+import numpy as np
+import pandas as pd
 import pytest
 import requests
-import numpy as np
-import json
-import pandas as pd
 
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import asyncio
-from akd.tools.misc import Embedder
-from akd.tools.search import SearxNGSearchToolConfig
+
 from akd.tools.code_search import (
     CodeSearchToolInputSchema,
+    GitHubCodeSearchTool,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
-    GitHubCodeSearchTool,
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
 )
-
+from akd.tools.misc import Embedder
+from akd.tools.search import SearxNGSearchToolConfig
 
 """Validate the output structure"""
 
@@ -116,7 +116,7 @@ async def test_local_repo_search(local_tool):
 
 @pytest.mark.asyncio
 async def test_searxng_server():
-    url = "http://localhost:8080"
+    url = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
     response = requests.head(url)
     assert response.status_code == 200
     assert response.headers.get("Content-Type") == "text/html; charset=utf-8"

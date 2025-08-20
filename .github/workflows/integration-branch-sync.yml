@@ -59,23 +59,52 @@ jobs:
 
           # Extract test results from pytest output
           if [ -f test_output.log ]; then
-            # Extract passed/failed/warnings counts from pytest summary line
-            # Format: ============ 7 failed, 97 passed, 86 warnings in 189.82s (0:03:09) =============
-            summary_line=$(grep -E "=+ [0-9]+ (failed|passed)" test_output.log)
+            # Debug: Show what we're parsing
+            echo "=== Debug: Searching for test results in output ==="
+            echo "Last 10 lines of test output:"
+            tail -10 test_output.log
+            echo ""
+            echo "Lines containing 'failed', 'passed', or 'warnings':"
+            grep -E "(failed|passed|warnings)" test_output.log | tail -5 || echo "No matching lines found"
+            echo "Lines containing '====' (pytest separators):"
+            grep -E "=+" test_output.log | tail -3 || echo "No separator lines found"
+            echo "=============================================="
 
-            # Extract failed count
-            failed_count=$(echo "$summary_line" | grep -oE "[0-9]+ failed" | grep -oE "[0-9]+" || echo "0")
+            # Strategy A: Look for pytest summary line
+            # Format: ============ 7 failed, 97 passed, 86 warnings in 189.82s =============
+            summary_line=$(grep -E "=+ [0-9]+" test_output.log | grep -E "(failed|passed)" | tail -1)
 
-            # Extract passed count
-            passed_count=$(echo "$summary_line" | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" || echo "0")
+            if [ -n "$summary_line" ]; then
+              echo "Strategy A: Found summary line: $summary_line"
+              # Extract from summary line
+              failed_count=$(echo "$summary_line" | grep -oE "[0-9]+ failed" | grep -oE "[0-9]+" || echo "0")
+              passed_count=$(echo "$summary_line" | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" || echo "0")
+              warnings_count=$(echo "$summary_line" | grep -oE "[0-9]+ warnings" | grep -oE "[0-9]+" || echo "0")
+              parsing_strategy="summary_line"
+            else
+              echo "Strategy B: No summary line found, counting individual test results..."
+              # Count individual FAILED/PASSED lines
+              failed_count=$(grep -c "^FAILED " test_output.log || echo "0")
+              passed_count=$(grep -c "^PASSED " test_output.log || echo "0")
+              warnings_count=$(grep -c "warnings summary" test_output.log || echo "0")
+              parsing_strategy="individual_counts"
 
-            # Extract warnings count
-            warnings_count=$(echo "$summary_line" | grep -oE "[0-9]+ warnings" | grep -oE "[0-9]+" || echo "0")
+              # Strategy C: Try short test summary info section
+              if [ "$failed_count" = "0" ] && [ "$passed_count" = "0" ]; then
+                echo "Strategy C: Trying short test summary info section..."
+                summary_info=$(grep -A 10 "short test summary info" test_output.log || echo "")
+                if [ -n "$summary_info" ]; then
+                  failed_count=$(echo "$summary_info" | grep -c "FAILED" || echo "0")
+                  passed_count=$(echo "$summary_info" | grep -c "PASSED" || echo "0")
+                  parsing_strategy="summary_info_section"
+                fi
+              fi
+            fi
 
             # Extract coverage percentage from coverage report
             coverage_percent=$(grep -E "TOTAL.*[0-9]+%" test_output.log | awk '{print $(NF)}' | sed 's/%//' || echo "0")
 
-            echo "Extracted metrics:"
+            echo "Extracted metrics (using $parsing_strategy):"
             echo "- Passed tests: $passed_count"
             echo "- Failed tests: $failed_count"
             echo "- Warnings: $warnings_count"
@@ -86,6 +115,7 @@ jobs:
             echo "failed_tests=$failed_count" >> $GITHUB_OUTPUT
             echo "warnings_count=$warnings_count" >> $GITHUB_OUTPUT
             echo "coverage_percent=$coverage_percent" >> $GITHUB_OUTPUT
+            echo "parsing_strategy=$parsing_strategy" >> $GITHUB_OUTPUT
           fi
 
           # Check for coverage files
@@ -128,12 +158,19 @@ jobs:
             const failedTests = '${{ steps.test.outputs.failed_tests }}' || '0';
             const warningsCount = '${{ steps.test.outputs.warnings_count }}' || '0';
             const coveragePercent = '${{ steps.test.outputs.coverage_percent }}' || '0';
+            const parsingStrategy = '${{ steps.test.outputs.parsing_strategy }}' || 'unknown';
 
             const outcome = testResult === 'success' ? '✅ Tests passed' : `❌ Tests failed (exit code: ${exitCode})`;
 
-            let testSummary = '';
-            if (passedTests !== '0' || failedTests !== '0') {
-              testSummary = `\n\n## 📊 Test Results\n- **Passed**: ${passedTests}\n- **Failed**: ${failedTests}\n- **Warnings**: ${warningsCount}\n- **Coverage**: ${coveragePercent}%`;
+            // Always show test results section
+            let testSummary = `\n\n## 📊 Test Results\n- **Passed**: ${passedTests}\n- **Failed**: ${failedTests}\n- **Warnings**: ${warningsCount}\n- **Coverage**: ${coveragePercent}%`;
+
+            // Add parsing context if results are all zeros
+            if (passedTests === '0' && failedTests === '0') {
+              testSummary += `\n\n⚠️ _Note: Test counts are 0, which may indicate parsing issues or early test failure. Check the workflow logs for details._`;
+              if (parsingStrategy !== 'unknown') {
+                testSummary += `\n_Parsing strategy used: ${parsingStrategy}_`;
+              }
             }
 
             github.rest.issues.createComment({
