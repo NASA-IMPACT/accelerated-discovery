@@ -1,9 +1,8 @@
 """
 URL Resolver package for AKD project.
 
-This package contains various resolvers for transforming URLs to their final destinations,
-such as DOI URLs, PDF URLs, or publisher URLs. It supports multiple input sources including
-direct URLs, PDF URLs, and DOI identifiers from search results.
+This package contains resolvers for transforming URLs to their final destinations,
+such as DOI URLs, PDF URLs, or publisher URLs.
 """
 
 # Base classes and schemas
@@ -17,19 +16,8 @@ from ._base import (
 # Individual resolvers
 from .ads import ADSResolver
 from .arxiv import ArxivResolver
-from .crossref_doi import (
-    CrossRefDoiResolver,
-    CrossRefDoiResolverConfig,
-    CrossRefDoiResolverInputSchema,
-    CrossRefDoiResolverOutputSchema,
-    
-)
-
-# Composite resolver
 from .composite import ResearchArticleResolver
-from .identity import IdentityResolver
-
-# Specialized resolvers
+from .crossref_doi import CrossRefDoiResolver
 from .specialized import DOIResolver, PDFUrlResolver
 
 __all__ = [
@@ -38,19 +26,11 @@ __all__ = [
     "ResolverInputSchema",
     "ResolverOutputSchema",
     "ArticleResolverConfig",
-    # Specialized resolvers
-    "PDFUrlResolver",
-    "DOIResolver",
     # Individual resolvers
-    "IdentityResolver",
-    "ArxivResolver",
     "ADSResolver",
-     # Cross ref DOI resolvers
-    "CrossRefDoiResolver", 
-    "CrossRefDoiResolverConfig",
-    "CrossRefDoiResolverInputSchema",
-    "CrossRefDoiResolverOutputSchema",
-    # Composite resolver
+    "ArxivResolver",
     "ResearchArticleResolver",
-    
+    "CrossRefDoiResolver",
+    "DOIResolver",
+    "PDFUrlResolver",
 ]
