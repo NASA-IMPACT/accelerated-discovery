@@ -9,6 +9,7 @@ from deepeval.metrics.dag import (
     VerdictNode,
 )
 from deepeval.test_case import LLMTestCaseParams
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from akd._base import InputSchema, OutputSchema
@@ -43,6 +44,9 @@ class RiskAgentInputSchema(InputSchema):
     @model_validator(mode="after")
     def check_inputs(self) -> Self:
         if len(self.inputs) != len(self.outputs):
+            logger.error(
+                f"'inputs' and 'outputs' must be of equal length. Got {len(self.inputs)} inputs and {len(self.outputs)} outputs.",
+            )
             raise ValueError(
                 f"'inputs' and 'outputs' must be of equal length. Got {len(self.inputs)} inputs and {len(self.outputs)} outputs.",
             )
@@ -136,6 +140,7 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
         config = config or RiskAgentConfig()
         super().__init__(config=config, debug=debug)
         self._risk_map = self.load_risks_from_yaml(config.risk_yaml_path)
+        logger.info("Risk agent created.")
 
     @staticmethod
     def load_risks_from_yaml(path: str) -> Dict[str, str]:
@@ -230,11 +235,13 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
         # Validate risk_ids
         unknown_ids = [r for r in params.risk_ids if r not in self._risk_map]
         if unknown_ids:
+            logger.error(f"Unknown risk IDs provided: {unknown_ids}")
             raise ValueError(f"Unknown risk IDs provided: {unknown_ids}")
 
         criteria_by_risk = {}
 
         for risk_id in params.risk_ids:
+            logger.info(f"Processing risk: {risk_id}")
             self.memory.clear()
 
             # Combine risk definition and conversation into one user message
@@ -264,9 +271,11 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
             response = await self.get_response_async(
                 response_model=RiskCriteriaOutputSchema,
             )
+            logger.info(f"Judge criteria obtained for risk: {risk_id}")
             criteria_by_risk[risk_id] = response.criteria
 
         dag_metric = self.build_dag_from_criteria(criteria_by_risk)
+        logger.info("DAG metric created.")
 
         return RiskAgentOutputSchema(
             criteria_by_risk=criteria_by_risk,
