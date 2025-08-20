@@ -41,14 +41,12 @@ dependencies = [
     "wikipedia>=1.4.0",
     "docling>=2.37.0",
     "langchain-openai>=0.3.27",
-    "pytest-asyncio>=1.0.0",
     "tenacity>=9.1.2",
     "httpx>=0.28.1",
-    "pytest-cov>=6.2.1",
     "sentence-transformers>=5.0.0",
     "ollama>=0.5.1",
     "tiktoken>=0.9.0",
-    "deepeval>=3.4.0"
+    "deepeval>=3.4.0",
 ]
 
 [project.urls]
@@ -65,11 +63,33 @@ build-backend = "setuptools.build_meta"
 include = ["akd*"]
 exclude = ["tests*", "examples*", "scripts*", "notebooks*"]
 
-[tool.poetry.group.dev.dependencies]
-ipykernel = "^6.30.0"
+# Pytest configuration
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+    "--cov=akd",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow tests",
+]
 
-[dependency-groups]
+# Optional dependencies (extras)
+[project.optional-dependencies]
 dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.0.0",
     "ipykernel>=6.30.0",
     "ipywidgets>=8.1.7",
     "pre-commit>=4.2.0",
