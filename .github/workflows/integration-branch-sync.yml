@@ -35,6 +35,15 @@ jobs:
           FORCE_COLOR: 1
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
+          echo "Checking environment setup..."
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "❌ OPENAI_API_KEY is not set"
+          else
+            echo "✅ OPENAI_API_KEY is set (length: ${#OPENAI_API_KEY})"
+            echo "Key starts with: ${OPENAI_API_KEY:0:7}..." # Show first 7 chars safely
+          fi
+
+          echo "Running tests..."
           python -m pytest tests/ -v
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
