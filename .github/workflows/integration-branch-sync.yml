@@ -35,6 +35,7 @@ jobs:
           PYTHONUNBUFFERED: 1
           FORCE_COLOR: 1
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SEARXNG_BASE_URL: ${{ vars.SEARXNG_BASE_URL}}
         run: |
           echo "Checking environment setup..."
           if [ -z "$OPENAI_API_KEY" ]; then
@@ -45,6 +46,7 @@ jobs:
           fi
 
           echo "Running tests..."
+          echo "Using SearxNG instance: $SEARXNG_BASE_URL"
           set +e  # Don't exit on command failure
 
           python -m pytest tests/ -v
