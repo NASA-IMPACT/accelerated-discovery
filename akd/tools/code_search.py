@@ -249,11 +249,11 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     data_file: str = str(
-        get_akd_root() / "docs" / "repositories_with_embeddings_v2.csv"
+        get_akd_root() / "docs" / "repositories_with_embeddings_v3.csv"
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
-        "1H15aL-y6DsQl-bt08cU0FaZf5NuwUzmD",
+        "1QtTKnlQmSFshCvw3cXAHXgMQQ-DMuGq0",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
     wait_time: int = 1
@@ -674,6 +674,7 @@ class SDECodeSearchToolConfig(CodeSearchToolConfig):
         description="Headers for the SDE API",
     )
     debug: bool = False
+    search_mode: str = "hybrid"  # "hybrid","vector","keyword"
 
 
 class SDECodeSearchTool(CodeSearchTool):
@@ -692,10 +693,10 @@ class SDECodeSearchTool(CodeSearchTool):
         """
 
         payload = {
-            "filters": {},
             "page": page,
             "pageSize": self.page_size,
             "search_term": query,
+            "search_type": self.search_mode,
         }
         if self.debug:
             logger.debug(f"Payload: {payload}")
