@@ -23,6 +23,7 @@ from akd.agents.search import (
 )
 from akd.configs.project import get_project_settings
 from akd.structures import SearchResultItem
+from akd.tools.search._base import SearchToolInputSchema
 
 
 class TestDeepLitSearchAgentConfig:
@@ -551,7 +552,7 @@ class TestDeepLitSearchAgentSearchExecution:
             ),
         ]
         mock_search_tool.arun.return_value = mock_search_result
-        mock_search_tool.input_schema = LitSearchAgentInputSchema
+        mock_search_tool.input_schema = SearchToolInputSchema
 
         # Create agent with semantic scholar disabled
         config = DeepLitSearchAgentConfig(
@@ -584,7 +585,7 @@ class TestDeepLitSearchAgentSearchExecution:
             ),
         ]
         mock_search_tool.arun.return_value = mock_search_result
-        mock_search_tool.input_schema = LitSearchAgentInputSchema
+        mock_search_tool.input_schema = SearchToolInputSchema
 
         # Mock semantic scholar tool
         mock_semantic_scholar_tool = AsyncMock()
@@ -652,7 +653,7 @@ class TestDeepLitSearchAgentSearchExecution:
             ),
         ]
         mock_search_tool.arun.return_value = mock_search_result
-        mock_search_tool.input_schema = LitSearchAgentInputSchema
+        mock_search_tool.input_schema = SearchToolInputSchema
 
         # Mock link relevancy assessor
         mock_assessor = AsyncMock()
@@ -839,7 +840,7 @@ class TestDeepLitSearchAgentIntegration:
             ),
         ]
         mock_search_tool.arun.return_value = mock_search_result
-        mock_search_tool.input_schema = LitSearchAgentInputSchema
+        mock_search_tool.input_schema = SearchToolInputSchema
 
         # Mock relevancy agent for quality evaluation
         mock_relevancy_agent = AsyncMock()
@@ -952,7 +953,7 @@ class TestDeepLitSearchAgentIntegration:
             ),
         ]
         mock_search_tool.arun.return_value = mock_search_result
-        mock_search_tool.input_schema = LitSearchAgentInputSchema
+        mock_search_tool.input_schema = SearchToolInputSchema
 
         mock_relevancy_agent = AsyncMock()
         mock_rubric_output = MultiRubricRelevancyOutputSchema(
@@ -1049,7 +1050,7 @@ class TestDeepLitSearchAgentIntegration:
             ),
         ]
         mock_search_tool.arun.side_effect = [first_result, second_result]
-        mock_search_tool.input_schema = LitSearchAgentInputSchema
+        mock_search_tool.input_schema = SearchToolInputSchema
 
         # Mock relevancy agent to show quality improvement
         mock_relevancy_agent = AsyncMock()
@@ -1151,7 +1152,7 @@ class TestDeepLitSearchAgentErrorHandling:
             ),
         ]
         mock_search_tool.arun.return_value = mock_search_result
-        mock_search_tool.input_schema = LitSearchAgentInputSchema
+        mock_search_tool.input_schema = SearchToolInputSchema
 
         # Mock relevancy agent
         mock_relevancy_agent = AsyncMock()
