@@ -71,8 +71,22 @@ jobs:
             echo "=============================================="
 
             # Strategy A: Look for pytest summary line
-            # Format: ============ 7 failed, 97 passed, 86 warnings in 189.82s =============
-            summary_line=$(grep -E "=+ [0-9]+" test_output.log | grep -E "(failed|passed)" | tail -1)
+            # Format: ============ 6 failed, 98 passed, 87 warnings in 200.97s =============
+            summary_line=$(grep -E "^=+ [0-9]+ [a-z]+, [0-9]+ [a-z]+" test_output.log | tail -1)
+
+            # Debug: Show what Strategy A found
+            echo "Strategy A debug:"
+            echo "  Looking for pattern: '^=+ [0-9]+ [a-z]+, [0-9]+ [a-z]+'"
+            if [ -n "$summary_line" ]; then
+              echo "  Found summary line: '$summary_line'"
+            else
+              echo "  No summary line found"
+              # Alternative pattern matching
+              summary_line=$(grep -E "=.*[0-9]+ failed.*[0-9]+ passed" test_output.log | tail -1)
+              if [ -n "$summary_line" ]; then
+                echo "  Found with alternative pattern: '$summary_line'"
+              fi
+            fi
 
             if [ -n "$summary_line" ]; then
               echo "Strategy A: Found summary line: $summary_line"
@@ -83,11 +97,15 @@ jobs:
               parsing_strategy="summary_line"
             else
               echo "Strategy B: No summary line found, counting individual test results..."
-              # Count individual FAILED/PASSED lines
-              failed_count=$(grep -c "^FAILED " test_output.log || echo "0")
-              passed_count=$(grep -c "^PASSED " test_output.log || echo "0")
+              # Count individual FAILED/PASSED lines (without space requirement)
+              failed_count=$(grep -c "^FAILED" test_output.log || echo "0")
+              passed_count=$(grep -c "^PASSED" test_output.log || echo "0")
               warnings_count=$(grep -c "warnings summary" test_output.log || echo "0")
               parsing_strategy="individual_counts"
+
+              echo "Strategy B debug:"
+              echo "  FAILED pattern '^FAILED' matches: $failed_count"
+              echo "  PASSED pattern '^PASSED' matches: $passed_count"
 
               # Strategy C: Try short test summary info section
               if [ "$failed_count" = "0" ] && [ "$passed_count" = "0" ]; then
@@ -97,6 +115,7 @@ jobs:
                   failed_count=$(echo "$summary_info" | grep -c "FAILED" || echo "0")
                   passed_count=$(echo "$summary_info" | grep -c "PASSED" || echo "0")
                   parsing_strategy="summary_info_section"
+                  echo "  Strategy C found: $failed_count failed, $passed_count passed"
                 fi
               fi
             fi
@@ -109,6 +128,13 @@ jobs:
             echo "- Failed tests: $failed_count"
             echo "- Warnings: $warnings_count"
             echo "- Coverage: $coverage_percent%"
+
+            # Validate variables before setting outputs
+            [ -z "$passed_count" ] && passed_count="0"
+            [ -z "$failed_count" ] && failed_count="0"
+            [ -z "$warnings_count" ] && warnings_count="0"
+            [ -z "$coverage_percent" ] && coverage_percent="0"
+            [ -z "$parsing_strategy" ] && parsing_strategy="unknown"
 
             # Set outputs for GitHub Actions
             echo "passed_tests=$passed_count" >> $GITHUB_OUTPUT
