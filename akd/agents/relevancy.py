@@ -83,6 +83,7 @@ class MethodologicalRelevanceLabel(str, Enum):
 
 class EvidenceQualityLabel(str, Enum):
     HIGH_QUALITY_EVIDENCE = "high_quality_evidence"
+    MEDIUM_QUALITY_EVIDENCE = "medium_quality_evidence"
     LOW_QUALITY_EVIDENCE = "low_quality_evidence"
 
 
