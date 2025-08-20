@@ -248,16 +248,19 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     Configuration for the local repository code search tool.
     """
 
-    data_file: str = str(get_akd_root() / "docs" / "repositories_with_embeddings.csv")
+    data_file: str = str(
+        get_akd_root() / "docs" / "repositories_with_embeddings_v3.csv"
+    )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
-        "1nPaEWD9Wuf115aEmqJQusCvJlPc7AP7O",
+        "1QtTKnlQmSFshCvw3cXAHXgMQQ-DMuGq0",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
     wait_time: int = 1
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
     remove_embedding_column: bool = True
     text_column: str = "text"
+    desc_column: str = "description"
     embeddings_column: str = "embeddings"
     debug: bool = False
 
@@ -385,7 +388,15 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         )
 
         # Get texts to embed
-        texts = self.repo_data[self.config.text_column].fillna("").astype(str).tolist()
+        texts = (
+            (
+                self.repo_data[self.config.desc_column].fillna("")
+                + " "
+                + self.repo_data[self.config.text_column].fillna("")
+            )
+            .astype(str)
+            .tolist()
+        )
 
         # Process in batches
         embeddings = []
@@ -663,6 +674,7 @@ class SDECodeSearchToolConfig(CodeSearchToolConfig):
         description="Headers for the SDE API",
     )
     debug: bool = False
+    search_mode: str = "hybrid"  # "hybrid","vector","keyword"
 
 
 class SDECodeSearchTool(CodeSearchTool):
@@ -681,10 +693,10 @@ class SDECodeSearchTool(CodeSearchTool):
         """
 
         payload = {
-            "filters": {},
             "page": page,
             "pageSize": self.page_size,
             "search_term": query,
+            "search_type": self.search_mode,
         }
         if self.debug:
             logger.debug(f"Payload: {payload}")
