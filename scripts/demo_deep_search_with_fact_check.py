@@ -12,6 +12,8 @@ This script demonstrates a complete pipeline:
 import asyncio
 import sys
 
+import markdown
+from bs4 import BeautifulSoup
 from langchain_core.documents import Document
 
 from akd.agents.search import (
@@ -27,6 +29,29 @@ from akd.tools.text_splitter import (
     TextSplitterToolConfig,
 )
 from akd.tools.vector_db_tool import VectorDBTool
+
+
+def process_report(report):
+    """Processes a report (in markdown) to remove headers and reference lists."""
+    html = markdown.markdown(report)
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Ignore header values
+    content_tags = soup.find_all(["p", "li"])
+
+    prose_fragments = []
+    for tag in content_tags:
+        is_reference_link = (
+            tag.name == "li" and tag.find("a") and len(tag.contents) == 1
+        )
+
+        if is_reference_link:
+            continue
+        else:
+            prose_fragments.append(tag.get_text(strip=True))
+
+    cleaned_markdown = "\n".join(prose_fragments)
+    return cleaned_markdown
 
 
 async def main():
@@ -47,7 +72,7 @@ async def main():
     )
     agent = DeepLitSearchAgent(config=agent_config)
 
-    research_query = "recent advances in transformer architectures"
+    research_query = "What evidence is there for water on Mars?"
     input_params = LitSearchAgentInputSchema(query=research_query, max_results=3)
 
     print(f"--- Starting research for: '{research_query}' ---")
@@ -109,11 +134,17 @@ async def main():
     print("\n--- Fact-checking the generated research report ---")
     fact_check_tool = FactCheckTool()
 
+    # Clean markdown formatting from report
+    report = research_report.get("content", "")
+
+    plaintext_report = process_report(report)
+
     fact_check_input = FactCheckInputSchema(
         question=research_report.get("query", research_query),
-        answer=research_report.get("content", ""),
+        answer=plaintext_report,
     )
 
+    print(plaintext_report)
     fact_check_result = await fact_check_tool.arun(params=fact_check_input)
 
     print("\n--- Fact-Check Complete ---")
