@@ -8,6 +8,7 @@ jobs:
   test-pr-branch:
     name: Run Tests on PR Branch 🧪
     runs-on: ubuntu-latest
+    environment: integration
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -30,7 +31,6 @@ jobs:
 
       - name: Run tests with coverage
         id: test
-        environment: integration
         env:
           PYTHONUNBUFFERED: 1
           FORCE_COLOR: 1
