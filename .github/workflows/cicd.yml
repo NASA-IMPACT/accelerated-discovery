@@ -122,7 +122,7 @@ jobs:
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v3
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.DEPLOYMENT_ROLE_ARN }}
           role-session-name: ${{ github.repository_owner}}
