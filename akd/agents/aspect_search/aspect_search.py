@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Union
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
 
-from langgraph.pregel.retry import RetryPolicy
+from langgraph.types import RetryPolicy
 from langchain_core.messages import AIMessage
 from langgraph.graph import StateGraph, START
 from langchain_community.retrievers import WikipediaRetriever
