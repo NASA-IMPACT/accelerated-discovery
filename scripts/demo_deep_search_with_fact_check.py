@@ -3,9 +3,8 @@ Demo script for running a full research and fact-checking workflow.
 
 This script demonstrates a complete pipeline:
 1.  Run the DeepLitSearchAgent to find relevant literature and generate a report.
-2.  Use the TextSplitterTool to chunk the retrieved source documents.
+2.  Convert the search results into text chunks using a Langchain text splitter.
 3.  Use the VectorDBTool to index the chunks into a persistent ChromaDB.
-    This step is so that we can also use the same documents to verify the answer.
 4.  Use the FactCheckTool to verify the generated report.
 """
 
@@ -15,6 +14,7 @@ import sys
 import markdown
 from bs4 import BeautifulSoup
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from akd.agents.search import (
     DeepLitSearchAgent,
@@ -23,11 +23,6 @@ from akd.agents.search import (
 )
 from akd.configs.project import get_project_settings
 from akd.tools.fact_check import FactCheckInputSchema, FactCheckTool
-from akd.tools.text_splitter import (
-    TextSplitterInputSchema,
-    TextSplitterTool,
-    TextSplitterToolConfig,
-)
 from akd.tools.vector_db_tool import VectorDBTool
 
 
@@ -111,16 +106,14 @@ async def main():
         if res.get("content")
     ]
 
-    splitter_config = TextSplitterToolConfig(chunk_size=2000)
-    splitter_tool = TextSplitterTool(config=splitter_config, debug=True)
-    splitter_input = TextSplitterInputSchema(documents=documents_to_process)
-
     print(
-        f"\n--- Splitting {len(documents_to_process)} documents into smaller chunks ---",
+        f"\n--- Splitting {len(documents_to_process)} documents into smaller chunks ---"
     )
-    split_output = await splitter_tool._arun(splitter_input)
-    chunks = split_output.chunks
-
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=2000,
+        chunk_overlap=200,
+    )
+    chunks = text_splitter.split_documents(documents_to_process)
     print(f"Created {len(chunks)} chunks.")
 
     vector_db_tool = VectorDBTool()
@@ -129,7 +122,7 @@ async def main():
 
     vector_db_tool.index(chunks)
 
-    print(f"Indexing complete! Database is located at: {vector_db_tool.config.db_path}")
+    print(f"Indexing complete. Database is located at: {vector_db_tool.config.db_path}")
 
     print("\n--- Fact-checking the generated research report ---")
     fact_check_tool = FactCheckTool()
@@ -144,7 +137,8 @@ async def main():
         answer=plaintext_report,
     )
 
-    print(plaintext_report)
+    print(f"\n--- Running Fact-Check on report ---\n{plaintext_report}\n")
+
     fact_check_result = await fact_check_tool.arun(params=fact_check_input)
 
     print("\n--- Fact-Check Complete ---")
