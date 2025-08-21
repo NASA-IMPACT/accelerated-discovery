@@ -548,7 +548,9 @@ class TestResearchArticleResolver:
             result = await composite_resolver.arun(input_schema)
 
             # Identity resolver should be used as fallback
-            assert str(result.resolved_url) == "https://example.com/"  # HttpUrl normalizes
+            assert (
+                str(result.resolved_url) == "https://example.com/"
+            )  # HttpUrl normalizes
             assert "IdentityResolver" in result.resolvers
 
     @pytest.mark.asyncio
@@ -646,7 +648,9 @@ class TestHTTPValidation:
             )
 
             result = await resolver_with_validation.arun(input_schema)
-            assert str(result.resolved_url) == "https://example.com/"  # HttpUrl normalizes
+            assert (
+                str(result.resolved_url) == "https://example.com/"
+            )  # HttpUrl normalizes
 
     @pytest.mark.asyncio
     async def test_validation_failure_4xx(self, resolver_with_validation):
