@@ -30,7 +30,7 @@ from .identity import IdentityResolver
 
 # Specialized resolvers
 from .specialized import DOIResolver, PDFUrlResolver
-from .unpaywall import UnpaywallResolver
+from .unpaywall import UnpaywallResolver, UnpaywallResolverConfig
 
 __all__ = [
     # Base classes and schemas
@@ -42,6 +42,7 @@ __all__ = [
     "PDFUrlResolver",
     "DOIResolver",
     "UnpaywallResolver",
+    "UnpaywallResolverConfig",
     # Individual resolvers
     "IdentityResolver",
     "ArxivResolver",

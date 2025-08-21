@@ -3,13 +3,29 @@ from typing import Optional, Union
 
 import httpx
 from loguru import logger
-from pydantic import HttpUrl
+from pydantic import Field, HttpUrl
 
-from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
+from ._base import (
+    ArticleResolverConfig,
+    BaseArticleResolver,
+    ResolverInputSchema,
+    ResolverOutputSchema,
+)
+
+
+class UnpaywallResolverConfig(ArticleResolverConfig):
+    """Configuration for UnpaywallResolver."""
+
+    email: str = Field(
+        default="user@institution.edu",
+        description="Email address required for Unpaywall API access",
+    )
 
 
 class UnpaywallResolver(BaseArticleResolver):
     """Resolver for finding open access versions via Unpaywall API."""
+
+    config_schema = UnpaywallResolverConfig
 
     def validate_url(self, url: Union[str, HttpUrl]) -> bool:
         """Check if this URL contains a DOI that can be resolved via Unpaywall."""
@@ -53,18 +69,19 @@ class UnpaywallResolver(BaseArticleResolver):
             ResolverOutputSchema with open access PDF URL if found, None if resolution fails
         """
         url_str = str(params.url)
-        doi = self._extract_doi_from_url(url_str)
+        # Try to get DOI from params first, then extract from URL
+        doi = params.doi or self._extract_doi_from_url(url_str)
+        if self.debug:
+            logger.debug(f"Extracted DOI: {doi} from URL: {url_str}")
 
         if not doi:
             if self.debug:
-                logger.debug(f"No DOI found in URL: {url_str}")
+                logger.debug(f"No DOI found in URL or params: {url_str}")
             return None
 
         try:
             # Query Unpaywall API
-            unpaywall_url = (
-                f"https://api.unpaywall.org/v2/{doi}?email=research@example.com"
-            )
+            unpaywall_url = f"https://api.unpaywall.org/v2/{doi}?email={self.email}"
 
             async with httpx.AsyncClient(timeout=self.validation_timeout) as client:
                 response = await client.get(unpaywall_url, headers=self.headers)
