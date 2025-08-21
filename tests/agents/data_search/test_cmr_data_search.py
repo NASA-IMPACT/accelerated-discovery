@@ -10,10 +10,12 @@ Usage:
 """
 
 import asyncio
-import json
 import os
 import sys
 from pathlib import Path
+
+from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
+from akd.agents.data_search._base import DataSearchAgentInputSchema
 
 # Add the project root to the path to allow for `akd` imports
 # and loading of the .env file
@@ -29,9 +31,6 @@ if env_file.exists():
             if line.strip() and not line.startswith("#"):
                 key, value = line.strip().split("=", 1)
                 os.environ[key] = value
-
-from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
-from akd.agents.data_search._base import DataSearchAgentInputSchema
 
 
 async def test_basic_collection_search():
@@ -50,19 +49,22 @@ async def test_basic_collection_search():
 
         # Test MODIS search
         search_params = CMRCollectionSearchInputSchema(
-            keyword="MODIS", platform="Terra", instrument="MODIS", page_size=5
+            keyword="MODIS",
+            platform="Terra",
+            instrument="MODIS",
+            page_size=5,
         )
 
         print("🔎 Searching for MODIS collections...")
         result = await tool.arun(search_params)
 
         print(
-            f"✅ Found {result.total_hits} collections, showing {len(result.collections)}"
+            f"✅ Found {result.total_hits} collections, showing {len(result.collections)}",
         )
 
         for i, collection in enumerate(result.collections[:3], 1):
             print(
-                f"  {i}. {collection.get('short_name')} v{collection.get('version', 'N/A')}"
+                f"  {i}. {collection.get('short_name')} v{collection.get('version', 'N/A')}",
             )
             print(f"     Title: {collection.get('entry_title', 'N/A')}")
             print(f"     Concept ID: {collection.get('concept_id', 'N/A')}")
@@ -108,7 +110,7 @@ async def test_basic_granule_search():
             print(f"  {i}. {granule.get('granule_ur', 'N/A')}")
             print(f"     Concept ID: {granule.get('concept_id', 'N/A')}")
             print(
-                f"     Online Access: {'Yes' if granule.get('online_access_flag') else 'No'}"
+                f"     Online Access: {'Yes' if granule.get('online_access_flag') else 'No'}",
             )
 
             download_urls = granule.get("download_urls", [])
@@ -121,78 +123,6 @@ async def test_basic_granule_search():
 
     except Exception as e:
         print(f"❌ Granule search test failed: {e}")
-        return False
-
-
-async def test_query_decomposition():
-    """Test query decomposition component."""
-    print("=" * 60)
-    print("🧪 TEST 3: Query Decomposition")
-    print("=" * 60)
-
-    # Check if OpenAI API key is available
-    if not os.getenv("OPENAI_API_KEY"):
-        print("⚠️  OpenAI API key not found. Testing pattern-based decomposition only.")
-
-        try:
-            # Simple pattern-based test without LLM
-            test_query = "Find MODIS sea surface temperature data from 2023 over the Pacific Ocean"
-            print(f"📝 Testing pattern matching on: '{test_query}'")
-
-            # Simple pattern matching
-            keywords = []
-            platforms = []
-            instruments = []
-
-            query_lower = test_query.lower()
-            if "modis" in query_lower:
-                keywords.append("modis")
-                instruments.append("MODIS")
-            if "terra" in query_lower:
-                platforms.append("Terra")
-            if "temperature" in query_lower or "sst" in query_lower:
-                keywords.append("temperature")
-
-            print("✅ Pattern-based decomposition result:")
-            print(f"   Keywords: {keywords}")
-            print(f"   Instruments: {instruments}")
-            print(f"   Platforms: {platforms}")
-
-            return True
-
-        except Exception as e:
-            print(f"❌ Pattern-based decomposition failed: {e}")
-            return False
-
-    try:
-        from akd.agents.data_search.components import QueryDecompositionComponent
-
-        component = QueryDecompositionComponent(debug=True)
-
-        test_query = (
-            "Find MODIS sea surface temperature data from 2023 over the Pacific Ocean"
-        )
-        print(f"📝 Decomposing query: '{test_query}'")
-
-        result = await component.process(test_query)
-
-        print("✅ Query decomposition result:")
-        print(f"   Keywords: {result.keywords}")
-        print(f"   Data types: {result.data_type_indicators}")
-        print(f"   Platforms: {result.platforms}")
-        print(f"   Instruments: {result.instruments}")
-        print(f"   Processing level: {result.processing_level}")
-        print(f"   Temporal: {result.temporal_description}")
-        print(f"   Spatial: {result.spatial_description}")
-        print(f"   Search variations: {len(result.search_variations)}")
-
-        for i, variation in enumerate(result.search_variations[:3], 1):
-            print(f"     {i}. {variation}")
-
-        return True
-
-    except Exception as e:
-        print(f"❌ Query decomposition test failed: {e}")
         return False
 
 
@@ -232,18 +162,18 @@ async def test_full_agent_workflow():
         print(f"   Collections searched: {len(result.collections_searched)}")
 
         if result.granules:
-            print(f"   Sample granules:")
+            print("   Sample granules:")
             for i, granule in enumerate(result.granules[:3], 1):
                 print(f"     {i}. {granule.get('title', 'Untitled')}")
                 print(
-                    f"        Collection: {granule.get('collection', {}).get('name', 'Unknown')}"
+                    f"        Collection: {granule.get('collection', {}).get('name', 'Unknown')}",
                 )
                 print(
-                    f"        Online access: {granule.get('access', {}).get('online', False)}"
+                    f"        Online access: {granule.get('access', {}).get('online', False)}",
                 )
                 if granule.get("primary_download_url"):
                     print(
-                        f"        Download: {granule['primary_download_url'][:60]}..."
+                        f"        Download: {granule['primary_download_url'][:60]}...",
                     )
                 print()
 
@@ -252,7 +182,7 @@ async def test_full_agent_workflow():
         print("📊 Search metadata:")
         print(f"   Original query: {metadata.get('original_query')}")
         print(
-            f"   Search duration: {metadata.get('total_search_duration_ms', 0):.0f}ms"
+            f"   Search duration: {metadata.get('total_search_duration_ms', 0):.0f}ms",
         )
         print(f"   Collections searched: {metadata.get('collections_searched', 0)}")
         print(f"   CMR query time: {metadata.get('cmr_query_time_ms', 0):.0f}ms")
@@ -279,7 +209,6 @@ async def main():
     tests = [
         ("Basic Collection Search", test_basic_collection_search),
         ("Basic Granule Search", test_basic_granule_search),
-        ("Query Decomposition", test_query_decomposition),
         ("Full Agent Workflow", test_full_agent_workflow),
     ]
 

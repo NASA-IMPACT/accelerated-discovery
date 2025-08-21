@@ -19,9 +19,8 @@ from ._base import (
     DataSearchAgentInputSchema,
     DataSearchAgentOutputSchema,
 )
-from .components import (  # Deprecated - kept for backward compatibility
+from .components import (
     CMRQueryGenerationComponent,
-    QueryDecompositionComponent,
     ScientificAnglesComponent,
     ScientificExpansionComponent,
 )
@@ -98,8 +97,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         scientific_expansion_component: ScientificExpansionComponent | None = None,
         scientific_angles_component: ScientificAnglesComponent | None = None,
         cmr_query_generation_component: CMRQueryGenerationComponent | None = None,
-        # Deprecated - kept for backward compatibility
-        query_decomposition_component: QueryDecompositionComponent | None = None,
         debug: bool = False,
     ) -> None:
         """Initialize the CMR Data Search Agent."""
@@ -141,11 +138,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         )
         self.cmr_query_generation_component = (
             cmr_query_generation_component or CMRQueryGenerationComponent(debug=debug)
-        )
-
-        # Deprecated - kept for backward compatibility
-        self.query_decomposition_component = (
-            query_decomposition_component or QueryDecompositionComponent(debug=debug)
         )
 
         # Track search state
@@ -370,46 +362,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             "spatial_bounds": None,
             "search_variations": [],
         }
-
-    # Deprecated method - kept for backward compatibility
-    async def _decompose_query(
-        self,
-        params: DataSearchAgentInputSchema,
-    ) -> Dict[str, Any]:
-        """Decompose natural language query into structured parameters (DEPRECATED)."""
-        logger.warning(
-            "_decompose_query is deprecated. Use LLM-driven workflow instead.",
-        )
-        decomposed = await self.query_decomposition_component.process(params.query)
-
-        # Combine with explicit parameters from input
-        query_params = {
-            "query": params.query,
-            "keywords": decomposed.keywords,
-            "data_type_indicators": decomposed.data_type_indicators,
-            "platforms": decomposed.platforms,
-            "instruments": decomposed.instruments,
-            "search_variations": decomposed.search_variations,
-        }
-
-        # Override with explicit input parameters
-        if params.temporal_range:
-            # Simple validation - pass through as string
-            if "," in params.temporal_range:
-                start, end = params.temporal_range.split(",", 1)
-                query_params["temporal_start"] = start.strip()
-                query_params["temporal_end"] = end.strip()
-        else:
-            query_params["temporal_start"] = decomposed.temporal_start
-            query_params["temporal_end"] = decomposed.temporal_end
-
-        if params.spatial_bounds:
-            # Simple validation - pass through as string
-            query_params["spatial_bounds"] = params.spatial_bounds
-        else:
-            query_params["spatial_bounds"] = decomposed.spatial_bounds
-
-        return query_params
 
     # Deprecated method - kept for backward compatibility
     async def _search_collections(
