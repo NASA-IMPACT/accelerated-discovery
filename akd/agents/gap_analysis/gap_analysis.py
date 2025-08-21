@@ -1,6 +1,6 @@
 import asyncio
 import networkx as nx
-from typing import List, Dict
+from typing import List, Dict, Tuple
 from loguru import logger
 
 from akd._base import InputSchema, OutputSchema
@@ -71,7 +71,7 @@ class GapAgent(BaseAgent):
 
 
     async def _fetch_paper_items(self,
-                                 search_results: List[SearchResultItem]) -> List[PaperDataItem]:
+                                 search_results: List[SearchResultItem]) -> Tuple[list[PaperDataItem], list[SearchResultItem]]:
         """
         Fetches paper metadata using arXiv IDs extracted from a list of search results.
         This function is restricted to Arxiv URLs for now.
@@ -81,6 +81,7 @@ class GapAgent(BaseAgent):
 
         Returns:
             List[PaperDataItem]: A list of paper data items retrieved from the Semantic Scholar tool.
+            List[SearchResultItem]: The subset of search_results corresponding to the successfully fetched papers.
         """
         arxiv_ids = [res.url.path.split("/")[-1].split("v")[0] for res in search_results]
         paper_items = await self.semantic_search_tool.fetch_paper_by_external_id(SemanticScholarSearchToolInputSchema(queries=arxiv_ids))   
