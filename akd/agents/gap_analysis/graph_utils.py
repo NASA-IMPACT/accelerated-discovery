@@ -350,7 +350,7 @@ async def generate_final_answer(G: nx.Graph,
             attributed_answers.update({node_id: answer.content})
     output = await final_answer_chain.ainvoke(input={'query': query, "attributed_answer_list": attributed_answers})
     attributed_source_answers = format_attributed_answers(G, attributed_answers)
-    return output, attributed_source_answers
+    return output.content, attributed_source_answers
 
 
 def format_final_answer(G: nx.Graph, output: str) -> str:
