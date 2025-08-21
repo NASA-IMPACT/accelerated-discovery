@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional
 
 import chromadb
@@ -34,11 +35,11 @@ class VectorDBToolConfig(BaseToolConfig):
         description="The name of the Hugging Face embedding model to use.",
     )
     embedding_model_api_key: Optional[str] = Field(
-        default=None,
-        description="The API key for the embedding model provider, currently using HuggingFace.",
+        default=os.getenv("EMBEDDING_MODEL_API_KEY", None),
+        description="The API key for the embedding model provider, if required.",
     )
     db_path: str = Field(
-        default="./chroma_db",
+        default=os.getenv("VECTOR_DB_PATH", "./chroma_db"),
         description="Path to the persistent ChromaDB directory.",
     )
     collection_name: str = Field(
