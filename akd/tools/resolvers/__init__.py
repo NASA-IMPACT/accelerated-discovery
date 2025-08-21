@@ -17,20 +17,20 @@ from ._base import (
 # Individual resolvers
 from .ads import ADSResolver
 from .arxiv import ArxivResolver
+
+# Composite resolver
+from .composite import ResearchArticleResolver
 from .crossref_doi import (
     CrossRefDoiResolver,
     CrossRefDoiResolverConfig,
     CrossRefDoiResolverInputSchema,
     CrossRefDoiResolverOutputSchema,
-    
 )
-
-# Composite resolver
-from .composite import ResearchArticleResolver
 from .identity import IdentityResolver
 
 # Specialized resolvers
 from .specialized import DOIResolver, PDFUrlResolver
+from .unpaywall import UnpaywallResolver
 
 __all__ = [
     # Base classes and schemas
@@ -41,16 +41,16 @@ __all__ = [
     # Specialized resolvers
     "PDFUrlResolver",
     "DOIResolver",
+    "UnpaywallResolver",
     # Individual resolvers
     "IdentityResolver",
     "ArxivResolver",
     "ADSResolver",
-     # Cross ref DOI resolvers
-    "CrossRefDoiResolver", 
+    # Cross ref DOI resolvers
+    "CrossRefDoiResolver",
     "CrossRefDoiResolverConfig",
     "CrossRefDoiResolverInputSchema",
     "CrossRefDoiResolverOutputSchema",
     # Composite resolver
     "ResearchArticleResolver",
-    
 ]

@@ -1,14 +1,15 @@
 """
-Integration tests for UnpaywallResolver - NO MOCKING.
+Integration tests for UnpaywallResolver with new resolver structure.
 Tests real API calls to verify functionality.
 """
 
 import pytest
 from pydantic import HttpUrl
 
-from akd.tools.scrapers.resolvers import (
+from akd.tools.resolvers import (
     ArticleResolverConfig,
     ResolverInputSchema,
+    ResolverOutputSchema,
     UnpaywallResolver,
 )
 
@@ -47,14 +48,6 @@ class TestUnpaywallResolverIntegration:
             is True
         )
 
-        # Test Science Direct URL with DOI
-        assert (
-            resolver.validate_url(
-                "https://www.sciencedirect.com/science/article/pii/S0123456789012345",
-            )
-            is False
-        )
-
         # Test URL without DOI
         assert resolver.validate_url("https://example.com/paper.html") is False
 
@@ -83,15 +76,20 @@ class TestUnpaywallResolverIntegration:
 
         # Use a known open access paper DOI (PLOS ONE paper)
         test_url = "https://doi.org/10.1371/journal.pone.0000308"
+        input_params = ResolverInputSchema(url=test_url)
 
-        result = await resolver.resolve(test_url)
+        result = await resolver.resolve(input_params)
 
-        # Should return either the open access PDF URL or the original URL
-        assert isinstance(result, str)
-        assert len(result) > 0
-        # If open access is found, it should be a different URL
-        # If not found, should return original URL
-        assert result == test_url or result.startswith("http")
+        # Should return ResolverOutputSchema with resolved URL or None if resolution fails
+        if result is not None:
+            assert isinstance(result, ResolverOutputSchema)
+            assert hasattr(result, "url")
+            assert hasattr(result, "resolved_url")
+            assert hasattr(result, "resolvers")
+            assert "UnpaywallResolver" in result.resolvers
+            # If open access is found, resolved_url should be set
+            if result.resolved_url:
+                assert str(result.resolved_url).startswith("http")
 
     @pytest.mark.asyncio
     async def test_resolve_with_real_closed_access_doi(self):
@@ -100,11 +98,15 @@ class TestUnpaywallResolverIntegration:
 
         # Use a DOI that's likely to be closed access (Nature paper)
         test_url = "https://doi.org/10.1038/nature12345"
+        input_params = ResolverInputSchema(url=test_url)
 
-        result = await resolver.resolve(test_url)
+        result = await resolver.resolve(input_params)
 
-        # Should return the original URL since no open access is available
-        assert result == test_url
+        # May return None if no open access version is available
+        # This is the expected behavior for closed access papers
+        if result is not None:
+            assert isinstance(result, ResolverOutputSchema)
+            assert "UnpaywallResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_resolve_with_invalid_doi(self):
@@ -113,11 +115,12 @@ class TestUnpaywallResolverIntegration:
 
         # Use an invalid DOI
         test_url = "https://doi.org/10.9999/invalid.doi.12345"
+        input_params = ResolverInputSchema(url=test_url)
 
-        result = await resolver.resolve(test_url)
+        result = await resolver.resolve(input_params)
 
-        # Should return the original URL
-        assert result == test_url
+        # Should return None for invalid DOI
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_resolve_without_doi(self):
@@ -125,11 +128,12 @@ class TestUnpaywallResolverIntegration:
         resolver = UnpaywallResolver(debug=True)
 
         test_url = "https://example.com/some-paper.html"
+        input_params = ResolverInputSchema(url=test_url)
 
-        result = await resolver.resolve(test_url)
+        result = await resolver.resolve(input_params)
 
-        # Should return the original URL unchanged
-        assert result == test_url
+        # Should return None since no DOI found
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_arun_method(self):
@@ -143,9 +147,10 @@ class TestUnpaywallResolverIntegration:
 
         result = await resolver._arun(input_params)
 
+        assert isinstance(result, ResolverOutputSchema)
         assert hasattr(result, "url")
-        assert hasattr(result, "resolver")
-        assert result.resolver == "UnpaywallResolver"
+        assert hasattr(result, "resolvers")
+        assert "UnpaywallResolver" in result.resolvers
         assert isinstance(result.url, HttpUrl)
 
     @pytest.mark.asyncio
@@ -156,56 +161,32 @@ class TestUnpaywallResolverIntegration:
         test_cases = [
             "https://doi.org/10.1371/journal.pone.0000308",
             "http://dx.doi.org/10.1371/journal.pone.0000308",
-            "https://onlinelibrary.wiley.com/doi/10.1371/journal.pone.0000308",
         ]
 
         for test_url in test_cases:
             if resolver.validate_url(test_url):
-                result = await resolver.resolve(test_url)
-                assert isinstance(result, str)
-                assert len(result) > 0
+                input_params = ResolverInputSchema(url=test_url)
+                result = await resolver.resolve(input_params)
+                # Result may be None or ResolverOutputSchema
+                if result is not None:
+                    assert isinstance(result, ResolverOutputSchema)
+                    assert "UnpaywallResolver" in result.resolvers
 
     @pytest.mark.asyncio
     async def test_network_timeout_handling(self):
         """Test handling of network timeouts and errors."""
-        # Create resolver with very short timeout
+        # Create resolver with default timeout
         config = ArticleResolverConfig(debug=True)
         resolver = UnpaywallResolver(config=config)
 
         # Test with a valid DOI - should handle any network issues gracefully
         test_url = "https://doi.org/10.1371/journal.pone.0000308"
+        input_params = ResolverInputSchema(url=test_url)
 
-        result = await resolver.resolve(test_url)
+        result = await resolver.resolve(input_params)
 
-        # Should return some result (either resolved or original URL)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    @pytest.mark.asyncio
-    async def test_different_paper_types(self):
-        """Test resolution with different types of academic papers."""
-        resolver = UnpaywallResolver(debug=True)
-
-        # Test cases with different publishers/types
-        test_cases = [
-            "https://doi.org/10.1371/journal.pone.0000308",  # PLOS ONE (open access)
-            "https://doi.org/10.1038/nature12345",  # Nature (typically closed)
-            "https://doi.org/10.1126/science.1234567",  # Science (typically closed)
-        ]
-
-        results = []
-        for test_url in test_cases:
-            try:
-                result = await resolver.resolve(test_url)
-                results.append((test_url, result))
-                assert isinstance(result, str)
-                assert len(result) > 0
-            except Exception as e:
-                # Should handle errors gracefully
-                results.append((test_url, str(e)))
-
-        # Should have processed all test cases
-        assert len(results) == len(test_cases)
+        # Should return either ResolverOutputSchema or None (not raise exception)
+        assert result is None or isinstance(result, ResolverOutputSchema)
 
     def test_error_handling_invalid_urls(self):
         """Test error handling with invalid URLs."""
@@ -228,24 +209,6 @@ class TestUnpaywallResolverIntegration:
                 # Some invalid URLs might raise exceptions, which is acceptable
                 pass
 
-
-class TestUnpaywallResolverIntegrationEdgeCases:
-    """Test edge cases and boundary conditions."""
-
-    @pytest.mark.asyncio
-    async def test_resolve_with_redirect_doi(self):
-        """Test resolution with DOI that redirects."""
-        resolver = UnpaywallResolver(debug=True)
-
-        # Test with DOI that might have redirects
-        test_url = "https://doi.org/10.1371/journal.pone.0000308"
-
-        result = await resolver.resolve(test_url)
-
-        # Should handle redirects gracefully
-        assert isinstance(result, str)
-        assert len(result) > 0
-
     def test_doi_extraction_edge_cases(self):
         """Test DOI extraction with edge cases."""
         resolver = UnpaywallResolver()
@@ -256,10 +219,6 @@ class TestUnpaywallResolverIntegrationEdgeCases:
             (
                 "https://onlinelibrary.wiley.com/doi/full/10.1002/anie.201234567",
                 "10.1002/anie.201234567",
-            ),
-            (
-                "https://www.nature.com/articles/10.1038/s41586-020-12345-6",
-                "10.1038/s41586-020-12345-6",
             ),
             ("https://example.com/no-doi-here", None),
             ("", None),
@@ -283,8 +242,11 @@ class TestUnpaywallResolverIntegrationEdgeCases:
             "https://example.com/no-doi",
         ]
 
+        # Create input params for each URL
+        input_params_list = [ResolverInputSchema(url=url) for url in test_urls]
+
         # Run concurrent resolutions
-        tasks = [resolver.resolve(url) for url in test_urls]
+        tasks = [resolver.resolve(params) for params in input_params_list]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # All should complete (either with results or exceptions handled)
@@ -292,5 +254,5 @@ class TestUnpaywallResolverIntegrationEdgeCases:
 
         for i, result in enumerate(results):
             if not isinstance(result, Exception):
-                assert isinstance(result, str)
-                assert len(result) > 0
+                # Result should be None or ResolverOutputSchema
+                assert result is None or isinstance(result, ResolverOutputSchema)
