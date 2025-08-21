@@ -516,11 +516,19 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         self, collection_results: List[Dict[str, Any]], query_params: Dict[str, Any]
     ):
         """Filter and rank collection results."""
-        return await self.collection_synthesis_component.process(
-            collection_results,
-            query_params,
-            max_collections=self.config.max_collections_to_search,
-        )
+        # Simple collection filtering - take up to max_collections_to_search
+        max_collections = self.config.max_collections_to_search
+        if len(collection_results) <= max_collections:
+            selected_collections = collection_results
+        else:
+            selected_collections = collection_results[:max_collections]
+        
+        # Return a simple object with selected_collections attribute
+        class SynthesisResult:
+            def __init__(self, selected_collections):
+                self.selected_collections = selected_collections
+        
+        return SynthesisResult(selected_collections)
 
     async def _search_granules(
         self,
@@ -615,9 +623,29 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         search_start_time: datetime,
     ):
         """Synthesize final granule results."""
-        return await self.granule_synthesis_component.process(
-            granule_results, collection_info, query_params, search_start_time
-        )
+        # Simple granule synthesis - flatten all results
+        all_granules = []
+        for collection_granules in granule_results:
+            if isinstance(collection_granules, list):
+                all_granules.extend(collection_granules)
+            elif collection_granules.get("granules"):
+                all_granules.extend(collection_granules["granules"])
+        
+        # Create a simple result object
+        class GranuleSynthesisResult:
+            def __init__(self, granules, search_metadata):
+                self.granules = granules
+                self.search_metadata = search_metadata
+        
+        search_metadata = {
+            "original_query": query_params.get("query", ""),
+            "status": "completed",
+            "search_timestamp": search_start_time.isoformat(),
+            "collections_processed": len(collection_info),
+            "total_granules": len(all_granules)
+        }
+        
+        return GranuleSynthesisResult(all_granules, search_metadata)
 
     def _create_empty_response(
         self, query: str, reason: str

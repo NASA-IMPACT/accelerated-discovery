@@ -11,8 +11,6 @@ __all__ = [
     "ScientificExpansionComponent",
     "ScientificAnglesComponent",
     "CMRQueryGenerationComponent",
-    "CollectionSynthesisComponent",
-    "GranuleSynthesisComponent",
     # Deprecated
     "QueryDecompositionComponent",
 ]
