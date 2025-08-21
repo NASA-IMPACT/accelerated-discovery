@@ -56,10 +56,6 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
         default=0.3,
         description="Minimum collection relevance score to include",
     )
-    prefer_online_access: bool = Field(
-        default=True,
-        description="Prefer collections with online accessible data",
-    )
 
     # Performance tuning
     collection_search_timeout: float = Field(
@@ -337,10 +333,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             search_params["keyword"] = cmr_query.keyword
         if cmr_query.short_name:
             search_params["short_name"] = cmr_query.short_name
-        if cmr_query.version:
-            search_params["version"] = cmr_query.version
-        if cmr_query.provider:
-            search_params["provider"] = cmr_query.provider
         if cmr_query.platform:
             search_params["platform"] = cmr_query.platform
         if cmr_query.instrument:
@@ -601,7 +593,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         """Build granule search parameters."""
         granule_params = {
             "collection_concept_id": collection_concept_id,
-            "online_only": self.config.prefer_online_access,
             "page_size": self.config.granule_search_page_size,
         }
 

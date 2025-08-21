@@ -41,14 +41,6 @@ class CMRCollectionSearchParams(BaseModel):
         None,
         description="Collection short name (e.g., MOD09A1)",
     )
-    version: Optional[str] = Field(
-        None,
-        description="Collection version (e.g., 6.1)",
-    )
-    provider: Optional[str] = Field(
-        None,
-        description="Data provider (e.g., LPDAAC_ECS, NSIDC_ECS)",
-    )
     platform: Optional[str] = Field(
         None,
         description="Single platform/satellite name (e.g., Terra, Aqua)",

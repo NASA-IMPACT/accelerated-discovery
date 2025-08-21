@@ -4,12 +4,12 @@ CMR Collection Search Tool - Search for Earth science collections/datasets.
 
 from typing import Optional
 
-from pydantic import Field
 from loguru import logger
+from pydantic import Field
 
 from ._base import (
     BaseDataSearchTool,
-    DataSearchToolConfig, 
+    DataSearchToolConfig,
     DataSearchToolInputSchema,
     DataSearchToolOutputSchema,
 )
@@ -20,37 +20,25 @@ class CMRCollectionSearchInputSchema(DataSearchToolInputSchema):
 
     keyword: Optional[str] = Field(
         None,
-        description="Text search across collection metadata (AND search)"
+        description="Text search across collection metadata (AND search)",
     )
     short_name: Optional[str] = Field(
         None,
-        description="Collection short name (e.g., MOD09A1)"
-    )
-    version: Optional[str] = Field(
-        None, 
-        description="Collection version (e.g., 6.1)"
-    )
-    provider: Optional[str] = Field(
-        None,
-        description="Data provider (e.g., LPDAAC_ECS, NSIDC_ECS)"
+        description="Collection short name (e.g., MOD09A1)",
     )
     platform: Optional[str] = Field(
         None,
-        description="Platform/satellite name (e.g., Terra, Aqua)"
+        description="Platform/satellite name (e.g., Terra, Aqua)",
     )
     instrument: Optional[str] = Field(
         None,
-        description="Instrument name (e.g., MODIS, VIIRS)"
-    )
-    processing_level: Optional[str] = Field(
-        None,
-        description="Data processing level (L0, L1A, L1B, L2, L3, L4)"
+        description="Instrument name (e.g., MODIS, VIIRS)",
     )
 
 
 class CMRCollectionSearchOutputSchema(DataSearchToolOutputSchema):
     """Output schema for CMR collection search operations."""
-    
+
     collections: list = Field(..., description="List of found collections")
 
 
@@ -58,11 +46,11 @@ class CMRCollectionSearchTool(
     BaseDataSearchTool[
         CMRCollectionSearchInputSchema,
         CMRCollectionSearchOutputSchema,
-    ]
+    ],
 ):
     """
     Tool for searching Earth science collections in NASA's CMR.
-    
+
     Wraps the CMR MCP server's search_collections endpoint to discover
     datasets based on scientific parameters like platform, instrument,
     processing level, and temporal/spatial constraints.
@@ -79,11 +67,11 @@ class CMRCollectionSearchTool(
     ) -> CMRCollectionSearchOutputSchema:
         """
         Execute CMR collection search using MCP server.
-        
+
         Args:
             params: Search parameters including keywords, platform, instrument, etc.
             **kwargs: Additional parameters
-            
+
         Returns:
             CMRCollectionSearchOutputSchema with collection results
         """
@@ -92,22 +80,16 @@ class CMRCollectionSearchTool(
 
         # Prepare MCP arguments
         arguments = {}
-        
+
         # Add search parameters
         if params.keyword:
             arguments["keyword"] = params.keyword
         if params.short_name:
             arguments["short_name"] = params.short_name
-        if params.version:
-            arguments["version"] = params.version
-        if params.provider:
-            arguments["provider"] = params.provider
         if params.platform:
             arguments["platform"] = params.platform
         if params.instrument:
             arguments["instrument"] = params.instrument
-        if params.processing_level:
-            arguments["processing_level"] = params.processing_level
 
         # Add temporal constraint
         if params.temporal:
@@ -115,7 +97,7 @@ class CMRCollectionSearchTool(
             if validated_temporal:
                 arguments["temporal"] = validated_temporal
 
-        # Add spatial constraint  
+        # Add spatial constraint
         if params.bounding_box:
             validated_bbox = self._validate_spatial_bounds(params.bounding_box)
             if validated_bbox:
@@ -130,7 +112,7 @@ class CMRCollectionSearchTool(
         try:
             # Make request to MCP server
             result = await self._make_http_request("search_collections", arguments)
-            
+
             if "error" in result:
                 raise Exception(f"CMR search error: {result['error']}")
 
@@ -145,7 +127,7 @@ class CMRCollectionSearchTool(
                 logger.debug(
                     f"CMR collection search completed: {total_hits} total hits, "
                     f"{len(collections)} collections returned, "
-                    f"query time: {query_time_ms}ms"
+                    f"query time: {query_time_ms}ms",
                 )
 
             return CMRCollectionSearchOutputSchema(
@@ -156,8 +138,11 @@ class CMRCollectionSearchTool(
                 page_info={
                     "page_size": page_size_returned,
                     "page_number": page_number,
-                    "total_pages": (total_hits + page_size_returned - 1) // page_size_returned if page_size_returned > 0 else 0
-                }
+                    "total_pages": (total_hits + page_size_returned - 1)
+                    // page_size_returned
+                    if page_size_returned > 0
+                    else 0,
+                },
             )
 
         except Exception as e:
@@ -168,7 +153,7 @@ class CMRCollectionSearchTool(
     def _build_search_summary(self, params: CMRCollectionSearchInputSchema) -> str:
         """Build a human-readable summary of search parameters."""
         summary_parts = []
-        
+
         if params.keyword:
             summary_parts.append(f"keyword: '{params.keyword}'")
         if params.platform:
@@ -193,16 +178,15 @@ class CMRCollectionSearchTool(
         keyword: Optional[str] = None,
         platform: Optional[str] = None,
         instrument: Optional[str] = None,
-        processing_level: Optional[str] = None,
         temporal: Optional[str] = None,
         bounding_box: Optional[str] = None,
         page_size: int = 50,
         debug: bool = False,
-        **kwargs
+        **kwargs,
     ) -> "CMRCollectionSearchTool":
         """
         Convenience constructor for creating tool with common parameters.
-        
+
         Args:
             keyword: Text search terms
             platform: Satellite platform name
@@ -213,14 +197,14 @@ class CMRCollectionSearchTool(
             page_size: Results per page
             debug: Enable debug logging
             **kwargs: Additional configuration parameters
-            
+
         Returns:
             Configured CMRCollectionSearchTool instance
         """
         config = DataSearchToolConfig(
             page_size=page_size,
             debug=debug,
-            **kwargs
+            **kwargs,
         )
-        
+
         return cls(config=config, debug=debug)
