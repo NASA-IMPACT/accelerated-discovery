@@ -50,10 +50,7 @@ class FactCheckToolConfig(BaseToolConfig):
     """Configuration for the FactCheckTool."""
 
     base_url: HttpUrl = Field(
-        default=os.getenv(
-            "FACT_CHECK_API_URL",
-            default="http://localhost:8011",
-        ),
+        default=HttpUrl(os.getenv("FACT_CHECK_API_URL", "http://localhost:8011")),
         description="The base URL of the remote Fact-Checking and Correction Service.",
     )
     polling_interval_seconds: int = Field(
