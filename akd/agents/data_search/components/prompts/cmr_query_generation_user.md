@@ -9,4 +9,4 @@ Specific to the given angle, think about known platforms, instruments, or datase
 {scientific_angle_title}
 Scientific Justification: {scientific_angle_justification}
 
-Generate 1-5 different CMR search parameter combinations that will help find relevant data for this scientific angle. Consider different platforms, instruments, processing levels, and keywords to ensure comprehensive coverage.
+Generate 1-5 different CMR search parameter combinations that will help find relevant data for this scientific angle. Consider different platforms, instruments, and keywords to ensure comprehensive coverage.

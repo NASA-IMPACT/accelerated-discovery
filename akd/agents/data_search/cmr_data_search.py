@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from loguru import logger
 from pydantic import Field, HttpUrl
+
+from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
 
 from ._base import (
     BaseDataSearchAgent,
@@ -17,16 +19,11 @@ from ._base import (
     DataSearchAgentInputSchema,
     DataSearchAgentOutputSchema,
 )
-from .components import (
-    ScientificExpansionComponent,
-    ScientificAnglesComponent,
+from .components import (  # Deprecated - kept for backward compatibility
     CMRQueryGenerationComponent,
-    # Deprecated - kept for backward compatibility
     QueryDecompositionComponent,
-)
-from akd.tools.data_search import (
-    CMRCollectionSearchTool,
-    CMRGranuleSearchTool,
+    ScientificAnglesComponent,
+    ScientificExpansionComponent,
 )
 from .schemas import ScientificAngle
 
@@ -42,29 +39,36 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
 
     # Search behavior
     max_collection_search_variations: int = Field(
-        default=5, description="Maximum number of collection search variations to try"
+        default=5,
+        description="Maximum number of collection search variations to try",
     )
     collection_search_page_size: int = Field(
-        default=20, description="Page size for collection searches"
+        default=20,
+        description="Page size for collection searches",
     )
     granule_search_page_size: int = Field(
-        default=50, description="Page size for granule searches"
+        default=50,
+        description="Page size for granule searches",
     )
 
     # Quality control
     min_collection_relevance_score: float = Field(
-        default=0.3, description="Minimum collection relevance score to include"
+        default=0.3,
+        description="Minimum collection relevance score to include",
     )
     prefer_online_access: bool = Field(
-        default=True, description="Prefer collections with online accessible data"
+        default=True,
+        description="Prefer collections with online accessible data",
     )
 
     # Performance tuning
     collection_search_timeout: float = Field(
-        default=30.0, description="Timeout for collection searches in seconds"
+        default=30.0,
+        description="Timeout for collection searches in seconds",
     )
     granule_search_timeout: float = Field(
-        default=45.0, description="Timeout for granule searches in seconds"
+        default=45.0,
+        description="Timeout for granule searches in seconds",
     )
 
 
@@ -115,7 +119,8 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         self.collection_search_tool = (
             collection_search_tool
             or CMRCollectionSearchTool.from_params(
-                page_size=self.config.collection_search_page_size, **tool_config_params
+                page_size=self.config.collection_search_page_size,
+                **tool_config_params,
             )
         )
 
@@ -177,7 +182,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 logger.info("📚 Step 1: Retrieving relevant scientific documents...")
 
             documents = await self.scientific_expansion_component.process(
-                original_query
+                original_query,
             )
 
             # Step 2: Scientific Angles Generation
@@ -185,30 +190,33 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 logger.info("🧠 Step 2: Generating scientific angles...")
 
             angles_output = await self.scientific_angles_component.process(
-                original_query, documents
+                original_query,
+                documents,
             )
 
             # Step 3: CMR Query Generation for Each Angle
             if self.debug:
                 logger.info(
-                    f"⚙️ Step 3: Generating CMR queries for {len(angles_output.angles)} angles..."
+                    f"⚙️ Step 3: Generating CMR queries for {len(angles_output.angles)} angles...",
                 )
 
             all_cmr_queries = []
             for angle in angles_output.angles:
                 cmr_queries_output = await self.cmr_query_generation_component.process(
-                    angle, original_query
+                    angle,
+                    original_query,
                 )
                 all_cmr_queries.extend(cmr_queries_output.search_queries)
 
             # Step 4: Collection Search
             if self.debug:
                 logger.info(
-                    f"🔎 Step 4: Executing {len(all_cmr_queries)} collection searches..."
+                    f"🔎 Step 4: Executing {len(all_cmr_queries)} collection searches...",
                 )
 
             collection_results = await self._search_collections_with_cmr_queries(
-                all_cmr_queries, params
+                all_cmr_queries,
+                params,
             )
 
             # Step 5: Collection Synthesis
@@ -217,26 +225,31 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
 
             # Convert to legacy format for synthesis component
             legacy_query_params = self._create_legacy_query_params(
-                original_query, angles_output.angles
+                original_query,
+                angles_output.angles,
             )
             synthesis_result = await self._synthesize_collections(
-                collection_results, legacy_query_params
+                collection_results,
+                legacy_query_params,
             )
 
             if not synthesis_result.selected_collections:
                 logger.warning("No relevant collections found")
                 return self._create_empty_response(
-                    original_query, "No relevant collections found"
+                    original_query,
+                    "No relevant collections found",
                 )
 
             # Step 6: Granule Search
             if self.debug:
                 logger.info(
-                    f"🗂️ Step 6: Searching for granules in {len(synthesis_result.selected_collections)} collections..."
+                    f"🗂️ Step 6: Searching for granules in {len(synthesis_result.selected_collections)} collections...",
                 )
 
             granule_results = await self._search_granules(
-                synthesis_result.selected_collections, legacy_query_params, params
+                synthesis_result.selected_collections,
+                legacy_query_params,
+                params,
             )
 
             # Step 7: Granule Synthesis
@@ -257,7 +270,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 search_duration = (datetime.now() - search_start_time).total_seconds()
                 logger.info(
                     f"✅ CMR Data Search completed: {total_granules} granules found "
-                    f"in {search_duration:.1f}s"
+                    f"in {search_duration:.1f}s",
                 )
 
             return DataSearchAgentOutputSchema(
@@ -312,7 +325,9 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         return successful_results
 
     def _convert_cmr_query_to_tool_params(
-        self, cmr_query, params: DataSearchAgentInputSchema  # CMRCollectionSearchParams
+        self,
+        cmr_query,
+        params: DataSearchAgentInputSchema,  # CMRCollectionSearchParams
     ) -> Dict[str, Any]:
         """Convert CMRCollectionSearchParams to tool input parameters."""
         search_params = {}
@@ -330,8 +345,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             search_params["platform"] = cmr_query.platform
         if cmr_query.instrument:
             search_params["instrument"] = cmr_query.instrument
-        if cmr_query.processing_level:
-            search_params["processing_level"] = cmr_query.processing_level
         if cmr_query.temporal:
             search_params["temporal"] = cmr_query.temporal
         if cmr_query.bounding_box:
@@ -349,7 +362,9 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         return search_params
 
     def _create_legacy_query_params(
-        self, original_query: str, angles: List[ScientificAngle]
+        self,
+        original_query: str,
+        angles: List[ScientificAngle],
     ) -> Dict[str, Any]:
         """Create legacy query params for backward compatibility with synthesis components."""
         return {
@@ -358,7 +373,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             "data_type_indicators": [],
             "platforms": [],
             "instruments": [],
-            "processing_level": None,
             "temporal_start": None,
             "temporal_end": None,
             "spatial_bounds": None,
@@ -367,11 +381,12 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
 
     # Deprecated method - kept for backward compatibility
     async def _decompose_query(
-        self, params: DataSearchAgentInputSchema
+        self,
+        params: DataSearchAgentInputSchema,
     ) -> Dict[str, Any]:
         """Decompose natural language query into structured parameters (DEPRECATED)."""
         logger.warning(
-            "_decompose_query is deprecated. Use LLM-driven workflow instead."
+            "_decompose_query is deprecated. Use LLM-driven workflow instead.",
         )
         decomposed = await self.query_decomposition_component.process(params.query)
 
@@ -382,38 +397,37 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             "data_type_indicators": decomposed.data_type_indicators,
             "platforms": decomposed.platforms,
             "instruments": decomposed.instruments,
-            "processing_level": decomposed.processing_level,
             "search_variations": decomposed.search_variations,
         }
 
         # Override with explicit input parameters
         if params.temporal_range:
-            temporal = self._parse_temporal_range(params.temporal_range)
-            if temporal:
-                query_params["temporal_start"] = temporal.get("start")
-                query_params["temporal_end"] = temporal.get("end")
+            # Simple validation - pass through as string
+            if "," in params.temporal_range:
+                start, end = params.temporal_range.split(",", 1)
+                query_params["temporal_start"] = start.strip()
+                query_params["temporal_end"] = end.strip()
         else:
             query_params["temporal_start"] = decomposed.temporal_start
             query_params["temporal_end"] = decomposed.temporal_end
 
         if params.spatial_bounds:
-            spatial = self._parse_spatial_bounds(params.spatial_bounds)
-            query_params["spatial_bounds"] = spatial
+            # Simple validation - pass through as string
+            query_params["spatial_bounds"] = params.spatial_bounds
         else:
             query_params["spatial_bounds"] = decomposed.spatial_bounds
-
-        if params.processing_level:
-            query_params["processing_level"] = params.processing_level
 
         return query_params
 
     # Deprecated method - kept for backward compatibility
     async def _search_collections(
-        self, query_params: Dict[str, Any], params: DataSearchAgentInputSchema
+        self,
+        query_params: Dict[str, Any],
+        params: DataSearchAgentInputSchema,
     ) -> List[Dict[str, Any]]:
         """Execute collection searches using multiple parameter variations (DEPRECATED)."""
         logger.warning(
-            "_search_collections is deprecated. Use _search_collections_with_cmr_queries instead."
+            "_search_collections is deprecated. Use _search_collections_with_cmr_queries instead.",
         )
         search_variations = query_params.get("search_variations", [])
 
@@ -433,7 +447,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         search_tasks = []
         for i, variation in enumerate(search_variations):
             search_params = self.collection_search_tool.input_schema(
-                **self._build_collection_search_params(variation, query_params, params)
+                **self._build_collection_search_params(variation, query_params, params),
             )
 
             task = self._execute_collection_search(search_params, f"variation_{i}")
@@ -513,7 +527,9 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         return await self.collection_search_tool.arun(search_params)
 
     async def _synthesize_collections(
-        self, collection_results: List[Dict[str, Any]], query_params: Dict[str, Any]
+        self,
+        collection_results: List[Dict[str, Any]],
+        query_params: Dict[str, Any],
     ):
         """Filter and rank collection results."""
         # Simple collection filtering - take up to max_collections_to_search
@@ -522,12 +538,12 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             selected_collections = collection_results
         else:
             selected_collections = collection_results[:max_collections]
-        
+
         # Return a simple object with selected_collections attribute
         class SynthesisResult:
             def __init__(self, selected_collections):
                 self.selected_collections = selected_collections
-        
+
         return SynthesisResult(selected_collections)
 
     async def _search_granules(
@@ -545,7 +561,9 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 continue
 
             search_params = self._build_granule_search_params(
-                concept_id, query_params, params
+                concept_id,
+                query_params,
+                params,
             )
 
             task = self._execute_granule_search(search_params, concept_id)
@@ -606,7 +624,9 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         return granule_params
 
     async def _execute_granule_search(
-        self, search_params: Dict[str, Any], collection_id: str
+        self,
+        search_params: Dict[str, Any],
+        collection_id: str,
     ):
         """Execute a single granule search."""
         if self.debug:
@@ -630,25 +650,27 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 all_granules.extend(collection_granules)
             elif collection_granules.get("granules"):
                 all_granules.extend(collection_granules["granules"])
-        
+
         # Create a simple result object
         class GranuleSynthesisResult:
             def __init__(self, granules, search_metadata):
                 self.granules = granules
                 self.search_metadata = search_metadata
-        
+
         search_metadata = {
             "original_query": query_params.get("query", ""),
             "status": "completed",
             "search_timestamp": search_start_time.isoformat(),
             "collections_processed": len(collection_info),
-            "total_granules": len(all_granules)
+            "total_granules": len(all_granules),
         }
-        
+
         return GranuleSynthesisResult(all_granules, search_metadata)
 
     def _create_empty_response(
-        self, query: str, reason: str
+        self,
+        query: str,
+        reason: str,
     ) -> DataSearchAgentOutputSchema:
         """Create empty response with explanation."""
         return DataSearchAgentOutputSchema(
@@ -664,7 +686,9 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         )
 
     def _create_error_response(
-        self, query: str, error_msg: str
+        self,
+        query: str,
+        error_msg: str,
     ) -> DataSearchAgentOutputSchema:
         """Create error response."""
         return DataSearchAgentOutputSchema(

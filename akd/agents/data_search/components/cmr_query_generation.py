@@ -6,12 +6,14 @@ and research queries.
 """
 
 import asyncio
+
 from loguru import logger
 
-from akd.agents._base import InstructorBaseAgent, BaseAgentConfig
 from akd._base import InputSchema
-from ..schemas import ScientificAngle, CMRQueryOutput
-from .prompt_loader import load_prompt_template, load_and_format_prompt
+from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
+
+from ..schemas import CMRQueryOutput, ScientificAngle
+from .prompt_loader import load_and_format_prompt, load_prompt_template
 
 
 class CMRQueryGenerationInputSchema(InputSchema):
@@ -22,7 +24,7 @@ class CMRQueryGenerationInputSchema(InputSchema):
 
 
 class CMRQueryGenerationComponent(
-    InstructorBaseAgent[CMRQueryGenerationInputSchema, CMRQueryOutput]
+    InstructorBaseAgent[CMRQueryGenerationInputSchema, CMRQueryOutput],
 ):
     """
     Component for generating CMR search parameters using LLM.
@@ -46,9 +48,10 @@ class CMRQueryGenerationComponent(
 
         super().__init__(config=config, debug=debug)
 
-
     async def process(
-        self, scientific_angle: ScientificAngle, original_query: str
+        self,
+        scientific_angle: ScientificAngle,
+        original_query: str,
     ) -> CMRQueryOutput:
         """
         Generate CMR search parameters for the given scientific angle.
@@ -62,7 +65,7 @@ class CMRQueryGenerationComponent(
         """
         if self.debug:
             logger.debug(
-                f"Generating CMR queries for angle: '{scientific_angle.title}'"
+                f"Generating CMR queries for angle: '{scientific_angle.title}'",
             )
 
         # Format the user prompt
@@ -82,7 +85,7 @@ class CMRQueryGenerationComponent(
 
                 if self.debug:
                     logger.debug(
-                        f"Generated {len(response.search_queries)} CMR search queries"
+                        f"Generated {len(response.search_queries)} CMR search queries",
                     )
                     for i, query in enumerate(response.search_queries, 1):
                         logger.debug(f"  {i}. {self._summarize_query(query)}")
@@ -100,7 +103,7 @@ class CMRQueryGenerationComponent(
                     delay = base_delay * (2**attempt)
                     if self.debug:
                         logger.warning(
-                            f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})"
+                            f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})",
                         )
                     await asyncio.sleep(delay)
                 else:
@@ -110,14 +113,16 @@ class CMRQueryGenerationComponent(
                     raise Exception(error_msg)
 
     def _format_user_prompt(
-        self, scientific_angle: ScientificAngle, original_query: str
+        self,
+        scientific_angle: ScientificAngle,
+        original_query: str,
     ) -> str:
         """Format the user prompt with scientific angle and query."""
         return load_and_format_prompt(
             "cmr_query_generation_user",
             original_query=original_query,
             scientific_angle_title=scientific_angle.title,
-            scientific_angle_justification=scientific_angle.scientific_justification
+            scientific_angle_justification=scientific_angle.scientific_justification,
         )
 
     def _summarize_query(self, query) -> str:
@@ -129,13 +134,13 @@ class CMRQueryGenerationComponent(
             parts.append(f"platform: {query.platform}")
         if query.instrument:
             parts.append(f"instrument: {query.instrument}")
-        if query.processing_level:
-            parts.append(f"level: {query.processing_level}")
 
         return ", ".join(parts) if parts else "empty query"
 
     async def _arun(
-        self, params: CMRQueryGenerationInputSchema, **kwargs
+        self,
+        params: CMRQueryGenerationInputSchema,
+        **kwargs,
     ) -> CMRQueryOutput:
         """Execute the CMR query generation."""
         return await self.process(params.scientific_angle, params.original_query)

@@ -20,15 +20,14 @@ can we specify sort level in the api (usage/relevance)
 Guidelines:
 
 2. Use standard instruments: MODIS, VIIRS, OLI, TIRS, MSI, ASTER, AVHRR, etc.
-3. Specify appropriate processing levels: L1B (calibrated radiances), L2 (geophysical parameters), L3 (gridded), L4 (model/analysis)
-4. Use specific, searchable keywords that match NASA dataset naming conventions
-5. For temporal ranges, use ISO format: YYYY-MM-DDTHH:mm:ssZ,YYYY-MM-DDTHH:mm:ssZ
-6. For spatial bounds, use: west,south,east,north in decimal degrees
-7. Consider both direct measurements and derived products
+3. Use specific, searchable keywords that match NASA dataset naming conventions
+4. For temporal ranges, use ISO format: YYYY-MM-DDTHH:mm:ssZ,YYYY-MM-DDTHH:mm:ssZ
+5. For spatial bounds, use: west,south,east,north in decimal degrees
+6. Consider both direct measurements and derived products
 
 Output Format Requirements:
 - keyword: Single string of space-separated terms (not a list)
-- platform: Single platform name (not a list)  
+- platform: Single platform name (not a list)
 - instrument: Single instrument name (not a list)
 - temporal: ISO format string if time constraints are relevant
 - bounding_box: Comma-separated coordinates if spatial constraints are relevant
