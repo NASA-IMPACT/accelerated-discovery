@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import networkx as nx
 from typing import Dict, List
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from pydantic import AnyUrl
 
@@ -11,6 +11,7 @@ from akd.tools.scrapers import DoclingScraperConfig
 from akd.tools.search import SemanticScholarSearchToolConfig
 from akd.agents.gap_analysis.gap_analysis import (GapAgent, 
                                                   GapInputSchema, 
+                                                  GapOutputSchema,
                                                   GapAgentConfig)
 from akd.agents.gap_analysis.structures import Section, ParsedPaper
 from akd.structures import SearchResultItem, PaperDataItem
@@ -68,11 +69,7 @@ def dummy_parsed_paper():
 def agent():
     """Creates an agent for further tests."""
     project_settings = get_project_settings()
-    openai_key = project_settings.openai_api_key
-    if not openai_key:
-        pytest.skip(
-            "No API keys available. Set OPENAI_API_KEY to run integration tests.",
-            )
+    openai_key = project_settings.model_config_settings.api_keys.openai
     docling_config = DoclingScraperConfig(do_table_structure=True, pdf_mode='accurate', export_type='html', debug=False)
     s2_config = SemanticScholarSearchToolConfig(debug=False, external_id="ARXIV", fields = ["paperId", "title", "externalIds", "isOpenAccess", "openAccessPdf"])
     gap_agent_config = GapAgentConfig(docling_config=docling_config,
@@ -125,10 +122,24 @@ async def test_create_graph(agent, dummy_parsed_paper):
 
 
 @pytest.mark.asyncio
-async def test_arun_full_pipeline(agent, dummy_search_results):
+@patch("akd.agents.gap_analysis.gap_analysis.generate_final_answer", new_callable=AsyncMock)
+@patch("akd.agents.gap_analysis.gap_analysis.select_nodes", new_callable=AsyncMock)
+async def test_arun_full_pipeline(select_nodes, generate_final_answer, agent, dummy_paper_item, dummy_search_results, dummy_parsed_paper):
     """Tests the whole pipeline with a short paper."""
+    select_nodes.return_value = [["node1"], ["node2"]]
+    generate_final_answer.return_value = ("final_answer_mock", {"node1": "source", "node2": "source"})
+    dummy_graph = nx.Graph()
+    dummy_graph.add_nodes_from(["node1", "node2"])
+    dummy_graph.add_edge("node1", "node2")
+    agent._fetch_paper_items = AsyncMock(return_value=(dummy_paper_item, dummy_search_results))
+    agent._fetch_parsed_pdfs = AsyncMock(return_value=["<html>paper content</html>"])
+    agent._fetch_parsed_papers = AsyncMock(return_value=dummy_parsed_paper)
+    agent.create_graph = AsyncMock(return_value=dummy_graph)
+
     params = GapInputSchema(search_results=dummy_search_results, gap="evidence")
     result = await agent.arun(params)
+
+    assert isinstance(result, GapOutputSchema)
 
     assert isinstance(result.G, nx.Graph)
     assert isinstance(result.attributed_source_answers, Dict)
