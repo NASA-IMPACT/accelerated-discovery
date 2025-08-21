@@ -6,14 +6,60 @@ and research queries.
 """
 
 import asyncio
+from typing import List, Optional
 
 from loguru import logger
+from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
 from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 
-from ..schemas import CMRQueryOutput, ScientificAngle
 from .prompt_loader import load_and_format_prompt, load_prompt_template
+from .scientific_angles import ScientificAngle
+
+
+class CMRCollectionSearchParams(BaseModel):
+    """Parameters for CMR collection search that map directly to MCP interface."""
+
+    keyword: Optional[str] = Field(
+        None,
+        description="Text search across collection metadata",
+    )
+    short_name: Optional[str] = Field(
+        None,
+        description="Collection short name (e.g., MOD09A1)",
+    )
+    platform: Optional[str] = Field(
+        None,
+        description="Single platform/satellite name (e.g., Terra, Aqua)",
+    )
+    instrument: Optional[str] = Field(
+        None,
+        description="Single instrument name (e.g., MODIS, VIIRS)",
+    )
+    temporal: Optional[str] = Field(
+        None,
+        description="Temporal range in ISO format: YYYY-MM-DDTHH:mm:ssZ,YYYY-MM-DDTHH:mm:ssZ",
+    )
+    bounding_box: Optional[str] = Field(
+        None,
+        description="Spatial bounding box as comma-separated string: west,south,east,north",
+    )
+
+
+class CMRQueryOutput(BaseModel):
+    """Output from CMR query generation component."""
+
+    search_queries: List[CMRCollectionSearchParams] = Field(
+        ...,
+        description="List of CMR search parameter sets for this scientific angle",
+        min_items=1,
+        max_items=5,
+    )
+    reasoning: str = Field(
+        ...,
+        description="Explanation of why these specific search parameters were chosen",
+    )
 
 
 class CMRQueryGenerationInputSchema(InputSchema):

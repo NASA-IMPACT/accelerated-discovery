@@ -25,7 +25,7 @@ from .components import (  # Deprecated - kept for backward compatibility
     ScientificAnglesComponent,
     ScientificExpansionComponent,
 )
-from .schemas import ScientificAngle
+from .components.scientific_angles import ScientificAngle
 
 
 class CMRDataSearchAgentConfig(DataSearchAgentConfig):

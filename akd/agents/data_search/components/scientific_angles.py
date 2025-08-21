@@ -6,14 +6,36 @@ and relevant scientific documents.
 """
 
 import asyncio
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from loguru import logger
+from pydantic import BaseModel, Field
 
-from akd.agents._base import InstructorBaseAgent, BaseAgentConfig
 from akd._base import InputSchema
-from ..schemas import ScientificAnglesOutput
-from .prompt_loader import load_prompt_template, load_and_format_prompt
+from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
+
+from .prompt_loader import load_and_format_prompt, load_prompt_template
+
+
+class ScientificAngle(BaseModel):
+    """Individual scientific angle for data discovery."""
+
+    title: str = Field(..., description="Concise title for this scientific angle")
+    scientific_justification: str = Field(
+        ...,
+        description="Scientific reasoning explaining why this angle is relevant to the research question",
+    )
+
+
+class ScientificAnglesOutput(BaseModel):
+    """Output from scientific angles generation component."""
+
+    angles: List[ScientificAngle] = Field(
+        ...,
+        description="List of scientific angles for data discovery (2-6 angles)",
+        min_items=2,
+        max_items=6,
+    )
 
 
 class ScientificAnglesInputSchema(InputSchema):
@@ -24,7 +46,7 @@ class ScientificAnglesInputSchema(InputSchema):
 
 
 class ScientificAnglesComponent(
-    InstructorBaseAgent[ScientificAnglesInputSchema, ScientificAnglesOutput]
+    InstructorBaseAgent[ScientificAnglesInputSchema, ScientificAnglesOutput],
 ):
     """
     Component for generating scientific angles using LLM.
@@ -48,9 +70,10 @@ class ScientificAnglesComponent(
 
         super().__init__(config=config, debug=debug)
 
-
     async def process(
-        self, query: str, documents: List[Dict[str, Any]]
+        self,
+        query: str,
+        documents: List[Dict[str, Any]],
     ) -> ScientificAnglesOutput:
         """
         Generate scientific angles for data discovery.
@@ -99,7 +122,7 @@ class ScientificAnglesComponent(
                     delay = base_delay * (2**attempt)
                     if self.debug:
                         logger.warning(
-                            f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})"
+                            f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})",
                         )
                     await asyncio.sleep(delay)
                 else:
@@ -120,17 +143,19 @@ class ScientificAnglesComponent(
                 documents_section.extend([f"**Document {i}: {title}**", content, ""])
         else:
             documents_section.append("None Provided")
-        
+
         formatted_documents = "\n".join(documents_section)
-        
+
         return load_and_format_prompt(
             "scientific_angles_user",
             query=query,
-            documents=formatted_documents
+            documents=formatted_documents,
         )
 
     async def _arun(
-        self, params: ScientificAnglesInputSchema, **kwargs
+        self,
+        params: ScientificAnglesInputSchema,
+        **kwargs,
     ) -> ScientificAnglesOutput:
         """Execute the scientific angles generation."""
         return await self.process(params.query, params.documents)
