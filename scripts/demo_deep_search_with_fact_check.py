@@ -13,7 +13,6 @@ import sys
 
 import markdown
 from bs4 import BeautifulSoup
-from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from akd.agents.search import (
@@ -23,7 +22,7 @@ from akd.agents.search import (
 )
 from akd.configs.project import get_project_settings
 from akd.tools.fact_check import FactCheckInputSchema, FactCheckTool
-from akd.tools.vector_db_tool import VectorDBTool
+from akd.tools.vector_db_tool import VectorDBIndexInputSchema, VectorDBTool
 
 
 def process_report(report):
@@ -96,31 +95,39 @@ async def main():
 
     print(f"\n--- Found {len(source_results)} source documents and research report ---")
 
-    # Convert search results to Langchain Document objects for processing
-    documents_to_process = [
-        Document(
-            page_content=res["content"],
-            metadata={"source": res["url"], "title": res["title"]},
-        )
-        for res in source_results
-        if res.get("content")
-    ]
-
-    print(
-        f"\n--- Splitting {len(documents_to_process)} documents into smaller chunks ---"
-    )
+    print(f"\n--- Splitting {len(source_results)} documents into smaller chunks ---")
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=2000,
         chunk_overlap=200,
     )
-    chunks = text_splitter.split_documents(documents_to_process)
-    print(f"Created {len(chunks)} chunks.")
+
+    all_chunks = []
+    all_metadatas = []
+    all_ids = []
+
+    for i, res in enumerate(source_results):
+        if res.get("content"):
+            # Use split_text on the raw content string
+            chunks = text_splitter.split_text(res["content"])
+            for j, chunk in enumerate(chunks):
+                all_chunks.append(chunk)
+                # Create a unique ID and metadata for each chunk
+                metadata = {"source": res["url"], "title": res["title"]}
+                all_metadatas.append(metadata)
+                all_ids.append(f"res_{i}_chunk_{j}")
+
+    print(f"Created {len(all_chunks)} chunks.")
 
     vector_db_tool = VectorDBTool()
 
-    print(f"\n--- Indexing {len(chunks)} chunks into ChromaDB ---")
+    print(f"\n--- Indexing {len(all_chunks)} chunks into ChromaDB ---")
 
-    vector_db_tool.index(chunks)
+    index_params = VectorDBIndexInputSchema(
+        ids=all_ids,
+        documents=all_chunks,
+        metadatas=all_metadatas,
+    )
+    vector_db_tool.index(index_params)
 
     print(f"Indexing complete. Database is located at: {vector_db_tool.config.db_path}")
 

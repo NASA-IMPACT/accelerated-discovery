@@ -1,9 +1,8 @@
 import os
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import chromadb
 import chromadb.utils.embedding_functions as embedding_functions
-from langchain_core.documents import Document
 from loguru import logger
 from pydantic import Field
 
@@ -12,19 +11,31 @@ from akd.tools._base import BaseTool, BaseToolConfig
 from akd.utils import get_akd_root
 
 
-class VectorDBInputSchema(InputSchema):
+class VectorDBIndexInputSchema(InputSchema):
+    """Input schema for indexing documents into the Vector Database."""
+
+    ids: List[str] = Field(..., description="A unique list of document IDs.")
+    documents: List[str] = Field(
+        ..., description="A list of document contents to index."
+    )
+    metadatas: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Optional list of metadata for each document."
+    )
+
+
+class VectorDBQueryInputSchema(InputSchema):
     """Input schema for querying documents from the Vector Database."""
 
     query: str = Field(..., description="The query string for retrieval.")
     k: int = Field(3, description="Number of documents to retrieve.")
 
 
-class VectorDBOutputSchema(OutputSchema):
+class VectorDBQueryOutputSchema(OutputSchema):
     """Output schema for the Vector Database tool's query results."""
 
-    results: List[Document] = Field(
+    results: List[Dict[str, Any]] = Field(
         ...,
-        description="List of retrieved Langchain Document objects.",
+        description="List of retrieved documents, each as a dictionary with 'page_content' and 'metadata'.",
     )
 
 
@@ -40,14 +51,9 @@ class VectorDBToolConfig(BaseToolConfig):
         description="The API key for the embedding model provider, if required.",
     )
     db_path: str = Field(
-        default=os.getenv("VECTOR_DB_PATH", "./chroma_db"),
-        description="Path to the persistent ChromaDB directory.",
-    )
-    db_path: str = Field(
         default=os.getenv("VECTOR_DB_PATH", str(get_akd_root() / "chroma_db")),
         description="Path to the persistent ChromaDB directory.",
     )
-
     collection_name: str = Field(
         default="litagent_demo",
         description="Name of the collection within ChromaDB.",
@@ -55,7 +61,7 @@ class VectorDBToolConfig(BaseToolConfig):
 
 
 class VectorDBTool(
-    BaseTool[VectorDBInputSchema, VectorDBOutputSchema],
+    BaseTool[VectorDBQueryInputSchema, VectorDBQueryOutputSchema],
 ):
     """
     A tool for indexing and retrieving documents from a Chroma vector database.
@@ -65,13 +71,13 @@ class VectorDBTool(
     description = (
         "Indexes documents into a vector database and retrieves them based on a query."
     )
-    input_schema = VectorDBInputSchema
-    output_schema = VectorDBOutputSchema
+    input_schema = VectorDBQueryInputSchema
+    output_schema = VectorDBQueryOutputSchema
     config_schema = VectorDBToolConfig
 
     def __init__(
         self,
-        config: VectorDBToolConfig | None = None,
+        config: Optional[VectorDBToolConfig] = None,
         debug: bool = False,
     ):
         """Initializes the VectorDBTool and its ChromaDB client."""
@@ -79,7 +85,6 @@ class VectorDBTool(
         super().__init__(config, debug)
 
         logger.info("Initializing VectorDBTool...")
-
         self.client = chromadb.PersistentClient(path=self.config.db_path)
 
         embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
@@ -93,36 +98,29 @@ class VectorDBTool(
             f"Connected to ChromaDB collection '{self.config.collection_name}'.",
         )
 
-    def index(self, documents: List[Document]):
+    def index(self, params: VectorDBIndexInputSchema):
         """
-        Adds or updates documents in the vector database collection from Langchain Documents.
+        Adds or updates documents in the vector database collection.
         """
-        logger.info(f"Indexing {len(documents)} documents...")
-
-        # Extract components from the Document objects for ChromaDB
-        ids = [doc.metadata.get("id", f"doc_{i}") for i, doc in enumerate(documents)]
-        contents = [doc.page_content for doc in documents]
-        metadatas = [doc.metadata for doc in documents]
-
+        logger.info(f"Indexing {len(params.documents)} documents...")
         self.collection.add(
-            ids=ids,
-            documents=contents,
-            metadatas=metadatas,
+            ids=params.ids,
+            documents=params.documents,
+            metadatas=params.metadatas,
         )
         logger.info("Indexing complete.")
 
     async def _arun(
         self,
-        params: VectorDBInputSchema,
-    ) -> VectorDBOutputSchema:
+        params: VectorDBQueryInputSchema,
+    ) -> VectorDBQueryOutputSchema:
         """
-        Retrieves documents and returns them as a list of Langchain Document objects.
+        Retrieves documents and returns them as a list of dictionaries.
         """
         logger.info(
             f"Querying collection with query: '{params.query}', retrieving top-{params.k} documents",
         )
 
-        # Include metadatas and documents to reconstruct the Document objects
         results = self.collection.query(
             query_texts=[params.query],
             n_results=params.k,
@@ -130,20 +128,17 @@ class VectorDBTool(
         )
 
         retrieved_docs = []
-        # The result is batched; we process the first (and only) query's results
         if results and results.get("ids") and results["ids"][0]:
-            result_ids = results["ids"][0]
             result_documents = results["documents"][0]
             result_metadatas = results["metadatas"][0]
 
-            for i in range(len(result_ids)):
-                # Reconstruct the Langchain Document object
-                doc = Document(
-                    page_content=result_documents[i],
-                    metadata=result_metadatas[i]
+            for i in range(len(result_documents)):
+                doc = {
+                    "page_content": result_documents[i],
+                    "metadata": result_metadatas[i]
                     if result_metadatas and result_metadatas[i]
                     else {},
-                )
+                }
                 retrieved_docs.append(doc)
 
-        return VectorDBOutputSchema(results=retrieved_docs)
+        return VectorDBQueryOutputSchema(results=retrieved_docs)
