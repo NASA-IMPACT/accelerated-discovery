@@ -1,7 +1,8 @@
 import json
 import os
 import sys
-
+import tempfile
+import shutil
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,7 +10,6 @@ import requests
 
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 from akd.tools.code_search import (
     CodeSearchToolInputSchema,
@@ -21,6 +21,7 @@ from akd.tools.code_search import (
 )
 from akd.tools.misc import Embedder
 from akd.tools.search import SearxNGSearchToolConfig
+from akd.utils import google_drive_downloader
 
 """Validate the output structure"""
 
@@ -72,9 +73,22 @@ def test_google_drive_link():
 """Test2: Data file validation"""
 
 
-def test_data_file_validation():
+@pytest.fixture
+def temp_data_file():
+    # Setup
+    temp_dir = tempfile.mkdtemp()
+    temp_file = os.path.join(temp_dir, "test_data.csv")
     config = LocalRepoCodeSearchToolConfig()
-    df = pd.read_csv(config.data_file)
+    google_drive_downloader(config.google_drive_file_id, temp_file, quiet=True)
+
+    yield temp_file
+
+    # Teardown
+    shutil.rmtree(temp_dir)
+
+
+def test_data_file_validation(temp_data_file):
+    df = pd.read_csv(temp_data_file)
     assert df is not None
     assert not df.empty
     assert "embeddings" in df.columns
