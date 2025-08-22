@@ -32,6 +32,8 @@ class ScraperToolInputSchema(InputSchema):
 
 
 class ScrapedMetadata(SearchResultItem):
+    """Metadata extracted from the scraped webpage."""
+
     keywords: list[str] | None = Field(
         None,
         description="List of keywords from the webpage content.",
