@@ -393,18 +393,18 @@ class TestRealAgentMappings:
         mapper = WaterfallMapper()
 
         # Create realistic LitAgent output
-        from akd.structures import ExtractionDTO
 
         lit_output = LitSearchAgentOutputSchema(
             results=[
-                ExtractionDTO(
-                    source="https://example.com/solar-paper",
-                    result={
+                {
+                    "source": "https://example.com/solar-paper",
+                    "result": {
                         "title": "Advanced Solar Cell Technologies",
                         "content": "Recent breakthroughs in perovskite solar cells...",
                     },
-                ),
+                },
             ],
+            category="science",
         )
 
         result = await mapper.arun(
@@ -661,6 +661,7 @@ class TestConfigurationScenarios:
         # Should use semantic mapping for similar field names
         source = LitSearchAgentOutputSchema(
             results=[],  # Empty results for simplicity
+            category="science",
         )
 
         result = await mapper.arun(

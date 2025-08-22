@@ -17,8 +17,7 @@ class InstructionBuilderInputSchema(InputSchema):
 
     query: str = Field(..., description="Research query to build instructions for")
     context: Optional[str] = Field(
-        default=None,
-        description="Additional context for instruction building",
+        default=None, description="Additional context for instruction building"
     )
 
 
@@ -26,13 +25,11 @@ class InstructionBuilderOutputSchema(OutputSchema):
     """Output schema for instruction builder agent."""
 
     research_instructions: str = Field(
-        ...,
-        description="Detailed research instructions",
+        ..., description="Detailed research instructions"
     )
     search_strategy: str = Field(..., description="Recommended search strategy")
     key_concepts: List[str] = Field(
-        default_factory=list,
-        description="Key concepts to focus on",
+        default_factory=list, description="Key concepts to focus on"
     )
 
 
@@ -62,16 +59,13 @@ class InstructionBuilderComponent:
 
         # Create internal instructor agent for instruction building
         self._agent = InstructorBaseAgent[
-            InstructionBuilderInputSchema,
-            InstructionBuilderOutputSchema,
+            InstructionBuilderInputSchema, InstructionBuilderOutputSchema
         ](config=self.config, debug=debug)
         self._agent.input_schema = InstructionBuilderInputSchema
         self._agent.output_schema = InstructionBuilderOutputSchema
 
     async def process(
-        self,
-        query: str,
-        clarifications: Optional[List[str]] = None,
+        self, query: str, clarifications: Optional[List[str]] = None
     ) -> str:
         """
         Build detailed research instructions from query and clarifications.
@@ -95,8 +89,8 @@ class InstructionBuilderComponent:
 
         if self.debug:
             logger.debug(
-                f"Generated research instructions ({len(instruction_output.research_instructions)} chars)",
+                f"Generated research instructions ({len(instruction_output.research_instructions)} chars)"
             )
-            logger.debug(f"Focus areas: {instruction_output.focus_areas}")
+            logger.debug(f"Key concepts: {instruction_output.key_concepts}")
 
         return instruction_output.research_instructions
