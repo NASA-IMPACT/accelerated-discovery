@@ -58,8 +58,12 @@ class FactCheckToolConfig(BaseToolConfig):
         description="How often to poll for job results.",
     )
     job_timeout_seconds: int = Field(
-        default=1800,
-        description="Maximum time to wait for a job to complete (30 minutes).",
+        default=int(os.getenv("FACT_CHECK_JOB_TIMEOUT", "1800")),
+        description="Maximum time to wait for the entire job to complete (30 minutes).",
+    )
+    request_timeout_seconds: int = Field(
+        default=int(os.getenv("FACT_CHECK_REQUEST_TIMEOUT", "60")),
+        description="Timeout in seconds for each individual API request.",
     )
 
 
@@ -88,7 +92,12 @@ class FactCheckTool(
         super().__init__(config, debug)
 
         logger.info("Initializing FactCheckTool...")
-        self.api_client = httpx.AsyncClient(base_url=str(self.config.base_url))
+        # Set a timeout on the API requests
+        timeout = httpx.Timeout(self.config.request_timeout_seconds, connect=60.0)
+        self.api_client = httpx.AsyncClient(
+            base_url=str(self.config.base_url),
+            timeout=timeout,
+        )
 
     async def _arun(
         self,
@@ -106,7 +115,6 @@ class FactCheckTool(
             start_response = await self.api_client.post(
                 "/fact-check/start",
                 json=params.model_dump(),
-                timeout=60.0,
             )
             start_response.raise_for_status()
             job_id = start_response.json()["job_id"]
@@ -118,7 +126,6 @@ class FactCheckTool(
                 logger.info(f"Polling status for job {job_id}...")
                 status_response = await self.api_client.get(
                     f"/fact-check/status/{job_id}",
-                    timeout=60.0,
                 )
                 status_response.raise_for_status()
                 status_data = status_response.json()
