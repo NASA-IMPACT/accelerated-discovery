@@ -47,6 +47,7 @@ dependencies = [
     "ollama>=0.5.1",
     "tiktoken>=0.9.0",
     "deepeval>=3.4.0",
+    "rapidfuzz>=3.13.0",
 ]
 
 [project.urls]
