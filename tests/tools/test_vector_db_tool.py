@@ -89,8 +89,7 @@ def test_index_method(temp_db_path: str, sample_data: Dict[str, List]):
 
     retrieved = db_tool.collection.get(ids=["doc2"], include=["metadatas", "documents"])
     assert (
-        retrieved["documents"][0]
-        == "The ingredients include apples, pears and grapes."
+        retrieved["documents"][0] == "The ingredients include apples, pears and grapes."
     )
     assert retrieved["metadatas"][0]["source"] == "ingredients.txt"
     assert retrieved["metadatas"][0]["title"] == "ingredients_list"
