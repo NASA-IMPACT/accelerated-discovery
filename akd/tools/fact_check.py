@@ -1,3 +1,5 @@
+import asyncio
+import os
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -38,17 +40,30 @@ class FactCheckOutputSchema(OutputSchema):
         None,
         description="The unique ID for the generated fact graph.",
     )
+    logging_metadata: Dict[str, Any] = Field(
+        {},
+        description="Additional logging metadata from the run.",
+    )
 
 
 class FactCheckToolConfig(BaseToolConfig):
     """Configuration for the FactCheckTool."""
 
     base_url: HttpUrl = Field(
-        # default="http://localhost:8011",
-        default=HttpUrl(
-            "https://factreasoner-service-app.1yhbkn094k2v.us-south.codeengine.appdomain.cloud",
-        ),
+        default=HttpUrl(os.getenv("FACT_CHECK_API_URL", "http://localhost:8011")),
         description="The base URL of the remote Fact-Checking and Correction Service.",
+    )
+    polling_interval_seconds: int = Field(
+        default=120,
+        description="How often to poll for job results.",
+    )
+    job_timeout_seconds: int = Field(
+        default=int(os.getenv("FACT_CHECK_JOB_TIMEOUT", "1800")),
+        description="Maximum time to wait for the entire job to complete (30 minutes).",
+    )
+    request_timeout_seconds: int = Field(
+        default=int(os.getenv("FACT_CHECK_REQUEST_TIMEOUT", "60")),
+        description="Timeout in seconds for each individual API request.",
     )
 
 
@@ -77,29 +92,61 @@ class FactCheckTool(
         super().__init__(config, debug)
 
         logger.info("Initializing FactCheckTool...")
-        self.api_client = httpx.AsyncClient(base_url=str(self.config.base_url))
+        # Set a timeout on the API requests
+        timeout = httpx.Timeout(self.config.request_timeout_seconds, connect=60.0)
+        self.api_client = httpx.AsyncClient(
+            base_url=str(self.config.base_url),
+            timeout=timeout,
+        )
 
     async def _arun(
         self,
         params: FactCheckInputSchema,
     ) -> FactCheckOutputSchema:
         """
-        Calls the /fact-check/ endpoint on the remote service.
+        Starts a fact-checking job and polls for its completion.
         """
         logger.info(
             f"Sending fact-check request for question: '{params.question[:50]}...'",
         )
 
         try:
-            response = await self.api_client.post(
-                "/fact-check/",
+            # Start the job
+            start_response = await self.api_client.post(
+                "/fact-check/start",
                 json=params.model_dump(),
-                timeout=1500.0,  # 25 mins timeout for potentially slow API calls
             )
-            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+            start_response.raise_for_status()
+            job_id = start_response.json()["job_id"]
+            logger.info(f"Successfully started job with ID: {job_id}")
 
-            results = response.json()
-            return FactCheckOutputSchema(**results)
+            # Poll for the result
+            total_wait_time = 0
+            while total_wait_time < self.config.job_timeout_seconds:
+                logger.info(f"Polling status for job {job_id}...")
+                status_response = await self.api_client.get(
+                    f"/fact-check/status/{job_id}",
+                )
+                status_response.raise_for_status()
+                status_data = status_response.json()
+
+                if status_data["status"] == "completed":
+                    logger.info(f"Job {job_id} completed successfully.")
+                    return FactCheckOutputSchema(**status_data["result"])
+                elif status_data["status"] == "failed":
+                    raise Exception(
+                        f"Job {job_id} failed on the server: {status_data.get('error', 'Unknown error')}",
+                    )
+                elif status_data["status"] == "pending":
+                    logger.info(
+                        f"Job {job_id} is in progress... (waited {total_wait_time}s)",
+                    )
+                    await asyncio.sleep(self.config.polling_interval_seconds)
+                    total_wait_time += self.config.polling_interval_seconds
+
+            raise asyncio.TimeoutError(
+                f"Job {job_id} did not complete within the {self.config.job_timeout_seconds}s timeout.",
+            )
 
         except httpx.HTTPStatusError as e:
             logger.error(
