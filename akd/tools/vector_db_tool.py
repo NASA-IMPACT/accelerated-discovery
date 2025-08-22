@@ -9,6 +9,7 @@ from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
+from akd.utils import get_akd_root
 
 
 class VectorDBInputSchema(InputSchema):
@@ -42,6 +43,11 @@ class VectorDBToolConfig(BaseToolConfig):
         default=os.getenv("VECTOR_DB_PATH", "./chroma_db"),
         description="Path to the persistent ChromaDB directory.",
     )
+    db_path: str = Field(
+        default=os.getenv("VECTOR_DB_PATH", str(get_akd_root() / "chroma_db")),
+        description="Path to the persistent ChromaDB directory.",
+    )
+
     collection_name: str = Field(
         default="litagent_demo",
         description="Name of the collection within ChromaDB.",
