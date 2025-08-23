@@ -397,7 +397,10 @@ class PDFScraper(ScraperToolBase):
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         headers = self.headers
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=True,
+            ) as client:
                 async with client.stream("GET", url, headers=headers) as response:
                     response.raise_for_status()
 
