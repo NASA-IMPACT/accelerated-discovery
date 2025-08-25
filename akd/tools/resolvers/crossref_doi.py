@@ -385,7 +385,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         params: CrossRefDoiResolverInputSchema,
     ) -> Optional[CrossRefDoiResolverOutputSchema]:
         # if doi is already present, return it
-        if getattr(params, "doi", None):
+        if getattr(params, "doi", None) and params.doi != 'None':
             if self.debug:
                 logger.debug(f"DOI already present: {params.doi}")
             return CrossRefDoiResolverOutputSchema(**params.model_dump())

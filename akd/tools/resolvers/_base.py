@@ -36,6 +36,9 @@ class ResolverInputSchema(SearchResultItem, InputSchema):
         None,
         description="Query used to obtain the search result",
     )
+        # allow extra fields in output schema
+    class Config:
+        extra = "allow"
 
 
 class ResolverOutputSchema(SearchResultItem, OutputSchema):
