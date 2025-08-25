@@ -351,12 +351,6 @@ class InstructorBaseAgent[
         return response
 
 
-class FinalResponse[T: OutputSchema](BaseModel):
-    """Represents the final response from the agent."""
-
-    response: T = Field(..., description="The final response")
-
-
 class AgentAction[T: OutputSchema](BaseModel):
     """Union type for agent actions - either tool call or final response."""
 
