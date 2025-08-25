@@ -39,6 +39,12 @@ except ImportError:
 class SearchResultItem(IOSchema):
     """Represents a single search result item with metadata."""
 
+    model_config = ConfigDict(
+        json_encoders={
+            AnyUrl: str,  # Convert AnyUrl objects to strings during JSON serialization
+        },
+    )
+
     # Required fields
     url: AnyUrl = Field(..., description="The URL of the search result")
     title: str = Field(..., description="The title of the search result")

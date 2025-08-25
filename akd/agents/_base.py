@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import uuid
 from abc import abstractmethod
 from typing import Any, cast
 
@@ -8,11 +10,17 @@ import openai
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
+from loguru import logger
 from pydantic import AnyUrl, BaseModel, Field
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
-from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+from akd.configs.prompts import (
+    DEFAULT_SYSTEM_PROMPT,
+    TOOL_CALL_EXAMPLES,
+    TOOL_CALL_FORMAT_INSTRUCTIONS,
+    TOOL_CALL_INSTRUCTIONS,
+)
 
 
 class BaseAgentConfig(BaseConfig):
@@ -323,3 +331,402 @@ class InstructorBaseAgent[
         )
 
         return response
+
+
+class ToolCall(BaseModel):
+    """Represents a tool call from the LLM."""
+
+    tool_name: str = Field(..., description="Name of the tool to call")
+    tool_input: dict = Field(..., description="Input parameters for the tool")
+
+
+class FinalResponse[T: OutputSchema](BaseModel):
+    """Represents the final response from the agent."""
+
+    response: T = Field(..., description="The final response")
+
+
+class AgentAction[T: OutputSchema](BaseModel):
+    """Union type for agent actions - either tool call or final response."""
+
+    action_type: str = Field(
+        ...,
+        description="Type of action: 'tool_call' or 'final_response'",
+    )
+    tool_call: ToolCall | None = Field(
+        None,
+        description="Tool call if action_type is 'tool_call'",
+    )
+    final_response: T | None = Field(
+        None,
+        description="Final response if action_type is 'final_response'",
+    )
+
+
+class InstructorBaseAgentWithToolCalling[
+    InSchema: InputSchema,
+    OutSchema: OutputSchema,
+](InstructorBaseAgent[InSchema, OutSchema]):
+    """InstructorBaseAgent with tool calling capabilities.
+
+    This agent can execute tools during conversation by leveraging instructor's
+    function calling mechanism. Tools are registered and made available to the LLM,
+    which can choose to call them or provide final responses.
+
+    Note: This is an abstract base class. Subclasses must define:
+    - input_schema: Class attribute pointing to InputSchema subclass
+    - output_schema: Class attribute pointing to OutputSchema subclass
+    """
+
+    def __init__(
+        self,
+        config: BaseAgentConfig | None = None,
+        debug: bool = False,
+        tools: list | None = None,
+    ) -> None:
+        super().__init__(config=config, debug=debug)
+
+        # Store available tools
+        self._tools: dict[str, Any] = {}
+        if tools:
+            self.bind_tools(tools)
+
+    def bind_tools(self, tools: list) -> None:
+        """Bind tools to this agent for use during conversations.
+
+        Args:
+            tools: List of BaseTool instances to make available
+        """
+        for tool in tools:
+            tool_name = tool.__class__.__name__
+            self._tools[tool_name] = tool
+
+    def get_available_tools(self) -> list[str]:
+        """Get list of available tool names."""
+        return list(self._tools.keys())
+
+    async def _execute_tool(self, tool_name: str, tool_input: dict) -> dict:
+        """Execute a tool with given input parameters.
+
+        Args:
+            tool_name: Name of the tool to execute
+            tool_input: Input parameters for the tool
+
+        Returns:
+            Tool execution result
+        """
+        if tool_name not in self._tools:
+            raise ValueError(
+                f"Tool '{tool_name}' not found. Available tools: {self.get_available_tools()}",
+            )
+
+        tool = self._tools[tool_name]
+
+        # Convert dict input to tool's input schema
+        tool_input_schema = tool.input_schema(**tool_input)
+
+        # Execute the tool
+        result = await tool.arun(tool_input_schema)
+
+        # Return as dict for easier handling, ensuring AnyUrl objects are converted to strings
+        if hasattr(result, "model_dump"):
+            return result.model_dump(
+                mode="json",
+            )  # mode='json' ensures proper serialization
+        else:
+            return result
+
+    def _generate_tool_call_id(self) -> str:
+        """Generate a unique tool call ID."""
+        return f"call_{uuid.uuid4().hex[:12]}"
+
+    def _add_tool_call_to_memory(
+        self,
+        tool_call_id: str,
+        tool_name: str,
+        tool_input: dict,
+    ) -> None:
+        """Add a tool call to memory using OpenAI format."""
+        tool_call_message = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "arguments": json.dumps(tool_input),
+                    },
+                },
+            ],
+        }
+        self.memory.append(tool_call_message)
+
+    def _add_tool_result_to_memory(
+        self,
+        tool_call_id: str,
+        tool_result: dict,
+        success: bool = True,
+    ) -> None:
+        """Add a tool result to memory using OpenAI format."""
+        if success:
+            content = json.dumps(tool_result)
+        else:
+            content = json.dumps({"error": str(tool_result), "success": False})
+
+        tool_result_message = {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": content,
+        }
+        self.memory.append(tool_result_message)
+
+    def get_tool_call_history(self) -> list[dict]:
+        """Get history of tool calls from memory."""
+        tool_history = []
+        for message in self.memory:
+            if message.get("role") == "assistant" and message.get("tool_calls"):
+                for tool_call in message["tool_calls"]:
+                    tool_history.append(
+                        {
+                            "tool_call_id": tool_call["id"],
+                            "tool_name": tool_call["function"]["name"],
+                            "arguments": json.loads(tool_call["function"]["arguments"]),
+                            "type": "call",
+                        },
+                    )
+            elif message.get("role") == "tool":
+                try:
+                    result = json.loads(message["content"])
+                except json.JSONDecodeError:
+                    result = message["content"]
+
+                tool_history.append(
+                    {
+                        "tool_call_id": message["tool_call_id"],
+                        "result": result,
+                        "type": "result",
+                    },
+                )
+        return tool_history
+
+    def _create_tool_description(self) -> str:
+        """Create detailed tool descriptions with parameter schemas for the system prompt."""
+        if not self._tools:
+            return "No tools are available."
+
+        tool_descriptions = []
+        for tool_name, tool in self._tools.items():
+            # Get FULL description (not truncated)
+            description = getattr(
+                tool,
+                "description",
+                tool.__class__.__doc__ or f"Tool: {tool_name}",
+            )
+            if description:
+                description = description.strip()  # Clean whitespace but keep full text
+
+            # Get input schema details
+            input_schema = tool.input_schema
+            schema_info = input_schema.model_json_schema()
+
+            # Format parameter information with types and descriptions
+            params = []
+            properties = schema_info.get("properties", {})
+            required_fields = schema_info.get("required", [])
+
+            for field_name, field_info in properties.items():
+                field_type = field_info.get("type", "unknown")
+                field_desc = field_info.get("description", "")
+                is_required = field_name in required_fields
+
+                # Handle array types properly
+                if field_type == "array":
+                    items_info = field_info.get("items", {})
+                    items_type = items_info.get("type", "unknown")
+                    field_type = f"array of {items_type}"
+
+                param_str = f"    - {field_name}: {field_type}"
+                if not is_required:
+                    param_str += " (optional)"
+                if field_desc:
+                    param_str += f" - {field_desc}"
+                params.append(param_str)
+
+            # Build complete tool description
+            tool_desc = f"- {tool_name}: {description}\n  Parameters:"
+            if params:
+                tool_desc += "\n" + "\n".join(params)
+            else:
+                tool_desc += " None required"
+
+            tool_descriptions.append(tool_desc)
+
+        return "Available tools:\n" + "\n\n".join(tool_descriptions)
+
+    @staticmethod
+    def _create_tool_calling_prompt(base_prompt: str, tool_descriptions: str) -> str:
+        """Create enhanced prompt with tool calling capabilities."""
+        return f"""{base_prompt}
+
+{tool_descriptions}
+
+{TOOL_CALL_FORMAT_INSTRUCTIONS}
+
+{TOOL_CALL_EXAMPLES}
+
+{TOOL_CALL_INSTRUCTIONS}"""
+
+    async def get_response_async(
+        self,
+        response_model: type[OutputSchema] | None = None,
+        max_iterations: int = 5,
+    ) -> OutSchema:
+        """
+        Obtains a response from the language model with tool calling support.
+
+        Args:
+            response_model: The schema for the response data. If not set, self.output_schema is used.
+            max_iterations: Maximum number of tool calling iterations.
+
+        Returns:
+            The final response from the language model.
+        """
+        response_model = response_model or self.output_schema
+
+        # Create enhanced system prompt with tool information
+        original_system_prompt = self.system_prompt
+        if self._tools:
+            tool_descriptions = self._create_tool_description()
+            enhanced_prompt = self._create_tool_calling_prompt(
+                original_system_prompt,
+                tool_descriptions,
+            )
+        else:
+            enhanced_prompt = f"{original_system_prompt}\n\nNo tools are available. Provide your final response with action_type='final_response'."
+
+        # Create the action model for this specific response type
+        action_model = type(
+            f"AgentAction_{response_model.__name__}",
+            (BaseModel,),
+            {
+                "action_type": Field(
+                    ...,
+                    description="Type of action: 'tool_call' or 'final_response'",
+                ),
+                "tool_call": Field(
+                    None,
+                    description="Tool call if action_type is 'tool_call'",
+                ),
+                "final_response": Field(
+                    None,
+                    description="Final response if action_type is 'final_response'",
+                ),
+                "__annotations__": {
+                    "action_type": str,
+                    "tool_call": ToolCall | None,
+                    "final_response": response_model | None,
+                },
+            },
+        )
+
+        # Create instructor-compatible model
+        instructor_model = self._create_instructor_compatible_model(action_model)
+
+        # Tool execution loop
+        for iteration in range(max_iterations):
+            # If we're on the last iteration, force a final response
+            current_prompt = enhanced_prompt
+            if iteration == max_iterations - 1:
+                current_prompt += "\n\nIMPORTANT: This is your final chance to respond. You MUST provide action_type='final_response' with your best answer based on the information you have."
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": current_prompt,
+                },
+            ] + self.memory
+
+            # Get action from LLM
+            action_response = await self.client.chat.completions.create(
+                messages=messages,
+                model=self.model_name,
+                temperature=self.temperature,
+                response_model=instructor_model,
+            )
+
+            action_data = action_response.model_dump()
+
+            if self.debug:
+                logger.debug(
+                    f"Iteration {iteration + 1}: Action type = {action_data.get('action_type')}",
+                )
+
+            if action_data["action_type"] == "final_response":
+                # Return the final response
+                final_response_data = action_data["final_response"]
+                response = response_model(**final_response_data)
+                return cast(OutSchema, response)
+
+            elif action_data["action_type"] == "tool_call":
+                # Execute the tool
+                tool_call_data = action_data.get("tool_call")
+                if not tool_call_data:
+                    raise ValueError(
+                        "tool_call field is required when action_type is 'tool_call'",
+                    )
+
+                tool_name = tool_call_data.get("tool_name")
+                if not tool_name:
+                    raise ValueError("tool_name is required in tool_call")
+
+                tool_input = tool_call_data.get("tool_input", {})
+
+                # Validate tool exists
+                if tool_name not in self._tools:
+                    available_tools = list(self._tools.keys())
+                    raise ValueError(
+                        f"Tool '{tool_name}' not found. Available tools: {available_tools}",
+                    )
+
+                # Generate unique tool call ID
+                tool_call_id = self._generate_tool_call_id()
+
+                # Add tool call to memory in OpenAI format
+                self._add_tool_call_to_memory(tool_call_id, tool_name, tool_input)
+
+                try:
+                    # Execute the tool
+                    tool_result = await self._execute_tool(tool_name, tool_input)
+
+                    if self.debug:
+                        logger.debug(
+                            f"Tool {tool_name} executed successfully: {tool_result}",
+                        )
+
+                    # Add successful tool result to memory
+                    self._add_tool_result_to_memory(
+                        tool_call_id,
+                        tool_result,
+                        success=True,
+                    )
+
+                except Exception as e:
+                    error_msg = f"Tool {tool_name} failed: {str(e)}"
+                    if self.debug:
+                        logger.debug(error_msg)
+
+                    # Add failed tool result to memory
+                    self._add_tool_result_to_memory(
+                        tool_call_id,
+                        error_msg,
+                        success=False,
+                    )
+            else:
+                raise ValueError(f"Unknown action type: {action_data['action_type']}")
+
+        # If we reach max iterations, force a final response
+        raise RuntimeError(
+            f"Max iterations ({max_iterations}) reached without final response",
+        )

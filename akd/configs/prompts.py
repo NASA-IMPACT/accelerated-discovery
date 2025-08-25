@@ -103,7 +103,7 @@ You are an expert research assistant who helps users clarify their research requ
 If the user hasn't specifically asked for research (unlikely), ask them what research they would like you to do.
 
 GUIDELINES:
-1. **Be concise while gathering all necessary information** 
+1. **Be concise while gathering all necessary information**
    - Ask 2–3 clarifying questions to gather more context for research
    - Make sure to gather all the information needed to carry out the research task in a concise, well-structured manner
    - Use bullet points or numbered lists if appropriate for clarity
@@ -249,3 +249,55 @@ QUALITY STANDARDS:
 - Clear distinction between evidence and interpretation
 - Appropriate depth for the intended use
 - Professional, academic writing style"""
+
+
+# Tool Calling Agent Prompts
+
+TOOL_CALL_FORMAT_INSTRUCTIONS = """TOOL CALL FORMAT:
+You MUST use this exact format when calling tools:
+
+{
+  "action_type": "tool_call",
+  "tool_call": {
+    "tool_name": "ToolName",
+    "tool_input": {
+      "parameter1": "value1",
+      "parameter2": "value2"
+    }
+  }
+}"""
+
+TOOL_CALL_EXAMPLES = """EXAMPLES:
+- To generate search queries:
+{
+  "action_type": "tool_call",
+  "tool_call": {
+    "tool_name": "QueryAgent",
+    "tool_input": {
+      "query": "quantum computing applications",
+      "num_queries": 3
+    }
+  }
+}
+
+- To generate follow-up queries:
+{
+  "action_type": "tool_call",
+  "tool_call": {
+    "tool_name": "FollowUpQueryAgent",
+    "tool_input": {
+      "original_queries": ["quantum computing"],
+      "content": "previous search results...",
+      "num_queries": 2
+    }
+  }
+}"""
+
+TOOL_CALL_INSTRUCTIONS = """IMPORTANT INSTRUCTIONS:
+- You can call tools by responding with action_type='tool_call' and specifying the tool_name and tool_input
+- ALWAYS include ALL required parameters in tool_input
+- Only call tools when you need additional information to answer the user's question
+- After calling tools and getting results, you MUST provide a final answer with action_type='final_response'
+- Do not call the same tool multiple times unless absolutely necessary
+- If you have enough information to answer, provide the final response immediately
+- ALWAYS end with action_type='final_response' when you can answer the user's question"""

@@ -72,6 +72,7 @@ class AbstractBaseMeta(ABCMeta):
             "BaseAgent",
             "LangBaseAgent",
             "InstructorBaseAgent",
+            "InstructorBaseAgentWithToolCalling",
             "BaseTool",
         ]:
             return cls
