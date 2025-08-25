@@ -7,9 +7,21 @@ from loguru import logger
 from pydantic import Field
 
 from akd.structures import SearchResultItem
+from akd.tools.resolvers import (
+    ResearchArticleResolver,
+    CrossRefDoiResolver,
+    ArxivResolver,
+    ADSResolver, 
+    DOIResolver,
+    PDFUrlResolver, 
+    BaseArticleResolver,
+)
+from akd.tools.resolvers.unpaywall import UnpaywallResolver
 from akd.tools.scrapers._base import ScraperToolBase
-from akd.tools.scrapers.composite import CompositeScraper, ResearchArticleResolver
-from akd.tools.scrapers.resolvers import BaseArticleResolver
+from akd.tools.scrapers.composite import CompositeScraper
+from akd.tools.scrapers.omni import DoclingScraper
+from akd.tools.scrapers.pdf_scrapers import SimplePDFScraper
+from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 
 from ._base import (
     SearchTool,
@@ -39,7 +51,6 @@ class FullTextSearchPipelineConfig(SearchToolConfig):
         default=30,
         description="Timeout in seconds for individual scraping operations",
     )
-
     # Error handling configuration
     fail_on_scraping_errors: bool = Field(
         default=False,
@@ -71,6 +82,27 @@ class FullTextSearchPipeline(SearchTool):
     output_schema = SearchToolOutputSchema
     config_schema = FullTextSearchPipelineConfig
 
+    def _default_research_article_resolver(self, debug: bool = False) -> ResearchArticleResolver:
+        return ResearchArticleResolver(
+        PDFUrlResolver(debug=debug),
+        ArxivResolver(debug=debug),
+        ADSResolver(debug=debug),
+        DOIResolver(debug=debug),
+        CrossRefDoiResolver(debug=debug),
+        UnpaywallResolver(debug=debug),
+        debug=debug,
+        )
+    
+
+    def default_scraper(self, debug: bool = False) -> ScraperToolBase:
+        return CompositeScraper(
+            DoclingScraper(debug=debug),
+            Crawl4AIWebScraper(debug=debug),
+            SimpleWebScraper(debug=debug),
+            SimplePDFScraper(debug=debug),
+        )
+
+
     def __init__(
         self,
         search_tool: SearchTool,
@@ -93,8 +125,8 @@ class FullTextSearchPipeline(SearchTool):
         super().__init__(config, debug)
 
         self.search_tool = search_tool
-        self.resolver = resolver or ResearchArticleResolver(debug=debug)
-        self.scraper = scraper or CompositeScraper(debug=debug)
+        self.resolver = resolver or self._default_research_article_resolver(debug=debug)
+        self.scraper = scraper or self.default_scraper(debug=debug)
 
         if debug:
             logger.debug("Initialized FullTextSearchPipeline with:")
@@ -102,7 +134,7 @@ class FullTextSearchPipeline(SearchTool):
             logger.debug(f"  - Resolver: {self.resolver.__class__.__name__}")
             logger.debug(f"  - Scraper: {self.scraper.__class__.__name__}")
 
-    async def _resolve_open_access_url(self, result: SearchResultItem) -> Optional[str]:
+    async def _resolve_essential_metadata(self, result: SearchResultItem) -> Optional[SearchResultItem]:
         """
         Resolve the open access URL for a search result.
 
@@ -115,20 +147,10 @@ class FullTextSearchPipeline(SearchTool):
         try:
             # Try to resolve from the main URL first
             resolver_output = await self.resolver.arun(
-                self.resolver.input_schema(url=result.url),
+                self.resolver.input_schema(**result.model_dump()),
             )
 
-            if resolver_output.url and str(resolver_output.url) != str(result.url):
-                if self.debug:
-                    logger.debug(f"Resolved {result.url} -> {resolver_output.url}")
-                return str(resolver_output.url)
-
-            # If no resolution found and there's a PDF URL, try that
-            if result.pdf_url:
-                return str(result.pdf_url)
-
-            # Fall back to original URL
-            return str(result.url)
+            return resolver_output
 
         except Exception as e:
             if self.debug:
@@ -139,7 +161,6 @@ class FullTextSearchPipeline(SearchTool):
     async def _scrape_content(
         self,
         url: str,
-        result: SearchResultItem,
     ) -> Optional[str]:
         """
         Scrape full text content from a URL.
@@ -152,6 +173,7 @@ class FullTextSearchPipeline(SearchTool):
             Scraped content or None if scraping fails
         """
         try:
+            # result.resolved_url if it exists, otherwise use original URL
             scraper_output = await asyncio.wait_for(
                 self.scraper.arun(self.scraper.input_schema(url=url)),
                 timeout=self.scraping_timeout,
@@ -195,19 +217,18 @@ class FullTextSearchPipeline(SearchTool):
         """
         try:
             # Resolve open access URL
-            resolved_url = await self._resolve_open_access_url(result)
 
-            if not resolved_url:
-                if self.debug:
-                    logger.warning(f"No URL to scrape for result: {result.title}")
-                return result
-
-            # Scrape content
-            scraped_content = await self._scrape_content(resolved_url, result)
+            resolved_result = await self._resolve_essential_metadata(result)
+            scraping_url = resolved_result.resolved_url or resolved_result.url
+            scraped_content = await self._scrape_content(scraping_url)
 
             if scraped_content:
                 # Create enhanced result
-                enhanced_result = result.model_copy()
+                search_item_data = resolved_result.model_dump(
+                include=set(SearchResultItem.model_fields.keys())
+                )
+
+                enhanced_result = SearchResultItem(**search_item_data)
 
                 if self.include_original_content and result.content:
                     # Combine original and scraped content
@@ -218,30 +239,29 @@ class FullTextSearchPipeline(SearchTool):
                     # Replace with scraped content
                     enhanced_result.content = scraped_content
 
-                # Update PDF URL if we resolved it
-                if resolved_url != str(result.url):
-                    enhanced_result.pdf_url = resolved_url
 
-                # Add metadata about scraping
                 if not enhanced_result.extra:
                     enhanced_result.extra = {}
                 enhanced_result.extra.update(
                     {
                         "full_text_scraped": True,
-                        "scraped_url": resolved_url,
+                        "scraped_url": scraping_url, 
                         "scraper_used": self.scraper.__class__.__name__,
-                        "resolver_used": self.resolver.__class__.__name__,
+                        "resolver_used": resolved_result.resolvers if hasattr(resolved_result, 'resolvers') else None,
                     },
                 )
 
                 return enhanced_result
+            
             else:
                 # Scraping failed, return original with metadata
                 enhanced_result = result.model_copy()
                 if not enhanced_result.extra:
                     enhanced_result.extra = {}
                 enhanced_result.extra["full_text_scraped"] = False
-                enhanced_result.extra["scraping_attempted_url"] = resolved_url
+                enhanced_result.extra["scraping_attempted_url"] = scraping_url
+                enhanced_result.extra["scraper_used"] = self.scraper.__class__.__name__
+                enhanced_result.extra["resolver_used"] = resolved_result.resolvers if hasattr(resolved_result, 'resolvers') else None
 
                 return enhanced_result
 
@@ -281,7 +301,7 @@ class FullTextSearchPipeline(SearchTool):
                 f"🔄 Starting FullTextSearchPipeline for {len(params.queries)} queries",
             )
 
-        # Step 1: Get initial search results
+        # Step 1: Get initial search result schema
         params_search = self.search_tool.input_schema(**params.model_dump())
         search_results = await self.search_tool.arun(params_search, **kwargs)
 
