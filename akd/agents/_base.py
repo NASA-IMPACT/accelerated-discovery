@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from abc import abstractmethod
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import instructor
 import openai
@@ -21,6 +21,7 @@ from akd.configs.prompts import (
     TOOL_CALL_FORMAT_INSTRUCTIONS,
     TOOL_CALL_INSTRUCTIONS,
 )
+from akd.structures import ToolCall
 
 
 class BaseAgentConfig(BaseConfig):
@@ -31,6 +32,23 @@ class BaseAgentConfig(BaseConfig):
     model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
     temperature: float = 0.0
     system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
+
+
+class ToolCallingAgentConfig(BaseAgentConfig):
+    """Configuration class for InstructorBaseAgentWithToolCalling."""
+
+    max_iterations: int = Field(
+        default=5,
+        description="Maximum number of tool calling iterations before forcing final response",
+    )
+    min_iterations: int = Field(
+        default=1,
+        description="Minimum number of tool calls before allowing final response",
+    )
+    enforce_min_tool_calls: bool = Field(
+        default=True,
+        description="Whether to enforce minimum tool calls before allowing final response",
+    )
 
 
 class BaseAgent[
@@ -333,13 +351,6 @@ class InstructorBaseAgent[
         return response
 
 
-class ToolCall(BaseModel):
-    """Represents a tool call from the LLM."""
-
-    tool_name: str = Field(..., description="Name of the tool to call")
-    tool_input: dict = Field(..., description="Input parameters for the tool")
-
-
 class FinalResponse[T: OutputSchema](BaseModel):
     """Represents the final response from the agent."""
 
@@ -349,7 +360,7 @@ class FinalResponse[T: OutputSchema](BaseModel):
 class AgentAction[T: OutputSchema](BaseModel):
     """Union type for agent actions - either tool call or final response."""
 
-    action_type: str = Field(
+    action_type: Literal["tool_call", "final_response"] = Field(
         ...,
         description="Type of action: 'tool_call' or 'final_response'",
     )
@@ -378,9 +389,11 @@ class InstructorBaseAgentWithToolCalling[
     - output_schema: Class attribute pointing to OutputSchema subclass
     """
 
+    config_schema = ToolCallingAgentConfig
+
     def __init__(
         self,
-        config: BaseAgentConfig | None = None,
+        config: ToolCallingAgentConfig | None = None,
         debug: bool = False,
         tools: list | None = None,
     ) -> None:
@@ -581,19 +594,21 @@ class InstructorBaseAgentWithToolCalling[
     async def get_response_async(
         self,
         response_model: type[OutputSchema] | None = None,
-        max_iterations: int = 5,
+        max_iterations: int | None = None,
     ) -> OutSchema:
         """
         Obtains a response from the language model with tool calling support.
 
         Args:
             response_model: The schema for the response data. If not set, self.output_schema is used.
-            max_iterations: Maximum number of tool calling iterations.
+            max_iterations: Maximum number of tool calling iterations. Uses config default if not provided.
 
         Returns:
             The final response from the language model.
         """
         response_model = response_model or self.output_schema
+        max_iterations = max_iterations or self.max_iterations
+        tool_calls_made = 0
 
         # Create enhanced system prompt with tool information
         original_system_prompt = self.system_prompt
@@ -664,6 +679,27 @@ class InstructorBaseAgentWithToolCalling[
                 )
 
             if action_data["action_type"] == "final_response":
+                # Check if we've met minimum iteration requirements
+                if (
+                    self.enforce_min_tool_calls
+                    and tool_calls_made < self.min_iterations
+                    and iteration < max_iterations - 1
+                ):
+                    if self.debug:
+                        logger.debug(
+                            f"Enforcing minimum tool calls: only {tool_calls_made} tool calls made, "
+                            f"minimum is {self.min_iterations}",
+                        )
+
+                    # Add message encouraging more thorough investigation
+                    self.memory.append(
+                        {
+                            "role": "user",
+                            "content": "Please use available tools to gather more information before providing your final answer. Consider what additional tool calls might be helpful.",
+                        },
+                    )
+                    continue
+
                 # Return the final response
                 final_response_data = action_data["final_response"]
                 response = response_model(**final_response_data)
@@ -695,6 +731,7 @@ class InstructorBaseAgentWithToolCalling[
 
                 # Add tool call to memory in OpenAI format
                 self._add_tool_call_to_memory(tool_call_id, tool_name, tool_input)
+                tool_calls_made += 1
 
                 try:
                     # Execute the tool

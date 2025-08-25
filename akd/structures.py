@@ -306,6 +306,13 @@ class ExtractionDTO(BaseModel):
 # =============================================================================
 
 
+class ToolCall(BaseModel):
+    """Represents a tool call from the LLM."""
+
+    tool_name: str = Field(..., description="Name of the tool to call")
+    tool_input: dict = Field(..., description="Input parameters for the tool")
+
+
 class ToolSearchResult(BaseModel):
     """Represents the result of a tool search operation."""
 
@@ -347,5 +354,6 @@ __all__ = [
     "SingleEstimation",
     "ExtractionDTO",
     # Tool Models
+    "ToolCall",
     "ToolSearchResult",
 ]
