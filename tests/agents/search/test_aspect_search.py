@@ -21,7 +21,6 @@ def agent():
     config = AspectSearchConfig(
         model_name="gpt-4o-mini",
         api_key=openai_key,
-        debug=True,
         max_turns=2,
         num_editors=1,
     )
@@ -93,7 +92,7 @@ async def test_agent_defaults(agent):
 
 
 @pytest.mark.asyncio
-@patch("akd.agents.aspect_search.aspect_search.survey_subjects")
+@patch("akd.agents.search.aspect_search.aspect_search.survey_subjects")
 async def test_get_perspectives(
     mock_survey_subjects,
     agent,
@@ -110,7 +109,7 @@ async def test_get_perspectives(
 
 
 @pytest.mark.asyncio
-@patch("akd.agents.aspect_search.aspect_search.survey_subjects")
+@patch("akd.agents.search.aspect_search.aspect_search.survey_subjects")
 async def test_conduct_interviews(
     mock_survey_subjects,
     agent,
