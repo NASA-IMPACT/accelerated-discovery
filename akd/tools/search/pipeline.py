@@ -16,6 +16,7 @@ from akd.tools.resolvers import (
     PDFUrlResolver, 
     BaseArticleResolver,
 )
+from akd.tools.resolvers._base import ResolverOutputSchema
 from akd.tools.resolvers.unpaywall import UnpaywallResolver
 from akd.tools.scrapers._base import ScraperToolBase
 from akd.tools.scrapers.composite import CompositeScraper
@@ -134,7 +135,7 @@ class FullTextSearchPipeline(SearchTool):
             logger.debug(f"  - Resolver: {self.resolver.__class__.__name__}")
             logger.debug(f"  - Scraper: {self.scraper.__class__.__name__}")
 
-    async def _resolve_essential_metadata(self, result: SearchResultItem) -> Optional[SearchResultItem]:
+    async def _resolve_essential_metadata(self, result: SearchResultItem) -> Optional[ResolverOutputSchema]:
         """
         Resolve the open access URL for a search result.
 
@@ -156,7 +157,7 @@ class FullTextSearchPipeline(SearchTool):
             if self.debug:
                 logger.warning(f"Failed to resolve URL {result.url}: {e}")
             # Fall back to pdf_url or original url
-            return str(result.pdf_url) if result.pdf_url else str(result.url)
+            return ResolverOutputSchema(**result.model_dump())
 
     async def _scrape_content(
         self,
