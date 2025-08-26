@@ -1,7 +1,9 @@
 import asyncio
+import time
 from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional
+
 import gdown
 from loguru import logger
 
@@ -115,13 +117,68 @@ class LangchainToolMixin:
         )
 
 
+class RateLimiter:
+    """
+    Simple rate limiter for API requests.
+
+    This class ensures that API requests are spaced out according to a specified
+    rate limit to avoid exceeding API quotas. It's thread-safe and async-friendly.
+
+    Example:
+        ```python
+            rate_limiter = RateLimiter(max_calls_per_second=1.0)
+
+            async def make_request():
+                await rate_limiter.acquire()
+                # Make your API request here
+                response = await api_client.get("/endpoint")
+                return response
+        ```
+
+    Args:
+        max_calls_per_second (float): Maximum number of API calls per second.
+            Default is 1.0 (one call per second).
+    """
+
+    def __init__(self, max_calls_per_second: float = 1.0):
+        self.max_calls_per_second = max_calls_per_second
+        self.min_interval = 1.0 / max_calls_per_second
+        self.last_called = 0.0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self):
+        """
+        Acquire permission to make a request, blocking if necessary.
+
+        This method will sleep if needed to ensure requests don't exceed
+        the configured rate limit. It's safe to call from multiple
+        concurrent tasks.
+        """
+        async with self._lock:
+            now = time.time()
+            elapsed = now - self.last_called
+
+            if elapsed < self.min_interval:
+                sleep_time = self.min_interval - elapsed
+                logger.debug(f"Rate limiting: sleeping for {sleep_time:.2f}s")
+                await asyncio.sleep(sleep_time)
+                self.last_called = time.time()
+            else:
+                self.last_called = now
+
+
 def get_akd_root() -> Path:
     """
     Returns the root directory of the AKD project.
     """
     return Path(__file__).parent.parent.resolve()
 
-def google_drive_downloader(file_id: str, output_path: str, quiet: bool = False) -> None:
+
+def google_drive_downloader(
+    file_id: str,
+    output_path: str,
+    quiet: bool = False,
+) -> None:
     """
     Download a file from Google Drive using the file ID.
 
