@@ -114,9 +114,15 @@ class SemanticScholarSearchTool(
     output_schema = SemanticScholarSearchToolOutputSchema
     config_schema = SemanticScholarSearchToolConfig
 
-    def __init__(self, config: SemanticScholarSearchToolConfig, debug: bool = False):
-        super().__init__(config, debug)
-        self.rate_limiter = RateLimiter(max_calls_per_second=config.requests_per_second)
+    def _post_init(self) -> None:
+        super()._post_init()
+        if self.debug:
+            logger.debug(
+                f"Setting rate limit to :: {self.config.requests_per_second} Requests/Second",
+            )
+        self.rate_limiter = RateLimiter(
+            max_calls_per_second=self.config.requests_per_second,
+        )
 
     @classmethod
     def from_params(
