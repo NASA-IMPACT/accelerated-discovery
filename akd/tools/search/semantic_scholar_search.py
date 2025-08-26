@@ -384,7 +384,7 @@ class SemanticScholarSearchTool(
         # Extract author names if requested and available
         authors = [
             author.get("name")
-            for author in item.get("authors", [])
+            for author in item.pop("authors", [])
             if author.get("name")
         ]
 
@@ -407,7 +407,7 @@ class SemanticScholarSearchTool(
             doi=doi,
             published_date=str(item.pop("year")) if item.get("year") else None,
             engine="semanticscholar",
-            tags=authors if authors else None,
+            authors=authors,
             extra=item,
         )
 
