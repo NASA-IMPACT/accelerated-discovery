@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from akd.agents.risk.risk import (
+from akd.agents.risk import (
     Criterion,
     RiskAgent,
     RiskAgentConfig,
