@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urljoin
 
 import aiohttp
@@ -13,6 +13,7 @@ from pydantic.networks import HttpUrl
 
 from akd.structures import PaperDataItem, SearchResultItem
 from akd.tools._base import BaseTool
+from akd.utils import RateLimiter
 
 from ._base import SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
 
@@ -73,8 +74,18 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
         gt=0,
         le=50,
     )
-    external_id: Optional[Literal["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]] = Field(default="DOI")
+    external_id: Optional[
+        Literal["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]
+    ] = Field(default="DOI")
     debug: bool = False
+
+    # Rate limiting configuration
+    requests_per_second: float = Field(
+        default=float(os.getenv("SEMANTIC_SCHOLAR_REQUESTS_PER_SECOND", "1.0")),
+        description="Maximum requests per second to respect API rate limits",
+        gt=0,
+        le=10,
+    )
 
     @field_validator("api_key", mode="before")
     @classmethod
@@ -103,6 +114,10 @@ class SemanticScholarSearchTool(
     output_schema = SemanticScholarSearchToolOutputSchema
     config_schema = SemanticScholarSearchToolConfig
 
+    def __init__(self, config: SemanticScholarSearchToolConfig, debug: bool = False):
+        super().__init__(config, debug)
+        self.rate_limiter = RateLimiter(max_calls_per_second=config.requests_per_second)
+
     @classmethod
     def from_params(
         cls,
@@ -114,6 +129,7 @@ class SemanticScholarSearchTool(
         max_pages_per_query: int = 5,
         external_id: str = "DOI",
         debug: bool = False,
+        requests_per_second: float = 1.0,
     ) -> SemanticScholarSearchTool:
         """Creates an instance from specific parameters."""
         config_data = {
@@ -124,6 +140,7 @@ class SemanticScholarSearchTool(
             "max_pages_per_query": max_pages_per_query,
             "external_id": external_id,
             "debug": debug,
+            "requests_per_second": requests_per_second,
         }
         if fields:
             config_data["fields"] = fields
@@ -171,6 +188,9 @@ class SemanticScholarSearchTool(
                 logger.debug("Using API Key.")
 
         try:
+            # Apply rate limiting before making the request
+            await self.rate_limiter.acquire()
+
             async with session.get(
                 search_url,
                 params=params,
@@ -260,7 +280,7 @@ class SemanticScholarSearchTool(
         self,
         session: aiohttp.ClientSession,
         query: str,
-        external_id: str = 'DOI',
+        external_id: str = "DOI",
     ) -> list[PaperDataItem]:
         """
         Fetches a single page of search results from Semantic Scholar.
@@ -274,7 +294,10 @@ class SemanticScholarSearchTool(
         Returns:
             The JSON response dictionary from the API or None if an error occurs.
         """
-        search_url = urljoin(str(self.config.base_url), f"graph/v1/paper/{external_id}:{query}")
+        search_url = urljoin(
+            str(self.config.base_url),
+            f"graph/v1/paper/{external_id}:{query}",
+        )
         params = {
             "fields": ",".join(self.config.fields),
         }
@@ -292,6 +315,9 @@ class SemanticScholarSearchTool(
                 logger.debug("Using API Key.")
 
         try:
+            # Apply rate limiting before making the request
+            await self.rate_limiter.acquire()
+
             async with session.get(
                 search_url,
                 params=params,
@@ -480,8 +506,7 @@ class SemanticScholarSearchTool(
                     )
                 break
 
-            # Optional: Add a small delay between pages
-            await asyncio.sleep(0.1)
+            # Rate limiting is handled by the rate_limiter in _fetch_search_page
 
         if self.debug:
             logger.debug(
@@ -543,7 +568,7 @@ class SemanticScholarSearchTool(
                 self._fetch_paper_by_external_id(
                     session,
                     query,
-                    kwargs.get("external_id", self.config.external_id)
+                    kwargs.get("external_id", self.config.external_id),
                 )
                 for query in params.queries
             ]
