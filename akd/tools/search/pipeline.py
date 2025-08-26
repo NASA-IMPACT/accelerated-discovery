@@ -48,6 +48,12 @@ class FullTextSearchPipelineConfig(SearchToolConfig):
         default=True,
         description="Whether to preserve original search result content alongside scraped content",
     )
+
+    enable_scraping: bool = Field(
+        default=True,
+        description="Whether to enable the scraping step in the pipeline",
+    ) 
+
     scraping_timeout: int = Field(
         default=30,
         description="Timeout in seconds for individual scraping operations",
@@ -214,23 +220,28 @@ class FullTextSearchPipeline(SearchTool):
             result: Original search result
 
         Returns:
-            Enhanced search result with scraped content
+            Enhanced search result with optional scraped content
         """
         try:
-            # Resolve open access URL
-
+            # Step 1: URL resolution (always performed)
             resolved_result = await self._resolve_essential_metadata(result)
-            scraping_url = resolved_result.resolved_url or resolved_result.url
-            scraped_content = await self._scrape_content(scraping_url)
 
-            if scraped_content:
-                # Create enhanced result
-                search_item_data = resolved_result.model_dump(
+            scraped_content = None
+            if self.enable_scraping:
+                scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else resolved_result.url
+                scraped_content = await self._scrape_content(scraping_url)
+            else:
+                if self.debug:
+                    logger.debug(f"Skipping scraping for {result.title}")
+
+            # Step 3: Create enhanced result
+            search_item_data = resolved_result.model_dump(
                 include=set(SearchResultItem.model_fields.keys())
-                )
+            )
+            enhanced_result = SearchResultItem(**search_item_data)
 
-                enhanced_result = SearchResultItem(**search_item_data)
-
+            # Handle content based on what was performed
+            if scraped_content:
                 if self.include_original_content and result.content:
                     # Combine original and scraped content
                     enhanced_result.content = (
@@ -240,31 +251,27 @@ class FullTextSearchPipeline(SearchTool):
                     # Replace with scraped content
                     enhanced_result.content = scraped_content
 
-
-                if not enhanced_result.extra:
-                    enhanced_result.extra = {}
-                enhanced_result.extra.update(
-                    {
-                        "full_text_scraped": True,
-                        "scraped_url": scraping_url, 
-                        "scraper_used": self.scraper.__class__.__name__,
-                        "resolver_used": resolved_result.resolvers if hasattr(resolved_result, 'resolvers') else None,
-                    },
-                )
-
-                return enhanced_result
-            
-            else:
-                # Scraping failed, return original with metadata
-                enhanced_result = result.model_copy()
-                if not enhanced_result.extra:
-                    enhanced_result.extra = {}
-                enhanced_result.extra["full_text_scraped"] = False
-                enhanced_result.extra["scraping_attempted_url"] = scraping_url
+            # Add metadata about what was performed
+            if not enhanced_result.extra:
+                enhanced_result.extra = {}
+                
+            enhanced_result.extra.update({
+                "scraping_performed": self.enable_scraping,
+                "full_text_scraped": scraped_content is not None,
+                "resolver_used": resolved_result.resolvers if hasattr(resolved_result, 'resolvers') else None,
+                "resolved_url": resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') else None,
+            })
+                
+            if self.enable_scraping:
                 enhanced_result.extra["scraper_used"] = self.scraper.__class__.__name__
-                enhanced_result.extra["resolver_used"] = resolved_result.resolvers if hasattr(resolved_result, 'resolvers') else None
+                if scraped_content:
+                    scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else resolved_result.url
+                    enhanced_result.extra["scraped_url"] = scraping_url
+                else:
+                    scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else resolved_result.url
+                    enhanced_result.extra["scraping_attempted_url"] = scraping_url
 
-                return enhanced_result
+            return enhanced_result
 
         except Exception as e:
             if self.debug:
@@ -274,8 +281,11 @@ class FullTextSearchPipeline(SearchTool):
             enhanced_result = result.model_copy()
             if not enhanced_result.extra:
                 enhanced_result.extra = {}
-            enhanced_result.extra["full_text_scraped"] = False
-            enhanced_result.extra["scraping_error"] = str(e)
+            enhanced_result.extra.update({
+                "scraping_performed": self.enable_scraping,
+                "full_text_scraped": False,
+                "processing_error": str(e),
+            })
 
             return enhanced_result
 
@@ -299,8 +309,9 @@ class FullTextSearchPipeline(SearchTool):
         """
         if self.debug:
             logger.info(
-                f"🔄 Starting FullTextSearchPipeline for {len(params.queries)} queries",
+                f" Starting FullTextSearchPipeline for {len(params.queries)} queries",
             )
+            logger.info(f"Scraping enabled: {self.enable_scraping}")
 
         # Step 1: Get initial search result schema
         params_search = self.search_tool.input_schema(**params.model_dump())
@@ -312,7 +323,7 @@ class FullTextSearchPipeline(SearchTool):
             return search_results
 
         if self.debug:
-            logger.info(f"📄 Processing {len(search_results.results)} search results")
+            logger.info(f"Processing {len(search_results.results)} search results")
 
         # Step 2: Process results through the pipeline
         if self.parallel_processing:
@@ -349,24 +360,25 @@ class FullTextSearchPipeline(SearchTool):
                         logger.error(f"Failed to process result {result.title}: {e}")
 
         # Step 3: Validate results
-        successful_scrapes = sum(
-            1
-            for result in enhanced_results
-            if result.extra and result.extra.get("full_text_scraped", False)
-        )
-
-        if self.debug:
-            logger.info(
-                f"✅ Successfully scraped {successful_scrapes}/{len(enhanced_results)} results",
+        if self.enable_scraping:
+            successful_scrapes = sum(
+                1
+                for result in enhanced_results
+                if result.extra and result.extra.get("full_text_scraped", False)
             )
 
-        if (
-            self.min_successful_scrapes is not None
-            and successful_scrapes < self.min_successful_scrapes
-        ):
-            raise Exception(
-                f"Only {successful_scrapes} successful scrapes, minimum required: {self.min_successful_scrapes}",
-            )
+            if self.debug:
+                logger.info(
+                    f"Successfully scraped {successful_scrapes}/{len(enhanced_results)} results",
+                )
+
+            if (
+                self.min_successful_scrapes is not None
+                and successful_scrapes < self.min_successful_scrapes
+            ):
+                raise Exception(
+                    f"Only {successful_scrapes} successful scrapes, minimum required: {self.min_successful_scrapes}",
+                )
 
         # Return enhanced results
         return SearchToolOutputSchema(
