@@ -2,7 +2,7 @@
 Base classes and shared utilities for data search agents.
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -93,6 +93,44 @@ class DataSearchAgentConfig(BaseAgentConfig):
     timeout_seconds: float = Field(
         default=30.0,
         description="Request timeout in seconds",
+    )
+
+
+class CollectionSynthesisResult(BaseModel):
+    """Result from collection synthesis step."""
+
+    selected_collections: List[Dict[str, Any]] = Field(
+        ...,
+        description="Collections selected for granule search",
+    )
+    total_collections_found: int = Field(
+        default=0,
+        description="Total number of collections found before filtering",
+    )
+    synthesis_reasoning: Optional[str] = Field(
+        None,
+        description="Reasoning for collection selection/ranking",
+    )
+
+
+class GranuleSynthesisResult(BaseModel):
+    """Result from granule synthesis step."""
+
+    granules: List[Dict[str, Any]] = Field(
+        ...,
+        description="Final list of data granules/files",
+    )
+    search_metadata: Dict[str, Any] = Field(
+        ...,
+        description="Metadata about the search process",
+    )
+    total_granules_found: int = Field(
+        default=0,
+        description="Total number of granules found",
+    )
+    collections_processed: int = Field(
+        default=0,
+        description="Number of collections processed",
     )
 
 

@@ -4,8 +4,9 @@ CMR Collection Search Tool - Search for Earth science collections/datasets.
 
 from typing import Optional
 
-from loguru import logger
 from pydantic import Field
+
+from akd.utils.logging import log_api_request
 
 from ._base import (
     BaseDataSearchTool,
@@ -75,8 +76,7 @@ class CMRCollectionSearchTool(
         Returns:
             CMRCollectionSearchOutputSchema with collection results
         """
-        if self.debug:
-            logger.debug(f"Starting CMR collection search with params: {params}")
+        self.tool_logger.debug(f"Starting CMR collection search with params: {params}")
 
         # Prepare MCP arguments
         arguments = {}
@@ -123,12 +123,13 @@ class CMRCollectionSearchTool(
             page_size_returned = result.get("page_size", page_size)
             page_number = result.get("page_number", 1)
 
-            if self.debug:
-                logger.debug(
-                    f"CMR collection search completed: {total_hits} total hits, "
-                    f"{len(collections)} collections returned, "
-                    f"query time: {query_time_ms}ms",
-                )
+            # Log API request details
+            log_api_request("POST", str(self.config.mcp_endpoint), 200, query_time_ms)
+            self.tool_logger.info(
+                f"CMR collection search completed: {total_hits} total hits, "
+                f"{len(collections)} collections returned, "
+                f"query time: {query_time_ms}ms",
+            )
 
             return CMRCollectionSearchOutputSchema(
                 results=result,  # Return full MCP response
@@ -147,7 +148,8 @@ class CMRCollectionSearchTool(
 
         except Exception as e:
             error_msg = f"CMR collection search failed: {e}"
-            logger.error(error_msg)
+            log_api_request("POST", str(self.config.mcp_endpoint), status_code=500)
+            self.tool_logger.error(error_msg)
             raise Exception(error_msg)
 
     def _build_search_summary(self, params: CMRCollectionSearchInputSchema) -> str:

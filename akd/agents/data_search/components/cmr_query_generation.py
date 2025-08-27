@@ -140,9 +140,13 @@ class CMRQueryGenerationComponent(
 
             except Exception as e:
                 if attempt == max_retries:
-                    error_msg = f"Failed to generate CMR queries after {max_retries + 1} attempts: {e}"
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
+                    logger.error(
+                        f"Failed to generate CMR queries after {max_retries + 1} attempts: {e}",
+                    )
+                    return self._create_fallback_queries(
+                        scientific_angle,
+                        original_query,
+                    )
 
                 # Check if it's a rate limit error
                 if "429" in str(e) or "rate" in str(e).lower():
@@ -154,9 +158,11 @@ class CMRQueryGenerationComponent(
                     await asyncio.sleep(delay)
                 else:
                     # Non-rate-limit error, don't retry
-                    error_msg = f"Failed to generate CMR queries: {e}"
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
+                    logger.error(f"Failed to generate CMR queries: {e}")
+                    return self._create_fallback_queries(
+                        scientific_angle,
+                        original_query,
+                    )
 
     def _format_user_prompt(
         self,
@@ -182,6 +188,81 @@ class CMRQueryGenerationComponent(
             parts.append(f"instrument: {query.instrument}")
 
         return ", ".join(parts) if parts else "empty query"
+
+    def _create_fallback_queries(
+        self,
+        scientific_angle: ScientificAngle,
+        original_query: str,
+    ) -> CMRQueryOutput:
+        """Create fallback CMR queries when LLM generation fails."""
+        logger.warning("Using fallback CMR queries due to LLM failure")
+
+        # Extract basic keywords from the scientific angle and original query
+        keywords = []
+
+        # Parse angle title for keywords
+        angle_words = scientific_angle.title.lower().split()
+        keywords.extend([word for word in angle_words if len(word) > 3])
+
+        # Parse original query for keywords
+        query_words = original_query.lower().split()
+        keywords.extend([word for word in query_words if len(word) > 3])
+
+        # Remove common stop words and duplicates
+        stop_words = {
+            "data",
+            "search",
+            "find",
+            "analysis",
+            "study",
+            "research",
+            "dataset",
+        }
+        keywords = list(set([k for k in keywords if k not in stop_words]))[
+            :3
+        ]  # Limit to 3 keywords
+
+        # Create basic fallback queries
+        fallback_queries = []
+
+        if keywords:
+            # Primary keyword search
+            fallback_queries.append(
+                CMRCollectionSearchParams(
+                    keyword=" ".join(keywords[:2]),  # Use top 2 keywords
+                ),
+            )
+
+            # Add platform/instrument guesses based on common terms
+            if any(term in original_query.lower() for term in ["modis", "mod"]):
+                fallback_queries.append(
+                    CMRCollectionSearchParams(
+                        keyword=keywords[0] if keywords else None,
+                        platform="Terra",
+                        instrument="MODIS",
+                    ),
+                )
+
+            if any(term in original_query.lower() for term in ["landsat"]):
+                fallback_queries.append(
+                    CMRCollectionSearchParams(
+                        keyword=keywords[0] if keywords else None,
+                        platform="Landsat-8",
+                    ),
+                )
+
+        # Ensure we have at least one query
+        if not fallback_queries:
+            fallback_queries.append(
+                CMRCollectionSearchParams(
+                    keyword="earth science",
+                ),
+            )
+
+        return CMRQueryOutput(
+            search_queries=fallback_queries,
+            reasoning=f"Fallback queries generated from keywords: {', '.join(keywords) if keywords else 'none found'}",
+        )
 
     async def _arun(
         self,

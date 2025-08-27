@@ -8,16 +8,19 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, List
 
-from loguru import logger
 from pydantic import Field, HttpUrl
 
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
+from akd.utils.logging import ContextualLogger, log_component_action, log_search_event
+from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
 from ._base import (
     BaseDataSearchAgent,
+    CollectionSynthesisResult,
     DataSearchAgentConfig,
     DataSearchAgentInputSchema,
     DataSearchAgentOutputSchema,
+    GranuleSynthesisResult,
 )
 from .components import (
     CMRQueryGenerationComponent,
@@ -37,10 +40,6 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
     )
 
     # Search behavior
-    max_collection_search_variations: int = Field(
-        default=5,
-        description="Maximum number of collection search variations to try",
-    )
     collection_search_page_size: int = Field(
         default=20,
         description="Page size for collection searches",
@@ -143,6 +142,53 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         # Track search state
         self.search_history: List[Dict[str, Any]] = []
 
+        # Optional progress handler for frontend integration
+        self.progress_handler = None
+        self._progress_handler_ready = False
+
+        # Contextual logger for this agent
+        self.agent_logger = ContextualLogger("CMRDataSearchAgent")
+
+    def set_progress_handler(self, progress_handler):
+        """
+        Set the progress handler for real-time frontend updates.
+
+        Args:
+            progress_handler: SearchProgressHandler instance for WebSocket communication
+        """
+        self.progress_handler = progress_handler
+        self._progress_handler_ready = True
+        self.agent_logger.debug("Progress handler set and marked as ready")
+
+    async def _wait_for_progress_handler_ready(self, timeout: float = 5.0):
+        """Wait for progress handler to be ready or timeout."""
+        import asyncio
+
+        if not self.progress_handler:
+            return
+
+        start_time = datetime.now()
+        while not self._progress_handler_ready:
+            if (datetime.now() - start_time).total_seconds() > timeout:
+                self.agent_logger.warning(
+                    "Progress handler readiness timeout - proceeding without waiting",
+                )
+                break
+            await asyncio.sleep(0.1)
+
+    async def _emit_progress_safely(self, method_name: str, *args, **kwargs):
+        """Safely emit progress updates with error handling."""
+        if not self.progress_handler or not hasattr(self.progress_handler, method_name):
+            return
+
+        try:
+            method = getattr(self.progress_handler, method_name)
+            await method(*args, **kwargs)
+            self.agent_logger.debug(f"Progress update sent: {method_name}")
+        except Exception as e:
+            self.agent_logger.warning(f"Progress update failed for {method_name}: {e}")
+            # Continue execution - progress failures shouldn't stop the search
+
     async def _arun(
         self,
         params: DataSearchAgentInputSchema,
@@ -161,32 +207,80 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         search_start_time = datetime.now()
         original_query = params.query
 
-        if self.debug:
-            logger.info(f"🔍 CMR Data Search - Starting query: '{original_query}'")
+        # Create search-specific logger
+        search_id = (
+            getattr(self.progress_handler, "search_id", "unknown")
+            if self.progress_handler
+            else "unknown"
+        )
+        search_logger = ContextualLogger("CMRDataSearchAgent", search_id)
+
+        log_search_event(
+            search_id,
+            "SEARCH_STARTED",
+            {"query": original_query, "start_time": search_start_time.isoformat()},
+        )
+        search_logger.info(f"Starting CMR data search: '{original_query}'")
+
+        # Wait for progress handler to be ready before starting
+        await self._wait_for_progress_handler_ready()
+
+        # Emit progress update for search start
+        await self._emit_progress_safely("on_search_started", original_query)
 
         try:
             # Step 1: Scientific Expansion (Document Retrieval)
-            if self.debug:
-                logger.info("📚 Step 1: Retrieving relevant scientific documents...")
+            log_component_action(
+                "ScientificExpansion",
+                "STARTED",
+                {"query": original_query},
+            )
+            search_logger.info("Step 1: Retrieving relevant scientific documents")
+
+            await self._emit_progress_safely("on_scientific_expansion_started")
 
             documents = await self.scientific_expansion_component.process(
                 original_query,
             )
 
+            await self._emit_progress_safely(
+                "on_scientific_expansion_completed",
+                documents,
+            )
+
             # Step 2: Scientific Angles Generation
-            if self.debug:
-                logger.info("🧠 Step 2: Generating scientific angles...")
+            log_component_action(
+                "ScientificAngles",
+                "STARTED",
+                {"documents_count": len(documents)},
+            )
+            search_logger.info("Step 2: Generating scientific angles")
+
+            await self._emit_progress_safely("on_scientific_angles_started")
 
             angles_output = await self.scientific_angles_component.process(
                 original_query,
                 documents,
             )
 
+            # Convert ScientificAngle objects to dicts for JSON serialization
+            angles_data = safe_model_dump_list(angles_output.angles)
+            await self._emit_progress_safely(
+                "on_scientific_angles_generated",
+                angles_data,
+            )
+
             # Step 3: CMR Query Generation for Each Angle
-            if self.debug:
-                logger.info(
-                    f"⚙️ Step 3: Generating CMR queries for {len(angles_output.angles)} angles...",
-                )
+            log_component_action(
+                "CMRQueryGeneration",
+                "STARTED",
+                {"angles_count": len(angles_output.angles)},
+            )
+            search_logger.info(
+                f"Step 3: Generating CMR queries for {len(angles_output.angles)} angles",
+            )
+
+            await self._emit_progress_safely("on_cmr_queries_started")
 
             all_cmr_queries = []
             for angle in angles_output.angles:
@@ -196,20 +290,72 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 )
                 all_cmr_queries.extend(cmr_queries_output.search_queries)
 
+            # Convert CMR query objects to dicts for JSON serialization
+            queries_data = safe_model_dump_list(all_cmr_queries)
+
+            log_component_action(
+                "CMRQueryGeneration",
+                "COMPLETED",
+                {"queries_generated": len(queries_data)},
+            )
+            search_logger.debug(f"Generated {len(queries_data)} CMR queries")
+            await self._emit_progress_safely("on_cmr_queries_generated", queries_data)
+
             # Step 4: Collection Search
-            if self.debug:
-                logger.info(
-                    f"🔎 Step 4: Executing {len(all_cmr_queries)} collection searches...",
-                )
+            log_component_action(
+                "CollectionSearch",
+                "STARTED",
+                {"queries_count": len(all_cmr_queries)},
+            )
+            search_logger.info(
+                f"Step 4: Executing {len(all_cmr_queries)} collection searches",
+            )
+
+            await self._emit_progress_safely(
+                "on_collections_search_started",
+                len(all_cmr_queries),
+            )
 
             collection_results = await self._search_collections_with_cmr_queries(
                 all_cmr_queries,
                 params,
             )
 
+            # Count collection results for progress reporting (but don't send raw collections)
+            total_collections_found = 0
+            for result_dict in collection_results:
+                if isinstance(result_dict, dict) and "collections" in result_dict:
+                    collections = result_dict.get("collections", [])
+                    if isinstance(collections, list):
+                        total_collections_found += len(collections)
+
+            log_component_action(
+                "CollectionSearch",
+                "COMPLETED",
+                {"total_collections_found": total_collections_found},
+            )
+            search_logger.info(
+                f"Found {total_collections_found} collections from searches",
+            )
+
+            # Send only a summary message, not the raw collections
+            await self._emit_progress_safely(
+                "on_collections_search_completed",
+                {
+                    "total_collections_found": total_collections_found,
+                    "message": f"Found {total_collections_found} collections from {len(collection_results)} searches",
+                },
+            )
+
             # Step 5: Collection Synthesis
-            if self.debug:
-                logger.info("⚖️ Step 5: Ranking and filtering collections...")
+            log_component_action(
+                "CollectionSynthesis",
+                "STARTED",
+                {"total_collections": total_collections_found},
+            )
+            search_logger.info("Step 5: Ranking and filtering collections")
+
+            await self._emit_progress_safely("on_collections_synthesis_started")
 
             # Convert to legacy format for synthesis component
             legacy_query_params = self._create_legacy_query_params(
@@ -222,17 +368,50 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             )
 
             if not synthesis_result.selected_collections:
-                logger.warning("No relevant collections found")
+                log_search_event(
+                    search_id,
+                    "NO_COLLECTIONS_FOUND",
+                    {"reason": "No relevant collections found"},
+                )
+                search_logger.warning("No relevant collections found")
                 return self._create_empty_response(
                     original_query,
                     "No relevant collections found",
                 )
 
+            log_component_action(
+                "CollectionSynthesis",
+                "COMPLETED",
+                {"selected_collections": len(synthesis_result.selected_collections)},
+            )
+            search_logger.info(
+                f"Selected {len(synthesis_result.selected_collections)} collections for data search",
+            )
+
+            # Convert collection objects to dicts for JSON serialization
+            collections_data = safe_model_dump_list(
+                synthesis_result.selected_collections,
+            )
+
+            await self._emit_progress_safely(
+                "on_collections_synthesized",
+                collections_data,
+            )
+
             # Step 6: Granule Search
-            if self.debug:
-                logger.info(
-                    f"🗂️ Step 6: Searching for granules in {len(synthesis_result.selected_collections)} collections...",
-                )
+            log_component_action(
+                "GranuleSearch",
+                "STARTED",
+                {"collections_count": len(synthesis_result.selected_collections)},
+            )
+            search_logger.info(
+                f"Step 6: Searching for granules in {len(synthesis_result.selected_collections)} collections",
+            )
+
+            await self._emit_progress_safely(
+                "on_granules_search_started",
+                len(synthesis_result.selected_collections),
+            )
 
             granule_results = await self._search_granules(
                 synthesis_result.selected_collections,
@@ -241,8 +420,8 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             )
 
             # Step 7: Granule Synthesis
-            if self.debug:
-                logger.info("📋 Step 7: Synthesizing final results...")
+            log_component_action("GranuleSynthesis", "STARTED")
+            search_logger.info("Step 7: Synthesizing final results")
 
             final_result = await self._synthesize_granules(
                 granule_results,
@@ -251,26 +430,56 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 search_start_time,
             )
 
+            # Calculate total file size
+            total_size_mb = 0.0
+            for granule in final_result.granules:
+                if isinstance(granule, dict) and granule.get("file_size_mb"):
+                    total_size_mb += float(granule["file_size_mb"])
+
+            await self._emit_progress_safely(
+                "on_granules_found",
+                final_result.granules,
+                total_size_mb if total_size_mb > 0 else None,
+            )
+
             # Create response
             total_granules = len(final_result.granules)
 
-            if self.debug:
-                search_duration = (datetime.now() - search_start_time).total_seconds()
-                logger.info(
-                    f"✅ CMR Data Search completed: {total_granules} granules found "
-                    f"in {search_duration:.1f}s",
-                )
+            search_duration = (datetime.now() - search_start_time).total_seconds()
+            log_search_event(
+                search_id,
+                "SEARCH_COMPLETED",
+                {
+                    "granules_found": total_granules,
+                    "duration_seconds": search_duration,
+                    "collections_searched": len(synthesis_result.selected_collections),
+                },
+            )
+            search_logger.info(
+                f"CMR Data Search completed: {total_granules} granules found in {search_duration:.1f}s",
+            )
 
-            return DataSearchAgentOutputSchema(
+            final_response = DataSearchAgentOutputSchema(
                 granules=final_result.granules,
                 search_metadata=final_result.search_metadata,
                 total_results=total_granules,
                 collections_searched=synthesis_result.selected_collections,
             )
 
+            await self._emit_progress_safely(
+                "on_search_completed",
+                safe_model_dump(final_response),
+            )
+
+            return final_response
+
         except Exception as e:
             error_msg = f"CMR data search failed: {e}"
-            logger.error(error_msg)
+            log_search_event(search_id, "SEARCH_FAILED", {"error": str(e)})
+            search_logger.error(error_msg)
+
+            await self._emit_progress_safely("on_search_error", error_msg)
+
             return self._create_error_response(original_query, error_msg)
 
     async def _search_collections_with_cmr_queries(
@@ -306,7 +515,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 if self.debug:
-                    logger.warning(f"CMR query {i} failed: {result}")
+                    self.agent_logger.warning(f"CMR query {i} failed: {result}")
             else:
                 successful_results.append(result.results)
 
@@ -363,110 +572,13 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             "search_variations": [],
         }
 
-    # Deprecated method - kept for backward compatibility
-    async def _search_collections(
-        self,
-        query_params: Dict[str, Any],
-        params: DataSearchAgentInputSchema,
-    ) -> List[Dict[str, Any]]:
-        """Execute collection searches using multiple parameter variations (DEPRECATED)."""
-        logger.warning(
-            "_search_collections is deprecated. Use _search_collections_with_cmr_queries instead.",
-        )
-        search_variations = query_params.get("search_variations", [])
-
-        if not search_variations:
-            # Fallback: create basic search from available parameters
-            basic_search = {}
-            if query_params.get("keywords"):
-                basic_search["keyword"] = " ".join(query_params["keywords"][:3])
-            search_variations = [basic_search]
-
-        # Limit variations
-        search_variations = search_variations[
-            : self.config.max_collection_search_variations
-        ]
-
-        # Prepare search tasks
-        search_tasks = []
-        for i, variation in enumerate(search_variations):
-            search_params = self.collection_search_tool.input_schema(
-                **self._build_collection_search_params(variation, query_params, params),
-            )
-
-            task = self._execute_collection_search(search_params, f"variation_{i}")
-            search_tasks.append(task)
-
-        # Execute searches in parallel
-        if self.config.enable_parallel_search and len(search_tasks) > 1:
-            results = await asyncio.gather(*search_tasks, return_exceptions=True)
-        else:
-            results = []
-            for task in search_tasks:
-                try:
-                    result = await task
-                    results.append(result)
-                except Exception as e:
-                    results.append(e)
-
-        # Filter successful results
-        successful_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                if self.debug:
-                    logger.warning(f"Collection search variation {i} failed: {result}")
-            else:
-                successful_results.append(result.results)
-
-        return successful_results
-
-    def _build_collection_search_params(
-        self,
-        variation: Dict[str, Any],
-        query_params: Dict[str, Any],
-        params: DataSearchAgentInputSchema,
-    ) -> Dict[str, Any]:
-        """Build collection search parameters from variation and query params."""
-        search_params = {}
-
-        # Add variation-specific parameters
-        for key, value in variation.items():
-            if value and key != "platforms" and key != "instruments":
-                search_params[key] = value
-
-        # Handle lists specially
-        if variation.get("platforms"):
-            search_params["platform"] = variation["platforms"][0]
-        elif query_params.get("platforms"):
-            search_params["platform"] = query_params["platforms"][0]
-
-        if variation.get("instruments"):
-            search_params["instrument"] = variation["instruments"][0]
-        elif query_params.get("instruments"):
-            search_params["instrument"] = query_params["instruments"][0]
-
-        # Add temporal constraints
-        if query_params.get("temporal_start") and query_params.get("temporal_end"):
-            search_params["temporal"] = (
-                f"{query_params['temporal_start']},{query_params['temporal_end']}"
-            )
-
-        # Add spatial constraints
-        spatial_bounds = query_params.get("spatial_bounds")
-        if spatial_bounds and isinstance(spatial_bounds, dict):
-            search_params["bounding_box"] = (
-                f"{spatial_bounds['west']},{spatial_bounds['south']},"
-                f"{spatial_bounds['east']},{spatial_bounds['north']}"
-            )
-        elif params.spatial_bounds:
-            search_params["bounding_box"] = params.spatial_bounds
-
-        return search_params
-
     async def _execute_collection_search(self, search_params, search_id: str):
         """Execute a single collection search."""
-        if self.debug:
-            logger.debug(f"Executing collection search {search_id}: {search_params}")
+        log_component_action(
+            "CollectionSearch",
+            "EXECUTE",
+            {"search_id": search_id, "params": str(search_params)},
+        )
 
         return await self.collection_search_tool.arun(search_params)
 
@@ -476,19 +588,26 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         query_params: Dict[str, Any],
     ):
         """Filter and rank collection results."""
+        # Extract actual collections from MCP response format
+        all_collections = []
+        for result_dict in collection_results:
+            if isinstance(result_dict, dict) and "collections" in result_dict:
+                collections = result_dict["collections"]
+                if isinstance(collections, list):
+                    all_collections.extend(collections)
+
         # Simple collection filtering - take up to max_collections_to_search
         max_collections = self.config.max_collections_to_search
-        if len(collection_results) <= max_collections:
-            selected_collections = collection_results
+        if len(all_collections) <= max_collections:
+            selected_collections = all_collections
         else:
-            selected_collections = collection_results[:max_collections]
+            selected_collections = all_collections[:max_collections]
 
-        # Return a simple object with selected_collections attribute
-        class SynthesisResult:
-            def __init__(self, selected_collections):
-                self.selected_collections = selected_collections
-
-        return SynthesisResult(selected_collections)
+        # Return proper Pydantic model
+        return CollectionSynthesisResult(
+            selected_collections=selected_collections,
+            total_collections_found=len(all_collections),
+        )
 
     async def _search_granules(
         self,
@@ -529,8 +648,11 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         successful_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                if self.debug:
-                    logger.warning(f"Granule search {i} failed: {result}")
+                log_component_action(
+                    "GranuleSearch",
+                    "FAILED",
+                    {"search_index": i, "error": str(result)},
+                )
             else:
                 successful_results.append(result.results)
 
@@ -572,8 +694,11 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         collection_id: str,
     ):
         """Execute a single granule search."""
-        if self.debug:
-            logger.debug(f"Searching granules for collection {collection_id}")
+        log_component_action(
+            "GranuleSearch",
+            "EXECUTE",
+            {"collection_id": collection_id},
+        )
 
         granule_search_params = self.granule_search_tool.input_schema(**search_params)
         return await self.granule_search_tool.arun(granule_search_params)
@@ -594,12 +719,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             elif collection_granules.get("granules"):
                 all_granules.extend(collection_granules["granules"])
 
-        # Create a simple result object
-        class GranuleSynthesisResult:
-            def __init__(self, granules, search_metadata):
-                self.granules = granules
-                self.search_metadata = search_metadata
-
+        # Create proper Pydantic model result
         search_metadata = {
             "original_query": query_params.get("query", ""),
             "status": "completed",
@@ -608,7 +728,12 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             "total_granules": len(all_granules),
         }
 
-        return GranuleSynthesisResult(all_granules, search_metadata)
+        return GranuleSynthesisResult(
+            granules=all_granules,
+            search_metadata=search_metadata,
+            total_granules_found=len(all_granules),
+            collections_processed=len(collection_info),
+        )
 
     def _create_empty_response(
         self,
