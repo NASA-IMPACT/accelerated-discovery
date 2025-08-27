@@ -7,7 +7,6 @@ providing deep integration of research workflow capabilities.
 
 from .clarification import ClarificationComponent
 from .content_condensation import ContentCondensationComponent
-from .content_condenser import ContentCondenser
 from .instruction_builder import InstructionBuilderComponent
 from .research_synthesis import ResearchSynthesisComponent
 from .triage import TriageComponent
