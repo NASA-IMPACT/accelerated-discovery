@@ -8,6 +8,7 @@ refer to akd/docs/deep_research_agent.md for more details.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -29,14 +30,26 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessorConfig,
     LinkRelevancyAssessorInputSchema,
 )
-from akd.tools.scrapers import OmniScraperInputSchema
-from akd.tools.scrapers.resolvers import UnpaywallResolver
-from akd.tools.scrapers.waterfall import WaterfallScraper
-from akd.tools.search.searxng_search import SearxNGSearchTool
-from akd.tools.search.semantic_scholar_search import (
-    SemanticScholarSearchTool,
-    SemanticScholarSearchToolInputSchema,
+from akd.tools.resolvers import (
+    ADSResolver,
+    ArxivResolver,
+    CrossRefDoiResolver,
+    DOIResolver,
+    PDFUrlResolver,
+    ResearchArticleResolver,
+    UnpaywallResolver,
 )
+from akd.tools.scrapers import (
+    ScraperToolInputSchema,
+    SimplePDFScraper,
+    SimpleWebScraper,
+)
+from akd.tools.scrapers.composite import CompositeScraper
+from akd.tools.scrapers.omni import DoclingScraper
+from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper
+from akd.tools.search.searxng_search import SearxNGSearchTool
+from akd.tools.search.semantic_scholar_search import SemanticScholarSearchTool
+from akd.tools.source_validator import SourceValidator, SourceValidatorInputSchema
 
 from ._base import (
     LitBaseAgent,
@@ -139,6 +152,17 @@ class DeepLitSearchAgentConfig(LitSearchAgentConfig):
         description="Enable scraping of full content for high-relevancy links",
     )
 
+    # Notebook compatibility options (accepted but not strictly required here)
+    # Some callers may provide a concrete search tool via config; we accept and ignore it.
+    search_tool: Any | None = Field(
+        default=None,
+        description="Optional search tool; accepted for compatibility, not used",
+    )
+    source_validation: bool = Field(
+        default=True,
+        description="Enable ISSN-based source validation",
+    )
+
 
 class DeepLitSearchAgent(LitBaseAgent):
     """
@@ -191,6 +215,13 @@ class DeepLitSearchAgent(LitBaseAgent):
         # Initialize relevancy agent
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
 
+        # Compose active search tools
+        self.search_tools: List[Any] = []
+        if self.search_tool is not None:
+            self.search_tools.append(self.search_tool)
+        if self.semantic_scholar_tool is not None:
+            self.search_tools.append(self.semantic_scholar_tool)
+
         # Initialize link relevancy assessor if enabled
         if self.config.enable_per_link_assessment:
             if link_relevancy_assessor is not None:
@@ -211,36 +242,42 @@ class DeepLitSearchAgent(LitBaseAgent):
                 link_relevancy_assessor  # Could be None or an injected instance
             )
 
-        # Initialize scrapers for full content fetching
+        # Initialize scrapers/resolvers for full content fetching
         if self.config.enable_full_content_scraping:
-            # Use waterfall scraper with intelligent URL resolution using existing resolvers,
-            # publisher patterns, prefetching, and fallback strategies for comprehensive content extraction.
-            from akd.tools.scrapers import DoclingScraper, PyPaperBotScraper
-            from akd.tools.scrapers.resolvers import (
-                ADSResolver,
-                ArxivResolver,
-                IdentityResolver,
+            # Centralized, best-defaults resolver and scraper
+            self.resolver = (
+                web_scraper  # type: ignore[assignment]
+                if False
+                else ResearchArticleResolver(
+                    PDFUrlResolver(debug=debug),
+                    ArxivResolver(debug=debug),
+                    ADSResolver(debug=debug),
+                    DOIResolver(debug=debug),
+                    CrossRefDoiResolver(debug=debug),
+                    UnpaywallResolver(debug=debug),
+                    debug=debug,
+                )
             )
-
-            # Create resolvers with Unpaywall for DOI resolution to open access versions
-            resolvers = [
-                ArxivResolver(debug=debug),
-                ADSResolver(debug=debug),
-                UnpaywallResolver(debug=debug),
-                IdentityResolver(
-                    debug=debug
-                ),  # Always resolves to original URL as fallback
-            ]
-
-            self.omni_scraper = WaterfallScraper(
+            # Build a composite scraper once; prefer Docling, then Crawl4AI, then simple web/pdf
+            self.scraper = CompositeScraper(
                 DoclingScraper(debug=debug),
-                PyPaperBotScraper(debug=debug),
-                resolvers=resolvers,
+                Crawl4AIWebScraper(debug=debug),
+                (web_scraper or SimpleWebScraper(debug=debug)),
+                (pdf_scraper or SimplePDFScraper(debug=debug)),
                 debug=debug,
             )
         else:
-            self.web_scraper = web_scraper  # Could be None or an injected instance
-            self.pdf_scraper = pdf_scraper  # Could be None or an injected instance
+            self.resolver = None
+            self.scraper = None
+
+        # Optional source validator (ISSN whitelist). Ensure attribute always exists.
+        self._source_validator = None
+        try:
+            if getattr(self.config, "source_validation", False):
+                self._source_validator = SourceValidator(debug=debug)
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Failed to initialize SourceValidator: {e}")
 
         # Initialize embedded components
         self.triage_component = triage_component or TriageComponent(debug=debug)
@@ -425,7 +462,6 @@ class DeepLitSearchAgent(LitBaseAgent):
         return {
             "research_report": research_output.research_report,
             "key_findings": research_output.key_findings,
-            "sources_consulted": research_output.sources_consulted,
             "evidence_quality_score": research_output.evidence_quality_score,
             "citations": research_output.citations,
             "iterations_performed": iterations,
@@ -439,12 +475,20 @@ class DeepLitSearchAgent(LitBaseAgent):
             num_queries=5,  # More queries for comprehensive coverage
         )
 
+        if self.debug:
+            logger.debug(
+                f"QueryAgent input preview | instructions: {instructions[:200]}"
+            )
+
         query_output = await self.query_agent.arun(query_input)
 
         if self.debug:
             logger.info("🧠 DeepLitSearchAgent - INITIAL QUERIES GENERATED:")
             for i, query in enumerate(query_output.queries, 1):
                 logger.info(f"  {i}. '{query}'")
+            logger.debug(
+                f"QueryAgent output preview | first query: {(query_output.queries[0] if query_output.queries else '')[:200]}"
+            )
 
         return query_output.queries
 
@@ -550,7 +594,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 logger.warning(f"Error in relevancy assessment: {e}")
 
         # Fetch full content for high-relevancy results if enabled
-        if self.web_scraper and all_results:
+        if getattr(self, "scraper", None) and all_results:
             all_results = await self._fetch_full_content_for_high_relevancy(all_results)
 
         return all_results
@@ -574,36 +618,43 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         for result in high_relevancy_results:
             try:
-                # Try PDF first if available
-                if hasattr(result, "pdf_url") and result.pdf_url and self.pdf_scraper:
+                # Determine best target URL: prefer explicit PDF, else resolved OA URL, else original
+                target_url: str = str(result.url)
+                # Try resolver once to improve URL and enrich metadata
+                if getattr(self, "resolver", None) is not None:
                     try:
-                        pdf_input = ScraperToolInputSchema(url=str(result.pdf_url))
-                        pdf_content = await self.pdf_scraper.arun(pdf_input)
-                        if pdf_content.content and len(pdf_content.content) > 500:
-                            result.content = pdf_content.content
-                            if self.debug:
-                                logger.debug(
-                                    f"Fetched PDF content for {result.url} ({len(result.content)} chars)",
-                                )
-                            continue
+                        resolved = await self.resolver.arun(
+                            self.resolver.input_schema(**result.model_dump())
+                        )
+                        target_url = str(
+                            resolved.resolved_url or resolved.url or result.url
+                        )
+                        if getattr(resolved, "doi", None):
+                            result.doi = resolved.doi
+                        if getattr(resolved, "authors", None):
+                            result.authors = resolved.authors
                     except Exception as e:
                         if self.debug:
-                            logger.debug(
-                                f"PDF scraping failed for {result.pdf_url}: {e}",
-                            )
+                            logger.debug(f"Resolution failed for {result.url}: {e}")
 
-                # Fall back to web scraping
-                if self.web_scraper:
-                    web_input = ScraperToolInputSchema(url=str(result.url))
-                    web_content = await self.web_scraper.arun(web_input)
-                    if web_content.content and len(web_content.content) > len(
-                        result.content or "",
-                    ):
-                        result.content = web_content.content
-                        if self.debug:
-                            logger.debug(
-                                f"Fetched web content for {result.url} ({len(result.content)} chars)",
-                            )
+                # If the result already carries a direct PDF URL, prefer it
+                if getattr(result, "pdf_url", None):
+                    target_url = str(result.pdf_url)
+
+                # Scrape once using the composite scraper
+                web_content = await self.scraper.arun(
+                    ScraperToolInputSchema(url=target_url)
+                )
+                if (
+                    web_content
+                    and web_content.content
+                    and len(web_content.content) > len(result.content or "")
+                ):
+                    result.content = web_content.content
+                    if self.debug:
+                        logger.debug(
+                            f"Fetched content for {target_url} ({len(result.content)} chars)",
+                        )
 
             except Exception as e:
                 if self.debug:
@@ -651,7 +702,17 @@ class DeepLitSearchAgent(LitBaseAgent):
             query=query,
         )
 
+        if self.debug:
+            logger.debug(
+                f"RelevancyAgent input preview | query: {query[:200]} | content: {content[:200]}"
+            )
+
         rubric_output = await self.relevancy_agent.arun(rubric_input)
+
+        if self.debug:
+            logger.debug(
+                f"RelevancyAgent output preview | topic_alignment: {rubric_output.topic_alignment} | content_depth: {rubric_output.content_depth}"
+            )
 
         # Calculate quality score from rubrics
         from akd.agents.relevancy import (
@@ -704,6 +765,11 @@ class DeepLitSearchAgent(LitBaseAgent):
             num_queries=3,
         )
 
+        if self.debug:
+            logger.debug(
+                f"FollowUpQueryAgent input preview | content: {enhanced_content[:200]}"
+            )
+
         followup_output = await self.followup_query_agent.arun(followup_input)
 
         if self.debug:
@@ -712,6 +778,9 @@ class DeepLitSearchAgent(LitBaseAgent):
                 is_original = query in previous_queries
                 marker = "🎯" if is_original else "🔄"
                 logger.info(f"  {i}. {marker} '{query}'")
+            logger.debug(
+                f"FollowUpQueryAgent output preview | first query: {(followup_output.followup_queries[0] if followup_output.followup_queries else '')[:200]}"
+            )
 
         return followup_output.followup_queries
 
@@ -735,20 +804,33 @@ class DeepLitSearchAgent(LitBaseAgent):
         # Step 1: Triage the query using embedded component
         triage_result = await self._handle_triage(original_query)
 
-        # Step 2: Handle based on triage decision
+        # Step 2: Clarification loop (LLM-driven) if needed
         enriched_query = original_query
-        clarifications = None
+        clarifications: List[str] | None = []
 
         if triage_result["needs_clarification"] and self.config.auto_clarify:
-            enriched_query, clarifications = await self._handle_clarification(
-                original_query,
-                kwargs.get("mock_answers"),  # TODO: Get answers from user input
-            )
+            max_rounds = max(1, getattr(self.config, "max_clarifying_rounds", 1))
+            for _ in range(max_rounds):
+                enriched_query, new_clarifications = await self._handle_clarification(
+                    enriched_query,
+                    kwargs.get("mock_answers"),
+                )
+                if new_clarifications:
+                    clarifications.extend(new_clarifications)
+
+                # Re-triage to see if more clarification is needed
+                try:
+                    triage_result = await self._handle_triage(enriched_query)
+                except Exception:
+                    break
+
+                if not triage_result.get("needs_clarification"):
+                    break
 
         # Step 3: Build research instructions using embedded component
         instructions = await self._build_research_instructions(
             enriched_query,
-            clarifications,
+            clarifications or None,
         )
 
         # Step 4: Perform deep research using embedded components
