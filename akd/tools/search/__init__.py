@@ -10,7 +10,7 @@ from ._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
-from .pipeline import FullTextSearchPipeline, FullTextSearchPipelineConfig
+from .pipeline import SearchPipeline, SearchPipelineConfig
 from .searxng_search import (
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
@@ -44,6 +44,6 @@ __all__ = [
     "SemanticScholarSearchToolOutputSchema",
     "SemanticScholarSearchToolConfig",
     # Full Text Search Pipeline
-    "FullTextSearchPipeline",
-    "FullTextSearchPipelineConfig",
+    "SearchPipeline",
+    "SearchPipelineConfig",
 ]

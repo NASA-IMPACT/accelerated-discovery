@@ -32,8 +32,8 @@ from ._base import (
 )
 
 
-class FullTextSearchPipelineConfig(SearchToolConfig):
-    """Configuration for the FullTextSearchPipeline."""
+class SearchPipelineConfig(SearchToolConfig):
+    """Configuration for the SearchPipeline."""
 
     # Pipeline behavior configuration
     parallel_processing: bool = Field(
@@ -69,7 +69,7 @@ class FullTextSearchPipelineConfig(SearchToolConfig):
     )
 
 
-class FullTextSearchPipeline(SearchTool):
+class SearchPipeline(SearchTool):
     """
     Full-text search pipeline that combines search, URL resolution, and content scraping.
 
@@ -87,7 +87,7 @@ class FullTextSearchPipeline(SearchTool):
 
     input_schema = SearchToolInputSchema
     output_schema = SearchToolOutputSchema
-    config_schema = FullTextSearchPipelineConfig
+    config_schema = SearchPipelineConfig
 
     def _default_research_article_resolver(self, debug: bool = False) -> ResearchArticleResolver:
         return ResearchArticleResolver(
@@ -115,11 +115,11 @@ class FullTextSearchPipeline(SearchTool):
         search_tool: SearchTool,
         resolver: Optional[BaseArticleResolver] = None,
         scraper: Optional[ScraperToolBase] = None,
-        config: Optional[FullTextSearchPipelineConfig] = None,
+        config: Optional[SearchPipelineConfig] = None,
         debug: bool = False,
     ):
         """
-        Initialize the FullTextSearchPipeline.
+        Initialize the SearchPipeline.
 
         Args:
             search_tool: The underlying search tool (e.g., SearxNG, Semantic Scholar)
@@ -128,7 +128,7 @@ class FullTextSearchPipeline(SearchTool):
             config: Pipeline configuration
             debug: Enable debug logging
         """
-        config = config or FullTextSearchPipelineConfig()
+        config = config or SearchPipelineConfig()
         super().__init__(config, debug)
 
         self.search_tool = search_tool
@@ -136,7 +136,7 @@ class FullTextSearchPipeline(SearchTool):
         self.scraper = scraper or self.default_scraper(debug=debug)
 
         if debug:
-            logger.debug("Initialized FullTextSearchPipeline with:")
+            logger.debug("Initialized SearchPipeline with:")
             logger.debug(f"  - Search tool: {search_tool.__class__.__name__}")
             logger.debug(f"  - Resolver: {self.resolver.__class__.__name__}")
             logger.debug(f"  - Scraper: {self.scraper.__class__.__name__}")
@@ -309,7 +309,7 @@ class FullTextSearchPipeline(SearchTool):
         """
         if self.debug:
             logger.info(
-                f" Starting FullTextSearchPipeline for {len(params.queries)} queries",
+                f" Starting SearchPipeline for {len(params.queries)} queries",
             )
             logger.info(f"Scraping enabled: {self.enable_scraping}")
 
