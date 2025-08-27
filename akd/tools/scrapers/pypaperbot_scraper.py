@@ -1,9 +1,11 @@
 import asyncio
 import importlib.util
+import re
 import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from loguru import logger
 from pydantic import Field
@@ -122,7 +124,7 @@ class PyPaperBotScraper(ScraperToolBase):
                     [
                         "--selenium-chrome-version",
                         str(self.config.selenium_chrome_version),
-                    ]
+                    ],
                 )
 
             if self.debug:
@@ -137,7 +139,8 @@ class PyPaperBotScraper(ScraperToolBase):
 
             try:
                 stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), timeout=self.config.max_runtime_seconds
+                    process.communicate(),
+                    timeout=self.config.max_runtime_seconds,
                 )
 
                 if self.debug:
@@ -157,7 +160,9 @@ class PyPaperBotScraper(ScraperToolBase):
         return None
 
     async def _run_pypaperbot_with_query(
-        self, query: str, out_dir: Path
+        self,
+        query: str,
+        out_dir: Path,
     ) -> Optional[Path]:
         """Run PyPaperBot with search query."""
         if not _PYPAPERBOT_AVAILABLE or not self.config.enable_query_fallback:
@@ -189,7 +194,7 @@ class PyPaperBotScraper(ScraperToolBase):
                     [
                         "--selenium-chrome-version",
                         str(self.config.selenium_chrome_version),
-                    ]
+                    ],
                 )
 
             if self.debug:
@@ -204,7 +209,8 @@ class PyPaperBotScraper(ScraperToolBase):
 
             try:
                 stdout, stderr = await asyncio.wait_for(
-                    process.communicate(), timeout=self.config.max_runtime_seconds
+                    process.communicate(),
+                    timeout=self.config.max_runtime_seconds,
                 )
 
                 if self.debug:
@@ -242,10 +248,18 @@ class PyPaperBotScraper(ScraperToolBase):
         return None
 
     def _extract_query_from_url(self, url: str) -> Optional[str]:
-        """Extract a reasonable search query from URL."""
-        # For now, just use the URL itself as the query
-        # PyPaperBot will try to extract meaningful information
-        return url
+        """Extract a reasonable search query from URL by removing domain and using the rest."""
+        res = url
+        try:
+            parsed = urlparse(url)
+            # Use path + query as search term, removing leading slash
+            query_term = (parsed.path + parsed.query).lstrip("/")
+            # Clean up common file extensions
+            res = re.sub(r"\.(pdf|html?|aspx?)$", "", query_term, flags=re.IGNORECASE)
+        except Exception as e:
+            if self.debug:
+                logger.debug(f"Error extracting query from URL {url}: {e}")
+        return res
 
     async def _arun(
         self,
@@ -267,6 +281,8 @@ class PyPaperBotScraper(ScraperToolBase):
                     logger.debug(f"Extracted DOI: {doi}")
                 pdf_path = await self._run_pypaperbot_with_doi(doi, tmp_path)
 
+            if self.debug:
+                logger.debug(f"PDF path after DOI search: {pdf_path}")
             # Fallback to query-based search if no DOI found or DOI search failed
             if not pdf_path and self.config.enable_query_fallback:
                 query = self._extract_query_from_url(url_str)
@@ -280,7 +296,7 @@ class PyPaperBotScraper(ScraperToolBase):
                 try:
                     docling_scraper = DoclingScraper(debug=self.debug)
                     result = await docling_scraper.arun(
-                        OmniScraperInputSchema(url=str(pdf_path))
+                        OmniScraperInputSchema(url=str(pdf_path)),
                     )
 
                     if result.content and result.content.strip():
