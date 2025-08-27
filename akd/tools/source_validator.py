@@ -99,7 +99,7 @@ class SourceValidatorConfig(BaseToolConfig):
     )
     whitelist_file_path: Optional[str] = Field(
         default_factory=lambda: str(
-            get_akd_root() / "docs" / "issn_whitelist.json",
+            get_akd_root() / "docs" / "issn_whitelist_full.json",
         ),
         description=(
             "Path to ISSN whitelist JSON file. Can be a flat list of ISSNs, "
@@ -174,7 +174,7 @@ class SourceValidator(
 
     def _load_whitelist(self) -> None:
         whitelist_path = self.config.whitelist_file_path or str(
-            get_akd_root() / "docs" / "issn_whitelist.json"
+            get_akd_root() / "docs" / "issn_whitelist_full.json"
         )
 
         try:
