@@ -420,7 +420,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
                 if response.status_code != 200:
                     logger.error(f"CrossRef API error: {response.status_code}")
                     return None
-                payload = await response.json()
+                payload = response.json()
 
                 items = payload.get("message", {}).get("items", []) or []
                 if not items:

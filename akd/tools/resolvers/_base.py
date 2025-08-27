@@ -174,9 +174,8 @@ class BaseArticleResolver(BaseTool[ResolverInputSchema, ResolverOutputSchema]):
             raise ValueError(f"Failed to resolve with {self.__class__.__name__}")
 
         # Post-validate the resolved URL if available
-        if resolved_result.url:
-            await self._post_validate_url(resolved_result.url)
-
+        if resolved_result.resolved_url:
+            await self._post_validate_url(resolved_result.resolved_url)
 
         if self.__class__.__name__ not in resolved_result.resolvers:
             resolved_result.resolvers.append(self.__class__.__name__)
