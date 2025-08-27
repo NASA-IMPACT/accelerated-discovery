@@ -24,7 +24,7 @@ class ContentCondensationInputSchema(IOSchema):
         description="Search results with full text content to condense"
     )
     max_tokens: int = Field(
-        default=4000, description="Maximum total tokens for condensed output"
+        default=40000, description="Maximum total tokens for condensed output"
     )
 
 
@@ -103,6 +103,11 @@ class ContentCondensationComponent(LangBaseAgent):
         )
 
         try:
+            if self.debug:
+                logger.debug(
+                    f"Condensation input preview | url: {result.url} | prompt: {prompt[:200]}"
+                )
+
             response = await self.client.ainvoke([{"role": "user", "content": prompt}])
 
             condensed_content = response.content.strip()
@@ -122,6 +127,9 @@ class ContentCondensationComponent(LangBaseAgent):
                 new_tokens = self._count_tokens(condensed_content)
                 logger.debug(
                     f"Condensed {result.url}: {original_tokens} -> {new_tokens} tokens"
+                )
+                logger.debug(
+                    f"Condensation output preview | content: {condensed_content[:200]}"
                 )
 
             return condensed_result
