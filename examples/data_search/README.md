@@ -17,20 +17,46 @@ A modern, dark-themed web interface for NASA Earth science data discovery using 
 
 ## Installation & Setup
 
+### Option 1: Minimal Dependencies (Recommended for Demo)
+
+Use the targeted dependency set for faster installation:
+
+```bash
+# Navigate to data search directory
+cd examples/data_search
+
+uv sync
+
+```
+
+### Option 2: Full AKD Framework
+
+For complete framework development:
+
+```bash
+# From repository root
+cd accelerated-discovery
+uv venv --python 3.12
+source .venv/bin/activate
+uv sync
+```
+
 ### Backend Setup
 
-1. **Install Python dependencies:**
+1. **Set up environment variables:**
 ```bash
-cd frontend/backend
-pip install -r requirements.txt
+# Copy example environment file (from repository root)
+cp .env.example .env
+# Edit .env with your API keys: OPENAI_API_KEY=your-key-here
 ```
 
 2. **Start the FastAPI server:**
 ```bash
+cd examples/data_search/backend
 python main.py
 ```
 
-The backend will start on `http://localhost:8000`
+The backend will start on `http://localhost:8003`
 
 ### Frontend Setup
 
@@ -105,20 +131,24 @@ The frontend will start on `http://localhost:3000`
 ## Project Structure
 
 ```
-frontend/
+examples/data_search/
 ├── backend/
-│   ├── main.py                 # FastAPI application
-│   ├── websocket_handler.py    # WebSocket connection manager
-│   ├── search_progress.py      # Progress event handler
-│   └── requirements.txt        # Python dependencies
-└── frontend/
-    ├── public/
-    │   └── index.html          # HTML template
-    ├── src/
-    │   ├── App.js              # Main React component
-    │   ├── App.css             # Dark theme styles
-    │   └── index.js            # React entry point
-    └── package.json            # Node.js dependencies
+│   ├── main.py                          # FastAPI application
+│   ├── websocket_handler.py             # WebSocket connection manager
+│   ├── search_progress.py               # Progress event handler
+│   └── requirements.txt                 # Original backend dependencies
+├── frontend/
+│   ├── public/
+│   │   └── index.html                   # HTML template
+│   ├── src/
+│   │   ├── App.js                       # Main React component
+│   │   ├── App.css                      # Dark theme styles
+│   │   └── index.js                     # React entry point
+│   └── package.json                     # Node.js dependencies
+├── pyproject.toml                       # Minimal dependencies configuration
+├── DEPENDENCY_STRATEGY.md               # Dependency reduction documentation
+├── README.md                            # This file
+└── STARTUP_GUIDE.md                     # Quick setup reference
 ```
 
 ## Development Notes
@@ -150,6 +180,22 @@ The React app uses hooks for:
 - Search state tracking
 - Progress monitoring
 - Error handling
+
+## Dependencies & Installation
+
+### Minimal vs Full Framework
+
+This demo supports two installation options:
+
+**🎯 Minimal (Demo):** 10 core dependencies, ~80MB, 20-second install
+- Perfect for demonstrations and focused data search development
+- See `pyproject.toml` in this directory
+
+**🔧 Full Framework:** 20+ dependencies, ~200MB, 60-second install
+- Required for literature search, STORM workflows, and full AKD development
+- Use main repository `pyproject.toml`
+
+For dependency reduction details, see `DEPENDENCY_STRATEGY.md`.
 
 ## Future Enhancements
 
