@@ -23,7 +23,7 @@ from .omni import DoclingScraper
 _PYPAPERBOT_AVAILABLE: bool = importlib.util.find_spec("PyPaperBot") is not None
 if not _PYPAPERBOT_AVAILABLE:
     logger.warning(
-        "PyPaperBot not available. Please install using `pip install PyPaperBot`",
+        "PyPaperBot not available. Please install using `uv pip install PyPaperBot`. Alternatively, install with `uv sync --extra dev --extra local`.",
     )
 
 

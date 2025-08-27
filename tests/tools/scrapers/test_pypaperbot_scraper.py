@@ -7,10 +7,7 @@ import pytest
 from pydantic import AnyUrl
 
 from akd.tools.scrapers._base import ScrapedMetadata, ScraperToolInputSchema
-from akd.tools.scrapers.pypaperbot_scraper import (
-    PyPaperBotScraper,
-    PyPaperBotScraperConfig,
-)
+from akd.tools.scrapers.pypaperbot import PyPaperBotScraper, PyPaperBotScraperConfig
 
 # Check if PyPaperBot is available (same check as in the scraper)
 _PYPAPERBOT_AVAILABLE: bool = importlib.util.find_spec("PyPaperBot") is not None
