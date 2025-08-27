@@ -11,6 +11,7 @@ from loguru import logger
 from pydantic import Field
 
 from ._base import (
+    ScrapedMetadata,
     ScraperToolBase,
     ScraperToolConfig,
     ScraperToolInputSchema,
@@ -20,6 +21,10 @@ from .omni import DoclingScraper
 
 # Detect if PyPaperBot module is available in the current environment
 _PYPAPERBOT_AVAILABLE: bool = importlib.util.find_spec("PyPaperBot") is not None
+if not _PYPAPERBOT_AVAILABLE:
+    logger.warning(
+        "PyPaperBot not available. Please install using `pip install PyPaperBot`",
+    )
 
 
 class PyPaperBotScraperConfig(ScraperToolConfig):
@@ -102,7 +107,7 @@ class PyPaperBotScraper(ScraperToolBase):
         """Run PyPaperBot with DOI."""
         if not _PYPAPERBOT_AVAILABLE:
             if self.debug:
-                logger.debug("PyPaperBot package not available")
+                logger.warning("PyPaperBot package not available")
             return None
 
         try:
@@ -170,7 +175,11 @@ class PyPaperBotScraper(ScraperToolBase):
         out_dir: Path,
     ) -> Optional[Path]:
         """Run PyPaperBot with search query."""
-        if not _PYPAPERBOT_AVAILABLE or not self.config.enable_query_fallback:
+        if not _PYPAPERBOT_AVAILABLE:
+            logger.warning("PyPaperBot package not available!")
+            return None
+        if not self.config.enable_query_fallback:
+            logger.warning("Query fallback disabled!")
             return None
 
         try:
@@ -291,9 +300,8 @@ class PyPaperBotScraper(ScraperToolBase):
             # Fallback to query-based search if no DOI found or DOI search failed
             if not pdf_path and self.config.enable_query_fallback:
                 query = self._extract_query_from_url(url_str)
-                if query:
-                    if self.debug:
-                        logger.debug(f"Falling back to query search: {query}")
+                if self.debug:
+                    logger.debug(f"Falling back to query search: {query}")
                     pdf_path = await self._run_pypaperbot_with_query(query, tmp_path)
 
             # Convert PDF to markdown using Docling if PDF found
@@ -311,9 +319,6 @@ class PyPaperBotScraper(ScraperToolBase):
                 except Exception as e:
                     if self.debug:
                         logger.debug(f"Docling conversion failed: {e}")
-
-            # Return empty result if all strategies failed
-            from ._base import ScrapedMetadata
 
             return ScraperToolOutputSchema(
                 content="",
