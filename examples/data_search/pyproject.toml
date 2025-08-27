@@ -48,6 +48,10 @@ Issues = "https://github.com/NASA-IMPACT/accelerated-discovery/issues"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+# Don't package the demo backend/frontend - they're not Python packages
+exclude = ["backend*", "frontend*"]
+
 # Note: This is a minimal subset of the full AKD framework
 # For the complete framework with literature search, STORM, and all agents,
 # use the main pyproject.toml in the repository root
