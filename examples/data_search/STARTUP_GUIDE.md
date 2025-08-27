@@ -61,8 +61,11 @@ npm install
 ### 1. Backend (FastAPI Server)
 
 ```bash
-# From project root, navigate to backend directory and start server
+# From the backend directory (as you prefer!)
 cd examples/data_search/backend
+
+# Set PYTHONPATH so Python can find akd modules (3 levels up)
+export PYTHONPATH="$(pwd)/../../..:$PYTHONPATH"
 uv run python main.py
 ```
 

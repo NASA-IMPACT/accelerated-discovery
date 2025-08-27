@@ -34,9 +34,11 @@ dependencies = [
     "python-dotenv>=1.0.0",      # For environment variable loading
     "httpx>=0.28.1",             # For async HTTP requests to MCP server
     "requests>=2.32.3",          # For fallback HTTP client
-
-    # Optional but recommended for production
     "tenacity>=9.1.2",           # For retry logic with exponential backoff
+
+    # Additional dependencies needed by akd core modules
+    "gdown>=5.2.0",              # Required by akd.utils.__init__.py
+    "langchain-core>=0.3.48",    # Required by akd.utils (LangchainToolMixin)
 ]
 
 [project.urls]

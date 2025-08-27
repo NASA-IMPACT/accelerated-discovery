@@ -53,7 +53,10 @@ cp .env.example .env
 2. **Start the FastAPI server:**
 ```bash
 cd examples/data_search/backend
-python main.py
+
+# Set PYTHONPATH to find akd modules (3 levels up to repo root)
+export PYTHONPATH="$(pwd)/../../..:$PYTHONPATH"
+uv run python main.py
 ```
 
 The backend will start on `http://localhost:8003`
@@ -146,6 +149,7 @@ examples/data_search/
 │   │   └── index.js                     # React entry point
 │   └── package.json                     # Node.js dependencies
 ├── pyproject.toml                       # Minimal dependencies configuration
+├── run-backend.sh                       # Script to run backend with correct PYTHONPATH
 ├── DEPENDENCY_STRATEGY.md               # Dependency reduction documentation
 ├── README.md                            # This file
 └── STARTUP_GUIDE.md                     # Quick setup reference
