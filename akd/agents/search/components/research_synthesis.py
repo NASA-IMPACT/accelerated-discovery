@@ -42,10 +42,6 @@ class ResearchSynthesisOutputSchema(OutputSchema):
         default_factory=list,
         description="Key research findings extracted from the sources",
     )
-    sources_consulted: List[str] = Field(
-        default_factory=list,
-        description="URLs of sources that were analyzed",
-    )
     evidence_quality_score: float = Field(
         default=0.5,
         description="Overall quality score of the evidence (0.0-1.0)",
@@ -64,7 +60,7 @@ class ResearchSynthesisAgentConfig(BaseAgentConfig):
     system_prompt: str = DEEP_RESEARCH_AGENT_PROMPT
     model_name: str = "gpt-4o"
     temperature: float = 0.2
-    max_tokens: int = 4000
+    max_tokens: int = 60000
 
 
 class ResearchSynthesisAgent(
@@ -178,7 +174,7 @@ class ResearchSynthesisComponent:
             iterations_performed: Number of iterations performed
 
         Returns:
-            Object with research_report, key_findings, sources_consulted,
+            Object with research_report, key_findings,
             evidence_quality_score, and citations attributes
         """
         if self.debug:
@@ -219,11 +215,20 @@ class ResearchSynthesisComponent:
         # Single synthesis attempt with properly sized content
         agent_input = ResearchSynthesisInputSchema(
             query=original_query,
-            search_results=results,
+            search_results=managed_results,
             context=context,
         )
 
         try:
+            # Debug preview of input (200 chars cap)
+            if self.debug:
+                preview_titles = ", ".join(
+                    [(r.title or "Untitled")[:40] for r in managed_results[:5]]
+                )[:200]
+                logger.debug(
+                    f"Synthesis input preview | query: {original_query[:200]} | results: {len(managed_results)} | titles: {preview_titles} | context: {context[:200]}"
+                )
+
             # Use the agent to synthesize the research
             agent_output = await self._agent.arun(agent_input)
 
@@ -231,6 +236,9 @@ class ResearchSynthesisComponent:
                 logger.debug("Agent synthesis completed successfully")
                 logger.debug(f"Key findings: {len(agent_output.key_findings)}")
                 logger.debug(f"Evidence quality: {agent_output.evidence_quality_score}")
+                logger.debug(
+                    f"Synthesis output preview | report: {agent_output.research_report[:200]}"
+                )
 
             # Return the agent output directly - it has the expected interface
             return agent_output
@@ -315,7 +323,6 @@ class ResearchSynthesisComponent:
         return ResearchSynthesisOutputSchema(
             research_report=report,
             key_findings=key_findings,
-            sources_consulted=source_urls,
             evidence_quality_score=avg_quality,
             citations=[{"url": url, "title": "N/A"} for url in source_urls],
         )
