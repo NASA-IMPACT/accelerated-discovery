@@ -48,8 +48,8 @@ dependencies = [
     "tiktoken>=0.9.0",
     "rapidfuzz>=3.13.0",
     "deepeval>=3.4.0",
-    "pypaperbot>=1.4.1",
     "undetected-chromedriver>=3.5.5",
+    "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
 ]
 
 [project.urls]
@@ -96,4 +96,7 @@ dev = [
     "ipykernel>=6.30.0",
     "ipywidgets>=8.1.7",
     "pre-commit>=4.2.0",
+]
+local = [
+    "marimo==0.15.0",
 ]
