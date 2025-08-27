@@ -16,7 +16,7 @@ from ._base import (
     ScraperToolInputSchema,
     ScraperToolOutputSchema,
 )
-from .omni import DoclingScraper, OmniScraperInputSchema
+from .omni import DoclingScraper
 
 # Detect if PyPaperBot module is available in the current environment
 _PYPAPERBOT_AVAILABLE: bool = importlib.util.find_spec("PyPaperBot") is not None
@@ -78,9 +78,14 @@ class PyPaperBotScraper(ScraperToolBase):
     def __init__(
         self,
         config: PyPaperBotScraperConfig | None = None,
+        scraper: ScraperToolBase | None = None,
         debug: bool = False,
     ) -> None:
         super().__init__(config=config or PyPaperBotScraperConfig(), debug=debug)
+        self.scraper = scraper or DoclingScraper(debug=debug)
+        logger.info(
+            f"Initialized PyPaperBotScraper with config: {self.config} | scraper={self.scraper.__class__.__name__}",
+        )
 
     def _find_downloaded_pdf(self, directory: Path) -> Optional[Path]:
         """Find first PDF file in directory."""
@@ -294,9 +299,8 @@ class PyPaperBotScraper(ScraperToolBase):
             # Convert PDF to markdown using Docling if PDF found
             if pdf_path and pdf_path.exists():
                 try:
-                    docling_scraper = DoclingScraper(debug=self.debug)
-                    result = await docling_scraper.arun(
-                        OmniScraperInputSchema(url=str(pdf_path)),
+                    result = await self.scraper.arun(
+                        self.scraper.input_schema(url=str(pdf_path)),
                     )
 
                     if result.content and result.content.strip():
