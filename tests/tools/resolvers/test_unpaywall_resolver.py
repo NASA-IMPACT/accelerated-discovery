@@ -151,7 +151,7 @@ class TestUnpaywallResolverIntegration:
         assert hasattr(result, "url")
         assert hasattr(result, "resolvers")
         assert "UnpaywallResolver" in result.resolvers
-        assert isinstance(result.url, HttpUrl)
+        assert isinstance(result.resolved_url, HttpUrl)
 
     @pytest.mark.asyncio
     async def test_multiple_doi_formats(self):

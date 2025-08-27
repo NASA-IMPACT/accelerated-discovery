@@ -36,7 +36,7 @@ class ResolverInputSchema(SearchResultItem, InputSchema):
         None,
         description="Query used to obtain the search result",
     )
-        # allow extra fields in output schema
+        # allow extra fields in input schema
     class Config:
         extra = "allow"
 
@@ -71,7 +71,7 @@ class ArticleResolverConfig(BaseToolConfig):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    session: Optional[requests.Session] = Field(
+    session: Optional[httpx.AsyncClient] = Field(
         None,
         description="Optional session to use for requests",
     )

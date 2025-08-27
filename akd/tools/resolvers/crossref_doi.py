@@ -2,6 +2,7 @@ import os
 from typing import Literal, Optional, Union
 
 import aiohttp
+import httpx
 from loguru import logger
 from pydantic import Field, HttpUrl, field_validator
 from rapidfuzz import fuzz
@@ -409,17 +410,17 @@ class CrossRefDoiResolver(BaseArticleResolver):
         doi = None
 
         try:
-            async with self.session or aiohttp.ClientSession() as session:
-                async with session.get(
-                    self.config.cross_ref_api_url,
+            async with self.session or httpx.AsyncClient() as session:
+                response = await session.get(
+                    self.cross_ref_api_url,
                     params=query_params,
-                    headers={"User-Agent": self.config.user_agent},
-                    timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds),
-                ) as resp:
-                    if resp.status != 200:
-                        logger.error(f"CrossRef API error: {resp.status}")
-                        return None
-                    payload = await resp.json()
+                    headers=self.headers,
+                    timeout=self.timeout_seconds,
+                )
+                if response.status_code != 200:
+                    logger.error(f"CrossRef API error: {response.status_code}")
+                    return None
+                payload = await response.json()
 
                 items = payload.get("message", {}).get("items", []) or []
                 if not items:
