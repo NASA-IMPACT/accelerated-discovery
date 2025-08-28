@@ -1,0 +1,234 @@
+riskgroups:
+- id: science-risk-atlas-legal
+  name: Legal
+  isDefinedByTaxonomy: science-risk-atlas
+- id: science-risk-atlas-safety-harmfulness-and-detection
+  name: Safety - harm and detection
+  isDefinedByTaxonomy: science-risk-atlas
+- id: science-risk-atlas-safety-robustness
+  name: Safety - robustness
+  isDefinedByTaxonomy: science-risk-atlas
+- id: science-risk-atlas-ethics-and-bias
+  name: Ethics and bias
+  isDefinedByTaxonomy: science-risk-atlas
+- id: science-risk-atlas-trustworthiness-factuality
+  name: Trustworthiness - factuality
+  isDefinedByTaxonomy: science-risk-atlas
+- id: science-risk-atlas-trustworthiness-explainability
+  name: Trustworthiness - explainability
+  isDefinedByTaxonomy: science-risk-atlas
+risks:
+- id: compliance
+  name: Compliance
+  description: Ensuring that literature agent outputs follow applicable institutional,
+    ethical, legal, and publication guidelines.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-legal
+  tag: compliance
+  type: non-technical
+  descriptor: traditional risk of AI
+  concern: Noncompliance may lead to regulatory breaches, academic misconduct, or duplicate
+    research, undermining trust and credibility.
+- id: privacy
+  name: Privacy
+  description: Preventing unauthorized exposure of sensitive or personally identifiable
+    information (PII) when processing scientific content.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-legal
+  tag: privacy
+  type: non-technical
+  descriptor: traditional risk of AI
+  concern: Disclosure of confidential data (e.g., participant details) may violate privacy laws (e.g., GDPR)
+    and damage participant trust or legal standing.
+- id: maliciousness
+  name: Maliciousness
+  description: Guarding against outputs that facilitate harmful or unethical actions, including sabotage
+    or dangerous protocol suggestions.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-safety-harmfulness-and-detection
+  tag: maliciousness
+  type: output
+  descriptor: amplified by generative AI
+  concern: Malicious recommendations could lead to misuse of scientific knowledge, deliberate harm, or dual-use applications.
+- id: profanity
+  name: Profanity
+  description: Detecting and filtering crude, obscene, or offensive language in agent outputs.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-safety-harmfulness-and-detection
+  tag: profanity
+  type: output
+  descriptor: amplified by generative AI
+  concern: Profanity erodes professional tone, may offend users, and can reflect poorly on scientific credibility.
+- id: toxicity
+  name: Toxicity
+  description: Identifying harmful or discriminatory content—such as harassment or defamation—in generated text.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-safety-harmfulness-and-detection
+  tag: toxicity
+  type: output
+  descriptor: amplified by generative AI
+  concern: Toxic language or bias can damage the user experience, propagate harmful stereotypes, and violate ethical norms.
+- id: out-of-distribution-checks
+  name: Out-of-Distribution Checks
+  description: Recognizing when inputs or prompts fall outside the model’s supported scientific domain or training distribution.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-safety-robustness
+  tag: out-of-distribution-checks
+  type: inference
+  descriptor: amplified by generative AI
+  concern: Without detection, agents may hallucinate or deliver erroneous information, as they’re unreliable in unfamiliar contexts.
+- id: jailbreak-prevention
+  name: Jailbreak Prevention
+  description: Protecting against attempts to bypass safety constraints or provoke forbidden behavior in the agent.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-safety-robustness
+  tag: jailbreak-prevention
+  type: agentic
+  descriptor: specific to agentic AI
+  concern: Jailbreaks can lead to unsafe outputs—e.g., undisclosed manipulations or policy violations—jeopardizing system reliability.
+- id: fairness
+  name: Fairness
+  description: Ensuring equitable treatment in output, avoiding bias related to demographics, geography, or research paradigms.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-ethics-and-bias
+  tag: fairness
+  type: non-technical
+  descriptor: traditional risk of AI
+  concern: Biased outputs may reproduce structural inequities, misrepresent minority voices, or skew scientific perspectives.
+- id: consistency
+  name: Consistency
+  description: Maintaining internal coherence across multi-step outputs or related queries, ensuring uniform responses.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality
+  tag: consistency
+  type: inference
+  descriptor: specific to generative AI
+  concern: Inconsistent statements can confuse users and undermine scientific reliability, especially across repeated interactions.
+- id: uncertainty-identification
+  name: Uncertainty Identification
+  description: Signaling when the model is unsure, or confidence is low in its response.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-explainability
+  tag: uncertainty-identification
+  type: inference
+  descriptor: amplified by generative AI
+  concern: Overconfident yet incorrect outputs may mislead researchers, promoting false consensus or conclusions.
+- id: verification
+  name: Verification
+  description: Enabling cross-checking of output facts or claims against trusted sources or repositories.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-explainability
+  tag: verification
+  type: agentic
+  descriptor: specific to agentic AI
+  concern: Without verification, agents risk generating unchecked or fabricated scientific claims that may propagate misinformation.
+- id: ip-and-copyright
+  name: IP & Copyright
+  description: Managing the reproduction or transformation of copyrighted or proprietary content in generated outputs.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-legal
+  tag: ip-and-copyright
+  type: output
+  descriptor: amplified by generative AI
+  concern: Generative models may reproduce protected text or data without attribution or permission, leading to intellectual
+    property violations or legal disputes.
+- id: societal-impact
+  name: Societal Impact
+  description: Evaluating and mitigating broader social harms that may emerge from scientific content generation and deployment.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-ethics-and-bias
+  tag: societal-impact
+  type: non-technical
+  descriptor: traditional risk of AI
+  concern: Outputs may unintentionally support harmful narratives or contribute to environmental, economic, or cultural harm at
+    scale, especially when deployed without oversight.
+- id: time-sensitivity
+  name: Time Sensitivity
+  description: Accounting for the temporal relevance and potential obsolescence of generated scientific content.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality
+  tag: time-sensitivity
+  type: inference
+  descriptor: amplified by generative AI
+  concern: Agents may present outdated or no-longer-valid findings as current, especially when lacking access to time-aware
+    or live-updated data.
+- id: knowledge-contextualization
+  name: Knowledge Contextualization
+  description: Presenting scientific facts or claims with appropriate qualifiers, scope, and disciplinary framing.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality
+  tag: knowledge-contextualization
+  type: inference
+  descriptor: specific to generative AI
+  concern: Without appropriate context, generated facts may mislead or be misinterpreted, especially when disciplinary norms,
+    limitations, or assumptions are omitted.
+- id: hallucination-identification
+  name: Hallucination Identification
+  description: Detecting content that is syntactically plausible but factually fabricated or unsupported by evidence.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality
+  tag: hallucination-identification
+  type: inference
+  descriptor: specific to generative AI
+  concern: Hallucinated content may sound authoritative while conveying false or unverifiable information, undermining scientific integrity.
+- id: attribution
+  name: Attribution
+  description: Ensuring that cited ideas, findings, or data are accurately and transparently attributed to their original sources.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-explainability
+  tag: attribution
+  type: agentic
+  descriptor: amplified by agentic AI
+  concern: Inadequate attribution risks plagiarism, undermines research transparency, and violates scholarly norms, especially
+    when models generate citations without grounding.
