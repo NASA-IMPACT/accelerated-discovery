@@ -34,7 +34,7 @@ class RiskAgentInputSchema(InputSchema):
     )
     risk_ids: List[str] = Field(
         ...,
-        description="A list of risk IDs to evaluate against. These should match keys in the risk definitions YAML file.",
+        description="A list of risk IDs to evaluate against. These should match keys in the risk definitions YAML file or science risks yaml file.",
     )
     metadata: Optional[dict] = Field(
         default=None,
@@ -101,6 +101,12 @@ class RiskAgentConfig(BaseAgentConfig):
         ),
         description="Path to source Risk Atlas yaml file.",
     )
+    science_risk_yaml_path: Optional[str] = Field(
+        default_factory=lambda: str(
+            get_akd_root() / "akd/agents/risk/science_lit_risks.yaml",
+        ),
+        description="Path to source Science Risks yaml file.",
+    )
 
 
 class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]):
@@ -110,8 +116,8 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
 
     Unlike approaches that convert static risk definitions into fixed criteria,
     this agent produces criteria that are context-sensitive - grounded not only
-    in the risk definitions (from the YAML atlas) but also in the actual
-    conversation (inputs/outputs) being evaluated.
+    in the risk definitions (from the YAML atlas + science yaml risks) but also in
+    the actual agent interaction (inputs/outputs) being evaluated.
 
     This allows the resulting DAGMetric to reflect how a given risk might
     manifest in a specific interaction, and enables generation of precise,
@@ -139,23 +145,33 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
         """Initialize the RiskAgent with configuration."""
         config = config or RiskAgentConfig()
         super().__init__(config=config, debug=debug)
-        self._risk_map = self.load_risks_from_yaml(config.risk_yaml_path)
+        self._risk_map = self.load_risks_from_yaml(
+            config.risk_yaml_path,
+            config.science_risk_yaml_path,
+        )
         logger.info("Risk agent created.")
 
     @staticmethod
-    def load_risks_from_yaml(path: str) -> Dict[str, str]:
+    def load_risks_from_yaml(atlas_path: str, science_risk_path: str) -> Dict[str, str]:
         """
         Load risks from YAML file and return a dict of {risk_id: description}
         """
 
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+        with open(atlas_path, "r", encoding="utf-8") as f:
+            atlas_data = yaml.safe_load(f)
 
-        return {
-            risk["id"]: risk["description"]
-            for risk in data.get("risks", [])
-            if "id" in risk and "description" in risk
-        }
+        with open(science_risk_path, "r", encoding="utf-8") as f:
+            science_risk_data = yaml.safe_load(f)
+
+        merged_risks = {}
+        for data in (atlas_data, science_risk_data):
+            for risk in data.get("risks", []):
+                risk_id = risk.get("id")
+                risk_description = risk.get("description")
+                if risk_id and risk_description:
+                    merged_risks[risk_id] = risk_description
+
+        return merged_risks
 
     def build_dag_from_criteria(
         self,
