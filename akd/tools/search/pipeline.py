@@ -89,6 +89,14 @@ class SearchPipeline(SearchTool):
     output_schema = SearchToolOutputSchema
     config_schema = SearchPipelineConfig
 
+    class ScrapingError(Exception):
+        """Raised when scraping fails or times out in SearchPipeline."""
+        def __init__(self, url: str, message: str):
+            super().__init__(f"Scraping failed for {url}: {message}")
+            self.url = url
+            self.message = message
+
+
     def _default_research_article_resolver(self, debug: bool = False) -> ResearchArticleResolver:
         return ResearchArticleResolver(
         PDFUrlResolver(debug=debug),
@@ -165,22 +173,17 @@ class SearchPipeline(SearchTool):
             # Fall back to pdf_url or original url
             return ResolverOutputSchema(**result.model_dump())
 
-    async def _scrape_content(
-        self,
-        url: str,
-    ) -> Optional[str]:
+    async def _scrape_content(self, url: str) -> Optional[str]:
         """
         Scrape full text content from a URL.
 
         Args:
             url: URL to scrape
-            result: Original search result for context
 
         Returns:
-            Scraped content or None if scraping fails
+            Scraped content or None if scraping fails (unless fail_on_scraping_errors=True)
         """
         try:
-            # result.resolved_url if it exists, otherwise use original URL
             scraper_output = await asyncio.wait_for(
                 self.scraper.arun(self.scraper.input_schema(url=url)),
                 timeout=self.scraping_timeout,
@@ -188,26 +191,33 @@ class SearchPipeline(SearchTool):
 
             if scraper_output.content and scraper_output.content.strip():
                 content = scraper_output.content.strip()
-
                 if self.debug:
-                    logger.debug(
-                        f"Successfully scraped {len(content)} characters from {url}",
-                    )
-
+                    logger.debug(f"Successfully scraped {len(content)} characters from {url}")
                 return content
             else:
+                msg = "No content scraped"
                 if self.debug:
-                    logger.warning(f"No content scraped from {url}")
+                    logger.warning(f"{msg} from {url}")
+                if self.fail_on_scraping_errors:
+                    raise self.ScrapingError(url, msg)
                 return None
 
         except asyncio.TimeoutError:
+            msg = "Scraping timeout"
             if self.debug:
-                logger.warning(f"Scraping timeout for {url}")
+                logger.warning(f"{msg} for {url}")
+            if self.fail_on_scraping_errors:
+                raise self.ScrapingError(url, msg)
             return None
+
         except Exception as e:
+            msg = str(e)
             if self.debug:
-                logger.warning(f"Failed to scrape {url}: {e}")
+                logger.warning(f"Failed to scrape {url}: {msg}")
+            if self.fail_on_scraping_errors:
+                raise self.ScrapingError(url, msg)
             return None
+ 
 
     async def _process_single_result(
         self,
@@ -228,7 +238,7 @@ class SearchPipeline(SearchTool):
 
             scraped_content = None
             if self.enable_scraping:
-                scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else resolved_result.url
+                scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else (resolved_result.pdf_url if hasattr(resolved_result, 'pdf_url') and resolved_result.pdf_url else resolved_result.url)
                 scraped_content = await self._scrape_content(scraping_url)
             else:
                 if self.debug:
@@ -274,6 +284,9 @@ class SearchPipeline(SearchTool):
             return enhanced_result
 
         except Exception as e:
+            if self.fail_on_scraping_errors and isinstance(e, self.ScrapingError):
+                raise
+
             if self.debug:
                 logger.error(f"Error processing result {result.title}: {e}")
 
