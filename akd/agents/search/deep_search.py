@@ -30,6 +30,7 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessorInputSchema,
 )
 from akd.tools.scrapers import (
+    PDFScraperInputSchema,
     ScraperToolInputSchema,
     SimplePDFScraper,
     SimpleWebScraper,
@@ -464,13 +465,19 @@ class DeepLitSearchAgent(LitBaseAgent):
                     logger.debug(
                         f"Relevancy assessment summary: {assessment_output.assessment_summary}",
                     )
+                if self.web_scraper and assessment_output.filtered_results:
+                    assessment_output.filtered_results = (
+                        await self._fetch_full_content_for_high_relevancy(
+                            assessment_output.filtered_results,
+                        )
+                    )
                 return assessment_output.filtered_results
             except Exception as e:
                 logger.warning(f"Error in relevancy assessment: {e}")
 
         # Fetch full content for high-relevancy results if enabled
-        if self.web_scraper and all_results:
-            all_results = await self._fetch_full_content_for_high_relevancy(all_results)
+        # if self.web_scraper and all_results:
+        #    all_results = await self._fetch_full_content_for_high_relevancy(all_results)
 
         return all_results
 
@@ -496,7 +503,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 # Try PDF first if available
                 if hasattr(result, "pdf_url") and result.pdf_url and self.pdf_scraper:
                     try:
-                        pdf_input = ScraperToolInputSchema(url=str(result.pdf_url))
+                        pdf_input = PDFScraperInputSchema(url=str(result.pdf_url))
                         pdf_content = await self.pdf_scraper.arun(pdf_input)
                         if pdf_content.content and len(pdf_content.content) > 500:
                             result.content = pdf_content.content
