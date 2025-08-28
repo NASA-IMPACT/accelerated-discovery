@@ -17,28 +17,16 @@ Quick reference for starting the Earth Science Data Discovery interface for any 
 # Clone the repository
 git clone <repository-url>
 cd accelerated-discovery
-```
 
-### 2. Choose Installation Option
-
-**Option A: Minimal Dependencies (Recommended for Demo)**
-```bash
-# Navigate to data search demo directory
-cd examples/data_search
-
-# Create virtual environment and install minimal dependencies
-uv sync
-```
-
-**Option B: Full AKD Framework**
-```bash
-# Install complete framework (from repository root)
+# Create and activate virtual environment
 uv venv --python 3.12
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install Python dependencies
 uv sync
 ```
 
-### 3. Configure Environment Variables
+### 2. Configure Environment Variables
 
 ```bash
 # Copy example environment file
@@ -48,7 +36,7 @@ cp .env.example .env
 # Required: OPENAI_API_KEY=your-api-key-here
 ```
 
-### 4. Install Frontend Dependencies
+### 3. Install Frontend Dependencies
 
 ```bash
 # Navigate to frontend directory and install Node dependencies
@@ -61,11 +49,8 @@ npm install
 ### 1. Backend (FastAPI Server)
 
 ```bash
-# From the backend directory (as you prefer!)
+# From project root, navigate to backend directory and start server
 cd examples/data_search/backend
-
-# Set PYTHONPATH so Python can find akd modules (3 levels up)
-export PYTHONPATH="$(pwd)/../../..:$PYTHONPATH"
 uv run python main.py
 ```
 
@@ -186,23 +171,20 @@ curl http://localhost:8003/
 ## File Structure
 
 ```
-examples/data_search/                    # Data search frontend example
-├── backend/                             # FastAPI server
-│   ├── main.py                         # Server entry point
-│   ├── websocket_handler.py            # WebSocket connections
-│   ├── search_progress.py              # Progress tracking
-│   ├── requirements.txt                # Original backend dependencies
-│   └── logs/                           # Application logs
-├── frontend/                           # React app
-│   ├── src/                            # React components
-│   │   ├── App.js                      # Main application
-│   │   └── config.js                   # Configuration
-│   ├── public/                         # Static files
-│   └── package.json                    # Node dependencies
-├── pyproject.toml                      # Minimal dependencies configuration
-├── DEPENDENCY_STRATEGY.md              # Dependency reduction strategy
-├── STARTUP_GUIDE.md                    # This file
-└── README.md                           # Detailed documentation
+examples/data_search/     # Data search frontend example
+├── backend/             # FastAPI server
+│   ├── main.py         # Server entry point
+│   ├── websocket_handler.py  # WebSocket connections
+│   ├── search_progress.py    # Progress tracking
+│   └── logs/           # Application logs
+├── frontend/           # React app
+│   ├── src/            # React components
+│   │   ├── App.js      # Main application
+│   │   └── config.js   # Configuration
+│   ├── public/         # Static files
+│   └── package.json    # Node dependencies
+├── STARTUP_GUIDE.md    # This file
+└── README.md           # Detailed documentation
 ```
 
 ## Quick URLs
