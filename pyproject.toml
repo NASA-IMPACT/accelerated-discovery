@@ -51,6 +51,14 @@ dependencies = [
     "python-dotenv>=1.0.0"
 ]
 
+[project.optional-dependencies]
+data-agents-demo = [
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.6",
+]
+
 [project.urls]
 Homepage = "https://github.com/NASA-IMPACT/accelerated-discovery"
 Repository = "https://github.com/NASA-IMPACT/accelerated-discovery"
