@@ -53,6 +53,17 @@ export function getConfig() {
  */
 export function getWebSocketUrl(searchId) {
   const config = getConfig();
+
+  // Use same-origin in production/staging (no port in URL)
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+  if (!isLocal) {
+    // Production/staging: use same-origin WebSocket behind reverse proxy
+    const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${wsProto}://${window.location.host}/ws/${searchId}`;
+  }
+
+  // Local development: use configured WebSocket URL
   return `${config.websocket.url}/ws/${searchId}`;
 }
 
