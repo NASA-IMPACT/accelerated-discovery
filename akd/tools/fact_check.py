@@ -53,6 +53,26 @@ class FactCheckToolConfig(BaseToolConfig):
         default=HttpUrl(os.getenv("FACT_CHECK_API_URL", "http://localhost:8011")),
         description="The base URL of the remote Fact-Checking and Correction Service.",
     )
+    start_endpoint: str = Field(
+        default=os.getenv("FACT_CHECK_START_ENDPOINT", "/fact-check/start"),
+        description="Endpoint to start a new fact-checking job."
+    )
+    status_endpoint: str = Field(
+        default=os.getenv("FACT_CHECK_STATUS_ENDPOINT", "/fact-check/status/"),
+        description="Endpoint to get the status of a job. Must end with a slash."
+    )
+    correct_endpoint: str = Field(
+        default=os.getenv("FACT_CHECK_CORRECT_ENDPOINT", "/correct/"),
+        description="Endpoint for single correction steps."
+    )
+    display_graph_endpoint: str = Field(
+        default=os.getenv("FACT_CHECK_DISPLAY_GRAPH_ENDPOINT", "/display_graph/"),
+        description="Endpoint to display a saved fact graph."
+    )
+    graph_json_endpoint: str = Field(
+        default=os.getenv("FACT_CHECK_GRAPH_JSON_ENDPOINT", "/graph/json/"),
+        description="Endpoint to retrieve graph data as JSON."
+    )
     polling_interval_seconds: int = Field(
         default=120,
         description="How often to poll for job results.",
@@ -113,7 +133,7 @@ class FactCheckTool(
         try:
             # Start the job
             start_response = await self.api_client.post(
-                "/fact-check/start",
+                self.config.start_endpoint,
                 json=params.model_dump(),
             )
             start_response.raise_for_status()
@@ -125,7 +145,7 @@ class FactCheckTool(
             while total_wait_time < self.config.job_timeout_seconds:
                 logger.info(f"Polling status for job {job_id}...")
                 status_response = await self.api_client.get(
-                    f"/fact-check/status/{job_id}",
+                    f"{self.config.status_endpoint}/{job_id}",
                 )
                 status_response.raise_for_status()
                 status_data = status_response.json()
