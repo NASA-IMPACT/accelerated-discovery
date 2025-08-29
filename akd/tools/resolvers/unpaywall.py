@@ -127,7 +127,14 @@ class UnpaywallResolver(BaseArticleResolver):
                             # Return ResolverOutputSchema with resolved URL and preserved metadata
                             result = ResolverOutputSchema(**params.model_dump())
                             result.doi = doi
-                            result.resolved_url = HttpUrl(oa_url)
+                            if not result.extra:
+                                result.extra = {}
+                            
+                            if not hasattr(result.extra, "original_url"):
+                                result.extra["original_url"] = []
+                            result.extra["original_url"].append(params.url)
+
+                            result.url = HttpUrl(oa_url)
                             result.resolvers.append(self.__class__.__name__)
                             return result
 

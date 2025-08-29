@@ -21,6 +21,10 @@ class IdentityResolver(BaseArticleResolver):
     ) -> Optional[ResolverOutputSchema]:
         """Return the primary URL as-is with preserved metadata"""
         result = ResolverOutputSchema(**params.model_dump())
-        result.resolved_url = params.url
+        if not result.extra:
+            result.extra = {}
+        if not hasattr(result.extra, "original_url"):
+            result.extra["original_url"] = []
+        result.extra["original_url"].append(params.url)
         result.resolvers.append(self.__class__.__name__)
         return result

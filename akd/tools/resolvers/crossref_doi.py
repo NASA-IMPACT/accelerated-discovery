@@ -36,17 +36,12 @@ class CrossRefDoiResolverInputSchema(ResolverInputSchema):
     )
 
 
-class CrossRefDoiResolverOutputSchema(ResolverOutputSchema):
+class CrossRefDoiResolverOutputSchema(CrossRefDoiResolverInputSchema, ResolverOutputSchema):
     """
     Output schema for CrossRef DOI resolver.
     Inherits from ResolverOutputSchema to ensure compatibility with search results.
     """
-
-    # override to make url optional
-    url: Optional[HttpUrl] = Field(
-        None,
-        description="URL of the article",
-    )
+    pass 
 
 
 class CrossRefDoiResolverConfig(ArticleResolverConfig):

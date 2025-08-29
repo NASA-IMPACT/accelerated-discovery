@@ -38,55 +38,47 @@ class ResearchArticleResolver(BaseArticleResolver):
 
         Once the URL is transformed, do NOT replace it again.
         """
-        output = ResolverInputSchema(**params.model_dump())
+        result = resolver_input = ResolverInputSchema(**params.model_dump())
 
-        is_url_resolved = bool(getattr(params, "resolved_url", None))
+        is_url_resolved = False
         is_doi_resolved = bool(getattr(params, "doi", None) and params.doi != 'None') 
 
         for resolver in self.resolvers:
-            if is_url_resolved and is_doi_resolved:
-                break
+            # if is_url_resolved and is_doi_resolved:
+            #     break
 
             resolver_name = resolver.__class__.__name__
             try:
                 if self.debug:
-                    logger.debug(f"Trying resolver={resolver_name} for url={params.url}")
+                    logger.debug(f"Trying resolver={resolver_name} for url={resolver_input.url}")
 
-                result = await resolver.arun(output)
+                result = await resolver.arun(resolver_input)
 
                 if not result:
                     continue
 
-                # TODO:: this will call most of the resolvers: doi until resolved by crossref, so we should do something about this 
-                if (not is_url_resolved and getattr(result, "resolved_url", None)):
-                    if output.url is None:
-                        output.url = result.resolved_url
-                    output.resolved_url = result.resolved_url
-                    is_url_resolved = True 
-                    if not getattr(output, "resolvers", None):
-                        output.resolvers = [resolver_name]
-                    else:
-                        output.resolvers = result.resolvers
 
+                # TODO:: this will call most of the resolvers: doi until resolved by crossref, so we should do something about this
 
+                # if original URL is not None, then only consider URL resolved
+                # resolver run successfully 
+                if resolver_name in result.resolvers:
+                    # check if url had been resolved = if it changed then original_url is not None
+                    if not is_url_resolved and result.extra.get("original_url", None) is not None:
+                        is_url_resolved = True 
 
-                if not is_doi_resolved and getattr(result, "doi", None) and result.doi != 'None':
-                    output.doi = result.doi
-                    is_doi_resolved = True
-                    if not getattr(output, "resolvers", None):
-                        output.resolvers = [resolver_name]
-                    else:
-                        output.resolvers = result.resolvers
+                    # check if doi had been resolved
+                    if not is_doi_resolved and getattr(result, "doi", None) and result.doi != 'None':
+                        is_doi_resolved = True
 
-                        
-                if not getattr(output, "authors", None) and getattr(result, "authors", None):
-                    output.authors = result.authors
+                resolver_input = result
 
                 if is_url_resolved and is_doi_resolved:
                     if self.debug:
                         logger.debug(
                             f"Stopping after {resolver_name}: "
-                            f"Transformed URL={output.url}, DOI={output.doi}"
+                            f"Transformed URL={params.url} to {result.url}, "
+                            f"Transformed DOI={params.doi} to {result.doi}",
                         )
                     break
 
@@ -95,4 +87,4 @@ class ResearchArticleResolver(BaseArticleResolver):
                     logger.error(f"Error using resolver={resolver_name}: {e}")
                 continue
 
-        return ResolverOutputSchema(**output.model_dump())
+        return result
