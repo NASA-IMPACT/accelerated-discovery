@@ -245,8 +245,6 @@ class PyPaperBotScraper(ScraperToolBase):
 
     def _extract_doi_from_url(self, url: str) -> Optional[str]:
         """Extract DOI from URL using simple pattern matching."""
-        import re
-
         # Common DOI patterns
         doi_patterns = [
             r"10\.\d{4,}/[^\s\"<>#]+",  # Standard DOI format
