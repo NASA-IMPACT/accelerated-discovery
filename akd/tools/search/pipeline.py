@@ -235,10 +235,10 @@ class SearchPipeline(SearchTool):
         try:
             # Step 1: URL resolution (always performed)
             resolved_result = await self._resolve_essential_metadata(result)
-
+            
+            scraping_url = resolved_result.url
             scraped_content = None
             if self.enable_scraping:
-                scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else (resolved_result.pdf_url if hasattr(resolved_result, 'pdf_url') and resolved_result.pdf_url else resolved_result.url)
                 scraped_content = await self._scrape_content(scraping_url)
             else:
                 if self.debug:
@@ -269,16 +269,15 @@ class SearchPipeline(SearchTool):
                 "scraping_performed": self.enable_scraping,
                 "full_text_scraped": scraped_content is not None,
                 "resolver_used": resolved_result.resolvers if hasattr(resolved_result, 'resolvers') else None,
-                "resolved_url": resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') else None,
+                "original_url": result.url,
             })
                 
             if self.enable_scraping:
                 enhanced_result.extra["scraper_used"] = self.scraper.__class__.__name__
+                
                 if scraped_content:
-                    scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else resolved_result.url
                     enhanced_result.extra["scraped_url"] = scraping_url
                 else:
-                    scraping_url = resolved_result.resolved_url if hasattr(resolved_result, 'resolved_url') and resolved_result.resolved_url else resolved_result.url
                     enhanced_result.extra["scraping_attempted_url"] = scraping_url
 
             return enhanced_result
@@ -298,6 +297,7 @@ class SearchPipeline(SearchTool):
                 "scraping_performed": self.enable_scraping,
                 "full_text_scraped": False,
                 "processing_error": str(e),
+                "scraping_attempted_url": scraping_url,
             })
 
             return enhanced_result

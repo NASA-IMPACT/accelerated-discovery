@@ -44,14 +44,12 @@ class ResearchArticleResolver(BaseArticleResolver):
         is_doi_resolved = bool(getattr(params, "doi", None) and params.doi != 'None') 
 
         for resolver in self.resolvers:
-            # if is_url_resolved and is_doi_resolved:
-            #     break
-
             resolver_name = resolver.__class__.__name__
             try:
                 if self.debug:
                     logger.debug(f"Trying resolver={resolver_name} for url={resolver_input.url}")
-
+                
+                
                 result = await resolver.arun(resolver_input)
 
                 if not result:
@@ -60,16 +58,10 @@ class ResearchArticleResolver(BaseArticleResolver):
 
                 # TODO:: this will call most of the resolvers: doi until resolved by crossref, so we should do something about this
 
-                # if original URL is not None, then only consider URL resolved
-                # resolver run successfully 
-                if resolver_name in result.resolvers:
-                    # check if url had been resolved = if it changed then original_url is not None
-                    if not is_url_resolved and result.extra.get("original_url", None) is not None:
-                        is_url_resolved = True 
+                if result.extra and "is_url_resolved" in result.extra:
+                    is_url_resolved = result.extra["is_url_resolved"]
 
-                    # check if doi had been resolved
-                    if not is_doi_resolved and getattr(result, "doi", None) and result.doi != 'None':
-                        is_doi_resolved = True
+                is_doi_resolved = bool(getattr(result, "doi", None) and result.doi != 'None')
 
                 resolver_input = result
 

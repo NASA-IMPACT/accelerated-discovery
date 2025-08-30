@@ -43,10 +43,10 @@ class MockResolver:
         result_data = {
             "query": params.query,
             "title": params.title,
-            "url": params.url,
+            "url": self.resolved_url or params.url,
             "content": params.content,
-            "resolved_url": self.resolved_url,
             "resolvers": ["MockResolver"]
+            
         }
         return ResolverOutputSchema(**result_data)
 
@@ -187,7 +187,7 @@ class TestSearchPipeline:
         result = sample_search_results[0]
         resolved = await pipeline._resolve_essential_metadata(result)
         
-        assert str(resolved.resolved_url) == "http://resolved.example.com/"
+        assert str(resolved.url) == "http://resolved.example.com/"
         assert resolved.resolvers == ["MockResolver"]
     
     @pytest.mark.asyncio
@@ -369,9 +369,8 @@ class TestSearchPipeline:
         enhanced = await pipeline._process_single_result(result)
         
         assert enhanced.title == result.title
-        assert enhanced.extra["resolved_url"] is None
         assert enhanced.extra["resolver_used"] == []
-        # scraping is performed (on original url) but fails 
+        # scraping is performed (on original url) but fails
         assert enhanced.extra["scraping_performed"] is True
         assert enhanced.extra["full_text_scraped"] is False
     

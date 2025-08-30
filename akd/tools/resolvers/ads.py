@@ -31,6 +31,8 @@ class ADSResolver(BaseArticleResolver):
         Returns:
             Optional[ResolverOutputSchema]: The resolved result with DOI URL or direct PDF URL if found, None otherwise
         """
+
+        # check if other resolver has already resolved the URL
         url = str(params.url)
         try:
             self.validate_url(url)
@@ -53,9 +55,10 @@ class ADSResolver(BaseArticleResolver):
                 if doi_tag:
                     doi = doi_tag["content"]
                     result = ResolverOutputSchema(**params.model_dump())
-                    result.resolved_url = HttpUrl(f"https://doi.org/{doi}")
                     result.doi = doi
                     result.resolvers.append(self.__class__.__name__)
+                    result.extra["is_url_resolved"] = True
+                    result.url = HttpUrl(f"https://doi.org/{doi}")
                     return result
 
                 # Look for the bibcode in meta tags
@@ -68,8 +71,12 @@ class ADSResolver(BaseArticleResolver):
                     pdf_response = await client.head(pdf_url)
                     if pdf_response.status_code == 200:
                         result = ResolverOutputSchema(**params.model_dump())
-                        result.resolved_url = HttpUrl(pdf_url)
+                        
                         result.resolvers.append(self.__class__.__name__)
+                        if not result.extra:
+                            result.extra = {}
+                        result.extra["is_url_resolved"] = True
+                        result.url = HttpUrl(pdf_url)
                         return result
 
                 # If no DOI or direct PDF found, look for other PDF links
@@ -84,11 +91,7 @@ class ADSResolver(BaseArticleResolver):
                     result = ResolverOutputSchema(**params.model_dump())
                     if not result.extra:
                         result.extra = {}
-                    
-                    if not hasattr(result.extra, "original_url"):
-                        result.extra["original_url"] = []
-
-                    result.extra["original_url"].append(params.url)
+                    result.extra["is_url_resolved"] = True
                     result.url = HttpUrl(urljoin(url, pdf_links[0]))
                     result.resolvers.append(self.__class__.__name__)
                     return result

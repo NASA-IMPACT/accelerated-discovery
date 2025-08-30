@@ -34,10 +34,7 @@ class ArxivResolver(BaseArticleResolver):
             result = ResolverOutputSchema(**params.model_dump())
             if not result.extra:
                 result.extra = {}
-            if not hasattr(result.extra, "original_url"):
-                result.extra["original_url"] = []
-
-            result.extra["original_url"].append(params.url)
+            result.extra["is_url_resolved"] = True
             result.url = pdf_url
             result.doi = doi
             result.resolvers.append(self.__class__.__name__)

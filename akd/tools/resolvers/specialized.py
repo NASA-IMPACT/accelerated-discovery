@@ -27,10 +27,7 @@ class PDFUrlResolver(BaseArticleResolver):
             if not result.extra:
                 result.extra = {}
             
-            if not hasattr(result.extra, "original_url"):
-                result.extra["original_url"] = []
-
-            result.extra["original_url"].append(params.url)
+            result.extra["is_url_resolved"] = True
             result.url = params.pdf_url
             result.resolvers.append(self.__class__.__name__)
             return result
@@ -75,9 +72,8 @@ class DOIResolver(BaseArticleResolver):
             result = ResolverOutputSchema(**params.model_dump())
             if not result.extra:
                 result.extra = {}
-            if not hasattr(result.extra, "original_url"):
-                result.extra["original_url"] = []
-            result.extra["original_url"].append(params.url)
+            
+            result.extra["is_url_resolved"] = True
             result.url = HttpUrl(f"https://doi.org/{params.doi}")
             result.resolvers.append(self.__class__.__name__)
             return result
