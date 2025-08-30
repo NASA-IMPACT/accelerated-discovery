@@ -32,7 +32,10 @@ class ArxivResolver(BaseArticleResolver):
             doi = params.doi or f"10.48550/arXiv.{paper_id}"
 
             result = ResolverOutputSchema(**params.model_dump())
-            result.resolved_url = pdf_url
+            if not result.extra:
+                result.extra = {}
+            result.extra["is_url_resolved"] = True
+            result.url = pdf_url
             result.doi = doi
             result.resolvers.append(self.__class__.__name__)
             return result
