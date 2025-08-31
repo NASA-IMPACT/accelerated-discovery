@@ -49,11 +49,7 @@ class PyPaperBotScraperConfig(ScraperToolConfig):
         description="Use title-based query fallback if DOI cannot be extracted",
     )
 
-    # Anna's Archive configuration (SciDB only)
-    annas_archive_mirror: str = Field(
-        default="https://annas-archive.se/",
-        description="Anna's Archive (SciDB) mirror URL for PyPaperBot",
-    )
+    # Network configuration for PyPaperBot
     proxy: Optional[str] = Field(
         default=None,
         description="Comma-separated proxies string understood by PyPaperBot --proxy",
@@ -71,9 +67,10 @@ class PyPaperBotScraperConfig(ScraperToolConfig):
 class PyPaperBotScraper(ScraperToolBase):
     """
     Scraper that uses PyPaperBot package to fetch full-text PDFs via DOI or query
-    from Anna's Archive (SciDB), then converts the file to Markdown using Docling.
+    using pypaperbot, then converts the file to Markdown using Docling.
 
     Reference: ferru97/PyPaperBot on GitHub.
+    Currently, using https://github.com/NISH1001/PyPaperBot/tree/develop fork that fixes google scholar
     """
 
     input_schema = ScraperToolInputSchema
@@ -121,8 +118,7 @@ class PyPaperBotScraper(ScraperToolBase):
                 str(out_dir),
             ]
 
-            # Add Anna's Archive mirror (required)
-            cmd.extend(["--annas-archive-mirror", self.config.annas_archive_mirror])
+            # PyPaperBot will use default mirrors automatically
 
             # Add optional parameters from config
             if self.config.proxy:
@@ -197,8 +193,7 @@ class PyPaperBotScraper(ScraperToolBase):
                 str(out_dir),
             ]
 
-            # Add Anna's Archive mirror (required)
-            cmd.extend(["--annas-archive-mirror", self.config.annas_archive_mirror])
+            # PyPaperBot will use default mirrors automatically
 
             # Add optional parameters from config
             if self.config.proxy:
