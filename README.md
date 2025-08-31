@@ -72,6 +72,9 @@ uv sync --extra dev
 # For local development (includes marimo and other local tools)
 uv sync --extra dev --extra local
 
+# For ML development (includes pandas, sentence-transformers, docling, deepeval)
+uv sync --extra ml
+
 # Setup environment variables
 cp .env.example .env
 # Edit .env with your API keys and configurations
