@@ -23,10 +23,6 @@ class CMRGranuleSearchInputSchema(DataSearchToolInputSchema):
         ...,
         description="Collection concept ID (e.g., C123456-LPDAAC_ECS)",
     )
-    producer_granule_id: Optional[str] = Field(
-        None,
-        description="Producer-assigned granule ID for specific file search",
-    )
     downloadable: Optional[bool] = Field(
         None,
         description="Return only downloadable granules",
@@ -137,10 +133,11 @@ class CMRGranuleSearchTool(
                 page_info={
                     "page_size": page_size_returned,
                     "page_number": page_number,
-                    "total_pages": (total_hits + page_size_returned - 1)
-                    // page_size_returned
-                    if page_size_returned > 0
-                    else 0,
+                    "total_pages": (
+                        (total_hits + page_size_returned - 1) // page_size_returned
+                        if page_size_returned > 0
+                        else 0
+                    ),
                 },
             )
 
