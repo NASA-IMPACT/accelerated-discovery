@@ -487,6 +487,7 @@ class TestResearchArticleResolver:
             assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
             assert "ArxivResolver" in result.resolvers
 
+
     @pytest.mark.asyncio
     async def test_pdf_resolver_wins_when_arxiv_unavailable(
         self,
@@ -702,85 +703,3 @@ class TestHTTPValidation:
         result = await resolver_without_validation.arun(input_schema)
         assert str(result.url) == "https://example.com/"  # HttpUrl normalizes
 
-
-# Enable pytest collection of test classes
-# Classes starting with "Test" are automatically collected by pytest
-
-
-if __name__ == "__main__":
-    # Run a comprehensive integration test if executed directly
-    async def run_integration_test():
-        """Run integration test demonstrating realistic resolver behavior."""
-        print("🧪 Testing ArXiv URL Resolution...")
-
-        # Test ArxivResolver directly
-        arxiv_resolver = ArxivResolver(debug=True)
-        arxiv_input = ResolverInputSchema(url="https://arxiv.org/abs/2411.08181")
-
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_client.return_value.__aenter__.return_value.head = AsyncMock(
-                return_value=mock_response,
-            )
-
-            arxiv_result = await arxiv_resolver.arun(arxiv_input)
-            print(f"✅ ArxivResolver: {arxiv_input.url} → {arxiv_result.url}")
-
-            # Test the exact configuration from the user request
-            print("\n🧪 Testing Original User Configuration...")
-            resolver = ResearchArticleResolver(
-                PDFUrlResolver(),
-                DOIResolver(),
-                IdentityResolver(),
-                debug=True,
-            )
-
-            # Test with arXiv data (realistic scenario)
-            test_input = ResolverInputSchema(
-                url="https://arxiv.org/abs/2411.08181",
-                pdf_url="https://arxiv.org/pdf/2411.08181.pdf",
-                doi="10.48550/arXiv.2411.08181",
-            )
-
-            result = await resolver.arun(test_input)
-            print("✅ Original Config Test:")
-            print(f"   Input URL: {test_input.url}")
-            print(f"   PDF URL: {test_input.pdf_url}")
-            print(f"   DOI: {test_input.doi}")
-            print(f"   → Resolved: {result.url}")
-            print(f"   → Via: {result.resolvers}")
-
-            # Test with enhanced configuration including ArxivResolver
-            print("\n🧪 Testing Enhanced Configuration...")
-            enhanced_resolver = ResearchArticleResolver(
-                ArxivResolver(),
-                PDFUrlResolver(),
-                DOIResolver(),
-                IdentityResolver(),
-                debug=True,
-            )
-
-            enhanced_result = await enhanced_resolver.arun(test_input)
-            print("✅ Enhanced Config Test:")
-            print(f"   → Resolved: {enhanced_result.url}")
-            print(f"   → Via: {enhanced_result.resolvers}")
-
-            # Test DOI-only scenario
-            print("\n🧪 Testing DOI-only Resolution...")
-            doi_input = ResolverInputSchema(
-                url="https://example.com",
-                doi="10.48550/arXiv.2411.08181",
-            )
-            doi_result = await resolver.arun(doi_input)
-            print(f"✅ DOI Test: {doi_input.doi} → {doi_result.url}")
-
-            # Test fallback scenario
-            print("\n🧪 Testing Fallback to Identity...")
-            fallback_input = ResolverInputSchema(url="https://example.com")
-            result2 = await resolver.arun(fallback_input)
-            print(
-                f"✅ Fallback: {fallback_input.url} → {result2.url} via {result2.resolvers}",
-            )
-
-    asyncio.run(run_integration_test())
