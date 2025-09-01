@@ -20,7 +20,7 @@ riskgroups:
 risks:
 - id: compliance
   name: Compliance
-  description: Ensuring that literature agent outputs follow applicable institutional,
+  description: Ensuring that scientific agent outputs follow applicable institutional,
     ethical, legal, and publication guidelines.
   url: ""
   dateCreated: "2025-08-27"
@@ -85,7 +85,7 @@ risks:
   concern: Toxic language or bias can damage the user experience, propagate harmful stereotypes, and violate ethical norms.
 - id: out-of-distribution-checks
   name: Out-of-Distribution Checks
-  description: Recognizing when inputs or prompts fall outside the model’s supported scientific domain or training distribution.
+  description: Recognizing when inputs or prompts fall outside the model's supported scientific domain or training distribution.
   url: ""
   dateCreated: "2025-08-27"
   dateModified: "2025-08-27"
@@ -94,7 +94,7 @@ risks:
   tag: out-of-distribution-checks
   type: inference
   descriptor: amplified by generative AI
-  concern: Without detection, agents may hallucinate or deliver erroneous information, as they’re unreliable in unfamiliar contexts.
+  concern: Without detection, agents may hallucinate or deliver erroneous information, as the're unreliable in unfamiliar contexts.
 - id: jailbreak-prevention
   name: Jailbreak Prevention
   description: Protecting against attempts to bypass safety constraints or provoke forbidden behavior in the agent.
