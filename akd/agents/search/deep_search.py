@@ -309,11 +309,24 @@ class DeepLitSearchAgent(LitBaseAgent):
             logger.debug(f"Triage decision: {triage_output.routing_decision}")
             logger.debug(f"Reasoning: {triage_output.reasoning}")
 
-        return {
-            "routing_decision": triage_output.routing_decision,
-            "needs_clarification": triage_output.needs_clarification,
-            "reasoning": triage_output.reasoning,
-        }
+        try:
+            return {
+                "routing_decision": triage_output.routing_decision,
+                "needs_clarification": triage_output.needs_clarification,
+                "reasoning": triage_output.reasoning,
+            }
+        except Exception as e:
+            if self.debug:
+                logger.warning(
+                    f"Triage component failed: {e}. Using fallback behavior.",
+                )
+
+            # Fallback: assume no clarification needed, proceed with research
+            return {
+                "routing_decision": "research",
+                "needs_clarification": False,
+                "reasoning": "Triage component failed - proceeding with fallback behavior",
+            }
 
     async def _handle_clarification(
         self,
@@ -398,6 +411,14 @@ class DeepLitSearchAgent(LitBaseAgent):
             new_results = self._deduplicate_results(search_results, all_results)
             all_results.extend(new_results)
 
+            # Cap total results to prevent memory issues
+            if len(all_results) > 50:
+                all_results = all_results[:50]
+
+                if self.debug:
+                    logger.debug(
+                        f"Capped results: keeping first {len(all_results)} results",
+                    )
             # Evaluate quality
             if new_results:
                 quality_score = await self._evaluate_research_quality(
@@ -458,7 +479,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         if self.debug:
             logger.debug(
-                f"QueryAgent input preview | instructions: {instructions[:200]}"
+                f"QueryAgent input preview | instructions: {instructions[:200]}",
             )
 
         query_output = await self.query_agent.arun(query_input)
@@ -468,7 +489,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             for i, query in enumerate(query_output.queries, 1):
                 logger.info(f"  {i}. '{query}'")
             logger.debug(
-                f"QueryAgent output preview | first query: {(query_output.queries[0] if query_output.queries else '')[:200]}"
+                f"QueryAgent output preview | first query: {(query_output.queries[0] if query_output.queries else '')[:200]}",
             )
 
         return query_output.queries
@@ -482,26 +503,64 @@ class DeepLitSearchAgent(LitBaseAgent):
         """Execute searches using available search tools."""
         all_results = []
 
-        search_input = self.search_tool.input_schema(
-            queries=queries,
-            max_results=20,
-            category="science",
+        # Launch all configured search tools concurrently
+        tasks: List[asyncio.Task] = []
+        tool_names: List[str] = []
+        for tool in getattr(self, "search_tools", []):
+            try:
+                # Use each tool's own input schema to ensure compatibility
+                tool_input = tool.input_schema(
+                    queries=queries,
+                    max_results=20,
+                    category="science",
+                )
+                tasks.append(asyncio.create_task(tool.arun(tool_input)))
+                tool_names.append(type(tool).__name__)
+            except Exception as e:
+                logger.warning(
+                    f"Skipping tool {type(tool).__name__} due to init error: {e}",
+                )
+
+        if tasks:
+            results_or_errors = await asyncio.gather(*tasks, return_exceptions=True)
+            for idx, res in enumerate(results_or_errors):
+                name = tool_names[idx] if idx < len(tool_names) else f"Tool#{idx}"
+                if isinstance(res, Exception):
+                    logger.warning(f"{name} failed: {res}")
+                    continue
+                try:
+                    all_results.extend(res.results)
+                except Exception as e:  # defensive against unexpected shapes
+                    logger.warning(f"{name} unexpected search result shape: {e}")
+
+        all_results = list(
+            map(lambda r: DeepSearchResultItem(**r.model_dump()), all_results),
         )
 
-        primary_results = await self.search_tool.arun(search_input)
-        all_results.extend(primary_results.results)
-
-        # Search with Semantic Scholar if enabled
-        if self.semantic_scholar_tool and self.config.use_semantic_scholar:
-            ss_input = SemanticScholarSearchToolInputSchema(
-                queries=queries,
-                max_results=20,
-                category="science",
-            )
-            ss_results = await self.semantic_scholar_tool.arun(ss_input)
-            all_results.extend(ss_results.results)
-
-        all_results = list(map(lambda r: DeepSearchResultItem(**r.dict()), all_results))
+        # Optional source validation (ISSN whitelist) handled intrinsically by the validator
+        if self._source_validator and all_results:
+            try:
+                input_payload = self._source_validator.input_schema(
+                    search_results=all_results,
+                )
+                validation_output = await self._source_validator.arun(input_payload)
+                # Keep only items that passed validation
+                filtered: List[DeepSearchResultItem] = []
+                for item, v in zip(all_results, validation_output.validated_results):
+                    if v.is_whitelisted:
+                        filtered.append(item)
+                if self.debug:
+                    logger.debug(
+                        "Source validation filter: kept %d of %d results",
+                        len(filtered),
+                        len(all_results),
+                    )
+                all_results = filtered
+            except Exception as e:
+                logger.warning(
+                    f"Source validation failed; dropping results due to strict validation mode: {e}",
+                )
+                all_results = []
         # Apply per-link relevancy assessment if enabled
         if self.link_relevancy_assessor and all_results:
             if self.debug:
@@ -532,12 +591,15 @@ class DeepLitSearchAgent(LitBaseAgent):
                     logger.debug(
                         f"Relevancy assessment summary: {assessment_output.assessment_summary}",
                     )
-                return assessment_output.filtered_results
+                all_results = assessment_output.filtered_results
             except Exception as e:
                 logger.warning(f"Error in relevancy assessment: {e}")
 
         # Fetch full content for high-relevancy results if enabled
         if getattr(self, "scraper", None) and all_results:
+            logger.info(
+                f"Fetching full content for high-relevancy {len(all_results)} results...",
+            )
             all_results = await self._fetch_full_content_for_high_relevancy(all_results)
 
         return all_results
@@ -567,10 +629,10 @@ class DeepLitSearchAgent(LitBaseAgent):
                 if getattr(self, "resolver", None) is not None:
                     try:
                         resolved = await self.resolver.arun(
-                            self.resolver.input_schema(**result.model_dump())
+                            self.resolver.input_schema(**result.model_dump()),
                         )
                         target_url = str(
-                            resolved.resolved_url or resolved.url or result.url
+                            resolved.resolved_url or resolved.url or result.url,
                         )
                         if getattr(resolved, "doi", None):
                             result.doi = resolved.doi
@@ -586,7 +648,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
                 # Scrape once using the composite scraper
                 web_content = await self.scraper.arun(
-                    ScraperToolInputSchema(url=target_url)
+                    ScraperToolInputSchema(url=target_url),
                 )
                 if (
                     web_content
@@ -647,14 +709,14 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         if self.debug:
             logger.debug(
-                f"RelevancyAgent input preview | query: {query[:200]} | content: {content[:200]}"
+                f"RelevancyAgent input preview | query: {query[:200]} | content: {content[:200]}",
             )
 
         rubric_output = await self.relevancy_agent.arun(rubric_input)
 
         if self.debug:
             logger.debug(
-                f"RelevancyAgent output preview | topic_alignment: {rubric_output.topic_alignment} | content_depth: {rubric_output.content_depth}"
+                f"RelevancyAgent output preview | topic_alignment: {rubric_output.topic_alignment} | content_depth: {rubric_output.content_depth}",
             )
 
         # Calculate quality score from rubrics
@@ -710,7 +772,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         if self.debug:
             logger.debug(
-                f"FollowUpQueryAgent input preview | content: {enhanced_content[:200]}"
+                f"FollowUpQueryAgent input preview | content: {enhanced_content[:200]}",
             )
 
         followup_output = await self.followup_query_agent.arun(followup_input)
@@ -722,7 +784,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 marker = "🎯" if is_original else "🔄"
                 logger.info(f"  {i}. {marker} '{query}'")
             logger.debug(
-                f"FollowUpQueryAgent output preview | first query: {(followup_output.followup_queries[0] if followup_output.followup_queries else '')[:200]}"
+                f"FollowUpQueryAgent output preview | first query: {(followup_output.followup_queries[0] if followup_output.followup_queries else '')[:200]}",
             )
 
         return followup_output.followup_queries
