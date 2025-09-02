@@ -10,7 +10,6 @@ from akd.configs.storm_config import STORM_SETTINGS, StormSettings
 from .config import initialise_storm_config
 from .nodes import (
     conduct_interviews,
-    hitl_editors,
     index_references,
     initialize_research,
     refine_outline,
@@ -60,11 +59,6 @@ class StormOutputSchema(OutputSchema):
 class StormAgentConfig(BaseAgentConfig):
     """Configuration for Storm Agent"""
 
-    hitl: bool = Field(
-        False,
-        description="Whether to set the agent in HITL mode.",
-    )
-
     storm_settings: StormSettings | None = Field(
         default_factory=lambda: STORM_SETTINGS,
         description="The configuration for the storm agent.",
@@ -88,7 +82,6 @@ class StormAgent(BaseAgent):
 
         nodes = [
             ("init_research", initialize_research),
-            ("hitl_editors", hitl_editors) if self.hitl else None,
             ("conduct_interviews", conduct_interviews),
             ("refine_outline", refine_outline),
             ("index_references", index_references),
