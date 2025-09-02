@@ -151,7 +151,7 @@ class AbstractBase[
         self.config = config
         self._kwargs = kwargs
         self._post_init()
-        self.debug = getattr(config, "debug", False) or debug
+        self.debug = debug or getattr(config, "debug", False)
 
     def _post_init(self) -> None:
         """
