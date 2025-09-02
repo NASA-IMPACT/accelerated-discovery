@@ -38,7 +38,7 @@ class ResearchArticleResolver(BaseArticleResolver):
 
         Once the URL is transformed, do NOT replace it again.
         """
-        result = resolver_input = ResolverInputSchema(**params.model_dump())
+        result = resolver_input = ResolverOutputSchema(**params.model_dump())
 
         is_url_resolved = False
         is_doi_resolved = bool(getattr(params, "doi", None) and params.doi != 'None') 
@@ -79,4 +79,5 @@ class ResearchArticleResolver(BaseArticleResolver):
                     logger.error(f"Error using resolver={resolver_name}: {e}")
                 continue
 
-        return result
+
+        return result 
