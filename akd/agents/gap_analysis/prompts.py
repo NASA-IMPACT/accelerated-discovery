@@ -1,11 +1,10 @@
 from langchain_core.prompts import ChatPromptTemplate
 
-
 # =============================================================================
 # Groups scientific paper section titles into hierarchical section clusters
 # =============================================================================
 
-section_grouper_inst = '''I have a structured list of section titles from a scientific paper, and I want you to group them into logical sections. Each group should represent a distinct part of the document, starting with the title, followed by related subsections if present. Here's an example:
+section_grouper_inst = """I have a structured list of section titles from a scientific paper, and I want you to group them into logical sections. Each group should represent a distinct part of the document, starting with the title, followed by related subsections if present. Here's an example:
 
 Input Example:
 ['KnowledgeHub: An End-to-End Tool for Assisted Scientific Discovery',
@@ -25,23 +24,23 @@ Output Example:
 [['KnowledgeHub: An End-to-End Tool for Assisted Scientific Discovery'], ['Abstract'], ['1 Introduction'], ['2 System Description', '2.1 Document Ingestion', '2.2 Annotation', '2.3 Question Answering'], ['3 Use-case: Knowledge Discovery for the Battery Domain'], ['4 Conclusion'], ['Ethical Statement'], ['Acknowledgments'], ['References']]
 
 Make sure to preserve the hierarchy of sections and subsections. ONLY provide the output.
-Now, group the following lists in the same way.'''
+Now, group the following lists in the same way."""
 
 
 section_grouper_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", section_grouper_inst),
-            ("user", "{input_sections}"),
-        ]
-    )
+    [
+        ("system", section_grouper_inst),
+        ("user", "{input_sections}"),
+    ],
+)
 
 
 # =============================================================================
-# Classifies research paper section titles into predefined key categories like 
+# Classifies research paper section titles into predefined key categories like
 # introduction, methodology, and conclusion.
 # =============================================================================
 
-section_classifier_inst = """You are an expert in text categorization. Your task is to group section titles from research papers into one of the following key sections: 
+section_classifier_inst = """You are an expert in text categorization. Your task is to group section titles from research papers into one of the following key sections:
 
 ## Key Sections
 `['introduction', 'related work or background', 'methodology', 'experiments, models and datasets', 'results and discussions', 'limitations', 'future work', 'conclusion', 'appendix', 'misc']`
@@ -84,15 +83,15 @@ Only provide a JSON dictionary as output. Do not include any explanation or text
 """
 
 section_classifier_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", section_classifier_inst),
-            ("user", "{sections_to_group}"),
-        ]
-    )
+    [
+        ("system", section_classifier_inst),
+        ("user", "{sections_to_group}"),
+    ],
+)
 
 
 # =============================================================================
-# Selects relevant section triples from a paper’s relations to answer a given 
+# Selects relevant section triples from a paper’s relations to answer a given
 # query based on typical scientific structure.
 # =============================================================================
 
@@ -116,7 +115,7 @@ For example:
 
 Examples:
 
-Query: "Identify the main contributions of the paper"  
+Query: "Identify the main contributions of the paper"
 Relations:
 [('paper', 'contains_section', 'related work or background'),
  ('paper', 'contains_section', 'results and discussions'),
@@ -129,15 +128,16 @@ Output: [('paper', 'contains_section', 'introduction'), ('paper', 'contains_sect
 
 traverse_relations_input = "Query: {query}\nRelation: {relations}"
 
-traverse_relations_prompt = ChatPromptTemplate.from_messages([
-            ("system", traverse_relations_inst),
-            ("user", traverse_relations_input)
-        ]
-    )
+traverse_relations_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", traverse_relations_inst),
+        ("user", traverse_relations_input),
+    ],
+)
 
 
 # =============================================================================
-# Selects subsections likely to contain information relevant to answering a 
+# Selects subsections likely to contain information relevant to answering a
 # specific research question.
 # =============================================================================
 
@@ -168,32 +168,38 @@ Output: ['experiments, models and datasets contains_subsection A. Experimental S
 """
 
 select_subsection_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", select_subsection_inst),
-            ("user", "Question: {query}\nList:\n{titles}\n")
-        ]
-    )
+    [
+        ("system", select_subsection_inst),
+        ("user", "Question: {query}\nList:\n{titles}\n"),
+    ],
+)
 
 
 # =============================================================================
-# Generates an answer to a question using only the content from a specific 
+# Generates an answer to a question using only the content from a specific
 # document section.
 # =============================================================================
 
 gen_answer_prompt = ChatPromptTemplate.from_messages(
     [
-        ("system", "Answer the following question based on the provided content from a document section. Use only the information from the content and avoid making assumptions."),
-        ("user", "Question: {query}\n\nSection Title: {section_title}\nSection Type: {node_type}\nSection Content: {section_content}\n\nAnswer:"),
-    ]
+        (
+            "system",
+            "Answer the following question based on the provided content from a document section. Use only the information from the content and avoid making assumptions.",
+        ),
+        (
+            "user",
+            "Question: {query}\n\nSection Title: {section_title}\nSection Type: {node_type}\nSection Content: {section_content}\n\nAnswer:",
+        ),
+    ],
 )
 
 
 # =============================================================================
-# Generates a well-structured, cited summary answer to a query using information 
+# Generates a well-structured, cited summary answer to a query using information
 # from multiple source-based responses.
 # =============================================================================
 
-summarise_answer_inst = '''You are a helpful AI assistant skilled at crafting detailed, engaging, and well-structured answers. You excel at summarizing and extracting relevant information to generate accurate and clear answers.
+summarise_answer_inst = """You are a helpful AI assistant skilled at crafting detailed, engaging, and well-structured answers. You excel at summarizing and extracting relevant information to generate accurate and clear answers.
 
 Given a query and a dictionary where the key is a `source_id` and the value is an answer generated from the `source` for the query, your task is to provide answers that are:
 - **Informative and relevant**: Thoroughly address the user's query using the data present in the sources.
@@ -203,13 +209,13 @@ Given a query and a dictionary where the key is a `source_id` and the value is a
 ### Formatting Instructions
 - **Tone and Style**: Maintain a neutral, journalistic tone with engaging narrative flow.
 - **Markdown Usage**: Format your response with Markdown for clarity. Use headings, subheadings, bold text, and italicized words when needed to enhance readability.
-- **Length and Depth**: Avoid superficial responses and strive for depth without unnecessary repetition.'''
+- **Length and Depth**: Avoid superficial responses and strive for depth without unnecessary repetition."""
 
 summarise_answer_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", summarise_answer_inst),
         ("user", "Query: {query}\nSources and context:\n{attributed_answer_list}"),
-    ]
+    ],
 )
 
 # =============================================================================
@@ -221,7 +227,8 @@ Are there areas where foundational knowledge is missing, outdated, or fragmented
 Does the research acknowledge uncertainties, ambiguities, or areas still poorly understood? \
 Are researchers calling for further conceptual or descriptive exploration?"""
 
-evidence_gap_query = """Is there a shortage of robust empirical evidence—such as experiments, trials, longitudinal studies, or real-world data—to support, challenge, or validate the core claims made in the literature? \
+evidence_gap_query = """Is there enough strong evidence such as experiments, trials, or long-term studies to support the main claims in the literature? \
+Is there enough evidence to challenge or test the validity of these claims in real-world settings? \
 Are theoretical assertions made without sufficient quantitative or qualitative backing? \
 Do review papers or authors explicitly note the need for more primary data collection or stronger empirical validation?"""
 
@@ -242,9 +249,11 @@ Are global or comparative perspectives missing? \
 Do authors indicate that findings may not generalize beyond certain locations? \
 Is there a call for more region-specific or cross-cultural research?"""
 
-gap_query_map = {"knowledge": knowledge_gap_query,
-                 "evidence": evidence_gap_query,
-                 "theoretical": theoretical_gap_query,
-                 "methodological": methodological_gap_query,
-                 "population": population_gap_query,
-                 "geographical": geographical_gap_query}
+gap_query_map = {
+    "knowledge": knowledge_gap_query,
+    "evidence": evidence_gap_query,
+    "theoretical": theoretical_gap_query,
+    "methodological": methodological_gap_query,
+    "population": population_gap_query,
+    "geographical": geographical_gap_query,
+}
