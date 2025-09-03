@@ -97,24 +97,25 @@ class SearchPipeline(SearchTool):
             self.message = message
 
 
-    def _default_research_article_resolver(self, debug: bool = False) -> ResearchArticleResolver:
+    @property
+    def _default_research_article_resolver(self) -> ResearchArticleResolver:
         return ResearchArticleResolver(
-        PDFUrlResolver(debug=debug),
-        ArxivResolver(debug=debug),
-        ADSResolver(debug=debug),
-        DOIResolver(debug=debug),
-        CrossRefDoiResolver(debug=debug),
-        UnpaywallResolver(debug=debug),
-        debug=debug,
+        PDFUrlResolver(debug=self.debug),
+        ArxivResolver(debug=self.debug),
+        ADSResolver(debug=self.debug),
+        DOIResolver(debug=self.debug),
+        CrossRefDoiResolver(debug=self.debug),
+        UnpaywallResolver(debug=self.debug),
+        debug=self.debug,
         )
     
-
-    def default_scraper(self, debug: bool = False) -> ScraperToolBase:
+    @property
+    def _default_scraper(self, debug: bool = False) -> ScraperToolBase:
         return CompositeScraper(
-            DoclingScraper(debug=debug),
-            Crawl4AIWebScraper(debug=debug),
-            SimpleWebScraper(debug=debug),
-            SimplePDFScraper(debug=debug),
+            DoclingScraper(debug=self.debug),
+            Crawl4AIWebScraper(debug=self.debug),
+            SimpleWebScraper(debug=self.debug),
+            SimplePDFScraper(debug=self.debug),
         )
 
 
@@ -140,8 +141,8 @@ class SearchPipeline(SearchTool):
         super().__init__(config, debug)
 
         self.search_tool = search_tool
-        self.resolver = resolver or self._default_research_article_resolver(debug=debug)
-        self.scraper = scraper or self.default_scraper(debug=debug)
+        self.resolver = resolver or self._default_research_article_resolver
+        self.scraper = scraper or self._default_scraper
 
         if debug:
             logger.debug("Initialized SearchPipeline with:")

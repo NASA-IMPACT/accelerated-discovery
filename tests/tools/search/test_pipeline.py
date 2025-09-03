@@ -1,6 +1,6 @@
 import asyncio
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, PropertyMock, patch
 from typing import Optional
 
 from akd.structures import SearchResultItem
@@ -142,17 +142,22 @@ class TestSearchPipeline:
     """Tests for SearchPipeline class"""
     
     def test_init_with_defaults(self, sample_search_results):
-        """Test initialization with default resolver and scraper"""
         mock_search_tool = MockSearchTool(sample_search_results)
-        
-        with patch('akd.tools.search.SearchPipeline._default_research_article_resolver') as mock_resolver, \
-             patch('akd.tools.search.SearchPipeline.default_scraper') as mock_scraper:
-            
+    
+        with patch.object(SearchPipeline, "_default_research_article_resolver",
+                          new_callable=PropertyMock) as mock_resolver_prop, \
+             patch.object(SearchPipeline, "_default_scraper",
+                          new_callable=PropertyMock) as mock_scraper_prop:
+    
             pipeline = SearchPipeline(mock_search_tool)
-            
-            assert pipeline.search_tool == mock_search_tool
-            mock_resolver.assert_called_once_with(debug=False)
-            mock_scraper.assert_called_once_with(debug=False)
+    
+            assert pipeline.search_tool is mock_search_tool
+            mock_resolver_prop.assert_called_once()
+            mock_scraper_prop.assert_called_once()
+    
+            assert pipeline.resolver is mock_resolver_prop.return_value
+            assert pipeline.scraper  is mock_scraper_prop.return_value
+
     
     def test_init_with_custom_components(self, sample_search_results, basic_config):
         """Test initialization with custom resolver and scraper"""
@@ -500,7 +505,7 @@ class TestSearchPipeline:
         mock_search_tool = MockSearchTool()
         pipeline = SearchPipeline(search_tool=mock_search_tool)
         
-        resolver = pipeline._default_research_article_resolver(debug=True)
+        resolver = pipeline._default_research_article_resolver
         
         # Should return a ResearchArticleResolver instance
         assert isinstance(resolver, ResearchArticleResolver)
@@ -510,7 +515,7 @@ class TestSearchPipeline:
         mock_search_tool = MockSearchTool()
         pipeline = SearchPipeline(search_tool=mock_search_tool)
         
-        scraper = pipeline.default_scraper(debug=True)
+        scraper = pipeline._default_scraper
         
         # Should return a CompositeScraper instance
         assert isinstance(scraper, CompositeScraper)
