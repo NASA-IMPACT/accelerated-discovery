@@ -261,10 +261,6 @@ class SearchPipeline(SearchTool):
                 else:
                     # Replace with scraped content
                     enhanced_result.content = scraped_content
-
-            # Add metadata about what was performed
-            if not enhanced_result.extra:
-                enhanced_result.extra = {}
                 
             enhanced_result.extra.update({
                 "scraping_performed": self.enable_scraping,
@@ -292,8 +288,7 @@ class SearchPipeline(SearchTool):
 
             # Return original result with error metadata
             enhanced_result = result.model_copy()
-            if not enhanced_result.extra:
-                enhanced_result.extra = {}
+
             enhanced_result.extra.update({
                 "scraping_performed": self.enable_scraping,
                 "full_text_scraped": False,
@@ -378,7 +373,7 @@ class SearchPipeline(SearchTool):
             successful_scrapes = sum(
                 1
                 for result in enhanced_results
-                if result.extra and result.extra.get("full_text_scraped", False)
+                if result.extra.get("full_text_scraped", False)
             )
 
             if self.debug:

@@ -152,7 +152,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         """
         return (
             result.extra.get("authors")
-            if result.extra and result.extra.get("authors")
+            if result.extra.get("authors")
             else result.authors
             if result.authors
             else []
