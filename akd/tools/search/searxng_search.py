@@ -10,7 +10,13 @@ from pydantic import Field
 from pydantic.networks import HttpUrl
 
 from akd.structures import SearchResultItem
-from ._base import SearchTool, SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
+
+from ._base import (
+    SearchTool,
+    SearchToolConfig,
+    SearchToolInputSchema,
+    SearchToolOutputSchema,
+)
 
 
 class SearxNGSearchToolInputSchema(SearchToolInputSchema):
@@ -30,18 +36,36 @@ class SearxNGSearchToolOutputSchema(SearchToolOutputSchema):
 
 
 class SearxNGSearchToolConfig(SearchToolConfig):
-    base_url: HttpUrl = Field(default=os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"))
+    base_url: HttpUrl = Field(
+        default=os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"),
+    )
     max_results: int = Field(default=int(os.getenv("SEARXNG_MAX_RESULTS", "10")))
     engines: List[str] = Field(
         default_factory=lambda: os.getenv(
             "SEARXNG_ENGINES",
             "google,arxiv,google_scholar",
-        ).split(",")
+        ).split(","),
     )
-    max_pages: int = Field(default=int(os.getenv("SEARXNG_MAX_PAGES", "25")), gt=0, le=100)
-    results_per_page: int = Field(default=int(os.getenv("SEARXNG_RESULTS_PER_PAGE", "10")), gt=0, le=100)
-    score_cutoff: float = Field(default=float(os.getenv("SEARXNG_SCORE_CUTOFF", "0.25")), ge=0.0, le=1.0)
-    debug: bool = False
+    max_pages: int = Field(
+        default=int(os.getenv("SEARXNG_MAX_PAGES", "25")),
+        gt=0,
+        le=100,
+    )
+    results_per_page: int = Field(
+        default=int(os.getenv("SEARXNG_RESULTS_PER_PAGE", "10")),
+        gt=0,
+        le=100,
+    )
+    score_cutoff: float = Field(
+        default=float(os.getenv("SEARXNG_SCORE_CUTOFF", "0.25")),
+        ge=0.0,
+        le=1.0,
+    )
+    strict: bool = Field(
+        default=False,
+        description="Whether to enforce strict search for filtering engines.",
+    )
+    debug: bool = Field(default=False, description="Whether to enable debug mode.")
 
 
 class SearxNGSearchTool(SearchTool):
@@ -91,6 +115,7 @@ class SearxNGSearchTool(SearchTool):
         max_pages: int = 5,
         results_per_page: int = 10,
         score_cutoff: float = 0.25,
+        strict: bool = True,
         debug: bool = False,
     ) -> SearxNGSearchTool:
         base_url = base_url or os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
@@ -105,6 +130,7 @@ class SearxNGSearchTool(SearchTool):
             max_pages=max_pages,
             results_per_page=results_per_page,
             score_cutoff=score_cutoff,
+            strict=strict,
             debug=debug,
         )
         return cls(config, debug)
@@ -174,7 +200,25 @@ class SearxNGSearchTool(SearchTool):
         self,
         results: List[dict],
     ) -> List[dict]:
+        _n_orig = len(results)
         results = filter(lambda r: r.get("score", 0) >= self.score_cutoff, results)
+
+        # Apply strict engine filtering if enabled
+        if self.strict and self.engines:
+            results = list(
+                filter(
+                    lambda r: any(
+                        self.engine_names_match(engine, r.get("engine", ""))
+                        for engine in self.engines
+                    ),
+                    results,
+                ),
+            )
+            if self.debug:
+                logger.debug(
+                    f"Filtered {(_n_orig - len(results))} results based on strict engine filtering.",
+                )
+
         sorted_results = sorted(
             results,
             key=lambda x: x.get("score", 0),
@@ -324,9 +368,11 @@ class SearxNGSearchTool(SearchTool):
             SearchResultItem(
                 url=result.pop("url", None),
                 pdf_url=result.pop("pdf_url", None),
-                title=result.pop("title", None) or "Untitled",  # Ensure title is never None
+                title=result.pop("title", None)
+                or "Untitled",  # Ensure title is never None
                 content=result.pop("content", None),
-                query=result.pop("query", None) or "Unknown query",  # Ensure query is never None
+                query=result.pop("query", None)
+                or "Unknown query",  # Ensure query is never None
                 category=result.pop("category", None),
                 doi=result.pop("doi", None),
                 published_date=result.pop("publishedDate", None),
@@ -340,3 +386,15 @@ class SearxNGSearchTool(SearchTool):
             results=results,
             category=params.category,
         )
+
+    @staticmethod
+    def normalize_engine_name(name: str) -> str:
+        """Convert engine name to standardized format for comparison."""
+        return name.lower().replace(" ", "_")
+
+    @staticmethod
+    def engine_names_match(configured_name: str, result_engine: str) -> bool:
+        """Check if configured engine name matches result engine name."""
+        return SearxNGSearchTool.normalize_engine_name(
+            configured_name,
+        ) == SearxNGSearchTool.normalize_engine_name(result_engine)
