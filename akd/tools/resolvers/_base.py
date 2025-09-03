@@ -36,30 +36,20 @@ class ResolverInputSchema(SearchResultItem, InputSchema):
         None,
         description="Query used to obtain the search result",
     )
+        # allow extra fields in input schema
+    model_config = {
+        "extra": "allow"
+    }
 
 
-class ResolverOutputSchema(SearchResultItem, OutputSchema):
+
+class ResolverOutputSchema(ResolverInputSchema, OutputSchema):
     """Output schema for resolver"""
 
-    # Override to make title optional for resolver output
-    title: str | None = Field(
-        None,
-        description="Title of the resolved article if available",
-    )
-    # Override to make query optional for resolver output
-    query: str | None = Field(
-        None,
-        description="Original query used to obtain the search result",
-    )
 
     resolvers: List[str] = Field(
         default_factory=list,
         description="Resolvers used to resolve the search result",
-    )
-
-    resolved_url: HttpUrl | None = Field(
-        None,
-        description="Resolved URL of the article, if available",
     )
 
 
@@ -68,7 +58,7 @@ class ArticleResolverConfig(BaseToolConfig):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    session: Optional[requests.Session] = Field(
+    session: Optional[httpx.AsyncClient] = Field(
         None,
         description="Optional session to use for requests",
     )
@@ -171,9 +161,7 @@ class BaseArticleResolver(BaseTool[ResolverInputSchema, ResolverOutputSchema]):
             raise ValueError(f"Failed to resolve with {self.__class__.__name__}")
 
         # Post-validate the resolved URL if available
-        if resolved_result.url:
-            await self._post_validate_url(resolved_result.url)
-
+        await self._post_validate_url(resolved_result.url)
 
         if self.__class__.__name__ not in resolved_result.resolvers:
             resolved_result.resolvers.append(self.__class__.__name__)

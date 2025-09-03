@@ -84,12 +84,11 @@ class TestUnpaywallResolverIntegration:
         if result is not None:
             assert isinstance(result, ResolverOutputSchema)
             assert hasattr(result, "url")
-            assert hasattr(result, "resolved_url")
             assert hasattr(result, "resolvers")
             assert "UnpaywallResolver" in result.resolvers
             # If open access is found, resolved_url should be set
-            if result.resolved_url:
-                assert str(result.resolved_url).startswith("http")
+            if result.url:
+                assert str(result.url).startswith("http")
 
     @pytest.mark.asyncio
     async def test_resolve_with_real_closed_access_doi(self):
@@ -145,6 +144,7 @@ class TestUnpaywallResolverIntegration:
             url="https://doi.org/10.1371/journal.pone.0000308",
         )
 
+
         result = await resolver._arun(input_params)
 
         assert isinstance(result, ResolverOutputSchema)
@@ -152,7 +152,10 @@ class TestUnpaywallResolverIntegration:
         assert hasattr(result, "resolvers")
         assert "UnpaywallResolver" in result.resolvers
         assert isinstance(result.url, HttpUrl)
+        assert input_params.url != result.url  # URL should be transformed
+        assert result.extra["is_url_resolved"] is True
 
+    
     @pytest.mark.asyncio
     async def test_multiple_doi_formats(self):
         """Test resolution with multiple DOI URL formats."""
