@@ -2,6 +2,7 @@ import os
 from typing import Literal, Optional, Union
 
 import aiohttp
+import httpx
 from loguru import logger
 from pydantic import Field, HttpUrl, field_validator
 from rapidfuzz import fuzz
@@ -35,17 +36,12 @@ class CrossRefDoiResolverInputSchema(ResolverInputSchema):
     )
 
 
-class CrossRefDoiResolverOutputSchema(ResolverOutputSchema):
+class CrossRefDoiResolverOutputSchema(CrossRefDoiResolverInputSchema, ResolverOutputSchema):
     """
     Output schema for CrossRef DOI resolver.
     Inherits from ResolverOutputSchema to ensure compatibility with search results.
     """
-
-    # override to make url optional
-    url: Optional[HttpUrl] = Field(
-        None,
-        description="URL of the article",
-    )
+    pass 
 
 
 class CrossRefDoiResolverConfig(ArticleResolverConfig):
@@ -156,7 +152,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         """
         return (
             result.extra.get("authors")
-            if result.extra and result.extra.get("authors")
+            if result.extra.get("authors")
             else result.authors
             if result.authors
             else []
@@ -385,7 +381,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         params: CrossRefDoiResolverInputSchema,
     ) -> Optional[CrossRefDoiResolverOutputSchema]:
         # if doi is already present, return it
-        if getattr(params, "doi", None):
+        if getattr(params, "doi", None) and params.doi != 'None':
             if self.debug:
                 logger.debug(f"DOI already present: {params.doi}")
             return CrossRefDoiResolverOutputSchema(**params.model_dump())
@@ -409,17 +405,17 @@ class CrossRefDoiResolver(BaseArticleResolver):
         doi = None
 
         try:
-            async with self.session or aiohttp.ClientSession() as session:
-                async with session.get(
-                    self.config.cross_ref_api_url,
+            async with self.session or httpx.AsyncClient() as session:
+                response = await session.get(
+                    self.cross_ref_api_url,
                     params=query_params,
-                    headers={"User-Agent": self.config.user_agent},
-                    timeout=aiohttp.ClientTimeout(total=self.config.timeout_seconds),
-                ) as resp:
-                    if resp.status != 200:
-                        logger.error(f"CrossRef API error: {resp.status}")
-                        return None
-                    payload = await resp.json()
+                    headers=self.headers,
+                    timeout=self.timeout_seconds,
+                )
+                if response.status_code != 200:
+                    logger.error(f"CrossRef API error: {response.status_code}")
+                    return None
+                payload = response.json()
 
                 items = payload.get("message", {}).get("items", []) or []
                 if not items:
