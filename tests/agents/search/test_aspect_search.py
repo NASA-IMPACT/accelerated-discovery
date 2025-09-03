@@ -48,22 +48,6 @@ def dummy_topic():
 
 
 @pytest.fixture
-def dummy_interview_result(dummy_perspectives):
-    return (
-        [
-            SearchResultItem(
-                url="http://example.com",
-                title="test",
-                query="test",
-                content="content",
-            ),
-        ],
-        {"http://example.com": "content"},
-        dummy_perspectives,
-    )
-
-
-@pytest.fixture
 def dummy_interview():
     return [
         {
@@ -81,6 +65,23 @@ def dummy_interview():
             "references": {"http://example.com": "content"},
         },
     ]
+
+
+@pytest.fixture
+def dummy_interview_result(dummy_perspectives, dummy_interview):
+    return (
+        [
+            SearchResultItem(
+                url="http://example.com",
+                title="test",
+                query="test",
+                content="content",
+            ),
+        ],
+        {"http://example.com": "content"},
+        dummy_perspectives,
+        [dummy_interview],
+    )
 
 
 @pytest.mark.asyncio
@@ -122,13 +123,19 @@ async def test_conduct_interviews(
 
     agent.interview_graph = MagicMock()
     agent.interview_graph.abatch = AsyncMock(return_value=dummy_interview)
-    search_results, references, perspectives = await agent._conduct_interviews(
+    (
+        search_results,
+        references,
+        perspectives,
+        interview_results,
+    ) = await agent._conduct_interviews(
         dummy_topic,
     )
 
     assert isinstance(search_results, list)
     assert isinstance(references, dict)
     assert isinstance(perspectives, Perspectives)
+    assert isinstance(interview_results, list)
     assert len(references) <= len(search_results)
     assert "http://example.com" in references
     assert perspectives.editors[0].affiliation == "University Researcher"
@@ -150,6 +157,7 @@ async def test_get_response_async_single_topic(
     assert isinstance(result.references, Dict)
     assert isinstance(result.perspectives, Perspectives)
     assert isinstance(result.perspectives.editors[0], Editor)
+    assert isinstance(result.interview_results, List)
 
 
 @pytest.mark.asyncio
@@ -169,8 +177,10 @@ async def test_get_response_async_multiple_topics(
     assert isinstance(result.references, List)
     assert isinstance(result.perspectives, List)
     assert isinstance(result.perspectives[0], Perspectives)
+    assert isinstance(result.interview_results, List)
     assert len(result.search_results) == 2
     assert len(result.references) == 2
+    assert len(result.interview_results) == 2
 
 
 @pytest.mark.asyncio

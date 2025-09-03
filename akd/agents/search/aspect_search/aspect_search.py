@@ -47,6 +47,10 @@ class AspectSearchOutputSchema(OutputSchema):
         None,
         description="List of perspectives used to explore the topic.",
     )
+    interview_results: Union[List, List[List]] = Field(
+        None,
+        description="Interview conversation dump.",
+    )
 
 
 class AspectSearchConfig(BaseAgentConfig):
@@ -205,7 +209,7 @@ class AspectSearchAgent(BaseAgent):
                 interview["search_results"],
             )
             references = update_references(references, interview["references"])
-        return search_results, references, perspectives
+        return search_results, references, perspectives, interview_results
 
     async def get_response_async(
         self,
@@ -227,19 +231,21 @@ class AspectSearchAgent(BaseAgent):
         results = await asyncio.gather(
             *(self._conduct_interviews(topic=topic) for topic in topics),
         )
-        search_results, references, perspectives = zip(*results)
+        search_results, references, perspectives, interview_results = zip(*results)
 
         if isinstance(params.topic, str):
             return AspectSearchOutputSchema(
                 search_results=search_results[0],
                 references=references[0],
                 perspectives=perspectives[0],
+                interview_results=interview_results[0],
             )
 
         return AspectSearchOutputSchema(
             search_results=list(search_results),
             references=list(references),
             perspectives=list(perspectives),
+            interview_results=list(interview_results),
         )
 
     async def _arun(
