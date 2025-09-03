@@ -56,11 +56,30 @@ class GapAgentConfig(BaseAgentConfig):
     """Configuration for Gap Agent"""
 
     docling_config: DoclingScraperConfig = Field(
-        ...,
+        default_factory=lambda: DoclingScraperConfig(
+            do_table_structure=True,
+            pdf_mode="accurate",
+            export_type="html",
+            debug=False,
+        ),
         description="Configuration for Docling Scraper.",
     )
     s2_tool_config: SemanticScholarSearchToolConfig = Field(
-        ...,
+        default_factory=lambda: SemanticScholarSearchToolConfig(
+            debug=False,
+            external_id="ARXIV",
+            fields=[
+                "paperId",
+                "externalIds",
+                "url",
+                "title",
+                "abstract",
+                "year",
+                "authors",
+                "isOpenAccess",
+                "openAccessPdf",
+            ],
+        ),
         description="Configuration for S2 Tool.",
     )
 
@@ -74,37 +93,10 @@ class GapAgent(BaseAgent):
         self,
     ) -> None:
         super()._post_init()
-        docling_config = (
-            self.config.docling_config
-            if self.config.docling_config
-            else DoclingScraperConfig(
-                do_table_structure=True,
-                pdf_mode="accurate",
-                export_type="html",
-                debug=False,
-            )
+        self.docling_scraper = DoclingScraper(self.config.docling_config)
+        self.semantic_search_tool = SemanticScholarSearchTool(
+            self.config.s2_tool_config,
         )
-        s2_tool_config = (
-            self.config.s2_tool_config
-            if self.config.s2_tool_config
-            else SemanticScholarSearchToolConfig(
-                debug=False,
-                external_id="ARXIV",
-                fields=[
-                    "paperId",
-                    "externalIds",
-                    "url",
-                    "title",
-                    "abstract",
-                    "year",
-                    "authors",
-                    "isOpenAccess",
-                    "openAccessPdf",
-                ],
-            )
-        )
-        self.docling_scraper = DoclingScraper(docling_config)
-        self.semantic_search_tool = SemanticScholarSearchTool(s2_tool_config)
 
         self.llm = ChatOpenAI(
             model_name=self.config.model_name,
