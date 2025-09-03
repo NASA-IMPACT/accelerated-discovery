@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 import networkx as nx
 from langchain_openai import ChatOpenAI
 from loguru import logger
+from networkx.readwrite import json_graph
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
@@ -49,7 +50,7 @@ class GapOutputSchema(OutputSchema):
         ...,
         description="Answers for each node selected from the graph.",
     )
-    G: nx.Graph = Field(..., description="Graph created from the ingested papers.")
+    G: Dict = Field(..., description="Graph created from the ingested papers.")
 
 
 class GapAgentConfig(BaseAgentConfig):
@@ -293,7 +294,7 @@ class GapAgent(BaseAgent):
         return GapOutputSchema(
             output=output,
             attributed_source_answers=attributed_source_answers,
-            G=G,
+            G=json_graph.node_link_data(G, edges="edges"),
         )
 
     async def _arun(self, params: GapInputSchema, **kwargs) -> GapOutputSchema:
