@@ -1,4 +1,6 @@
+from langchain_community.vectorstores import VectorStore, VectorStoreRetriever
 from langchain_core.documents import Document
+from langchain_openai import ChatOpenAI
 
 from akd.agents.search.aspect_search import (
     AspectSearchAgent,
@@ -10,7 +12,7 @@ from .structures import ResearchState
 from .tools import get_draft_outline, get_refined_outline, section_writer, writer
 
 
-async def initialize_research(state: ResearchState, fast_llm):
+async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI):
     topic = state["topic"]
     print(f"\n💬: {topic}\n")
     outline = get_draft_outline(topic, fast_llm=fast_llm)
@@ -39,7 +41,7 @@ async def conduct_interviews(
     }
 
 
-async def refine_outline(state: ResearchState, long_context_llm):
+async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI):
     def format_conversation(interview_state):
         messages = interview_state["messages"]
         convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
@@ -64,7 +66,7 @@ async def refine_outline(state: ResearchState, long_context_llm):
     return {**state, "outline": updated_outline}
 
 
-async def index_references(state: ResearchState, vector_store):
+async def index_references(state: ResearchState, vector_store: VectorStore):
     print("\n🤖: Indexing references")
     reference_docs = [
         Document(page_content=v, metadata={"source": k})
@@ -74,7 +76,11 @@ async def index_references(state: ResearchState, vector_store):
     return state
 
 
-async def write_sections(state: ResearchState, long_context_llm, retriever):
+async def write_sections(
+    state: ResearchState,
+    long_context_llm: ChatOpenAI,
+    retriever: VectorStoreRetriever,
+):
     outline = state["outline"]
     print("\n🤖: Writing each section")
     sections = await section_writer(
@@ -90,7 +96,7 @@ async def write_sections(state: ResearchState, long_context_llm, retriever):
     }
 
 
-async def write_article(state: ResearchState, long_context_llm):
+async def write_article(state: ResearchState, long_context_llm: ChatOpenAI):
     topic = state["topic"]
     sections = state["sections"]
     print("\n🤖: Writing the article!")

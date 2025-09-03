@@ -78,6 +78,10 @@ class StormAgentConfig(BaseAgentConfig):
         default=3,
         description="Top k context to retrieve for the writer",
     )
+    max_attempts: int = Field(
+        default=3,
+        description="Maximum number of attempts to make before giving up, including the first",
+    )
 
 
 class StormAgent(BaseAgent):
@@ -161,7 +165,11 @@ class StormAgent(BaseAgent):
 
         for i in range(len(nodes)):
             name, node = nodes[i]
-            storm_builder.add_node(name, node, retry=RetryPolicy(max_attempts=3))
+            storm_builder.add_node(
+                name,
+                node,
+                retry=RetryPolicy(max_attempts=self.config.max_attempts),
+            )
             if i > 0:
                 storm_builder.add_edge(nodes[i - 1][0], name)
 
