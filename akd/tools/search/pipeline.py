@@ -110,7 +110,7 @@ class SearchPipeline(SearchTool):
         )
     
     @property
-    def _default_scraper(self, debug: bool = False) -> ScraperToolBase:
+    def _default_scraper(self) -> ScraperToolBase:
         return CompositeScraper(
             DoclingScraper(debug=self.debug),
             Crawl4AIWebScraper(debug=self.debug),
