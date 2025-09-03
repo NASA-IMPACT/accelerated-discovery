@@ -108,8 +108,6 @@ class UnpaywallResolver(BaseArticleResolver):
                         # Return ResolverOutputSchema with resolved URL and preserved metadata
                         result = ResolverOutputSchema(**params.model_dump())
                         result.doi = doi
-                        if not result.extra:
-                            result.extra = {}
                         result.extra["is_url_resolved"] = True
                         result.url = HttpUrl(pdf_url)
                         result.resolvers.append(self.__class__.__name__)
@@ -130,8 +128,6 @@ class UnpaywallResolver(BaseArticleResolver):
                             # Return ResolverOutputSchema with resolved URL and preserved metadata
                             result = ResolverOutputSchema(**params.model_dump())
                             result.doi = doi
-                            if not result.extra:
-                                result.extra = {}
                             result.extra["is_url_resolved"] = True
                             result.url = HttpUrl(oa_url)
                             result.resolvers.append(self.__class__.__name__)

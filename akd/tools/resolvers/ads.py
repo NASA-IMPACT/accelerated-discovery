@@ -73,8 +73,6 @@ class ADSResolver(BaseArticleResolver):
                         result = ResolverOutputSchema(**params.model_dump())
                         
                         result.resolvers.append(self.__class__.__name__)
-                        if not result.extra:
-                            result.extra = {}
                         result.extra["is_url_resolved"] = True
                         result.url = HttpUrl(pdf_url)
                         return result
@@ -89,8 +87,6 @@ class ADSResolver(BaseArticleResolver):
                 if pdf_links:
                     # Return the first PDF link, making it an absolute URL if needed
                     result = ResolverOutputSchema(**params.model_dump())
-                    if not result.extra:
-                        result.extra = {}
                     result.extra["is_url_resolved"] = True
                     result.url = HttpUrl(urljoin(url, pdf_links[0]))
                     result.resolvers.append(self.__class__.__name__)

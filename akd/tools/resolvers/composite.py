@@ -58,7 +58,7 @@ class ResearchArticleResolver(BaseArticleResolver):
 
                 # TODO:: this will call most of the resolvers: doi until resolved by crossref, so we should do something about this
 
-                if result.extra and "is_url_resolved" in result.extra:
+                if "is_url_resolved" in result.extra:
                     is_url_resolved = result.extra["is_url_resolved"]
 
                 is_doi_resolved = bool(getattr(result, "doi", None) and result.doi != 'None')
