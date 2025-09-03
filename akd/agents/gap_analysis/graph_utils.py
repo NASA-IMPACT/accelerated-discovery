@@ -444,34 +444,3 @@ async def generate_final_answer(
     )
     attributed_source_answers = format_attributed_answers(graph, attributed_answers)
     return output.content, attributed_source_answers
-
-
-def format_final_answer(graph: nx.Graph, output: str) -> str:
-    """
-    Formats the final answer by appending human-readable citations based on graph node metadata.
-
-    Args:
-        G (networkx.Graph): The graph containing paper and section nodes.
-        output (str): The generated model output/
-
-    Returns:
-        str: A string combining the main answer and a formatted "### Sources" section with numbered citations.
-    """
-    cited_sources = output.split("### Sources")[-1].strip().split("\n")
-    attributed_sources = []
-    for i in range(len(cited_sources)):
-        section_title_id = cited_sources[i].strip().split(" ")[-1]
-        source_paper_id = section_title_id.split("_")[0]
-        title = graph.nodes[source_paper_id]["title"]
-        if section_title_id not in graph.nodes:
-            continue
-        section_data = graph.nodes[section_title_id]
-        if "section_title" in section_data.keys():
-            section_title = section_data["section_title"]
-        else:
-            section_title = section_data["subsection_title"]
-        attributed_sources.append(f"[{i + 1}] {section_title}, {title}")
-    sources = "\n".join(attributed_sources)
-    answer = output.split("### Sources")[0].strip()
-    final_output = f"{answer}\n\n### Sources\n{sources}"
-    return final_output
