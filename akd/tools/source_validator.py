@@ -7,6 +7,7 @@ against a predefined source whitelist.
 """
 
 from __future__ import annotations
+from rapidfuzz.fuzz import token_set_ratio, token_sort_ratio, ratio
 
 import json
 import re
@@ -20,9 +21,17 @@ from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.utils import get_akd_root
+from enum import Enum
 
 if TYPE_CHECKING:
     pass
+
+
+
+class FuzzyMatchMethod(str, Enum):
+    TOKEN_SET = "token_set"
+    TOKEN_SORT = "token_sort"
+    RATIO = "ratio"
 
 
 class SourceInfo(BaseModel):
@@ -108,6 +117,23 @@ class SourceValidatorConfig(BaseToolConfig):
     )
     debug: bool = Field(default=False, description="Enable debug logging")
 
+    use_fuzzy_match: bool = Field(
+        default=False,
+        description="Enable fuzzy matching of journal titles",
+    )
+
+    fuzzy_threshold: int = Field(
+        default=90,
+        description="Fuzzy matching threshold (0-100) for journal titles (default is 90)",
+    )
+
+    fuzzy_match_method: FuzzyMatchMethod = Field(
+        default=FuzzyMatchMethod.TOKEN_SET,
+        description="Fuzzy matching method: TOKEN_SET (default), TOKEN_SORT, or RATIO",
+    )
+
+
+
 
 class SourceValidator(
     BaseTool[SourceValidatorInputSchema, SourceValidatorOutputSchema],
@@ -125,6 +151,12 @@ class SourceValidator(
     input_schema = SourceValidatorInputSchema
     output_schema = SourceValidatorOutputSchema
     config_schema = SourceValidatorConfig
+
+    scorer_map = {
+        "TOKEN_SET": token_set_ratio,
+        "TOKEN_SORT": token_sort_ratio,
+        "RATIO": ratio,
+        }
 
     def __init__(
         self,
@@ -299,6 +331,13 @@ class SourceValidator(
             url=original_url,
         )
 
+
+    def get_fuzzy_scorer(self):
+        """
+        Returns the appropriate RapidFuzz scorer based on method name.
+        """
+        return self.scorer_map.get(self.config.fuzzy_match_method, token_set_ratio)
+
     def _validate_against_whitelist(
         self,
         source_info: SourceInfo,
@@ -334,9 +373,15 @@ class SourceValidator(
                 # Exact title match
                 if source_title == whitelisted_title:
                     return True, category_name, 1.0
+                
+                
+                if self.config.use_fuzzy_match:
+                    scorer = self.get_fuzzy_scorer()
+                    fuzzy_score = scorer(source_title, whitelisted_title)
+                    if fuzzy_score >= self.config.fuzzy_threshold:  # You can adjust this threshold
+                        return True, category_name, fuzzy_score / 100.0  # Normalize to [0, 1]
 
-                # Fuzzy title match (partial match)
-                if (
+                elif (
                     whitelisted_title in source_title
                     or source_title in whitelisted_title
                 ):
@@ -344,8 +389,7 @@ class SourceValidator(
                     if len(whitelisted_title) > 10 or len(source_title) > 10:
                         return True, category_name, 0.8
 
-                # TODO: Could add ISSN matching here if we had ISSN data in whitelist
-
+               
         return False, None, 0.0
 
     async def _validate_single_result(
