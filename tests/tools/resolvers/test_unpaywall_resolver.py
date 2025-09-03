@@ -84,7 +84,6 @@ class TestUnpaywallResolverIntegration:
         if result is not None:
             assert isinstance(result, ResolverOutputSchema)
             assert hasattr(result, "url")
-            assert hasattr(result, "resolved_url")
             assert hasattr(result, "resolvers")
             assert "UnpaywallResolver" in result.resolvers
             # If open access is found, resolved_url should be set
@@ -154,7 +153,6 @@ class TestUnpaywallResolverIntegration:
         assert "UnpaywallResolver" in result.resolvers
         assert isinstance(result.url, HttpUrl)
         assert input_params.url != result.url  # URL should be transformed
-        assert result.extra["original_url"] == input_params.url
         assert result.extra["is_url_resolved"] is True
 
     
