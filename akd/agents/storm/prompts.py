@@ -1,30 +1,32 @@
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.prompts import MessagesPlaceholder
-
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 # gen_initial_outline_inst = '''You are a Wikipedia writer. Write an outline for a Wikipedia page about a user-provided topic. Be comprehensive and specific.'''
-gen_initial_outline_inst = '''Write an outline for a Wikipedia page.
+gen_initial_outline_inst = """Write an outline for a Wikipedia page.
 
 Here is the format of your writing:
     1. Use "#" Title" to indicate section title, "##" Title" to indicate subsection title, "###" Title" to indicate subsubsection title, and so on.
-    2. Do not include other information.'''
+    2. Do not include other information."""
 
-gen_related_topics_inst = '''I'm writing a Wikipedia page for a topic mentioned below. Please identify and recommend some Wikipedia pages on closely related subjects. I'm looking for examples that provide insights into interesting aspects commonly associated with this topic, or examples that help me understand the typical content and structure included in Wikipedia pages for similar topics.
+gen_related_topics_inst = """I'm writing a Wikipedia page for a topic mentioned below. Please identify and recommend some Wikipedia pages on closely related subjects. I'm looking for examples that provide insights into interesting aspects commonly associated with this topic, or examples that help me understand the typical content and structure included in Wikipedia pages for similar topics.
 Please list the urls in separate lines.
 
-Topic of interest: {topic}'''
+Topic of interest: {topic}"""
 
-gen_perspectives_prompt_inst = '''You need to select a group of Wikipedia editors who will work together to create a comprehensive article on the topic. Each of them represents a different perspective, role, or affiliation related to this topic. You can use other Wikipedia pages of related topics for inspiration. For each editor, add description of what they will focus on.
+gen_perspectives_prompt_inst = """You need to select a group of Wikipedia editors who will work together to create a comprehensive article on the topic. Each of them represents a different perspective, role, or affiliation related to this topic. You can use other Wikipedia pages of related topics for inspiration. For each editor, add description of what they will focus on.
 Give your answer in the following format: 1. short summary of editor 1:description\n2. short summary of editor 2: description\n...
 
 Wiki page outlines of related topics for inspiration:
-{examples}'''
+{examples}"""
 
 direct_gen_outline_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", gen_initial_outline_inst),
-        ("user", "Topic you want to write: {topic}\nWrite the Wikipedia page outline:\n"),
-    ]
+        (
+            "user",
+            "Topic you want to write: {topic}\nWrite the Wikipedia page outline:\n",
+        ),
+    ],
 )
 
 gen_related_topics_prompt = ChatPromptTemplate.from_template(gen_related_topics_inst)
@@ -33,7 +35,7 @@ gen_perspectives_prompt = ChatPromptTemplate.from_messages(
     [
         ("system", gen_perspectives_prompt_inst),
         ("user", "Topic of interest: {topic}"),
-    ]
+    ],
 )
 
 # Wiki Expert
@@ -55,7 +57,7 @@ Stay true to your specific perspective:
 {persona}""",
         ),
         MessagesPlaceholder(variable_name="messages", optional=True),
-    ]
+    ],
 )
 
 
@@ -64,11 +66,11 @@ gen_queries_prompt = ChatPromptTemplate.from_messages(
         (
             "system",
             """You want to answer the question using Google search. What do you type in the search box?
-            Write the queries you will use in the following format:- query 1\n- query 2\n..."""
+            Write the queries you will use in the following format:- query 1\n- query 2\n...""",
             # "You are a helpful research assistant. Query the search engine to answer the user's questions.",
         ),
         MessagesPlaceholder(variable_name="messages", optional=True),
-    ]
+    ],
 )
 
 
@@ -84,7 +86,7 @@ writer_prompt = ChatPromptTemplate.from_messages(
             'Write the complete Wiki article using markdown format. Organize citations using footnotes like "[1]",'
             " avoiding duplicates in the footer. Include URLs in the footer.",
         ),
-    ]
+    ],
 )
 
 gen_answer_prompt = ChatPromptTemplate.from_messages(
@@ -98,7 +100,7 @@ Make your response as informative as possible and make sure every sentence is su
 Each response must be backed up by a citation from a reliable source, formatted as a footnote, reproducing the URLS after your response.""",
         ),
         MessagesPlaceholder(variable_name="messages", optional=True),
-    ]
+    ],
 )
 
 
@@ -108,7 +110,7 @@ refine_outline_prompt = ChatPromptTemplate.from_messages(
             "system",
             """You are a Wikipedia writer. You have gathered information from experts and search engines. Now, you are refining the outline of the Wikipedia page. \
 You need to make sure that the outline is comprehensive and specific. \
-Topic you are writing about: {topic} 
+Topic you are writing about: {topic}
 
 Old outline:
 
@@ -118,7 +120,7 @@ Old outline:
             "user",
             "Refine the outline based on your conversations with subject-matter experts:\n\nConversations:\n\n{conversations}\n\nWrite the refined Wikipedia outline:",
         ),
-    ]
+    ],
 )
 
 
@@ -130,7 +132,22 @@ section_writer_prompt = ChatPromptTemplate.from_messages(
             "{outline}\n\nCite your sources, using the following references:\n\n<Documents>\n{docs}\n<Documents>",
         ),
         ("user", "Write the full WikiSection for the {section} section."),
-    ]
+    ],
 )
 
 
+def format_messages(messages):
+    return [
+        {
+            "role": "tool",
+            "content": message.content,
+            "tool_call_id": message.tool_call_id,
+        }
+        if isinstance(message, ToolMessage)
+        else {"role": "user", "content": message.content}
+        if isinstance(message, HumanMessage)
+        else {"role": "system", "content": message.content}
+        if isinstance(message, SystemMessage)
+        else {"role": "assistant", "content": message.content}
+        for message in messages
+    ]

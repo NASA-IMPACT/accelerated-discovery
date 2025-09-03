@@ -1,5 +1,42 @@
-from typing import List, Optional, Annotated
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
+
+from akd.agents.search.aspect_search.structures import InterviewState, Perspectives
+
+
+class SubSection(BaseModel):
+    subsection_title: str = Field(..., title="Title of the subsection")
+    content: str = Field(
+        ...,
+        title="Full content of the subsection. Include [#] citations to the cited sources where relevant.",
+    )
+
+    @property
+    def as_str(self) -> str:
+        return f"### {self.subsection_title}\n\n{self.content}".strip()
+
+
+class WikiSection(BaseModel):
+    section_title: str = Field(..., title="Title of the section")
+    content: str = Field(..., title="Full content of the section")
+    subsections: Optional[List[SubSection]] = Field(
+        default=None,
+        title="Titles and descriptions for each subsection of the Wikipedia page.",
+    )
+    citations: List[str] = Field(default_factory=list)
+
+    @property
+    def as_str(self) -> str:
+        subsections = "\n\n".join(
+            subsection.as_str for subsection in self.subsections or []
+        )
+        citations = "\n".join([f" [{i}] {cit}" for i, cit in enumerate(self.citations)])
+        return (
+            f"## {self.section_title}\n\n{self.content}\n\n{subsections}".strip()
+            + f"\n\n{citations}".strip()
+        )
 
 
 def format_doc(doc, max_length=1000):
@@ -7,6 +44,7 @@ def format_doc(doc, max_length=1000):
     return f"### {doc.metadata['title']}\n\nSummary: {doc.page_content}\n\nRelated\n{related}"[
         :max_length
     ]
+
 
 def format_docs(docs):
     return "\n\n".join(format_doc(doc) for doc in docs)
@@ -37,6 +75,7 @@ class Section(BaseModel):
         )
         return f"## {self.section_title}\n\n{self.description}\n\n{subsections}".strip()
 
+
 class Outline(BaseModel):
     page_title: str = Field(..., title="Title of the Wikipedia page")
     sections: List[Section] = Field(
@@ -50,33 +89,11 @@ class Outline(BaseModel):
         return f"# {self.page_title}\n\n{sections}".strip()
 
 
-class Editor(BaseModel):
-    affiliation: str = Field(
-        description="Primary affiliation of the editor.",
-    )
-    name: str = Field(
-        description="Name of the editor.") #, pattern=r"^[a-zA-Z0-9_-]{1,64}$"
-    # )
-    role: str = Field(
-        description="Role of the editor in the context of the topic.",
-    )
-    description: str = Field(
-        description="Description of the editor's focus, concerns, and motives.",
-    )
-
-    @property
-    def persona(self) -> str:
-        return f"Name: {self.name}\nRole: {self.role}\nAffiliation: {self.affiliation}\nDescription: {self.description}\n"
-
-
-class Perspectives(BaseModel):
-    editors: List[Editor] = Field(
-        description="Comprehensive list of editors with their roles and affiliations.",
-        # Add a pydantic validation/restriction to be at most M editors
-    )
-
-
-class RelatedSubjects(BaseModel):
-    topics: List[str] = Field(
-        description="Comprehensive list of related subjects as background research.",
-    )
+class ResearchState(TypedDict):
+    topic: str
+    outline: Outline
+    perspectives: Perspectives
+    interview_results: List[InterviewState]
+    references: dict
+    sections: List[WikiSection]
+    article: str

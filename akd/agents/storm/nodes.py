@@ -1,115 +1,50 @@
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage
-from langgraph.graph import END, START, StateGraph
-from langgraph.pregel import RetryPolicy
 
-from .config import storm_config
-from .state import InterviewState, ResearchState
-from .tools import (
-    format_conversation,
-    gen_answer,
-    generate_question,
-    get_draft_outline,
-    get_perspectives,
-    get_refined_outline,
-    section_writer,
-    vectorstore,
-    writer,
+from akd.agents.search.aspect_search import (
+    AspectSearchAgent,
+    AspectSearchConfig,
+    AspectSearchInputSchema,
 )
 
-# Research nodes
+from .structures import ResearchState
+from .tools import get_draft_outline, get_refined_outline, section_writer, writer
 
 
-async def initialize_research(state: ResearchState):
+async def initialize_research(state: ResearchState, fast_llm):
     topic = state["topic"]
     print(f"\n💬: {topic}\n")
-    outline = get_draft_outline(topic)
+    outline = get_draft_outline(topic, fast_llm=fast_llm)
     print("\n🤖: Here is a highlight of your article's initial outline.\n")
     print(f"{outline.as_str} ...")
-    editors = await get_perspectives(topic)
     return {
         **state,
         "outline": outline,
-        "editors": editors,
     }
 
 
-async def conduct_interviews(state: ResearchState):
-    MAX_NUM_TURNS = storm_config.MAX_NUM_TURNS
-    RETRY_ATTEMPTS = storm_config.RETRY_ATTEMPTS
-    NUM_EDITORS = storm_config.NUM_EDITORS
-
-    def route_messages(state: InterviewState, name: str = "Subject_Matter_Expert"):
-        messages = state["messages"]
-        num_responses = len(
-            [m for m in messages if isinstance(m, AIMessage) and m.name == name],
-        )
-        if num_responses >= MAX_NUM_TURNS:
-            return END
-        last_question = messages[-2]
-        if last_question.content.endswith("Thank you so much for your help!"):
-            return END
-        return "ask_question"
-
-    # Interview graph
-    builder = StateGraph(InterviewState)
-
-    builder.add_node(
-        "ask_question",
-        generate_question,
-        retry=RetryPolicy(max_attempts=RETRY_ATTEMPTS),
-    )
-    builder.add_node(
-        "answer_question",
-        gen_answer,
-        retry=RetryPolicy(max_attempts=RETRY_ATTEMPTS),
-    )
-    builder.add_conditional_edges("answer_question", route_messages)
-    builder.add_edge("ask_question", "answer_question")
-
-    builder.add_edge(START, "ask_question")
-    interview_graph = builder.compile(checkpointer=False).with_config(
-        run_name="Conduct Interviews",
-    )
-
+async def conduct_interviews(
+    state: ResearchState,
+    aspect_search_config: AspectSearchConfig,
+):
     topic = state["topic"]
-    initial_states = []
-    print("🤖: Here are your editors!")
-    for editor in state["editors"].editors[:NUM_EDITORS]:
-        initial_states.append(
-            {
-                "editor": editor,
-                "messages": [
-                    AIMessage(
-                        content=f"So you said you were writing an article on {topic}?",
-                        name="Subject_Matter_Expert",
-                    ),
-                ],
-            },
-        )
-        print(
-            f"👤: {editor.name} works at {editor.affiliation} as a {editor.role}. They {editor.description}.",
-        )
-    # We call in to the sub-graph here to parallelize the interviews
-    print("\n🤖: The interviews have started!")
-    interview_results = await interview_graph.abatch(initial_states)
-    print("\n🤖: Interview outcomes\n")
-    for interview in interview_results:
-        print("👥 Interview\n")
-        i = 0
-        messages = interview["messages"]
-        for message in messages:
-            print(f"{message.name}: {message.content}")
-            i = i + 1
-            if i % 2 == 0:
-                print("\n")
+    aspect_agent = AspectSearchAgent(aspect_search_config)
+    aspect_output = await aspect_agent.arun(AspectSearchInputSchema(topic=topic))
+    for i in range(len(aspect_output.interview_results)):
+        aspect_output.interview_results[i].pop("search_results")
     return {
         **state,
-        "interview_results": interview_results,
+        "perspectives": aspect_output.perspectives,
+        "interview_results": aspect_output.interview_results,
+        "references": aspect_output.references,
     }
 
 
-async def refine_outline(state: ResearchState):
+async def refine_outline(state: ResearchState, long_context_llm):
+    def format_conversation(interview_state):
+        messages = interview_state["messages"]
+        convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
+        return f"Conversation with {interview_state['editor'].name}\n\n" + convo
+
     convos = "\n\n".join(
         [
             format_conversation(interview_state)
@@ -120,6 +55,7 @@ async def refine_outline(state: ResearchState):
         topic=state["topic"],
         old_outline=state["outline"].as_str,
         conversations=convos,
+        long_context_llm=long_context_llm,
     )
     print(
         "\n🤖: Here is a highlight of your article's refined outline using the interviews for context.\n",
@@ -128,26 +64,25 @@ async def refine_outline(state: ResearchState):
     return {**state, "outline": updated_outline}
 
 
-async def index_references(state: ResearchState):
+async def index_references(state: ResearchState, vector_store):
     print("\n🤖: Indexing references")
-    all_docs = []
-    for interview_state in state["interview_results"]:
-        reference_docs = [
-            Document(page_content=v, metadata={"source": k})
-            for k, v in interview_state["references"].items()
-        ]
-        all_docs.extend(reference_docs)
-    await vectorstore.aadd_documents(all_docs)
+    reference_docs = [
+        Document(page_content=v, metadata={"source": k})
+        for k, v in state["references"].items()
+    ]
+    await vector_store.aadd_documents(reference_docs)
     return state
 
 
-async def write_sections(state: ResearchState):
+async def write_sections(state: ResearchState, long_context_llm, retriever):
     outline = state["outline"]
     print("\n🤖: Writing each section")
     sections = await section_writer(
         outline=outline,
         sections=outline.sections,
         topic=state["topic"],
+        long_context_llm=long_context_llm,
+        retriever=retriever,
     )
     return {
         **state,
@@ -155,12 +90,12 @@ async def write_sections(state: ResearchState):
     }
 
 
-async def write_article(state: ResearchState):
+async def write_article(state: ResearchState, long_context_llm):
     topic = state["topic"]
     sections = state["sections"]
     print("\n🤖: Writing the article!")
     draft = "\n\n".join([section.as_str for section in sections])
-    article = await writer(topic=topic, draft=draft)
+    article = await writer(topic=topic, draft=draft, long_context_llm=long_context_llm)
     print("\n🤖: Done. Print your article below!")
     return {
         **state,
