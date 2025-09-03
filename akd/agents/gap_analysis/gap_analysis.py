@@ -27,7 +27,7 @@ from .parsing_utils import (
     group_section_titles,
     parse_html,
 )
-from .prompts import gap_query_map
+from .prompts import GAP_QUERY_MAP
 from .structures import ParsedPaper
 
 
@@ -50,7 +50,7 @@ class GapOutputSchema(OutputSchema):
         ...,
         description="Answers for each node selected from the graph.",
     )
-    G: Dict = Field(..., description="Graph created from the ingested papers.")
+    graph: Dict = Field(..., description="Graph created from the ingested papers.")
 
 
 class GapAgentConfig(BaseAgentConfig):
@@ -221,10 +221,10 @@ class GapAgent(BaseAgent):
         Returns:
             nx.Graph: A graph where nodes and edges represent the structure and relationships within and between papers.
         """
-        G = nx.Graph()
+        graph = nx.Graph()
         for paper in parsed_papers:
-            G = await add_paper_to_graph(G, paper, self.llm)
-        return G
+            graph = await add_paper_to_graph(graph, paper, self.llm)
+        return graph
 
     def get_node_data(self, G: nx.Graph, node_id: str) -> Dict:
         """
@@ -257,15 +257,15 @@ class GapAgent(BaseAgent):
         """
         search_results = params.search_results
         if self.debug:
-            if params.gap not in gap_query_map.keys():
+            if params.gap not in GAP_QUERY_MAP.keys():
                 logger.debug(
                     "You are running the gap agent with your own defined gap. Please ensure you have described the gap you want to investigate in detail.",
                 )
             else:
                 logger.debug(f"Running gap analysis to investigate {params.gap} gap.")
         gap = (
-            gap_query_map[params.gap]
-            if params.gap in gap_query_map.keys()
+            GAP_QUERY_MAP[params.gap]
+            if params.gap in GAP_QUERY_MAP.keys()
             else params.gap
         )
         paper_items, search_results = await self._fetch_paper_items(search_results)
@@ -277,16 +277,16 @@ class GapAgent(BaseAgent):
         parsed_papers = await self._fetch_parsed_papers(parsed_pdfs, paper_items)
         if self.debug:
             logger.debug(f"Fetched {len(parsed_papers)} parsed papers.")
-        G = await self.create_graph(parsed_papers=parsed_papers)
+        graph = await self.create_graph(parsed_papers=parsed_papers)
         if self.debug:
-            logger.debug(f"Created {G}")
-        selected_nodes = await select_nodes(G, query=gap, llm=self.llm)
+            logger.debug(f"Created {graph}")
+        selected_nodes = await select_nodes(graph, query=gap, llm=self.llm)
         if self.debug:
             logger.debug(
                 f"Selected nodes from {len(selected_nodes)} papers. Now generating answer",
             )
         output, attributed_source_answers = await generate_final_answer(
-            G,
+            graph,
             query=gap,
             all_selected_nodes=selected_nodes,
             llm=self.llm,
@@ -294,7 +294,7 @@ class GapAgent(BaseAgent):
         return GapOutputSchema(
             output=output,
             attributed_source_answers=attributed_source_answers,
-            G=json_graph.node_link_data(G, edges="edges"),
+            graph=json_graph.node_link_data(graph, edges="edges"),
         )
 
     async def _arun(self, params: GapInputSchema, **kwargs) -> GapOutputSchema:

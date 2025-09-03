@@ -3,7 +3,7 @@ from typing import Dict, List
 
 from bs4 import BeautifulSoup
 
-from .prompts import section_grouper_prompt
+from .prompts import SECTION_GROUPER_PROMPT
 from .structures import Section, SubSection
 
 
@@ -50,10 +50,6 @@ def parse_html(html_content: str) -> List[Dict[str, str]]:
             sibling = sibling.find_next_sibling()
         if section_title not in parsed_content:
             parsed_content.update({section_title: " ".join(section_content)})
-        else:
-            raise KeyError(
-                f"section_title {section_title} has been parsed or is being duplicated",
-            )
     return parsed_content
 
 
@@ -132,7 +128,7 @@ async def group_section_titles(parsed_output: list[dict], llm):
                          followed by its subsections (if any).
     """
     section_titles = list(parsed_output.keys())
-    group_sections_chain = section_grouper_prompt | llm
+    group_sections_chain = SECTION_GROUPER_PROMPT | llm
     model_output = await group_sections_chain.ainvoke(
         {"input_sections": section_titles},
     )

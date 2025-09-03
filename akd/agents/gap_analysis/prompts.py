@@ -27,7 +27,7 @@ Make sure to preserve the hierarchy of sections and subsections. ONLY provide th
 Now, group the following lists in the same way."""
 
 
-section_grouper_prompt = ChatPromptTemplate.from_messages(
+SECTION_GROUPER_PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", section_grouper_inst),
         ("user", "{input_sections}"),
@@ -82,7 +82,7 @@ Only provide a JSON dictionary as output. Do not include any explanation or text
 'misc': ['Deep Convolutional Neural Networks for Palm Fruit Maturity Classification *', '7 References']
 """
 
-section_classifier_prompt = ChatPromptTemplate.from_messages(
+SECTION_CLASSIFIER_PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", section_classifier_inst),
         ("user", "{sections_to_group}"),
@@ -128,7 +128,7 @@ Output: [('paper', 'contains_section', 'introduction'), ('paper', 'contains_sect
 
 traverse_relations_input = "Query: {query}\nRelation: {relations}"
 
-traverse_relations_prompt = ChatPromptTemplate.from_messages(
+TRAVERSE_RELATIONS_PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", traverse_relations_inst),
         ("user", traverse_relations_input),
@@ -167,7 +167,7 @@ List:
 Output: ['experiments, models and datasets contains_subsection A. Experimental Setup']
 """
 
-select_subsection_prompt = ChatPromptTemplate.from_messages(
+SELECT_SUBSECTIONS_PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", select_subsection_inst),
         ("user", "Question: {query}\nList:\n{titles}\n"),
@@ -180,7 +180,7 @@ select_subsection_prompt = ChatPromptTemplate.from_messages(
 # document section.
 # =============================================================================
 
-gen_answer_prompt = ChatPromptTemplate.from_messages(
+GEN_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
@@ -211,7 +211,7 @@ Given a query and a dictionary where the key is a `source_id` and the value is a
 - **Markdown Usage**: Format your response with Markdown for clarity. Use headings, subheadings, bold text, and italicized words when needed to enhance readability.
 - **Length and Depth**: Avoid superficial responses and strive for depth without unnecessary repetition."""
 
-summarise_answer_prompt = ChatPromptTemplate.from_messages(
+SUMMARISE_ANSWER_PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", summarise_answer_inst),
         ("user", "Query: {query}\nSources and context:\n{attributed_answer_list}"),
@@ -249,7 +249,7 @@ Are global or comparative perspectives missing? \
 Do authors indicate that findings may not generalize beyond certain locations? \
 Is there a call for more region-specific or cross-cultural research?"""
 
-gap_query_map = {
+GAP_QUERY_MAP = {
     "knowledge": knowledge_gap_query,
     "evidence": evidence_gap_query,
     "theoretical": theoretical_gap_query,
