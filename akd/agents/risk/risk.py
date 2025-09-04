@@ -64,7 +64,7 @@ class Criterion(BaseModel):
     )
 
 
-class RiskAgentOutputSchema(InputSchema):
+class RiskAgentOutputSchema(OutputSchema):
     """
     Output schema for Risk Agent.
     """
