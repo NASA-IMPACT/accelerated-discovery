@@ -1,0 +1,8 @@
+{
+    "USE_AZURE_OPENAI": "NO",
+    "LOCAL_MODEL_NAME": "granite3-dense:8b",
+    "LOCAL_MODEL_BASE_URL": "http://localhost:11435",
+    "LOCAL_MODEL_API_KEY": "ollama",
+    "LOCAL_MODEL_FORMAT": "json",
+    "USE_LOCAL_MODEL": "YES"
+}
