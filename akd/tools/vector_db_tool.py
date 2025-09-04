@@ -16,10 +16,12 @@ class VectorDBIndexInputSchema(InputSchema):
 
     ids: List[str] = Field(..., description="A unique list of document IDs.")
     documents: List[str] = Field(
-        ..., description="A list of document contents to index."
+        ...,
+        description="A list of document contents to index.",
     )
     metadatas: Optional[List[Dict[str, Any]]] = Field(
-        None, description="Optional list of metadata for each document."
+        None,
+        description="Optional list of metadata for each document.",
     )
 
 
@@ -55,7 +57,7 @@ class VectorDBToolConfig(BaseToolConfig):
         description="Path to the persistent ChromaDB directory.",
     )
     collection_name: str = Field(
-        default="litagent_demo",
+        default="akd_vdb",
         description="Name of the collection within ChromaDB.",
     )
 
