@@ -44,6 +44,9 @@ dependencies = [
     "ollama>=0.5.1",
     "tiktoken>=0.9.0",
     "rapidfuzz>=3.13.0",
+    "deepeval>=3.4.0",
+    "markdown>=3.8.2",
+    "chromadb>=1.0.13",
     "undetected-chromedriver>=3.5.5",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
 ]
@@ -89,6 +92,9 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.1",
+    "ipykernel>=6.30.0",
+    "ipywidgets>=8.1.7",
     "pre-commit>=4.2.0",
 ]
 local = [
@@ -98,6 +104,7 @@ local = [
     "ipywidgets>=8.1.7",
 ]
 ml = [
+    "chromadb>=1.0.13",
     "pandas>=2.3.1",
     "sentence-transformers>=5.0.0",
     "docling>=2.37.0",
