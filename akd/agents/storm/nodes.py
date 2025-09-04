@@ -1,5 +1,5 @@
-from langchain_community.vectorstores import VectorStore, VectorStoreRetriever
 from langchain_core.documents import Document
+from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 from langchain_openai import ChatOpenAI
 
 from akd.agents.search.aspect_search import (

@@ -3,21 +3,21 @@ from functools import partial
 from langchain_core.output_parsers import StrOutputParser
 
 from .prompts import (
-    direct_gen_outline_prompt,
-    refine_outline_prompt,
-    section_writer_prompt,
-    writer_prompt,
+    GEN_INITIAL_OUTLINE_PROMPT,
+    REFINE_OUTLINE_PROMPT,
+    SECTION_WRITER_PROMPT,
+    WRITER_PROMPT,
 )
-from .structures import Outline, Section, WikiSection
+from .structures import ArticleSection, Outline, Section
 
-# ======================
+# =============================================================================
 # Initialise Research
-# ======================
+# =============================================================================
 
 
 def get_draft_outline(topic, fast_llm):
     generate_outline_direct = (
-        direct_gen_outline_prompt
+        GEN_INITIAL_OUTLINE_PROMPT
         | fast_llm.with_structured_output(
             Outline,
         )
@@ -25,14 +25,14 @@ def get_draft_outline(topic, fast_llm):
     return generate_outline_direct.invoke({"topic": topic})
 
 
-# ======================
+# =============================================================================
 # Refine Outline
-# ======================
+# =============================================================================
 
 
 async def get_refined_outline(topic, old_outline, conversations, long_context_llm):
     refine_outline_chain = (
-        refine_outline_prompt
+        REFINE_OUTLINE_PROMPT
         | long_context_llm.with_structured_output(
             Outline,
         )
@@ -46,9 +46,9 @@ async def get_refined_outline(topic, old_outline, conversations, long_context_ll
     )
 
 
-# ======================
+# =============================================================================
 # Write Article
-# ======================
+# =============================================================================
 
 
 async def retrieve(inputs: dict, retriever):
@@ -71,8 +71,8 @@ async def section_writer(
 ):
     section_writer = (
         partial(retrieve, retriever=retriever)
-        | section_writer_prompt
-        | long_context_llm.with_structured_output(WikiSection)
+        | SECTION_WRITER_PROMPT
+        | long_context_llm.with_structured_output(ArticleSection)
     )
     sections = await section_writer.abatch(
         [
@@ -88,6 +88,6 @@ async def section_writer(
 
 
 async def writer(topic: str, draft: str, long_context_llm):
-    writer = writer_prompt | long_context_llm | StrOutputParser()
+    writer = WRITER_PROMPT | long_context_llm | StrOutputParser()
     article = await writer.ainvoke({"topic": topic, "draft": draft})
     return article

@@ -11,7 +11,7 @@ Here is the format of your writing:
     2. Do not include other information."""
 
 
-direct_gen_outline_prompt = ChatPromptTemplate.from_messages(
+GEN_INITIAL_OUTLINE_PROMPT = ChatPromptTemplate.from_messages(
     [
         ("system", gen_initial_outline_inst),
         (
@@ -22,7 +22,7 @@ direct_gen_outline_prompt = ChatPromptTemplate.from_messages(
 )
 
 
-refine_outline_prompt = ChatPromptTemplate.from_messages(
+REFINE_OUTLINE_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
@@ -46,8 +46,19 @@ Old outline:
 # Writer prompts
 # =============================================================
 
+SECTION_WRITER_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are an expert Wikipedia writer. Complete your assigned WikiSection from the following outline:\n\n"
+            "{outline}\n\nCite your sources, using the following references:\n\n<Documents>\n{docs}\n<Documents>",
+        ),
+        ("user", "Write the full WikiSection for the {section} section."),
+    ],
+)
 
-writer_prompt = ChatPromptTemplate.from_messages(
+
+WRITER_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
@@ -59,17 +70,5 @@ writer_prompt = ChatPromptTemplate.from_messages(
             'Write the complete Wiki article using markdown format. Organize citations using footnotes like "[1]",'
             " avoiding duplicates in the footer. Include URLs in the footer.",
         ),
-    ],
-)
-
-
-section_writer_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are an expert Wikipedia writer. Complete your assigned WikiSection from the following outline:\n\n"
-            "{outline}\n\nCite your sources, using the following references:\n\n<Documents>\n{docs}\n<Documents>",
-        ),
-        ("user", "Write the full WikiSection for the {section} section."),
     ],
 )
