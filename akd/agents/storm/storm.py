@@ -7,6 +7,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
+from loguru import logger
 from pydantic import AliasChoices, Field
 
 from akd._base import InputSchema, OutputSchema
@@ -195,12 +196,20 @@ class StormAgent(BaseAgent):
         """
         config = params.config
         topic = params.topic
-
-        article_state = await self.storm.ainvoke(
-            {"topic": topic},
-            config,
-            debug=self.config.debug,
-        )
+        if self.config.debug:
+            async for chunk in self.storm.astream(
+                {"topic": topic},
+                config=config,
+                stream_mode="values",
+                debug=self.config.debug,
+            ):
+                logger.debug(chunk)
+            article_state = self.storm.get_state(config=config).values
+        else:
+            article_state = await self.storm.ainvoke(
+                {"topic": topic},
+                config=config,
+            )
         article = article_state["article"]
         perspectives = article_state["perspectives"]
         references = article_state["references"]

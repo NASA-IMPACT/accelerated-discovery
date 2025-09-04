@@ -26,10 +26,7 @@ async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI) -> Dic
         Dict: Updated research state.
     """
     topic = state["topic"]
-    print(f"\n💬: {topic}\n")
     outline = get_draft_outline(topic, fast_llm=fast_llm)
-    print("\n🤖: Here is a highlight of your article's initial outline.\n")
-    print(f"{outline.as_str} ...")
     return {
         **state,
         "outline": outline,
@@ -92,10 +89,6 @@ async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI) -> 
         conversations=conversations,
         long_context_llm=long_context_llm,
     )
-    print(
-        "\n🤖: Here is a highlight of your article's refined outline using the interviews for context.\n",
-    )
-    print(f"{updated_outline.as_str} ...")
     return {**state, "outline": updated_outline}
 
 
@@ -110,7 +103,6 @@ async def index_references(state: ResearchState, vector_store: VectorStore) -> D
     Returns:
         ResearchState: Updated research state.
     """
-    print("\n🤖: Indexing references")
     reference_docs = [
         Document(page_content=v, metadata={"source": k})
         for k, v in state["references"].items()
@@ -136,7 +128,6 @@ async def write_sections(
         Dict: Updated research state.
     """
     outline = state["outline"]
-    print("\n🤖: Writing each section")
     sections = await section_writer(
         outline=outline,
         sections=outline.sections,
@@ -164,10 +155,8 @@ async def write_article(state: ResearchState, long_context_llm: ChatOpenAI) -> D
     """
     topic = state["topic"]
     sections = state["sections"]
-    print("\n🤖: Writing the article!")
     draft = "\n\n".join([section.as_str for section in sections])
     article = await writer(topic=topic, draft=draft, long_context_llm=long_context_llm)
-    print("\n🤖: Done. Print your article below!")
     return {
         **state,
         "article": article,
