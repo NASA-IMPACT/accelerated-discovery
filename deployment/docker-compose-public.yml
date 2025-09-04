@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  searxng:
+    image: 350996086543.dkr.ecr.us-east-1.amazonaws.com/searxng:fixed
+    container_name: searxng
+    restart: unless-stopped
+    environment:
+      - BIND_ADDRESS=0.0.0.0:8080
+      - BASE_URL=https://your-domain.com/
+    networks:
+      - searxng-net
+    volumes:
+      - searxng-data:/var/log/searxng
+
+  nginx:
+    image: nginx:alpine
+    container_name: searxng-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    networks:
+      - searxng-net
+    depends_on:
+      - searxng
+
+  certbot:
+    image: certbot/certbot
+    container_name: searxng-certbot
+    volumes:
+      - ./ssl:/etc/letsencrypt
+      - ./web-root:/var/www/certbot
+    command: certonly --webroot --webroot-path=/var/www/certbot --email your-email@example.com --agree-tos --no-eff-email -d your-domain.com
+
+networks:
+  searxng-net:
+    driver: bridge
+
+volumes:
+  searxng-data:
+    driver: local
