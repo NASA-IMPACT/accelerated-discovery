@@ -84,10 +84,10 @@ class SearchResultItem(IOSchema):
         description="Relevance score of the search result",
     )
 
-    extra: dict[str, Any] | None = Field(
-        None,
-        description="Extra information from the search result",
-    )
+    extra: dict[str, Any] = Field(
+    default_factory=dict,
+    description="Extra information from the search result",
+)
 
     @computed_field
     @property
