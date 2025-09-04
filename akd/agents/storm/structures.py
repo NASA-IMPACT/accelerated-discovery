@@ -10,7 +10,9 @@ from akd.agents.search.aspect_search.structures import InterviewState, Perspecti
 # =============================================================
 
 
-class Subsection(BaseModel):
+class OutlineSubsection(BaseModel):
+    """Represents a subsection of the outline"""
+
     subsection_title: str = Field(..., title="Title of the subsection")
     description: str = Field(..., title="Content of the subsection")
 
@@ -19,10 +21,12 @@ class Subsection(BaseModel):
         return f"### {self.subsection_title}\n\n{self.description}".strip()
 
 
-class Section(BaseModel):
+class OutlineSection(BaseModel):
+    """Represents a section of the outline"""
+
     section_title: str = Field(..., title="Title of the section")
     description: str = Field(..., title="Content of the section")
-    subsections: Optional[List[Subsection]] = Field(
+    subsections: Optional[List[OutlineSubsection]] = Field(
         default=None,
         title="Titles and descriptions for each subsection of the Wikipedia page.",
     )
@@ -37,8 +41,10 @@ class Section(BaseModel):
 
 
 class Outline(BaseModel):
+    """Structure out the article's outline"""
+
     page_title: str = Field(..., title="Title of the Wikipedia page")
-    sections: List[Section] = Field(
+    sections: List[OutlineSection] = Field(
         default_factory=list,
         title="Titles and descriptions for each section of the Wikipedia page.",
     )
@@ -55,6 +61,8 @@ class Outline(BaseModel):
 
 
 class ArticleSubSection(BaseModel):
+    """The subsection of the generated article"""
+
     subsection_title: str = Field(..., title="Title of the subsection")
     content: str = Field(
         ...,
@@ -67,6 +75,8 @@ class ArticleSubSection(BaseModel):
 
 
 class ArticleSection(BaseModel):
+    """The section of the generated article"""
+
     section_title: str = Field(..., title="Title of the section")
     content: str = Field(..., title="Full content of the section")
     subsections: Optional[List[ArticleSubSection]] = Field(
@@ -93,6 +103,8 @@ class ArticleSection(BaseModel):
 
 
 class ResearchState(TypedDict):
+    """Tracks state of research on the topic"""
+
     topic: str
     outline: Outline
     perspectives: Perspectives

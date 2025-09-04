@@ -1,3 +1,5 @@
+from typing import Dict
+
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 from langchain_openai import ChatOpenAI
@@ -12,7 +14,17 @@ from .structures import ResearchState
 from .tools import get_draft_outline, get_refined_outline, section_writer, writer
 
 
-async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI):
+async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI) -> Dict:
+    """
+    Initializes the research process by generating a draft outline for the given topic.
+
+    Args:
+        state (ResearchState): Current research state.
+        fast_llm (ChatOpenAI): A small LLM capable of structured output.
+
+    Returns:
+        Dict: Updated research state.
+    """
     topic = state["topic"]
     print(f"\n💬: {topic}\n")
     outline = get_draft_outline(topic, fast_llm=fast_llm)
@@ -27,7 +39,17 @@ async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI):
 async def conduct_interviews(
     state: ResearchState,
     aspect_search_config: AspectSearchConfig,
-):
+) -> Dict:
+    """
+    Conducts interviews between an SME by generating perspectives focusing on different aspects of the topic.
+
+    Args:
+        state (ResearchState): Current research state.
+        aspect_search_config (AspectSearchConfig): Configuration for the aspect search agent.
+
+    Returns:
+        Dict: Updated research state.
+    """
     topic = state["topic"]
     aspect_agent = AspectSearchAgent(aspect_search_config)
     aspect_output = await aspect_agent.arun(AspectSearchInputSchema(topic=topic))
@@ -41,13 +63,24 @@ async def conduct_interviews(
     }
 
 
-async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI):
+async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI) -> Dict:
+    """
+    Refines the article outline using interview conversations.
+
+    Args:
+        state (ResearchState): Current research state.
+        long_context_llm (ChatOpenAI): An LLM capable of handling long context.
+
+    Returns:
+        Dict: Updated research state.
+    """
+
     def format_conversation(interview_state):
         messages = interview_state["messages"]
         convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
         return f"Conversation with {interview_state['editor'].name}\n\n" + convo
 
-    convos = "\n\n".join(
+    conversations = "\n\n".join(
         [
             format_conversation(interview_state)
             for interview_state in state["interview_results"]
@@ -56,7 +89,7 @@ async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI):
     updated_outline = await get_refined_outline(
         topic=state["topic"],
         old_outline=state["outline"].as_str,
-        conversations=convos,
+        conversations=conversations,
         long_context_llm=long_context_llm,
     )
     print(
@@ -66,7 +99,17 @@ async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI):
     return {**state, "outline": updated_outline}
 
 
-async def index_references(state: ResearchState, vector_store: VectorStore):
+async def index_references(state: ResearchState, vector_store: VectorStore) -> Dict:
+    """
+    Indexes reference documents for retrieval.
+
+    Args:
+        state (ResearchState): Current research state.
+        vector_store (VectorStore): In memory vector store to index documents for the current topic.
+
+    Returns:
+        ResearchState: Updated research state.
+    """
     print("\n🤖: Indexing references")
     reference_docs = [
         Document(page_content=v, metadata={"source": k})
@@ -80,7 +123,18 @@ async def write_sections(
     state: ResearchState,
     long_context_llm: ChatOpenAI,
     retriever: VectorStoreRetriever,
-):
+) -> Dict:
+    """
+    Writes content for each section of a research document, using a long-context LLM and a retriever.
+
+    Args:
+        state (ResearchState): Current research state.
+        long_context_llm (ChatOpenAI):An LLM capable of handling long context.
+        retriever (VectorStoreRetriever): Vectorstore retriever for fetching relevant documents.
+
+    Returns:
+        Dict: Updated research state.
+    """
     outline = state["outline"]
     print("\n🤖: Writing each section")
     sections = await section_writer(
@@ -96,7 +150,18 @@ async def write_sections(
     }
 
 
-async def write_article(state: ResearchState, long_context_llm: ChatOpenAI):
+async def write_article(state: ResearchState, long_context_llm: ChatOpenAI) -> Dict:
+    """
+    Writes content for each section of a research document, using a long-context LLM and a retriever.
+
+    Args:
+        state (ResearchState): Current research state.
+        long_context_llm (ChatOpenAI): An LLM capable of handling long context.
+        retriever (VectorStoreRetriever): Vectorstore retriever for fetching relevant documents.
+
+    Returns:
+        Dict: Updated research state.
+    """
     topic = state["topic"]
     sections = state["sections"]
     print("\n🤖: Writing the article!")
