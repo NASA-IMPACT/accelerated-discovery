@@ -17,6 +17,12 @@ riskgroups:
 - id: science-risk-atlas-trustworthiness-explainability
   name: Trustworthiness - explainability
   isDefinedByTaxonomy: science-risk-atlas
+- id: science-risk-atlas-trustworthiness-factuality-time-sensitivity
+  name: Time sensitivity
+  isDefinedByTaxonomy: science-risk-atlas
+- id: science-risk-atlas-trustworthiness-factuality-knowledge-contextualization
+  name: Knowledge contextualization
+  isDefinedByTaxonomy: science-risk-atlas
 risks:
 - id: compliance
   name: Compliance
@@ -181,32 +187,6 @@ risks:
   descriptor: traditional risk of AI
   concern: Outputs may unintentionally support harmful narratives or contribute to environmental, economic, or cultural harm at
     scale, especially when deployed without oversight.
-- id: time-sensitivity
-  name: Time Sensitivity
-  description: Accounting for the temporal relevance and potential obsolescence of generated scientific content.
-  url: ""
-  dateCreated: "2025-08-27"
-  dateModified: "2025-08-27"
-  isDefinedByTaxonomy: ""
-  isPartOf: science-risk-atlas-trustworthiness-factuality
-  tag: time-sensitivity
-  type: inference
-  descriptor: amplified by generative AI
-  concern: Agents may present outdated or no-longer-valid findings as current, especially when lacking access to time-aware
-    or live-updated data.
-- id: knowledge-contextualization
-  name: Knowledge Contextualization
-  description: Presenting scientific facts or claims with appropriate qualifiers, scope, and disciplinary framing.
-  url: ""
-  dateCreated: "2025-08-27"
-  dateModified: "2025-08-27"
-  isDefinedByTaxonomy: ""
-  isPartOf: science-risk-atlas-trustworthiness-factuality
-  tag: knowledge-contextualization
-  type: inference
-  descriptor: specific to generative AI
-  concern: Without appropriate context, generated facts may mislead or be misinterpreted, especially when disciplinary norms,
-    limitations, or assumptions are omitted.
 - id: hallucination-identification
   name: Hallucination Identification
   description: Detecting content that is syntactically plausible but factually fabricated or unsupported by evidence.
@@ -232,3 +212,75 @@ risks:
   descriptor: amplified by agentic AI
   concern: Inadequate attribution risks plagiarism, undermines research transparency, and violates scholarly norms, especially
     when models generate citations without grounding.
+- id: static-knowledge
+  name: Static Knowledge
+  description: Reliance on fixed or outdated knowledge sources that do not reflect the most recent developments in scientific domains.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality-time-sensitivity
+  tag: static-knowledge
+  type: inference
+  descriptor: amplified by generative AI
+  concern: LLMs trained on static corpora may present outdated scientific knowledge as current, especially in fast-moving fields like medicine or AI research.
+- id: outdated-confidence
+  name: Outdated Information and False Confidence
+  description: Presentation of obsolete or retracted claims with unwarranted confidence, leading to misleading conclusions.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality-time-sensitivity
+  tag: outdated-confidence
+  type: inference
+  descriptor: amplified by generative AI
+  concern: Agents may confidently cite superseded or retracted studies without signaling uncertainty, misleading users and reinforcing invalid conclusions.
+- id: overgeneralization
+  name: Overgeneralization
+  description: Failure to acknowledge the scope, limitations, or conditionality of scientific claims during generation.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality-knowledge-contextualization
+  tag: overgeneralization
+  type: inference
+  descriptor: specific to generative AI
+  concern: Generated claims may exaggerate applicability or validity by omitting qualifiers, causing overconfidence in results or inappropriate extrapolation.
+- id: multidisciplinary-failure
+  name: Failure to Integrate Multidisciplinary Knowledge
+  description: Inability to synthesize relevant insights from different fields that contribute to understanding a scientific question.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality-knowledge-contextualization
+  tag: multidisciplinary-failure
+  type: inference
+  descriptor: specific to generative AI
+  concern: Scientific problems often require cross-domain reasoning, but agents may silo knowledge, missing connections or presenting narrow viewpoints.
+- id: lack-of-adaptive-reasoning
+  name: Lack of Adaptive Reasoning
+  description: Rigid application of learned patterns without adjusting reasoning to specific scientific contexts or novel conditions.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality-knowledge-contextualization
+  tag: lack-of-adaptive-reasoning
+  type: inference
+  descriptor: specific to generative AI
+  concern: Generative systems may default to formulaic patterns and fail to reason flexibly in novel or interdisciplinary scenarios, reducing scientific utility.
+- id: positivity-bias
+  name: Positivity Bias
+  description: Tendency to overemphasize favorable results or consensus while underrepresenting null, negative, or controversial findings.
+  url: ""
+  dateCreated: "2025-08-27"
+  dateModified: "2025-08-27"
+  isDefinedByTaxonomy: ""
+  isPartOf: science-risk-atlas-trustworthiness-factuality-knowledge-contextualization
+  tag: positivity-bias
+  type: output
+  descriptor: amplified by generative AI
+  concern: Generative agents may preferentially surface optimistic or popular conclusions, obscuring the true state of scientific uncertainty or debate.
