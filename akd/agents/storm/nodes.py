@@ -1,150 +1,162 @@
-from langgraph.graph import END, StateGraph, START
-from langgraph.pregel import RetryPolicy
+from typing import Dict
+
 from langchain_core.documents import Document
-from langgraph.types import interrupt
+from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
+from langchain_openai import ChatOpenAI
 
-from .state import ResearchState, InterviewState
-from .tools import *
-from .config import storm_config
+from akd.agents.search.aspect_search import (
+    AspectSearchAgent,
+    AspectSearchConfig,
+    AspectSearchInputSchema,
+)
 
-# Research nodes
+from .structures import ResearchState
+from .tools import get_draft_outline, get_refined_outline, section_writer, writer
 
-async def initialize_research(state: ResearchState):
+
+async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI) -> Dict:
+    """
+    Initializes the research process by generating a draft outline for the given topic.
+
+    Args:
+        state (ResearchState): Current research state.
+        fast_llm (ChatOpenAI): A small LLM capable of structured output.
+
+    Returns:
+        Dict: Updated research state.
+    """
     topic = state["topic"]
-    print(f"\n💬: {topic}\n")
-    outline = get_draft_outline(topic)
-    print(f"\n🤖: Here is a highlight of your article's initial outline.\n")
-    print(f"{outline.as_str} ...")
-    editors = await get_perspectives(topic)
+    outline = get_draft_outline(topic, fast_llm=fast_llm)
     return {
         **state,
         "outline": outline,
-        "editors": editors,
     }
 
 
-def hitl_editors(state: ResearchState):
-    result = interrupt(
-        {
-            "task": "Review the generated perspectives and make any necessary edits.",
-            "editors": state["editors"]
-        }
-    )
-    return {
-        "editors": result["modified_editors"] 
-    }
+async def conduct_interviews(
+    state: ResearchState,
+    aspect_search_config: AspectSearchConfig,
+) -> Dict:
+    """
+    Conducts interviews between an SME by generating perspectives focusing on different aspects of the topic.
 
+    Args:
+        state (ResearchState): Current research state.
+        aspect_search_config (AspectSearchConfig): Configuration for the aspect search agent.
 
-async def conduct_interviews(state: ResearchState):
-
-    MAX_NUM_TURNS = storm_config.MAX_NUM_TURNS
-    RETRY_ATTEMPTS = storm_config.RETRY_ATTEMPTS
-    NUM_EDITORS = storm_config.NUM_EDITORS
-
-    def route_messages(state: InterviewState, name: str = "Subject_Matter_Expert"):
-        messages = state["messages"]
-        num_responses = len(
-            [m for m in messages if isinstance(m, AIMessage) and m.name == name]
-        )
-        if num_responses >= MAX_NUM_TURNS:
-            return END
-        last_question = messages[-2]
-        if last_question.content.endswith("Thank you so much for your help!"):
-            return END
-        return "ask_question"
-
-    # Interview graph
-    builder = StateGraph(InterviewState)
-
-    builder.add_node("ask_question", generate_question, retry=RetryPolicy(max_attempts=RETRY_ATTEMPTS))
-    builder.add_node("answer_question", gen_answer, retry=RetryPolicy(max_attempts=RETRY_ATTEMPTS))
-    builder.add_conditional_edges("answer_question", route_messages)
-    builder.add_edge("ask_question", "answer_question")
-
-    builder.add_edge(START, "ask_question")
-    interview_graph = builder.compile(checkpointer=False).with_config(
-        run_name="Conduct Interviews"
-    )
-
+    Returns:
+        Dict: Updated research state.
+    """
     topic = state["topic"]
-    initial_states = []
-    print(f"🤖: Here are your editors!")
-    for editor in state["editors"].editors[:NUM_EDITORS]:
-        initial_states.append(
-        {
-            "editor": editor,
-            "messages": [
-                AIMessage(
-                    content=f"So you said you were writing an article on {topic}?",
-                    name="Subject_Matter_Expert",
-                )
-            ],
-        })
-        print(f"👤: {editor.name} works at {editor.affiliation} as a {editor.role}. They {editor.description}.")
-    # We call in to the sub-graph here to parallelize the interviews
-    print(f"\n🤖: The interviews have started!")
-    interview_results = await interview_graph.abatch(initial_states)
-    print(f"\n🤖: Interview outcomes\n")
-    for interview in interview_results:
-        print("👥 Interview\n")
-        i = 0
-        messages = interview['messages']
-        for message in messages:
-            print(f"{message.name}: {message.content}")
-            i = i + 1
-            if i%2 == 0:
-                print('\n')
+    aspect_agent = AspectSearchAgent(aspect_search_config)
+    aspect_output = await aspect_agent.arun(AspectSearchInputSchema(topic=topic))
+    for i in range(len(aspect_output.interview_results)):
+        aspect_output.interview_results[i].pop("search_results")
     return {
         **state,
-        "interview_results": interview_results,
+        "perspectives": aspect_output.perspectives,
+        "interview_results": aspect_output.interview_results,
+        "references": aspect_output.references,
     }
 
 
-async def refine_outline(state: ResearchState):
-    convos = "\n\n".join(
+async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI) -> Dict:
+    """
+    Refines the article outline using interview conversations.
+
+    Args:
+        state (ResearchState): Current research state.
+        long_context_llm (ChatOpenAI): An LLM capable of handling long context.
+
+    Returns:
+        Dict: Updated research state.
+    """
+
+    def format_conversation(interview_state):
+        messages = interview_state["messages"]
+        convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
+        return f"Conversation with {interview_state['editor'].name}\n\n" + convo
+
+    conversations = "\n\n".join(
         [
             format_conversation(interview_state)
             for interview_state in state["interview_results"]
-        ]
+        ],
     )
-    updated_outline = await get_refined_outline(topic=state["topic"], 
-                                    old_outline=state["outline"].as_str,
-                                    conversations=convos)
-    print(f"\n🤖: Here is a highlight of your article's refined outline using the interviews for context.\n")
-    print(f"{updated_outline.as_str} ...")
+    updated_outline = await get_refined_outline(
+        topic=state["topic"],
+        old_outline=state["outline"].as_str,
+        conversations=conversations,
+        long_context_llm=long_context_llm,
+    )
     return {**state, "outline": updated_outline}
 
 
-async def index_references(state: ResearchState):
-    print(f"\n🤖: Indexing references")
-    all_docs = []
-    for interview_state in state["interview_results"]:
-        reference_docs = [
-            Document(page_content=v, metadata={"source": k})
-            for k, v in interview_state["references"].items()
-        ]
-        all_docs.extend(reference_docs)
-    await vectorstore.aadd_documents(all_docs)
+async def index_references(state: ResearchState, vector_store: VectorStore) -> Dict:
+    """
+    Indexes reference documents for retrieval.
+
+    Args:
+        state (ResearchState): Current research state.
+        vector_store (VectorStore): In memory vector store to index documents for the current topic.
+
+    Returns:
+        ResearchState: Updated research state.
+    """
+    reference_docs = [
+        Document(page_content=v, metadata={"source": k})
+        for k, v in state["references"].items()
+    ]
+    await vector_store.aadd_documents(reference_docs)
     return state
 
 
-async def write_sections(state: ResearchState):
+async def write_sections(
+    state: ResearchState,
+    long_context_llm: ChatOpenAI,
+    retriever: VectorStoreRetriever,
+) -> Dict:
+    """
+    Writes content for each section of a research document, using a long-context LLM and a retriever.
+
+    Args:
+        state (ResearchState): Current research state.
+        long_context_llm (ChatOpenAI):An LLM capable of handling long context.
+        retriever (VectorStoreRetriever): Vectorstore retriever for fetching relevant documents.
+
+    Returns:
+        Dict: Updated research state.
+    """
     outline = state["outline"]
-    print(f"\n🤖: Writing each section")
-    sections = await section_writer(outline=outline, sections=outline.sections, topic=state["topic"])
+    sections = await section_writer(
+        outline=outline,
+        sections=outline.sections,
+        topic=state["topic"],
+        long_context_llm=long_context_llm,
+        retriever=retriever,
+    )
     return {
         **state,
         "sections": sections,
     }
 
 
-async def write_article(state: ResearchState):
+async def write_article(state: ResearchState, long_context_llm: ChatOpenAI) -> Dict:
+    """
+    Writes content for each section of a research document, using a long-context LLM and a retriever.
+
+    Args:
+        state (ResearchState): Current research state.
+        long_context_llm (ChatOpenAI): An LLM capable of handling long context.
+        retriever (VectorStoreRetriever): Vectorstore retriever for fetching relevant documents.
+
+    Returns:
+        Dict: Updated research state.
+    """
     topic = state["topic"]
     sections = state["sections"]
-    print(f"\n🤖: Writing the article!")
     draft = "\n\n".join([section.as_str for section in sections])
-    article = await writer(topic=topic, draft=draft)
-    print(f"\n🤖: Done. Print your article below!")
+    article = await writer(topic=topic, draft=draft, long_context_llm=long_context_llm)
     return {
         **state,
         "article": article,

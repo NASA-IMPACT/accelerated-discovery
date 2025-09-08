@@ -104,6 +104,10 @@ class WebScraperToolConfig(ScraperToolConfig):
         default="en-US,en;q=0.5",
         description="Accept-Language header for HTTP requests.",
     )
+    accept_encoding: str = Field(
+        default="gzip, deflate",
+        description="Accept-Encoding header for HTTP requests.",
+    )
     follow_redirects: bool = Field(
         default=True,
         description="Whether to follow HTTP redirects.",
@@ -119,7 +123,7 @@ class WebScraperToolConfig(ScraperToolConfig):
             "User-Agent": self.user_agent,
             "Accept": self.accept_header,
             "Accept-Language": self.accept_language,
-            "Accept-Encoding": "gzip, deflate",
+            "Accept-Encoding": self.accept_encoding,
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
         }
