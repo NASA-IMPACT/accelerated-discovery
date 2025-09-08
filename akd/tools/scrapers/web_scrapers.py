@@ -8,7 +8,7 @@ from readability import Document
 from requests import HTTPError, RequestException
 
 from ._base import ScraperToolInputSchema, ScraperToolOutputSchema, WebScraper
-
+from markdownify import markdownify as md
 
 class SimpleWebScraper(WebScraper):
     """
@@ -162,29 +162,44 @@ class Crawl4AIWebScraper(WebScraper):
         async with AsyncWebCrawler() as crawler:
             return await crawler.arun(url=url)
 
-    async def _arun(
-        self,
-        params: ScraperToolInputSchema,
-        **kwargs,
-    ) -> ScraperToolOutputSchema:
-        """
-        Async version of the run method.
-        """
+    def _clean_dom(self, html: str) -> str:
+        soup = BeautifulSoup(html, "html.parser")
+
+        boilerplate_selectors = [
+            "nav", "header", "footer", "aside", "script", "style", "noscript",
+            # Common header/footer classes
+            ".header", ".footer", ".nav", ".navigation", ".navbar", ".sidebar",
+            ".menu", ".breadcrumb", ".pagination", ".ads", ".advertisement",
+            ".social", ".share", ".comments", ".related", ".recommended",
+            # Common IDs
+            "#header", "#footer", "#nav", "#navigation", "#sidebar", "#menu",
+            "#ads", "#advertisement", "#comments", "#social"
+        ]
+        for sel in boilerplate_selectors:
+            for tag in soup.select(sel):
+                tag.decompose()
+
+        main = soup.select_one("main, [role='main'], article, .article, .post, .post-content, .entry-content")
+        if main:
+            # /print which tag was used
+            soup = BeautifulSoup(str(main), "html.parser")
+
+        return str(soup)
+
+    async def _arun(self, params: ScraperToolInputSchema, **kwargs) -> ScraperToolOutputSchema:
         if params.url.path.endswith((".pdf", ".PDF")):
             raise RuntimeError(f"Can't parse url with PDF :: {params.url}")
 
         crawl_result = await self.fetch(str(params.url))
+        raw_html = crawl_result.html
 
-        html_content = crawl_result.html
+        cleaned_html = self._clean_dom(raw_html)
 
-        soup = BeautifulSoup(html_content, "html.parser")
-        metadata = await self._extract_metadata(
-            soup,
-            Document(html_content),
-            str(params.url),
-        )
+        soup = BeautifulSoup(cleaned_html, "html.parser")
+        markdown = md(cleaned_html).strip()
+        metadata = await self._extract_metadata(soup, Document(cleaned_html), str(params.url))
 
         return ScraperToolOutputSchema(
-            content=crawl_result.markdown.strip(),
+            content=markdown,
             metadata=metadata,
         )
