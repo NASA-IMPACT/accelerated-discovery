@@ -6,7 +6,8 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_openai import ChatOpenAI
 
 from .prompts import (
-    GEN_INITIAL_OUTLINE_PROMPT,
+    DRAFT_OUTLINE_PROMPT,
+    OUTLINE_FROM_SKETCH_PROMPT,
     REFINE_OUTLINE_PROMPT,
     SECTION_WRITER_PROMPT,
     WRITER_PROMPT,
@@ -29,13 +30,37 @@ def get_draft_outline(topic: str, fast_llm: ChatOpenAI) -> Outline:
     Returns:
         Outline: An outline generated for the topic containing sections, subsections and corresponsing descriptions.
     """
-    generate_outline_direct = (
-        GEN_INITIAL_OUTLINE_PROMPT
+    generate_outline_direct = DRAFT_OUTLINE_PROMPT | fast_llm.with_structured_output(
+        Outline,
+    )
+    return generate_outline_direct.invoke({"topic": topic})
+
+
+def get_draft_outline_from_sketch(
+    topic: str,
+    outline_sketch: str,
+    fast_llm: ChatOpenAI,
+) -> Outline:
+    """
+    Generates a structured draft outline for a given topic based on a provided sketch.
+
+    Args:
+        topic (str): The user-defined topic.
+        outline_sketch (str): Sketch of what the outline should look like.
+        fast_llm (ChatOpenAI): A small LLM capable of structured output.
+
+    Returns:
+        Outline: An outline generated for the topic containing sections, subsections and corresponsing descriptions.
+    """
+    generate_outline_from_sketch = (
+        OUTLINE_FROM_SKETCH_PROMPT
         | fast_llm.with_structured_output(
             Outline,
         )
     )
-    return generate_outline_direct.invoke({"topic": topic})
+    return generate_outline_from_sketch.invoke(
+        {"topic": topic, "outline_sketch": outline_sketch},
+    )
 
 
 # =============================================================================

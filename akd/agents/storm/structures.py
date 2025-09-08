@@ -106,6 +106,7 @@ class ResearchState(TypedDict):
     """Tracks state of research on the topic"""
 
     topic: str
+    outline_sketch: str
     outline: Outline
     perspectives: Perspectives
     interview_results: List[InterviewState]

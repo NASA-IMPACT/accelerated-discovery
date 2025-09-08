@@ -5,7 +5,7 @@ import pytest
 
 from akd.agents.search.aspect_search.structures import Editor, Perspectives
 from akd.agents.storm import StormAgent, StormInputSchema, StormOutputSchema
-from akd.agents.storm.prompts import GEN_INITIAL_OUTLINE_PROMPT, REFINE_OUTLINE_PROMPT
+from akd.agents.storm.prompts import DRAFT_OUTLINE_PROMPT, REFINE_OUTLINE_PROMPT
 from akd.agents.storm.structures import Outline, OutlineSection, ResearchState
 from akd.agents.storm.tools import get_draft_outline, get_refined_outline, retrieve
 from akd.configs.project import get_project_settings
@@ -103,7 +103,7 @@ async def test_get_draft_outline(dummy_topic, dummy_outline):
     mock_pipeline.invoke.return_value = dummy_outline
     mock_llm.with_structured_output.return_value = MagicMock()
     with patch.object(
-        type(GEN_INITIAL_OUTLINE_PROMPT),
+        type(DRAFT_OUTLINE_PROMPT),
         "__or__",
         return_value=mock_pipeline,
     ):

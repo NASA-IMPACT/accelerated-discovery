@@ -37,6 +37,10 @@ class StormInputSchema(InputSchema):
         validation_alias=AliasChoices("topic", "query"),
         description="The topic to create the article for.",
     )
+    outline_sketch: str = Field(
+        default=None,
+        description="Rough sketch of the article's outline.",
+    )
 
 
 class StormOutputSchema(OutputSchema):
@@ -196,9 +200,10 @@ class StormAgent(BaseAgent):
         """
         config = params.config
         topic = params.topic
+        outline_sketch = params.outline_sketch
         if self.config.debug:
             async for chunk in self.storm.astream(
-                {"topic": topic},
+                {"topic": topic, "outline_sketch": outline_sketch},
                 config=config,
                 stream_mode="values",
                 debug=self.config.debug,
@@ -207,7 +212,7 @@ class StormAgent(BaseAgent):
             article_state = self.storm.get_state(config=config).values
         else:
             article_state = await self.storm.ainvoke(
-                {"topic": topic},
+                {"topic": topic, "outline_sketch": outline_sketch},
                 config=config,
             )
         article = article_state["article"]
