@@ -2,7 +2,7 @@ import re
 
 import httpx
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler
+from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from markdownify import markdownify
 from readability import Document
 from requests import HTTPError, RequestException
@@ -159,45 +159,35 @@ class SimpleWebScraper(WebScraper):
 
 class Crawl4AIWebScraper(WebScraper):
     async def fetch(self, url: str):
+        config = CrawlerRunConfig(
+        
+        excluded_tags=[
+            "nav", "header", "footer", "aside", "script", "style", "noscript"
+        ],
+        excluded_selector=".header, .footer, .nav, .navigation, .navbar, .sidebar, "
+                        ".menu, .breadcrumb, .pagination, .ads, "
+                        ".advertisement, .social, .share, .comments, "
+                        ".related, .recommended, "
+                        "#header, #footer, #nav, #navigation, #sidebar, #menu, "
+                        "#ads, #advertisement, #comments, #social",
+    )
+        
         async with AsyncWebCrawler() as crawler:
-            return await crawler.arun(url=url)
+            return await crawler.arun(url=url, config=config)
 
-    def _clean_dom(self, html: str) -> str:
-        soup = BeautifulSoup(html, "html.parser")
-
-        boilerplate_selectors = [
-            "nav", "header", "footer", "aside", "script", "style", "noscript",
-            # Common header/footer classes
-            ".header", ".footer", ".nav", ".navigation", ".navbar", ".sidebar",
-            ".menu", ".breadcrumb", ".pagination", ".ads", ".advertisement",
-            ".social", ".share", ".comments", ".related", ".recommended",
-            # Common IDs
-            "#header", "#footer", "#nav", "#navigation", "#sidebar", "#menu",
-            "#ads", "#advertisement", "#comments", "#social"
-        ]
-        for sel in boilerplate_selectors:
-            for tag in soup.select(sel):
-                tag.decompose()
-
-        main = soup.select_one("main, [role='main'], article, .article, .post, .post-content, .entry-content")
-        if main:
-            # /print which tag was used
-            soup = BeautifulSoup(str(main), "html.parser")
-
-        return str(soup)
 
     async def _arun(self, params: ScraperToolInputSchema, **kwargs) -> ScraperToolOutputSchema:
         if params.url.path.endswith((".pdf", ".PDF")):
             raise RuntimeError(f"Can't parse url with PDF :: {params.url}")
 
         crawl_result = await self.fetch(str(params.url))
-        raw_html = crawl_result.html
-
-        cleaned_html = self._clean_dom(raw_html)
-
-        soup = BeautifulSoup(cleaned_html, "html.parser")
-        markdown = md(cleaned_html).strip()
-        metadata = await self._extract_metadata(soup, Document(cleaned_html), str(params.url))
+        
+        # Use Crawl4AI's built-in markdown
+        markdown = crawl_result.markdown.strip()
+        
+        # Use original HTML for metadata extraction
+        soup = BeautifulSoup(crawl_result.html, "html.parser")
+        metadata = await self._extract_metadata(soup, Document(crawl_result.html), str(params.url))
 
         return ScraperToolOutputSchema(
             content=markdown,
