@@ -11,7 +11,13 @@ from akd.agents.search.aspect_search import (
 )
 
 from .structures import ResearchState
-from .tools import get_draft_outline, get_refined_outline, section_writer, writer
+from .tools import (
+    get_draft_outline,
+    get_draft_outline_from_sketch,
+    get_refined_outline,
+    section_writer,
+    writer,
+)
 
 
 async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI) -> Dict:
@@ -26,7 +32,15 @@ async def initialize_research(state: ResearchState, fast_llm: ChatOpenAI) -> Dic
         Dict: Updated research state.
     """
     topic = state["topic"]
-    outline = get_draft_outline(topic, fast_llm=fast_llm)
+    outline_sketch = state["outline_sketch"]
+    if outline_sketch:
+        outline = get_draft_outline_from_sketch(
+            topic=topic,
+            outline_sketch=outline_sketch,
+            fast_llm=fast_llm,
+        )
+    else:
+        outline = get_draft_outline(topic=topic, fast_llm=fast_llm)
     return {
         **state,
         "outline": outline,
