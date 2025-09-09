@@ -167,7 +167,7 @@ class CombinedCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     reranker_model_name: str = Field(
-        "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "cross-encoder/ms-marco-MiniLM-L12-v2",
         description="The model to use for reranking the combined results.",
     )
 
@@ -249,17 +249,18 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     data_file: str = str(
-        get_akd_root() / "docs" / "repositories_with_embeddings_v3.csv"
+        get_akd_root() / "docs" / "repositories_with_embeddings_v4.csv"
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
-        "1QtTKnlQmSFshCvw3cXAHXgMQQ-DMuGq0",
+        "1-3eD0kJFKgsgKhREA4dOW_V2gYfosK9R",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
     wait_time: int = 1
-    embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "all-MiniLM-L6-v2")
+    embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
     remove_embedding_column: bool = True
     text_column: str = "text"
+    name_column: str = "name"
     desc_column: str = "description"
     embeddings_column: str = "embeddings"
     debug: bool = False
@@ -390,7 +391,9 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         # Get texts to embed
         texts = (
             (
-                self.repo_data[self.config.desc_column].fillna("")
+                self.repo_data[self.config.name_column].fillna("")
+                + " "
+                + self.repo_data[self.config.desc_column].fillna("")
                 + " "
                 + self.repo_data[self.config.text_column].fillna("")
             )
@@ -512,7 +515,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         formatted_results = [
             SearchResultItem(
-                title=f"GitHub Repository for {query}",
+                title=f"GitHub Repository: {result.pop('name', '')}",
                 url=HttpUrlAdapter.validate_python(result.pop("URL", "")),
                 content=result.pop("text", ""),
                 query=query,
@@ -742,7 +745,7 @@ class SDECodeSearchTool(CodeSearchTool):
 
         formatted_results = [
             SearchResultItem(
-                title=f"SDE Code Search for {query}",
+                title=f"SDE Code Search Result",
                 url=HttpUrlAdapter.validate_python(result.pop("url", "")),
                 content=result.pop("full_text", ""),
                 query=query,
