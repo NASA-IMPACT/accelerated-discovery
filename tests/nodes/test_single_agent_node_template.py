@@ -67,7 +67,7 @@ class TestSingleAgentNodeTemplateBasic:
         agent = TestAgent()
 
         # Remove the schema attributes to simulate a bad agent
-        del agent.__class__.input_schema
+        agent.input_schema = None  # type: ignore
 
         with pytest.raises(ValueError, match="must have an input_schema"):
             SingleAgentNodeTemplate(agent=agent)
@@ -76,7 +76,7 @@ class TestSingleAgentNodeTemplateBasic:
     async def test_execute_basic_agent(self):
         """Test executing node template with basic agent."""
         agent = TestAgent()
-        template = SingleAgentNodeTemplate(agent=agent, mutation=True)
+        template = SingleAgentNodeTemplate(agent=agent, mutation=False)
 
         # Create test global state
         global_state = GlobalState(
