@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
@@ -40,6 +41,7 @@ class GuardianModelID(Enum):
 
     GUARDIAN_2B = "granite3-guardian:2b"
     GUARDIAN_8B = "granite3-guardian:8b"
+    GUARDIAN_3_3_8B = "ibm/granite3.3-guardian:8b"
 
 
 class OllamaType(Enum):
@@ -159,13 +161,27 @@ class GraniteGuardianTool(
         try:
             if self.ollama_type == OllamaType.CHAT:
                 result = chat(model=self.model, messages=messages)
-                label = result["message"]["content"].strip().lower()
+                content = result.message.content
             elif self.ollama_type == OllamaType.SERVER:
                 result = self._ollama_server_gen(messages)
-                label = result["content"].strip().lower()
+                content = result["content"]
+
+            try:
+                label = re.findall(r"\b(yes|no)\b", content, flags=re.IGNORECASE)[
+                    0
+                ].lower()
+            except Exception as e:
+                logger.error(f"[GuardianTool] Ollama error: {e}")
+                return {"error": str(e)}
+
+            if label not in ("yes", "no"):
+                is_risky = None
+            else:
+                is_risky = label == "yes"
+
             return {
                 "risk_label": label,
-                "is_risky": label == "yes",
+                "is_risky": is_risky,
                 "raw_response": result,
             }
         except Exception as e:
