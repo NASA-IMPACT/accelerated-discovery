@@ -7,6 +7,9 @@ from loguru import logger
 from akd._base import AbstractBase
 from akd.agents._base import BaseAgent
 from akd.common_types import CallableSpec
+from akd.configs.guardrails_config import GuardrailsConfig
+from akd.guardrails import add_guardrails
+from akd.tools.granite_guardian_tool import RiskDefinition
 from akd.tools.utils import ToolRunner
 
 from .states import GlobalState, NodeState
@@ -248,8 +251,9 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         self,
         agent: BaseAgent,
         node_id: Optional[str] = None,
-        input_guardrails: List[CallableSpec] | None = None,
-        output_guardrails: List[CallableSpec] | None = None,
+        input_guardrails: Optional[List[RiskDefinition]] = None,
+        output_guardrails: Optional[List[RiskDefinition]] = None,
+        guardrails_config: Optional[GuardrailsConfig] = None,
         tool_runner: Optional[ToolRunner] = None,
         mutation: bool = False,
         debug: bool = False,
@@ -260,8 +264,9 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
 
         Args:
             agent: The BaseAgent instance to wrap
-            input_guardrails: List of input validation functions
-            output_guardrails: List of output validation functions
+            input_guardrails: RiskDefinition list for AI safety input validation
+            output_guardrails: RiskDefinition list for AI safety output validation
+            guardrails_config: Configuration for RiskDefinition-style guardrails
             node_id: Unique identifier for this node
             tool_runner: Tool runner instance
             mutation: Whether to mutate global state in place
@@ -271,31 +276,88 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         if not isinstance(agent, BaseAgent):
             raise TypeError("agent must be an instance of BaseAgent")
 
-        # Validate that agent has required schemas
-        if not hasattr(agent, "input_schema") or agent.input_schema is None:
-            raise ValueError(
-                f"Agent {agent.__class__.__name__} must have an input_schema",
-            )
-        if not hasattr(agent, "output_schema") or agent.output_schema is None:
-            raise ValueError(
-                f"Agent {agent.__class__.__name__} must have an output_schema",
-            )
-
-        self.agent = agent
-
-        # Dynamically set the input and output schemas from the agent
-        self._input_schema = agent.input_schema
-        self._output_schema = agent.output_schema
-
-        super().__init__(
+        self.agent = self._apply_guardrails_to_agent(
+            agent=agent,
+            config=guardrails_config,
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
+        )
+        # Validate that agent has required schemas
+        if not hasattr(self.agent, "input_schema") or self.agent.input_schema is None:
+            raise ValueError(
+                f"Agent {self.agent.__class__.__name__} must have an input_schema",
+            )
+        if not hasattr(self.agent, "output_schema") or self.agent.output_schema is None:
+            raise ValueError(
+                f"Agent {self.agent.__class__.__name__} must have an output_schema",
+            )
+
+        # Dynamically set the input and output schemas from the agent
+        self._input_schema = self.agent.input_schema
+        self._output_schema = self.agent.output_schema
+
+        # Call parent constructor with no CallableSpec guardrails (agent handles its own guardrails)
+        super().__init__(
+            input_guardrails=[],  # no need to run callable spec guardrails
+            output_guardrails=[],  # no need to run callable spec guardrails
             node_id=node_id,
             tool_runner=tool_runner,
             mutation=mutation,
             debug=debug,
             **kwargs,
         )
+
+    @staticmethod
+    def _apply_guardrails_to_agent(
+        agent: BaseAgent,
+        config: GuardrailsConfig | None,
+        input_guardrails: List[RiskDefinition] | None = None,
+        output_guardrails: List[RiskDefinition] | None = None,
+    ) -> BaseAgent:
+        """
+        Apply guardrails to an agent class using the add_guardrails decorator.
+
+        Args:
+            agent: The BaseAgent instance to wrap
+            config: Configuration for RiskDefinition-style guardrails
+            input_guardrails: RiskDefinition list for AI safety input validation
+            output_guardrails: RiskDefinition list for AI safety output validation
+
+        Returns:
+            A new BaseAgent instance with guardrails applied, or the original agent if no guardrails
+        """
+        if not isinstance(agent, BaseAgent):
+            raise TypeError("agent must be an instance of BaseAgent")
+
+        # Only apply guardrails if we have non-empty lists or a config
+        agent_name = agent.__class__.__name__
+        has_input_guardrails = input_guardrails and len(input_guardrails) > 0
+        has_output_guardrails = output_guardrails and len(output_guardrails) > 0
+        has_config = config is not None
+
+        if has_input_guardrails or has_output_guardrails or has_config:
+            # Apply the decorator to create a guarded agent class
+            logger.info(f"Applying guardrails to agent {agent_name}")
+            GuardedAgentClass = add_guardrails(
+                input_guardrails=input_guardrails,
+                output_guardrails=output_guardrails,
+                config=config,
+            )(agent.__class__)
+
+            # Create new guarded agent instance preserving original state
+            guarded_agent = GuardedAgentClass.__new__(GuardedAgentClass)
+            guarded_agent.__dict__.update(agent.__dict__)
+
+            # Initialize the guardrails system
+            GuardedAgentClass.__init__(guarded_agent)
+
+            logger.info(
+                f"Guardrails applied to {agent_name}. Now, it has become {guarded_agent.__class__.__name__}",
+            )
+            return guarded_agent
+        else:
+            # No guardrails to apply, return original agent
+            return agent
 
     async def _execute(
         self,
