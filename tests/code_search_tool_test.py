@@ -97,7 +97,7 @@ def test_data_file_validation(temp_data_file):
 """Test3: Vector Embedding"""
 
 
-def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
+def test_vector_embedding(embedder=Embedder(model_name="thenlper/gte-large")):
     texts = ["flood prediction", "earthquake classification"]
     embeddings = embedder.embed_texts(texts)
 
