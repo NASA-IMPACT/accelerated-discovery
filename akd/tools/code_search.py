@@ -249,7 +249,9 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     data_file: str = str(
-        get_akd_root() / "docs" / "repositories_with_embeddings_v4.csv"
+        get_akd_root()
+        / "docs"
+        / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v4.csv")
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
@@ -515,7 +517,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         formatted_results = [
             SearchResultItem(
-                title=f"GitHub Repository: {result.pop('name', '')}",
+                title=str(result.pop("name", "")),
                 url=HttpUrlAdapter.validate_python(result.pop("URL", "")),
                 content=result.pop("text", ""),
                 query=query,
@@ -745,7 +747,7 @@ class SDECodeSearchTool(CodeSearchTool):
 
         formatted_results = [
             SearchResultItem(
-                title=f"SDE Code Search Result",
+                title=str(result.get("url", "")).split("/")[-1],
                 url=HttpUrlAdapter.validate_python(result.pop("url", "")),
                 content=result.pop("full_text", ""),
                 query=query,
