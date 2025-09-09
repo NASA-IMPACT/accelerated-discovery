@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from loguru import logger
 
 from akd._base import AbstractBase
+from akd.agents._base import BaseAgent
 from akd.common_types import CallableSpec
 from akd.tools.utils import ToolRunner
 
@@ -50,6 +51,9 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
         global_state = params
         node_id = self.node_id
         node_state = global_state.node_states.get(node_id, NodeState())
+
+        if not node_state.inputs:
+            logger.warning(f"Node {node_id} has no inputs to process.")
 
         # If mutation is not enabled, we create a copy of the node state
         # to avoid modifying the original state in place.
@@ -229,5 +233,104 @@ class SupervisedNodeTemplate(AbstractNodeTemplate):
             node_state.tool_calls.extend(sup_out.tool_calls)
 
         node_state.steps.update(sup_out.steps)
+
+        return node_state
+
+
+class SingleAgentNodeTemplate(AbstractNodeTemplate):
+    """
+    A node template that wraps a single agent and automatically binds the agent's IO schema.
+    This class simplifies node creation for single-agent workflows by automatically extracting
+    the input and output schemas from the provided agent.
+    """
+
+    def __init__(
+        self,
+        agent: BaseAgent,
+        node_id: Optional[str] = None,
+        input_guardrails: List[CallableSpec] | None = None,
+        output_guardrails: List[CallableSpec] | None = None,
+        tool_runner: Optional[ToolRunner] = None,
+        mutation: bool = False,
+        debug: bool = False,
+        **kwargs,
+    ) -> None:
+        """
+        Initialize the SingleAgentNodeTemplate with an agent.
+
+        Args:
+            agent: The BaseAgent instance to wrap
+            input_guardrails: List of input validation functions
+            output_guardrails: List of output validation functions
+            node_id: Unique identifier for this node
+            tool_runner: Tool runner instance
+            mutation: Whether to mutate global state in place
+            debug: Enable debug logging
+            **kwargs: Additional keyword arguments
+        """
+        if not isinstance(agent, BaseAgent):
+            raise TypeError("agent must be an instance of BaseAgent")
+
+        # Validate that agent has required schemas
+        if not hasattr(agent, "input_schema") or agent.input_schema is None:
+            raise ValueError(
+                f"Agent {agent.__class__.__name__} must have an input_schema",
+            )
+        if not hasattr(agent, "output_schema") or agent.output_schema is None:
+            raise ValueError(
+                f"Agent {agent.__class__.__name__} must have an output_schema",
+            )
+
+        self.agent = agent
+
+        # Dynamically set the input and output schemas from the agent
+        self._input_schema = agent.input_schema
+        self._output_schema = agent.output_schema
+
+        super().__init__(
+            input_guardrails=input_guardrails,
+            output_guardrails=output_guardrails,
+            node_id=node_id,
+            tool_runner=tool_runner,
+            mutation=mutation,
+            debug=debug,
+            **kwargs,
+        )
+
+    async def _execute(
+        self,
+        node_state: NodeState,
+        global_state: GlobalState,
+    ) -> NodeState:
+        """Execute the agent using the node state inputs."""
+        try:
+            # Extract inputs from node state and create agent input schema instance
+            agent_input = self.agent.input_schema(**node_state.inputs)
+
+            if self.debug:
+                logger.debug(
+                    f"[SingleAgentNodeTemplate {self.node_id}] "
+                    f"Running agent {self.agent.__class__.__name__} with input: {agent_input}",
+                )
+
+            # Run the agent
+            agent_output = await self.agent._arun(agent_input)
+
+            # Store the agent output in node state outputs
+            # Convert the agent output to dict format for storage
+            node_state.outputs.update(agent_output.model_dump())
+
+            if self.debug:
+                logger.debug(
+                    f"[SingleAgentNodeTemplate {self.node_id}] "
+                    f"Agent output: {agent_output}",
+                )
+
+        except Exception as e:
+            logger.error(
+                f"[SingleAgentNodeTemplate {self.node_id}] "
+                f"Error executing agent {self.agent.__class__.__name__}: {e}",
+            )
+            raise
 
         return node_state
