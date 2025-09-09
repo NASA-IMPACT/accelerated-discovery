@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from loguru import logger
 
+from akd.agents._base import BaseAgent
 from akd.configs.guardrails_config import GuardrailsConfig
 from akd.tools.granite_guardian_tool import (
     GraniteGuardianInputSchema,
@@ -56,7 +57,9 @@ def add_guardrails(
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
                 self._setup_guardrails_validation(
-                    config, input_guardrails, output_guardrails
+                    config,
+                    input_guardrails,
+                    output_guardrails,
                 )
 
             def _setup_guardrails_validation(
@@ -91,7 +94,10 @@ def add_guardrails(
                     )
 
             async def _validate_with_guardrails(
-                self, text: str, risk_types: List[RiskDefinition], is_input: bool = True
+                self,
+                text: str,
+                risk_types: List[RiskDefinition],
+                is_input: bool = True,
             ) -> bool:
                 """Validate text with Granite Guardian model."""
                 if (
@@ -114,7 +120,9 @@ def add_guardrails(
                         for risk_result in result.risk_results:
                             if risk_result.get("is_risky", False):
                                 return self._handle_risk_detection(
-                                    text, risk_type, is_input
+                                    text,
+                                    risk_type,
+                                    is_input,
                                 )
 
                     return True
@@ -123,7 +131,10 @@ def add_guardrails(
                     return self._handle_validation_error(e)
 
             def _handle_risk_detection(
-                self, text: str, risk_type: RiskDefinition, is_input: bool
+                self,
+                text: str,
+                risk_type: RiskDefinition,
+                is_input: bool,
             ) -> bool:
                 """Handle detected risk based on configuration."""
                 text_type = "input" if is_input else "response"
@@ -169,7 +180,8 @@ def add_guardrails(
                 # Input validation
                 if self.guardrails_config.enabled:
                     input_text = self._extract_text_content(
-                        params, ["query", "content", "text", "user_input"]
+                        params,
+                        ["query", "content", "text", "user_input"],
                     )
                     input_passed = await self._validate_with_guardrails(
                         input_text,
@@ -185,7 +197,8 @@ def add_guardrails(
                 # Output validation
                 if self.guardrails_config.enabled:
                     output_text = self._extract_text_content(
-                        response, ["response", "answer", "content", "text"]
+                        response,
+                        ["response", "answer", "content", "text"],
                     )
                     output_passed = await self._validate_with_guardrails(
                         output_text,
@@ -209,7 +222,9 @@ def add_guardrails(
                     return getattr(response, "_guardrails_passed", True)
 
                 object.__setattr__(
-                    response, "guardrails_validated", guardrails_validated
+                    response,
+                    "guardrails_validated",
+                    guardrails_validated,
                 )
 
         # Preserve original class metadata
@@ -240,3 +255,61 @@ def add_guardrails(
 # @add_guardrails(...)
 # class MyTool(BaseTool):
 #     pass
+
+
+def apply_guardrails_to_agent(
+    agent: BaseAgent,
+    config: GuardrailsConfig | None,
+    input_guardrails: List[RiskDefinition] | None = None,
+    output_guardrails: List[RiskDefinition] | None = None,
+) -> BaseAgent:
+    """
+    Apply guardrails to an agent instance using the add_guardrails decorator.
+
+    This helper function takes an existing BaseAgent instance and applies
+    guardrails validation to it, returning a new guarded agent instance.
+
+    Args:
+        agent: The BaseAgent instance to wrap with guardrails
+        config: Configuration for RiskDefinition-style guardrails
+        input_guardrails: RiskDefinition list for AI safety input validation
+        output_guardrails: RiskDefinition list for AI safety output validation
+
+    Returns:
+        A new BaseAgent instance with guardrails applied, or the original agent if no guardrails
+
+    Raises:
+        TypeError: If agent is not an instance of BaseAgent
+    """
+    if not isinstance(agent, BaseAgent):
+        raise TypeError("agent must be an instance of BaseAgent")
+
+    # Only apply guardrails if we have non-empty lists or a config
+    agent_name = agent.__class__.__name__
+    has_input_guardrails = input_guardrails and len(input_guardrails) > 0
+    has_output_guardrails = output_guardrails and len(output_guardrails) > 0
+    has_config = config is not None
+
+    if has_input_guardrails or has_output_guardrails or has_config:
+        # Apply the decorator to create a guarded agent class
+        logger.info(f"Applying guardrails to agent {agent_name}")
+        GuardedAgentClass = add_guardrails(
+            input_guardrails=input_guardrails,
+            output_guardrails=output_guardrails,
+            config=config,
+        )(agent.__class__)
+
+        # Create new guarded agent instance preserving original state
+        guarded_agent = GuardedAgentClass.__new__(GuardedAgentClass)
+        guarded_agent.__dict__.update(agent.__dict__)
+
+        # Initialize the guardrails system
+        GuardedAgentClass.__init__(guarded_agent)
+
+        logger.info(
+            f"Guardrails applied to {agent_name}. Now, it has become {guarded_agent.__class__.__name__}",
+        )
+        return guarded_agent
+    else:
+        # No guardrails to apply, return original agent
+        return agent
