@@ -259,7 +259,7 @@ def add_guardrails(
 
 def apply_guardrails_to_agent(
     agent: BaseAgent,
-    config: GuardrailsConfig | None,
+    config: GuardrailsConfig | None = None,
     input_guardrails: List[RiskDefinition] | None = None,
     output_guardrails: List[RiskDefinition] | None = None,
 ) -> BaseAgent:
