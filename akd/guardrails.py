@@ -82,6 +82,7 @@ def add_guardrails(
                 output_guardrails: Optional[List[RiskDefinition]],
             ) -> None:
                 """Initialize guardrails configuration and tool."""
+                print(input_guardrails, output_guardrails)
                 self.guardrails_config = config or GuardrailsConfig(
                     input_risk_types=input_guardrails
                     if input_guardrails is not None
@@ -218,6 +219,41 @@ def add_guardrails(
                 # Return all found values combined
                 return " | ".join(found_values) if found_values else ""
 
+            def _iterate_object_fields(self, obj):
+                """Yield (key, value) pairs from any object type with password filtering."""
+                if isinstance(obj, dict):
+                    for key, value in obj.items():
+                        if "password" not in str(key).lower():
+                            yield key, value
+                elif hasattr(obj, "model_fields"):  # Pydantic
+                    for field_name in obj.model_fields.keys():
+                        if "password" not in field_name.lower():
+                            try:
+                                value = getattr(obj, field_name, None)
+                                yield field_name, value
+                            except Exception:
+                                continue
+                elif hasattr(obj, "__dict__"):  # Regular object
+                    for key, value in obj.__dict__.items():
+                        if not key.startswith("_") and "password" not in key.lower():
+                            yield key, value
+
+            def _process_field_value(self, value, strings: List[str]):
+                """Helper method to process field values with consistent stringification logic."""
+                if isinstance(value, str) and value.strip():
+                    strings.append(value.strip())
+                elif value is not None:
+                    # Stringify non-string values
+                    stringified = str(value).strip()
+                    if stringified and stringified not in [
+                        "None",
+                        "[]",
+                        "{}",
+                        "0",
+                        "False",
+                    ]:
+                        strings.append(stringified)
+
             def _collect_all_content(
                 self,
                 obj,
@@ -243,11 +279,15 @@ def add_guardrails(
                                 max_depth,
                                 visited,
                             )
-                    elif isinstance(obj, dict):
-                        for key, value in obj.items():
-                            if (
-                                "password" not in str(key).lower()
-                            ):  # Skip sensitive keys
+                    elif (
+                        isinstance(obj, (dict, type(None)))
+                        or hasattr(obj, "model_fields")
+                        or hasattr(obj, "__dict__")
+                    ):
+                        # Handle all object types with unified field iteration
+                        for key, value in self._iterate_object_fields(obj):
+                            if isinstance(obj, dict):
+                                # For dictionaries, recursively process values
                                 self._collect_all_content(
                                     value,
                                     strings,
@@ -255,45 +295,9 @@ def add_guardrails(
                                     max_depth,
                                     visited,
                                 )
-                    elif hasattr(obj, "model_fields"):  # Pydantic
-                        for field_name in obj.model_fields.keys():
-                            if "password" not in field_name.lower():
-                                try:
-                                    value = getattr(obj, field_name, None)
-                                    if isinstance(value, str) and value.strip():
-                                        strings.append(value.strip())
-                                    elif value is not None:
-                                        # Stringify non-string values
-                                        stringified = str(value).strip()
-                                        if stringified and stringified not in [
-                                            "None",
-                                            "[]",
-                                            "{}",
-                                            "0",
-                                            "False",
-                                        ]:
-                                            strings.append(stringified)
-                                except Exception:
-                                    continue
-                    elif hasattr(obj, "__dict__"):  # Regular object
-                        for key, value in obj.__dict__.items():
-                            if (
-                                not key.startswith("_")
-                                and "password" not in key.lower()
-                            ):
-                                if isinstance(value, str) and value.strip():
-                                    strings.append(value.strip())
-                                elif value is not None:
-                                    # Stringify non-string values
-                                    stringified = str(value).strip()
-                                    if stringified and stringified not in [
-                                        "None",
-                                        "[]",
-                                        "{}",
-                                        "0",
-                                        "False",
-                                    ]:
-                                        strings.append(stringified)
+                            else:
+                                # For Pydantic and regular objects, directly process values
+                                self._process_field_value(value, strings)
                 except Exception:
                     pass
                 finally:
