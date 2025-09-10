@@ -1,5 +1,6 @@
 """Guardrails decorator and utilities for agent validation."""
 
+import copy
 from typing import List, Optional
 
 from loguru import logger
@@ -263,6 +264,7 @@ def apply_guardrails(
     config: GuardrailsConfig | None = None,
     input_guardrails: List[RiskDefinition] | None = None,
     output_guardrails: List[RiskDefinition] | None = None,
+    safe: bool = True,
 ) -> BaseAgent | BaseTool:
     """
     Apply guardrails to an agent or tool using the add_guardrails decorator.
@@ -275,6 +277,9 @@ def apply_guardrails(
         config: Configuration for RiskDefinition-style guardrails
         input_guardrails: RiskDefinition list for AI safety input validation
         output_guardrails: RiskDefinition list for AI safety output validation
+        safe: bool
+            If True, creates a deep copy of the component before applying guardrails.
+            Else, might lead to side-effects.
 
     Returns:
         A new instance with guardrails applied, or the original component if no guardrails
@@ -314,6 +319,13 @@ def apply_guardrails(
     has_config = config is not None
 
     if has_input_guardrails or has_output_guardrails or has_config:
+        # Try-catch to make sure we continue if deepcopy fails
+        try:
+            component = copy.deepcopy(component) if safe else component
+        except Exception as e:
+            logger.warning(
+                f"Could not deepcopy {component_name}. Proceeding with inplace modification. Error: {e}",
+            )
         # Apply the decorator to create a guarded agent class
         logger.info(f"Applying guardrails to component {component_name}")
         GuardedComponentClass = add_guardrails(
