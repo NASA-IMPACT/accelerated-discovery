@@ -312,21 +312,20 @@ def apply_guardrails(
     if not isinstance(component, (BaseAgent, BaseTool)):
         raise TypeError("component must be an agent or tool. ")
 
-    # Try-catch to make sure we continue if deepcopy fails
-    component_name = component.__class__.__name__
-    try:
-        component = copy.deepcopy(component) if safe else component
-    except Exception as e:
-        logger.warning(
-            f"Could not deepcopy {component_name}. Proceeding with inplace modification. Error: {e}",
-        )
-
     # Only apply guardrails if we have non-empty lists or a config
+    component_name = component.__class__.__name__
     has_input_guardrails = input_guardrails and len(input_guardrails) > 0
     has_output_guardrails = output_guardrails and len(output_guardrails) > 0
     has_config = config is not None
 
     if has_input_guardrails or has_output_guardrails or has_config:
+        # Try-catch to make sure we continue if deepcopy fails
+        try:
+            component = copy.deepcopy(component) if safe else component
+        except Exception as e:
+            logger.warning(
+                f"Could not deepcopy {component_name}. Proceeding with inplace modification. Error: {e}",
+            )
         # Apply the decorator to create a guarded agent class
         logger.info(f"Applying guardrails to component {component_name}")
         GuardedComponentClass = add_guardrails(
