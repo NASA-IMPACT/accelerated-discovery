@@ -148,7 +148,7 @@ class TestPyPaperBotScraper:
             content="Challenges in Guardrailing Large Language Models for Science\n\nThis is test content from the mocked scraper.",
             metadata=ScrapedMetadata(
                 title="Challenges in Guardrailing Large Language Models for Science",
-                url=AnyUrl("https://test-url.com"),
+                url=AnyUrl("https://doi.org/10.48550/arXiv.2411.08181"),
                 query="test_query",
             ),
         )
