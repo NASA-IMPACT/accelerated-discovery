@@ -150,6 +150,8 @@ class GraniteGuardianTool(
             outputs = self._process_multiturn(params.query, params.response)
         elif params.query:
             outputs = self._process_singleturn(params.query)
+        elif params.response:
+            outputs = self._process_singleturn(params.response)
         else:
             raise ValueError(
                 "Must provide either 'query', 'query + response', or 'search_results'.",
