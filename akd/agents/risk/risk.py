@@ -217,6 +217,49 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
 
         return merged_risks
 
+    def _get_risk_agg_instructions(
+        self,
+        high_clause: str,
+        medium_clause: str,
+        m_required: int,
+        borderline_expr: str,
+        low_clause: str,
+    ) -> str:
+        return (
+            "Evaluate the risk pass/fail using the following rules:\n"
+            f"1) HIGH: {high_clause}\n"
+            f"2) MEDIUM: {medium_clause}\n"
+            f"   - Define MEDIUM_pass = True if count(True in MEDIUM) >= {m_required}; else False.\n"
+            f"   - Define MEDIUM_borderline = {borderline_expr}\n"
+            f"3) LOW (tiebreaker only): {low_clause}\n\n"
+            "Decision logic:\n"
+            "- If any HIGH is False -> return False.\n"
+            "- Else if MEDIUM_pass is True -> return True.\n"
+            "- Else if MEDIUM_borderline is True ->\n"
+            "      If any LOW is True -> return True; else return False.\n"
+            "- Else -> return False.\n\n"
+            "Return strictly 'True' or 'False'."
+        )
+
+    def _get_summary_instructions(
+        self,
+        all_risk_outputs: List[str],
+        weights_text: str,
+        denom: float,
+    ) -> str:
+        return (
+            "Compute a weighted pass ratio over risks using their pass/fail outputs and the provided weights.\n"
+            "Steps:\n"
+            f"1) Risk pass/fail outputs: [{', '.join(all_risk_outputs)}]\n"
+            "   Treat each as True (passed) or False (failed).\n"
+            "2) Weights:\n"
+            f"{weights_text}\n"
+            f"3) Let total_weight = {denom} (sum of the weights).\n"
+            "4) Let passed_weight = sum of weights for risks that passed (True).\n"
+            "5) weighted_ratio = passed_weight / total_weight.\n"
+            "Select the verdict that matches the weighted_ratio bucket."
+        )
+
     def build_dag_from_criteria(
         self,
         criteria_by_risk: dict[str, list[Criterion]],
@@ -251,6 +294,9 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
                 )
                 child_nodes.append((node, importance_str))
                 root_nodes.append(node)
+                logger.debug(
+                    f"Created DAG root node for criterion: `{criterion}` for risk: {risk_id}",
+                )
 
             # --- Group nodes by importance for aggregaton logic ---
             high_nodes = [n for n, imp in child_nodes if imp == "high"]
@@ -293,20 +339,12 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
             )
 
             # --- Aggregation rule to pass to the LLM (per-risk) ---
-            risk_agg_instructions = (
-                "Evaluate the risk pass/fail using the following rules:\n"
-                f"1) HIGH: {high_clause}\n"
-                f"2) MEDIUM: {medium_clause}\n"
-                f"   - Define MEDIUM_pass = True if count(True in MEDIUM) >= {m_required}; else False.\n"
-                f"   - Define MEDIUM_borderline = {borderline_expr}\n"
-                f"3) LOW (tiebreaker only): {low_clause}\n\n"
-                "Decision logic:\n"
-                "- If any HIGH is False -> return False.\n"
-                "- Else if MEDIUM_pass is True -> return True.\n"
-                "- Else if MEDIUM_borderline is True ->\n"
-                "      If any LOW is True -> return True; else return False.\n"
-                "- Else -> return False.\n\n"
-                "Return strictly 'True' or 'False'."
+            risk_agg_instructions = self._get_risk_agg_instructions(
+                high_clause,
+                medium_clause,
+                m_required,
+                borderline_expr,
+                low_clause,
             )
 
             # Create the per-risk aggregation node
@@ -317,6 +355,7 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
                 children=[],  # Will link to global node later
                 label=f"{risk_id} aggregation node (importance-aware)",
             )
+            logger.debug(f"Created aggregation node for risk: {risk_id}")
 
             # Link every criterion node to the per-risk aggregation node
             for n, _imp in child_nodes:
@@ -356,17 +395,10 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
         ]
 
         # NonBinaryJudgementNode instruction describing how to compute weighted ratio
-        summary_instructions = (
-            "Compute a weighted pass ratio over risks using their pass/fail outputs and the provided weights.\n"
-            "Steps:\n"
-            f"1) Risk pass/fail outputs: [{', '.join(all_risk_outputs)}]\n"
-            "   Treat each as True (passed) or False (failed).\n"
-            "2) Weights:\n"
-            f"{weights_text}\n"
-            f"3) Let total_weight = {denom} (sum of the weights).\n"
-            "4) Let passed_weight = sum of weights for risks that passed (True).\n"
-            "5) weighted_ratio = passed_weight / total_weight.\n"
-            "Select the verdict that matches the weighted_ratio bucket."
+        summary_instructions = self._get_summary_instructions(
+            all_risk_outputs,
+            weights_text,
+            denom,
         )
 
         risk_summary_node = NonBinaryJudgementNode(
@@ -377,6 +409,9 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
 
         for risk_node in final_risk_nodes:
             risk_node.children = [risk_summary_node]
+        logger.debug(
+            "Created final risk aggregation node and linked its parent nodes (risk aggregatinon nodes).",
+        )
 
         dag_metric = DAGMetric(
             name=f"Evaluate result based on risks (weighted): {', '.join(criteria_by_risk.keys())}",
