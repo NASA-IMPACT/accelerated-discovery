@@ -141,12 +141,13 @@ def add_guardrails(
                 """Handle detected risk based on configuration."""
                 text_type = "input" if is_input else "response"
                 snippet = text[: self.guardrails_config.snippet_n_chars]
+                io_type = "Input" if is_input else "Output"
                 message = f"Guardrails detected {risk_type.value} risk in {text_type}. Snippet: '{snippet}...'"
 
                 if self.guardrails_config.fail_on_risk:
                     raise ValueError(f"Guardrails validation failed: {message}")
                 else:
-                    logger.warning(f"[Guardrails] {message}")
+                    logger.warning(f"[{io_type} Guardrails] {message}")
                     return False
 
             def _handle_validation_error(self, error: Exception) -> bool:
@@ -158,24 +159,80 @@ def add_guardrails(
                     return True  # Default to allowing on error
 
             def _extract_text_content(self, obj, preferred_fields: List[str]) -> str:
-                """Extract text content from Pydantic object using preferred field order."""
-                text_parts = []
+                """Extract text content recursively from any object."""
+                strings = []
+                visited = set()
+                self._collect_strings(obj, strings, 0, 3, visited)
+                return " | ".join(strings) if strings else ""
 
-                # Try preferred fields first
-                for field_name in preferred_fields:
-                    value = getattr(obj, field_name, "")
-                    if value:
-                        text_parts.append(str(value))
+            def _collect_strings(
+                self,
+                obj,
+                strings: List[str],
+                depth: int,
+                max_depth: int,
+                visited: set,
+            ):
+                """Recursively collect all string values with safety guards."""
+                if depth >= max_depth or obj is None or id(obj) in visited:
+                    return
 
-                # Fallback to all string fields if no preferred fields found
-                if not text_parts:
-                    for field_name, field_info in obj.model_fields.items():
-                        if field_info.annotation is str:
-                            value = getattr(obj, field_name, "")
-                            if value:
-                                text_parts.append(str(value))
-
-                return " | ".join(text_parts) if text_parts else ""
+                visited.add(id(obj))
+                try:
+                    if isinstance(obj, str) and obj.strip():
+                        strings.append(obj.strip())
+                    elif isinstance(obj, (list, tuple)):
+                        for item in obj:
+                            self._collect_strings(
+                                item,
+                                strings,
+                                depth + 1,
+                                max_depth,
+                                visited,
+                            )
+                    elif isinstance(obj, dict):
+                        for key, value in obj.items():
+                            if (
+                                "password" not in str(key).lower()
+                            ):  # Skip sensitive keys
+                                self._collect_strings(
+                                    value,
+                                    strings,
+                                    depth + 1,
+                                    max_depth,
+                                    visited,
+                                )
+                    elif hasattr(obj, "model_fields"):  # Pydantic
+                        for field_name in obj.model_fields.keys():
+                            if "password" not in field_name.lower():
+                                try:
+                                    value = getattr(obj, field_name, None)
+                                    self._collect_strings(
+                                        value,
+                                        strings,
+                                        depth + 1,
+                                        max_depth,
+                                        visited,
+                                    )
+                                except Exception:
+                                    continue
+                    elif hasattr(obj, "__dict__"):  # Regular object
+                        for key, value in obj.__dict__.items():
+                            if (
+                                not key.startswith("_")
+                                and "password" not in key.lower()
+                            ):
+                                self._collect_strings(
+                                    value,
+                                    strings,
+                                    depth + 1,
+                                    max_depth,
+                                    visited,
+                                )
+                except Exception:
+                    pass
+                finally:
+                    visited.discard(id(obj))
 
             async def _arun(self, params, **kwargs):
                 """Enhanced _arun with guardrails validation."""
