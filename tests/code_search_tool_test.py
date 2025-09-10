@@ -57,6 +57,11 @@ def sde_tool():
     config = SDECodeSearchToolConfig(debug=True)
     return SDECodeSearchTool(config=config)
 
+@pytest.fixture
+def embedder():
+    model = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
+    return Embedder(model_name=model)
+
 
 """Test1: Google Drive Link"""
 
@@ -97,7 +102,7 @@ def test_data_file_validation(temp_data_file):
 """Test3: Vector Embedding"""
 
 
-def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
+def test_vector_embedding(embedder):
     texts = ["flood prediction", "earthquake classification"]
     embeddings = embedder.embed_texts(texts)
 
