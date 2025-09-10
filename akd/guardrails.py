@@ -1,5 +1,6 @@
 """Guardrails decorator and utilities for agent validation."""
 
+import copy
 from typing import List, Optional
 
 from loguru import logger
@@ -263,6 +264,7 @@ def apply_guardrails(
     config: GuardrailsConfig | None = None,
     input_guardrails: List[RiskDefinition] | None = None,
     output_guardrails: List[RiskDefinition] | None = None,
+    safe: bool = True,
 ) -> BaseAgent | BaseTool:
     """
     Apply guardrails to an agent or tool using the add_guardrails decorator.
@@ -275,6 +277,9 @@ def apply_guardrails(
         config: Configuration for RiskDefinition-style guardrails
         input_guardrails: RiskDefinition list for AI safety input validation
         output_guardrails: RiskDefinition list for AI safety output validation
+        safe: bool
+            If True, creates a deep copy of the component before applying guardrails.
+            Else, might lead to side-effects.
 
     Returns:
         A new instance with guardrails applied, or the original component if no guardrails
@@ -307,8 +312,16 @@ def apply_guardrails(
     if not isinstance(component, (BaseAgent, BaseTool)):
         raise TypeError("component must be an agent or tool. ")
 
-    # Only apply guardrails if we have non-empty lists or a config
+    # Try-catch to make sure we continue if deepcopy fails
     component_name = component.__class__.__name__
+    try:
+        component = copy.deepcopy(component) if safe else component
+    except Exception as e:
+        logger.warning(
+            f"Could not deepcopy {component_name}. Proceeding with inplace modification. Error: {e}",
+        )
+
+    # Only apply guardrails if we have non-empty lists or a config
     has_input_guardrails = input_guardrails and len(input_guardrails) > 0
     has_output_guardrails = output_guardrails and len(output_guardrails) > 0
     has_config = config is not None
