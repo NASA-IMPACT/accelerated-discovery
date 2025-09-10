@@ -20,6 +20,8 @@ def add_guardrails(
     input_guardrails: Optional[List[RiskDefinition]] = None,
     output_guardrails: Optional[List[RiskDefinition]] = None,
     config: Optional[GuardrailsConfig] = None,
+    input_fields: Optional[List[str]] = None,
+    output_fields: Optional[List[str]] = None,
 ):
     """
     Decorator to add Granite Guardian guardrails validation to any agent or tool class.
@@ -32,6 +34,8 @@ def add_guardrails(
         input_guardrails: Risk types for input validation
         output_guardrails: Risk types for output validation
         config: Complete guardrails configuration (overrides individual parameters)
+        input_fields: Field names to prioritize when extracting input text for validation
+        output_fields: Field names to prioritize when extracting output text for validation
 
     Returns:
         Decorator function that wraps agent/tool classes with guardian validation
@@ -39,7 +43,9 @@ def add_guardrails(
     Usage:
         @add_guardrails(
             input_guardrails=[RiskDefinition.JAILBREAK, RiskDefinition.HARM],
-            output_guardrails=[RiskDefinition.ANSWER_RELEVANCE]
+            output_guardrails=[RiskDefinition.ANSWER_RELEVANCE],
+            input_fields=["query", "content"],
+            output_fields=["response", "answer"]
         )
         class MyAgent(InstructorBaseAgent):
             pass
@@ -62,6 +68,11 @@ def add_guardrails(
                     config,
                     input_guardrails,
                     output_guardrails,
+                )
+                # Store field preferences
+                self.input_fields = input_fields or self.guardrails_config.input_fields
+                self.output_fields = (
+                    output_fields or self.guardrails_config.output_fields
                 )
 
             def _setup_guardrails_validation(
@@ -159,13 +170,55 @@ def add_guardrails(
                     return True  # Default to allowing on error
 
             def _extract_text_content(self, obj, preferred_fields: List[str]) -> str:
-                """Extract text content recursively from any object."""
+                """Extract text content with field prioritization and fallback to auto-extraction."""
+                if not obj:
+                    return ""
+
+                # Step 1: Try preferred fields first
+                preferred_content = self._extract_preferred_fields(
+                    obj,
+                    preferred_fields,
+                )
+                if preferred_content:
+                    return preferred_content
+
+                # Step 2: Fallback
+                # recursively collect all text content (strings + stringify non-strings)
                 strings = []
                 visited = set()
-                self._collect_strings(obj, strings, 0, 3, visited)
+                self._collect_all_content(obj, strings, 0, 3, visited)
                 return " | ".join(strings) if strings else ""
 
-            def _collect_strings(
+            def _extract_preferred_fields(
+                self,
+                obj,
+                preferred_fields: List[str],
+            ) -> str:
+                """Extract content from preferred fields with priority ordering."""
+                found_values = []
+
+                # Handle different object types
+                for field in preferred_fields:
+                    value = None
+
+                    # Try to get the field value
+                    if isinstance(obj, dict) and field in obj:
+                        value = obj[field]
+                    elif hasattr(obj, "model_fields") and field in obj.model_fields:
+                        value = getattr(obj, field, None)
+                    elif hasattr(obj, field):
+                        value = getattr(obj, field, None)
+
+                    # If we found the field, stringify it
+                    if value is not None:
+                        stringified = str(value).strip()
+                        if stringified:
+                            found_values.append(stringified)
+
+                # Return all found values combined
+                return " | ".join(found_values) if found_values else ""
+
+            def _collect_all_content(
                 self,
                 obj,
                 strings: List[str],
@@ -173,7 +226,7 @@ def add_guardrails(
                 max_depth: int,
                 visited: set,
             ):
-                """Recursively collect all string values with safety guards."""
+                """Recursively collect all content (strings + stringify non-strings) with safety guards."""
                 if depth >= max_depth or obj is None or id(obj) in visited:
                     return
 
@@ -183,7 +236,7 @@ def add_guardrails(
                         strings.append(obj.strip())
                     elif isinstance(obj, (list, tuple)):
                         for item in obj:
-                            self._collect_strings(
+                            self._collect_all_content(
                                 item,
                                 strings,
                                 depth + 1,
@@ -195,7 +248,7 @@ def add_guardrails(
                             if (
                                 "password" not in str(key).lower()
                             ):  # Skip sensitive keys
-                                self._collect_strings(
+                                self._collect_all_content(
                                     value,
                                     strings,
                                     depth + 1,
@@ -207,13 +260,19 @@ def add_guardrails(
                             if "password" not in field_name.lower():
                                 try:
                                     value = getattr(obj, field_name, None)
-                                    self._collect_strings(
-                                        value,
-                                        strings,
-                                        depth + 1,
-                                        max_depth,
-                                        visited,
-                                    )
+                                    if isinstance(value, str) and value.strip():
+                                        strings.append(value.strip())
+                                    elif value is not None:
+                                        # Stringify non-string values
+                                        stringified = str(value).strip()
+                                        if stringified and stringified not in [
+                                            "None",
+                                            "[]",
+                                            "{}",
+                                            "0",
+                                            "False",
+                                        ]:
+                                            strings.append(stringified)
                                 except Exception:
                                     continue
                     elif hasattr(obj, "__dict__"):  # Regular object
@@ -222,13 +281,19 @@ def add_guardrails(
                                 not key.startswith("_")
                                 and "password" not in key.lower()
                             ):
-                                self._collect_strings(
-                                    value,
-                                    strings,
-                                    depth + 1,
-                                    max_depth,
-                                    visited,
-                                )
+                                if isinstance(value, str) and value.strip():
+                                    strings.append(value.strip())
+                                elif value is not None:
+                                    # Stringify non-string values
+                                    stringified = str(value).strip()
+                                    if stringified and stringified not in [
+                                        "None",
+                                        "[]",
+                                        "{}",
+                                        "0",
+                                        "False",
+                                    ]:
+                                        strings.append(stringified)
                 except Exception:
                     pass
                 finally:
@@ -240,7 +305,7 @@ def add_guardrails(
                 if self.guardrails_config.enabled:
                     input_text = self._extract_text_content(
                         params,
-                        ["query", "content", "text", "user_input"],
+                        self.input_fields,
                     )
                     input_passed = await self._validate_with_guardrails(
                         input_text,
@@ -257,7 +322,7 @@ def add_guardrails(
                 if self.guardrails_config.enabled:
                     output_text = self._extract_text_content(
                         response,
-                        ["response", "answer", "content", "text"],
+                        self.output_fields,
                     )
                     output_passed = await self._validate_with_guardrails(
                         output_text,
@@ -321,6 +386,8 @@ def apply_guardrails(
     config: GuardrailsConfig | None = None,
     input_guardrails: List[RiskDefinition] | None = None,
     output_guardrails: List[RiskDefinition] | None = None,
+    input_fields: List[str] | None = None,
+    output_fields: List[str] | None = None,
     safe: bool = True,
 ) -> BaseAgent | BaseTool:
     """
@@ -334,6 +401,8 @@ def apply_guardrails(
         config: Configuration for RiskDefinition-style guardrails
         input_guardrails: RiskDefinition list for AI safety input validation
         output_guardrails: RiskDefinition list for AI safety output validation
+        input_fields: Field names to prioritize when extracting input text for validation
+        output_fields: Field names to prioritize when extracting output text for validation
         safe: bool
             If True, creates a deep copy of the component before applying guardrails.
             Else, might lead to side-effects.
@@ -353,7 +422,9 @@ def apply_guardrails(
         agent = QueryAgent()
         agent_guarded = apply_guardrails(
             component=agent,
-            input_guardrails=[RiskDefinition.JAILBREAK]
+            input_guardrails=[RiskDefinition.JAILBREAK],
+            input_fields=["query", "content"],
+            output_fields=["queries", "response"]
         )
 
         output = await agent_guarded.arun(
@@ -389,6 +460,8 @@ def apply_guardrails(
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
             config=config,
+            input_fields=input_fields,
+            output_fields=output_fields,
         )(component.__class__)
 
         # Create new guarded component instance preserving original state
