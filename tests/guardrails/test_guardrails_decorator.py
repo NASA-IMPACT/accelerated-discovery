@@ -143,26 +143,30 @@ async def test_guardrails_configuration():
 @pytest.mark.asyncio
 async def test_guardrails_disabled():
     """Test behavior when guardrails are disabled."""
-    with patch("akd.guardrails.GuardrailsConfig") as mock_config:
-        mock_config.return_value = MagicMock(enabled=False)
+    # Create a proper disabled config instead of mocking the class
+    disabled_config = GuardrailsConfig(enabled=False)
 
-        @add_guardrails()
-        class DisabledGuardrailsAgent(
-            InstructorBaseAgent[AgentInputSchema, AgentOutputSchema],
-        ):
-            input_schema = AgentInputSchema
-            output_schema = AgentOutputSchema
+    @add_guardrails(config=disabled_config)
+    class DisabledGuardrailsAgent(
+        InstructorBaseAgent[AgentInputSchema, AgentOutputSchema],
+    ):
+        input_schema = AgentInputSchema
+        output_schema = AgentOutputSchema
 
-            async def _arun(
-                self,
-                params: AgentInputSchema,
-                **kwargs,
-            ) -> AgentOutputSchema:
-                return AgentOutputSchema(response="test")
+        async def _arun(
+            self,
+            params: AgentInputSchema,
+            **kwargs,
+        ) -> AgentOutputSchema:
+            return AgentOutputSchema(response="test")
 
-        agent = DisabledGuardrailsAgent()
-        result = await agent.arun(AgentInputSchema(query="test input"))
-        assert result.response == "test"
+    agent = DisabledGuardrailsAgent()
+    # Verify guardrails are disabled
+    assert agent.guardrails_config.enabled is False
+    assert agent.guardrails_tool is None
+
+    result = await agent.arun(AgentInputSchema(query="test input"))
+    assert result.response == "test"
 
 
 @pytest.mark.asyncio

@@ -82,18 +82,14 @@ def add_guardrails(
                 output_guardrails: Optional[List[RiskDefinition]],
             ) -> None:
                 """Initialize guardrails configuration and tool."""
-                print(input_guardrails, output_guardrails)
-                self.guardrails_config = config or GuardrailsConfig(
-                    input_risk_types=input_guardrails
-                    if input_guardrails is not None
-                    else [
-                        RiskDefinition.JAILBREAK,
-                        RiskDefinition.HARM,
-                        RiskDefinition.UNETHICAL_BEHAVIOR,
-                    ],
-                    output_risk_types=output_guardrails
-                    if output_guardrails is not None
-                    else [RiskDefinition.ANSWER_RELEVANCE, RiskDefinition.GROUNDEDNESS],
+                self.guardrails_config = (config or GuardrailsConfig()).model_copy(
+                    deep=True,
+                )
+                self.guardrails_config.input_risk_types = (
+                    input_guardrails or self.guardrails_config.input_risk_types
+                )
+                self.guardrails_config.output_risk_types = (
+                    output_guardrails or self.guardrails_config.output_risk_types
                 )
 
                 self.guardrails_tool = None
