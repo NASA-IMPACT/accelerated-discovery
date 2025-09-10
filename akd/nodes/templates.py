@@ -8,7 +8,7 @@ from akd._base import AbstractBase
 from akd.agents._base import BaseAgent
 from akd.common_types import CallableSpec
 from akd.configs.guardrails_config import GuardrailsConfig
-from akd.guardrails import apply_guardrails_to_agent
+from akd.guardrails import apply_guardrails
 from akd.tools.granite_guardian_tool import RiskDefinition
 from akd.tools.utils import ToolRunner
 
@@ -276,8 +276,8 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         if not isinstance(agent, BaseAgent):
             raise TypeError("agent must be an instance of BaseAgent")
 
-        self.agent = apply_guardrails_to_agent(
-            agent=agent,
+        self.agent = apply_guardrails(
+            component=agent,
             config=guardrails_config,
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
