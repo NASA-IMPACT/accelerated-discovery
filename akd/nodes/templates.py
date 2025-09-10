@@ -254,7 +254,6 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         input_guardrails: Optional[List[RiskDefinition]] = None,
         output_guardrails: Optional[List[RiskDefinition]] = None,
         guardrails_config: Optional[GuardrailsConfig] = None,
-        tool_runner: Optional[ToolRunner] = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
@@ -281,6 +280,8 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
             config=guardrails_config,
             input_guardrails=input_guardrails,
             output_guardrails=output_guardrails,
+            input_fields=kwargs.get("input_fields", []),
+            output_fields=kwargs.get("output_fields", []),
         )
         # Validate that agent has required schemas
         if not hasattr(self.agent, "input_schema") or self.agent.input_schema is None:
@@ -301,7 +302,6 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
             input_guardrails=[],  # no need to run callable spec guardrails
             output_guardrails=[],  # no need to run callable spec guardrails
             node_id=node_id,
-            tool_runner=tool_runner,
             mutation=mutation,
             debug=debug,
             **kwargs,

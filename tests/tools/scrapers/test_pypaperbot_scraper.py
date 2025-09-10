@@ -6,7 +6,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import AnyUrl
 
-from akd.tools.scrapers._base import ScrapedMetadata, ScraperToolInputSchema
+from akd.tools.scrapers._base import (
+    ScrapedMetadata,
+    ScraperToolInputSchema,
+    ScraperToolOutputSchema,
+)
 from akd.tools.scrapers.pypaperbot import PyPaperBotScraper, PyPaperBotScraperConfig
 
 # Check if PyPaperBot is available (same check as in the scraper)
@@ -140,25 +144,19 @@ class TestPyPaperBotScraper:
     async def test_pypaperbot_scraper_with_mocked_docling(self):
         """Test PyPaperBotScraper with mocked Docling scraper to isolate PyPaperBot behavior."""
         # Create a mock for the internal scraper (Docling)
-        mock_docling_result = type(
-            "MockResult",
-            (),
-            {
-                "content": "Challenges in Guardrailing Large Language Models for Science\n\nThis is test content from the mocked scraper.",
-                "metadata": type(
-                    "MockMetadata",
-                    (),
-                    {
-                        "title": "Challenges in Guardrailing Large Language Models for Science",
-                        "url": "test_url",
-                    },
-                )(),
-            },
-        )()
+        mock_docling_result = ScraperToolOutputSchema(
+            content="Challenges in Guardrailing Large Language Models for Science\n\nThis is test content from the mocked scraper.",
+            metadata=ScrapedMetadata(
+                title="Challenges in Guardrailing Large Language Models for Science",
+                url=AnyUrl("https://doi.org/10.48550/arXiv.2411.08181"),
+                query="test_query",
+            ),
+        )
 
         mock_scraper = AsyncMock()
         mock_scraper.arun.return_value = mock_docling_result
-        mock_scraper.input_schema = ScraperToolInputSchema
+        # Mock the input_schema to not perform validation
+        mock_scraper.input_schema = lambda **kwargs: type("MockInput", (), kwargs)()
 
         # Test PyPaperBotScraper with mocked Docling
         scraper = PyPaperBotScraper(scraper=mock_scraper, debug=True)
@@ -171,6 +169,7 @@ class TestPyPaperBotScraper:
         with (
             patch.object(scraper, "_find_downloaded_pdf") as mock_find_pdf,
             patch.object(scraper, "_run_pypaperbot_with_doi") as mock_run_pypaperbot,
+            patch("pathlib.Path.exists") as mock_exists,
         ):
             # Mock successful PDF download
             from pathlib import Path
@@ -178,6 +177,8 @@ class TestPyPaperBotScraper:
             mock_pdf_path = Path("/tmp/test.pdf")
             mock_find_pdf.return_value = mock_pdf_path
             mock_run_pypaperbot.return_value = mock_pdf_path
+            # Mock that the PDF path exists
+            mock_exists.return_value = True
 
             result = await scraper.arun(input_data)
 
