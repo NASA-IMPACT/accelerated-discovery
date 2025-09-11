@@ -246,7 +246,9 @@ class AgentRegistry:
         """Save registry to JSON file."""
         try:
             # Ensure directory exists
-            os.makedirs(os.path.dirname(self.config.registry_path), exist_ok=True)
+            registry_dir = os.path.dirname(self.config.registry_path)
+            if registry_dir:  # Only create directory if there is a parent directory
+                os.makedirs(registry_dir, exist_ok=True)
             
             # Update timestamp
             self.registry_data.updated_at = datetime.now(timezone.utc).isoformat()
@@ -287,6 +289,12 @@ class AgentRegistry:
     def reload(self) -> None:
         """Reload the registry from file or re-discover."""
         self._load_or_discover()
+    
+    @classmethod
+    def _reset_singleton(cls) -> None:
+        """Reset the singleton instance (for testing purposes only)."""
+        cls._instance = None
+        cls._initialized = False
 
 
 def get_agent_registry(config: Optional[AgentRegistryConfig] = None) -> AgentRegistry:
