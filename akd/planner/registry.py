@@ -289,6 +289,12 @@ class AgentRegistry:
     def reload(self) -> None:
         """Reload the registry from file or re-discover."""
         self._load_or_discover()
+    
+    @classmethod
+    def _reset_singleton(cls) -> None:
+        """Reset the singleton instance (for testing purposes only)."""
+        cls._instance = None
+        cls._initialized = False
 
 
 def get_agent_registry(config: Optional[AgentRegistryConfig] = None) -> AgentRegistry:
