@@ -166,6 +166,10 @@ class TestAgentEntry:
 class TestAgentRegistry:
     """Test AgentRegistry class."""
     
+    def teardown_method(self):
+        """Reset singleton state after each test."""
+        AgentRegistry._reset_singleton()
+    
     def test_registry_with_existing_file(self, temp_registry_file, sample_registry_data):
         """Test loading registry from existing file."""
         # Write test data to file
@@ -324,11 +328,14 @@ class TestAgentRegistry:
 class TestGlobalRegistry:
     """Test global registry functions."""
     
+    def teardown_method(self):
+        """Reset singleton state after each test."""
+        AgentRegistry._reset_singleton()
+    
     def test_get_agent_registry_singleton(self):
         """Test that get_agent_registry returns a singleton."""
         # Reset singleton instance
-        AgentRegistry._instance = None
-        AgentRegistry._initialized = False
+        AgentRegistry._reset_singleton()
         
         registry1 = get_agent_registry()
         registry2 = get_agent_registry()
@@ -338,8 +345,7 @@ class TestGlobalRegistry:
     def test_get_agent_registry_with_config(self):
         """Test getting registry with custom config."""
         # Reset singleton instance
-        AgentRegistry._instance = None
-        AgentRegistry._initialized = False
+        AgentRegistry._reset_singleton()
         
         config = AgentRegistryConfig(auto_discover=False)
         registry = get_agent_registry(config)
