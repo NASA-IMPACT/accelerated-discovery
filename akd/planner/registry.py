@@ -21,9 +21,9 @@ from .config import AgentRegistryConfig
 class FieldDefinition(BaseModel):
     """Individual field definition for agent schemas."""
     
-    name: str = Field(description="Field name")
-    type: str = Field(description="Field type")
-    description: str = Field(description="Field description")
+    name: str = Field(..., description="Field name")
+    type: str = Field(..., description="Field type")
+    description: str = Field(..., description="Field description")
     required: bool = Field(default=True, description="Whether field is required")
     default: Union[str, int, float, bool, List[Any], None] = Field(default=None, description="Default value if any")
     items_type: Optional[str] = Field(default=None, description="Array item type")
