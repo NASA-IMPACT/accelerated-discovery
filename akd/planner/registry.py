@@ -77,20 +77,20 @@ class AgentRegistry:
     _initialized = False
     
     # Known agent mappings for auto-discovery (currently hand-made)
-    # Format: (agent_id, module_path, class_name)
+    # Format: agent_id -> (module_path, class_name)
     # TODO: Add filesystem scanning for automatic agent discovery in future iterations
-    KNOWN_AGENTS: list[tuple[str, str, str]] = [
-        ("query", "akd.agents.query", "QueryAgent"),
-        ("followup_query", "akd.agents.query", "FollowUpQueryAgent"), 
-        ("extraction", "akd.agents.extraction", "EstimationExtractionAgent"),
-        ("relevancy", "akd.agents.relevancy", "MultiRubricRelevancyAgent"),
-        ("intent", "akd.agents.intents", "IntentAgent"),
-        ("controlled_search", "akd.agents.search.controlled", "ControlledSearchAgent"),
-        ("deep_search", "akd.agents.search.deep_search", "DeepLitSearchAgent"),
-        ("gap_analysis", "akd.agents.gap_analysis.gap_analysis", "GapAgent"),
-        ("storm", "akd.agents.storm.storm", "StormAgent"),
-        ("aspect_search", "akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
-    ]
+    KNOWN_AGENTS: dict[str, tuple[str, str]] = {
+        "query": ("akd.agents.query", "QueryAgent"),
+        "followup_query": ("akd.agents.query", "FollowUpQueryAgent"), 
+        "extraction": ("akd.agents.extraction", "EstimationExtractionAgent"),
+        "relevancy": ("akd.agents.relevancy", "MultiRubricRelevancyAgent"),
+        "intent": ("akd.agents.intents", "IntentAgent"),
+        "controlled_search": ("akd.agents.search.controlled", "ControlledSearchAgent"),
+        "deep_search": ("akd.agents.search.deep_search", "DeepLitSearchAgent"),
+        "gap_analysis": ("akd.agents.gap_analysis.gap_analysis", "GapAgent"),
+        "storm": ("akd.agents.storm.storm", "StormAgent"),
+        "aspect_search": ("akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
+    }
     
     def __new__(cls, config: Optional[AgentRegistryConfig] = None):
         """Create or return the singleton instance."""
@@ -155,7 +155,7 @@ class AgentRegistry:
         """Auto-discover agents by scanning known agent classes."""
         discovered: dict[str, AgentEntry] = {}
         
-        for agent_id, module_path, class_name in self.KNOWN_AGENTS:
+        for agent_id, (module_path, class_name) in self.KNOWN_AGENTS.items():
             # Skip if we have specific enabled agents and this isn't one of them
             if self.config.enabled_agents and agent_id not in self.config.enabled_agents:
                 continue
