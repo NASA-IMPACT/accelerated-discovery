@@ -7,13 +7,14 @@ This module provides agent registration and discovery capabilities for the AKD f
 import importlib
 import json
 import os
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import IOSchema
+
 from .config import AgentRegistryConfig
 
 
@@ -67,9 +68,15 @@ class AgentRegistry:
     
     This registry can automatically discover agents from the akd.agents module
     and persist them to a JSON file for easy configuration.
+    
+    Implements singleton pattern to ensure only one registry instance exists.
     """
     
-    # Known agent mappings for auto-discovery
+    # Singleton instance holder
+    _instance = None
+    _initialized = False
+    
+    # Known agent mappings for auto-discovery (currently hand-made)
     # Format: (agent_id, module_path, class_name)
     # TODO: Add filesystem scanning for automatic agent discovery in future iterations
     KNOWN_AGENTS: List[Tuple[str, str, str]] = [
@@ -85,11 +92,19 @@ class AgentRegistry:
         ("aspect_search", "akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
     ]
     
+    def __new__(cls, config: Optional[AgentRegistryConfig] = None):
+        """Create or return the singleton instance."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
     def __init__(self, config: Optional[AgentRegistryConfig] = None):
-        """Initialize the agent registry."""
-        self.config = config or AgentRegistryConfig()
-        self.registry_data: AgentRegistryData = AgentRegistryData()
-        self._load_or_discover()
+        """Initialize the agent registry (only once due to singleton pattern)."""
+        if not self._initialized:
+            self.config = config or AgentRegistryConfig()
+            self.registry_data: AgentRegistryData = AgentRegistryData()
+            self._load_or_discover()
+            AgentRegistry._initialized = True
     
     def _load_or_discover(self) -> None:
         """Load registry from file, or auto-discover if missing/empty."""
@@ -274,13 +289,6 @@ class AgentRegistry:
         self._load_or_discover()
 
 
-# Global registry instance
-_registry: Optional[AgentRegistry] = None
-
-
 def get_agent_registry(config: Optional[AgentRegistryConfig] = None) -> AgentRegistry:
-    """Get the global agent registry instance."""
-    global _registry
-    if _registry is None:
-        _registry = AgentRegistry(config)
-    return _registry
+    """Get the singleton agent registry instance."""
+    return AgentRegistry(config)
