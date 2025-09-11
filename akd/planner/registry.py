@@ -8,7 +8,7 @@ import importlib
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Optional, Type
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -25,14 +25,14 @@ class FieldDefinition(BaseModel):
     type: str = Field(..., description="Field type")
     description: str = Field(..., description="Field description")
     required: bool = Field(default=True, description="Whether field is required")
-    default: Union[str, int, float, bool, List[Any], None] = Field(default=None, description="Default value if any")
+    default: str | int | float | bool | list[Any] | None = Field(default=None, description="Default value if any")
     items_type: Optional[str] = Field(default=None, description="Array item type")
 
 
 class AgentSchemaDefinition(BaseModel):
     """Schema definition for agent inputs/outputs."""
     
-    fields: List[FieldDefinition] = Field(
+    fields: list[FieldDefinition] = Field(
         default_factory=list,
         description="List of field definitions"
     )
@@ -48,9 +48,9 @@ class AgentEntry(BaseModel):
     enabled: bool = Field(default=True, description="Whether agent is enabled")
     input_schema: AgentSchemaDefinition = Field(description="Input schema definition")
     output_schema: AgentSchemaDefinition = Field(description="Output schema definition")
-    tags: List[str] = Field(default_factory=list, description="Agent tags")
-    use_cases: List[str] = Field(default_factory=list, description="Agent use cases")
-    dependencies: List[str] = Field(default_factory=list, description="Agent dependencies")
+    tags: list[str] = Field(default_factory=list, description="Agent tags")
+    use_cases: list[str] = Field(default_factory=list, description="Agent use cases")
+    dependencies: list[str] = Field(default_factory=list, description="Agent dependencies")
 
 
 class AgentRegistryData(BaseModel):
@@ -59,7 +59,7 @@ class AgentRegistryData(BaseModel):
     version: str = Field(default="1.0.0", description="Registry format version")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    agents: Dict[str, AgentEntry] = Field(default_factory=dict, description="Agent entries")
+    agents: dict[str, AgentEntry] = Field(default_factory=dict, description="Agent entries")
 
 
 class AgentRegistry:
@@ -79,7 +79,7 @@ class AgentRegistry:
     # Known agent mappings for auto-discovery (currently hand-made)
     # Format: (agent_id, module_path, class_name)
     # TODO: Add filesystem scanning for automatic agent discovery in future iterations
-    KNOWN_AGENTS: List[Tuple[str, str, str]] = [
+    KNOWN_AGENTS: list[tuple[str, str, str]] = [
         ("query", "akd.agents.query", "QueryAgent"),
         ("followup_query", "akd.agents.query", "FollowUpQueryAgent"), 
         ("extraction", "akd.agents.extraction", "EstimationExtractionAgent"),
@@ -153,7 +153,7 @@ class AgentRegistry:
     
     def _discover_agents(self) -> None:
         """Auto-discover agents by scanning known agent classes."""
-        discovered: Dict[str, AgentEntry] = {}
+        discovered: dict[str, AgentEntry] = {}
         
         for agent_id, module_path, class_name in self.KNOWN_AGENTS:
             # Skip if we have specific enabled agents and this isn't one of them
@@ -211,8 +211,8 @@ class AgentRegistry:
         try:
             # Get the JSON schema from the Pydantic model
             json_schema = schema_class.model_json_schema()
-            properties: Dict[str, Any] = json_schema.get("properties", {})
-            required: List[str] = json_schema.get("required", [])
+            properties: dict[str, Any] = json_schema.get("properties", {})
+            required: list[str] = json_schema.get("required", [])
             
             fields = []
             for field_name, field_info in properties.items():
@@ -263,15 +263,15 @@ class AgentRegistry:
         """Get a specific agent by ID."""
         return self.registry_data.agents.get(agent_id)
     
-    def get_enabled_agents(self) -> List[AgentEntry]:
+    def get_enabled_agents(self) -> list[AgentEntry]:
         """Get all enabled agents."""
         return [agent for agent in self.registry_data.agents.values() if agent.enabled]
     
-    def get_agents_by_tag(self, tag: str) -> List[AgentEntry]:
+    def get_agents_by_tag(self, tag: str) -> list[AgentEntry]:
         """Get all agents with a specific tag."""
         return [agent for agent in self.registry_data.agents.values() if tag in agent.tags and agent.enabled]
     
-    def get_all_agents(self) -> List[AgentEntry]:
+    def get_all_agents(self) -> list[AgentEntry]:
         """Get all agents (enabled and disabled)."""
         return list(self.registry_data.agents.values())
     
