@@ -317,9 +317,9 @@ class TestGlobalRegistry:
     
     def test_get_agent_registry_singleton(self):
         """Test that get_agent_registry returns a singleton."""
-        # Reset global registry
-        import akd.planner.registry
-        akd.planner.registry._registry = None
+        # Reset singleton instance
+        AgentRegistry._instance = None
+        AgentRegistry._initialized = False
         
         registry1 = get_agent_registry()
         registry2 = get_agent_registry()
@@ -328,9 +328,9 @@ class TestGlobalRegistry:
     
     def test_get_agent_registry_with_config(self):
         """Test getting registry with custom config."""
-        # Reset global registry
-        import akd.planner.registry
-        akd.planner.registry._registry = None
+        # Reset singleton instance
+        AgentRegistry._instance = None
+        AgentRegistry._initialized = False
         
         config = AgentRegistryConfig(auto_discover=False)
         registry = get_agent_registry(config)

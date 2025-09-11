@@ -7,31 +7,32 @@ This module provides agent registration and discovery capabilities for the AKD f
 import importlib
 import json
 import os
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
 from datetime import datetime, timezone
+from typing import Any, Optional, Type
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import IOSchema
+
 from .config import AgentRegistryConfig
 
 
 class FieldDefinition(BaseModel):
     """Individual field definition for agent schemas."""
     
-    name: str = Field(description="Field name")
-    type: str = Field(description="Field type")
-    description: str = Field(description="Field description")
+    name: str = Field(..., description="Field name")
+    type: str = Field(..., description="Field type")
+    description: str = Field(..., description="Field description")
     required: bool = Field(default=True, description="Whether field is required")
-    default: Union[str, int, float, bool, List[Any], None] = Field(default=None, description="Default value if any")
+    default: str | int | float | bool | list[Any] | None = Field(default=None, description="Default value if any")
     items_type: Optional[str] = Field(default=None, description="Array item type")
 
 
 class AgentSchemaDefinition(BaseModel):
     """Schema definition for agent inputs/outputs."""
     
-    fields: List[FieldDefinition] = Field(
+    fields: list[FieldDefinition] = Field(
         default_factory=list,
         description="List of field definitions"
     )
@@ -47,9 +48,9 @@ class AgentEntry(BaseModel):
     enabled: bool = Field(default=True, description="Whether agent is enabled")
     input_schema: AgentSchemaDefinition = Field(description="Input schema definition")
     output_schema: AgentSchemaDefinition = Field(description="Output schema definition")
-    tags: List[str] = Field(default_factory=list, description="Agent tags")
-    use_cases: List[str] = Field(default_factory=list, description="Agent use cases")
-    dependencies: List[str] = Field(default_factory=list, description="Agent dependencies")
+    tags: list[str] = Field(default_factory=list, description="Agent tags")
+    use_cases: list[str] = Field(default_factory=list, description="Agent use cases")
+    dependencies: list[str] = Field(default_factory=list, description="Agent dependencies")
 
 
 class AgentRegistryData(BaseModel):
@@ -58,7 +59,7 @@ class AgentRegistryData(BaseModel):
     version: str = Field(default="1.0.0", description="Registry format version")
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    agents: Dict[str, AgentEntry] = Field(default_factory=dict, description="Agent entries")
+    agents: dict[str, AgentEntry] = Field(default_factory=dict, description="Agent entries")
 
 
 class AgentRegistry:
@@ -67,29 +68,43 @@ class AgentRegistry:
     
     This registry can automatically discover agents from the akd.agents module
     and persist them to a JSON file for easy configuration.
+    
+    Implements singleton pattern to ensure only one registry instance exists.
     """
     
-    # Known agent mappings for auto-discovery
-    # Format: (agent_id, module_path, class_name)
+    # Singleton instance holder
+    _instance = None
+    _initialized = False
+    
+    # Known agent mappings for auto-discovery (currently hand-made)
+    # Format: agent_id -> (module_path, class_name)
     # TODO: Add filesystem scanning for automatic agent discovery in future iterations
-    KNOWN_AGENTS: List[Tuple[str, str, str]] = [
-        ("query", "akd.agents.query", "QueryAgent"),
-        ("followup_query", "akd.agents.query", "FollowUpQueryAgent"), 
-        ("extraction", "akd.agents.extraction", "EstimationExtractionAgent"),
-        ("relevancy", "akd.agents.relevancy", "MultiRubricRelevancyAgent"),
-        ("intent", "akd.agents.intents", "IntentAgent"),
-        ("controlled_search", "akd.agents.search.controlled", "ControlledSearchAgent"),
-        ("deep_search", "akd.agents.search.deep_search", "DeepLitSearchAgent"),
-        ("gap_analysis", "akd.agents.gap_analysis.gap_analysis", "GapAgent"),
-        ("storm", "akd.agents.storm.storm", "StormAgent"),
-        ("aspect_search", "akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
-    ]
+    KNOWN_AGENTS: dict[str, tuple[str, str]] = {
+        "query": ("akd.agents.query", "QueryAgent"),
+        "followup_query": ("akd.agents.query", "FollowUpQueryAgent"), 
+        "extraction": ("akd.agents.extraction", "EstimationExtractionAgent"),
+        "relevancy": ("akd.agents.relevancy", "MultiRubricRelevancyAgent"),
+        "intent": ("akd.agents.intents", "IntentAgent"),
+        "controlled_search": ("akd.agents.search.controlled", "ControlledSearchAgent"),
+        "deep_search": ("akd.agents.search.deep_search", "DeepLitSearchAgent"),
+        "gap_analysis": ("akd.agents.gap_analysis.gap_analysis", "GapAgent"),
+        "storm": ("akd.agents.storm.storm", "StormAgent"),
+        "aspect_search": ("akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
+    }
+    
+    def __new__(cls, config: Optional[AgentRegistryConfig] = None):
+        """Create or return the singleton instance."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
     
     def __init__(self, config: Optional[AgentRegistryConfig] = None):
-        """Initialize the agent registry."""
-        self.config = config or AgentRegistryConfig()
-        self.registry_data: AgentRegistryData = AgentRegistryData()
-        self._load_or_discover()
+        """Initialize the agent registry (only once due to singleton pattern)."""
+        if not self._initialized:
+            self.config = config or AgentRegistryConfig()
+            self.registry_data: AgentRegistryData = AgentRegistryData()
+            self._load_or_discover()
+            AgentRegistry._initialized = True
     
     def _load_or_discover(self) -> None:
         """Load registry from file, or auto-discover if missing/empty."""
@@ -138,9 +153,9 @@ class AgentRegistry:
     
     def _discover_agents(self) -> None:
         """Auto-discover agents by scanning known agent classes."""
-        discovered: Dict[str, AgentEntry] = {}
+        discovered: dict[str, AgentEntry] = {}
         
-        for agent_id, module_path, class_name in self.KNOWN_AGENTS:
+        for agent_id, (module_path, class_name) in self.KNOWN_AGENTS.items():
             # Skip if we have specific enabled agents and this isn't one of them
             if self.config.enabled_agents and agent_id not in self.config.enabled_agents:
                 continue
@@ -196,8 +211,8 @@ class AgentRegistry:
         try:
             # Get the JSON schema from the Pydantic model
             json_schema = schema_class.model_json_schema()
-            properties: Dict[str, Any] = json_schema.get("properties", {})
-            required: List[str] = json_schema.get("required", [])
+            properties: dict[str, Any] = json_schema.get("properties", {})
+            required: list[str] = json_schema.get("required", [])
             
             fields = []
             for field_name, field_info in properties.items():
@@ -248,15 +263,15 @@ class AgentRegistry:
         """Get a specific agent by ID."""
         return self.registry_data.agents.get(agent_id)
     
-    def get_enabled_agents(self) -> List[AgentEntry]:
+    def get_enabled_agents(self) -> list[AgentEntry]:
         """Get all enabled agents."""
         return [agent for agent in self.registry_data.agents.values() if agent.enabled]
     
-    def get_agents_by_tag(self, tag: str) -> List[AgentEntry]:
+    def get_agents_by_tag(self, tag: str) -> list[AgentEntry]:
         """Get all agents with a specific tag."""
         return [agent for agent in self.registry_data.agents.values() if tag in agent.tags and agent.enabled]
     
-    def get_all_agents(self) -> List[AgentEntry]:
+    def get_all_agents(self) -> list[AgentEntry]:
         """Get all agents (enabled and disabled)."""
         return list(self.registry_data.agents.values())
     
@@ -274,13 +289,6 @@ class AgentRegistry:
         self._load_or_discover()
 
 
-# Global registry instance
-_registry: Optional[AgentRegistry] = None
-
-
 def get_agent_registry(config: Optional[AgentRegistryConfig] = None) -> AgentRegistry:
-    """Get the global agent registry instance."""
-    global _registry
-    if _registry is None:
-        _registry = AgentRegistry(config)
-    return _registry
+    """Get the singleton agent registry instance."""
+    return AgentRegistry(config)
