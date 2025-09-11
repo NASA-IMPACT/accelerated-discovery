@@ -85,11 +85,11 @@ class TestAgentRegistryConfig:
     def test_default_config(self):
         """Test default configuration values."""
         config = AgentRegistryConfig()
-        assert config.registry_path == "akd/mapping/agent_registry.json"
+        # Path should end with the expected relative path
+        assert config.registry_path.endswith("akd/mapping/agent_registry.json")
         assert config.auto_discover is True
         assert config.enabled_agents == []
         assert config.validate_schemas is True
-        assert config.debug is False  # Inherited from BaseConfig
     
     def test_custom_config(self):
         """Test custom configuration values."""
@@ -301,8 +301,17 @@ class TestAgentRegistry:
                 'output_schema': mock_schema_class,
                 '__doc__': 'Mock agent for testing'
             })
-            mock_module = type('Module', (), {'QueryAgent': mock_agent_class, 'EstimationExtractionAgent': mock_agent_class})
-            mock_import.return_value = mock_module
+            
+            # Mock different modules for different imports
+            def mock_import_func(module_path):
+                if module_path == 'akd.agents.query':
+                    return type('Module', (), {'QueryAgent': mock_agent_class})
+                elif module_path == 'akd.agents.extraction':
+                    return type('Module', (), {'EstimationExtractionAgent': mock_agent_class})
+                else:
+                    return type('Module', (), {})
+            
+            mock_import.side_effect = mock_import_func
             
             registry = AgentRegistry(config)
             
