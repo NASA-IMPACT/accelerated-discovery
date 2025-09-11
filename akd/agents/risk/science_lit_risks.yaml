@@ -226,7 +226,7 @@ risks:
   concern: LLMs trained on static corpora may present outdated scientific knowledge as current, especially in fast-moving fields like medicine or AI research.
 - id: outdated-confidence
   name: Outdated Information and False Confidence
-  description: Presentation of obsolete or retracted claims with unwarranted confidence, leading to misleading conclusions.
+  description: Presentation of obsolete or retracted claims with unwarranted confidence, leading to misleading conclusions. This includes citing outdated studies or data without acknowledging that they may no longer be valid.
   url: ""
   dateCreated: "2025-08-27"
   dateModified: "2025-08-27"
