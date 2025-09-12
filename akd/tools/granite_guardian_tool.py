@@ -161,9 +161,14 @@ class GraniteGuardianTool(
         return GraniteGuardianOutputSchema(risk_results=outputs)
 
     def _call_guardian(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+        print("url is",self.config.ollama_base_url )
+
         try:
             if self.ollama_type == OllamaType.CHAT:
+                print("i came here")
                 result = chat(model=self.model, messages=messages)
+                print("result is :", result)
+
                 content = result.message.content
             elif self.ollama_type == OllamaType.SERVER:
                 result = self._ollama_server_gen(messages)
@@ -173,6 +178,7 @@ class GraniteGuardianTool(
                 label = re.findall(r"\b(yes|no)\b", content, flags=re.IGNORECASE)[
                     0
                 ].lower()
+                print("label is :", label)
             except Exception as e:
                 logger.error(f"[GuardianTool] Ollama error: {e}")
                 return {"error": str(e)}
