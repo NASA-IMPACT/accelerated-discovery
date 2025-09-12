@@ -48,6 +48,7 @@ dependencies = [
     "markdown>=3.8.2",
     "chromadb>=1.0.13",
     "undetected-chromedriver>=3.5.5",
+    "jsonpath-ng>=1.6.1",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
 ]
 
