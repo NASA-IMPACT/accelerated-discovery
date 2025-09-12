@@ -313,47 +313,21 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
             **kwargs,
         )
 
-    async def _resolve_inputs(
+    def _build_jsonpath_context(
         self,
         node_state: NodeState,
         global_state: GlobalState,
     ) -> Dict[str, Any]:
         """
-        Resolve inputs for the agent using JSONPath for complex cross-node data access.
-
-        Supports merging current node inputs with data from other nodes using JSONPath expressions.
-        Never overrides existing inputs in the current node - only fills missing fields.
+        Build JSONPath context from global state for cross-node data access.
 
         Args:
             node_state: Current node's state
             global_state: Global state containing all node states
 
         Returns:
-            Dictionary of resolved inputs for the agent
-
-        Examples:
-            io_map = {
-                "query": "$.lit_search.outputs.query",              # Simple field access
-                "context": "$.preprocessing.outputs.cleaned_text",  # Cross-node data
-                "limit": "$.config.inputs.params.limit",            # Nested access
-                "results": "$.search.outputs.items[*].title"        # Array extraction
-            }
+            Dictionary context for JSONPath expressions
         """
-        # Start with node's existing inputs (never override existing)
-        resolved_inputs = node_state.inputs.copy()
-
-        # If no io_map configured, just validate and return current inputs
-        if not self.io_map:
-            try:
-                self.agent.input_schema(**resolved_inputs)
-                return resolved_inputs
-            except Exception as e:
-                raise ValueError(
-                    f"Node '{self.node_id}' missing required inputs for agent "
-                    f"{self.agent.__class__.__name__}: {e}. Consider using io_map parameter.",
-                )
-
-        # Create JSONPath context from global state
         context = {
             # Current node access
             "current": {
@@ -375,6 +349,25 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
                 f"[SingleAgentNodeTemplate {self.node_id}] "
                 f"JSONPath context keys: {list(context.keys())}",
             )
+
+        return context
+
+    def _apply_io_mapping(
+        self,
+        base_inputs: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Apply io_map transformations to fill missing inputs using JSONPath.
+
+        Args:
+            base_inputs: Starting inputs (never overridden)
+            context: JSONPath context for expression evaluation
+
+        Returns:
+            Dictionary with resolved inputs from io_map
+        """
+        resolved_inputs = base_inputs.copy()
 
         # Apply io_map using JSONPath to fill missing fields
         for target_field, jsonpath_expr in self.io_map.items():
@@ -411,7 +404,24 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
                     f"JSONPath '{jsonpath_expr}' failed for field '{target_field}': {e}",
                 )
 
-        # Validate resolved inputs can create agent input
+        return resolved_inputs
+
+    def _validate_resolved_inputs(
+        self,
+        resolved_inputs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Validate that resolved inputs can create agent input schema.
+
+        Args:
+            resolved_inputs: Dictionary of resolved inputs
+
+        Returns:
+            Same dictionary if validation passes
+
+        Raises:
+            ValueError: If validation fails
+        """
         try:
             self.agent.input_schema(**resolved_inputs)
             if self.debug:
@@ -426,6 +436,52 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
                 f"Failed to resolve required inputs for agent {self.agent.__class__.__name__} "
                 f"in node '{self.node_id}'. After applying io_map, validation failed: {validation_error}",
             )
+
+    async def _resolve_inputs(
+        self,
+        node_state: NodeState,
+        global_state: GlobalState,
+    ) -> Dict[str, Any]:
+        """
+        Resolve inputs for the agent using JSONPath for complex cross-node data access.
+
+        Supports merging current node inputs with data from other nodes using JSONPath expressions.
+        Never overrides existing inputs in the current node - only fills missing fields.
+
+        Args:
+            node_state: Current node's state
+            global_state: Global state containing all node states
+
+        Returns:
+            Dictionary of resolved inputs for the agent
+
+        Examples:
+            io_map = {
+                "query": "$.lit_search.outputs.query",              # Simple field access
+                "context": "$.preprocessing.outputs.cleaned_text",  # Cross-node data
+                "limit": "$.config.inputs.params.limit",            # Nested access
+                "results": "$.search.outputs.items[*].title"        # Array extraction
+            }
+        """
+        # Start with node's existing inputs (never override existing)
+        resolved_inputs = node_state.inputs.copy()
+
+        # If no io_map configured, just validate and return current inputs
+        if not self.io_map:
+            try:
+                return self._validate_resolved_inputs(resolved_inputs)
+            except ValueError as e:
+                raise ValueError(
+                    f"Node '{self.node_id}' missing required inputs for agent "
+                    f"{self.agent.__class__.__name__}. Consider using io_map parameter.\nError: {e}",
+                ) from e
+
+        # Build JSONPath context and apply io_map transformations
+        context = self._build_jsonpath_context(node_state, global_state)
+        resolved_inputs = self._apply_io_mapping(resolved_inputs, context)
+
+        # Validate and return final inputs
+        return self._validate_resolved_inputs(resolved_inputs)
 
     async def _execute(
         self,
