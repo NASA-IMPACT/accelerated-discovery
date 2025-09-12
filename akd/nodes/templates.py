@@ -1,6 +1,6 @@
 import uuid
 from abc import abstractmethod
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict
 
 from jsonpath_ng import parse as jsonpath_parse
 from loguru import logger
@@ -34,10 +34,10 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
 
     def __init__(
         self,
-        node_id: Optional[str] = None,
-        input_guardrails: List[CallableSpec] | None = None,
-        output_guardrails: List[CallableSpec] | None = None,
-        tool_runner: Optional[ToolRunner] = None,
+        node_id: str | None = None,
+        input_guardrails: list[CallableSpec] | None = None,
+        output_guardrails: list[CallableSpec] | None = None,
+        tool_runner: ToolRunner | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
@@ -112,9 +112,9 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
 
     async def _apply_guardrails(
         self,
-        guardrails: List[CallableSpec],
-        data: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        guardrails: list[CallableSpec],
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Note:
             If guardrails are callables,
@@ -125,7 +125,7 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
             If they are Tuple,
             the 2nd element is the mapping of input keys.
         """
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         for guard in guardrails:
             if isinstance(guard, tuple):
                 name = guard[0].__class__.__name__
@@ -182,10 +182,10 @@ class SupervisedNodeTemplate(AbstractNodeTemplate):
     def __init__(
         self,
         supervisor: BaseSupervisor,
-        input_guardrails: List[CallableSpec] | None = None,
-        output_guardrails: List[CallableSpec] | None = None,
-        node_id: Optional[str] = None,
-        tool_runner: Optional[ToolRunner] = None,
+        input_guardrails: list[CallableSpec] | None = None,
+        output_guardrails: list[CallableSpec] | None = None,
+        node_id: str | None = None,
+        tool_runner: ToolRunner | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
@@ -251,11 +251,11 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
     def __init__(
         self,
         agent: BaseAgent,
-        node_id: Optional[str] = None,
-        input_guardrails: Optional[List[RiskDefinition]] = None,
-        output_guardrails: Optional[List[RiskDefinition]] = None,
-        guardrails_config: Optional[GuardrailsConfig] = None,
-        io_map: Optional[Dict[str, str]] = None,
+        node_id: str | None = None,
+        input_guardrails: list[RiskDefinition] | None = None,
+        output_guardrails: list[RiskDefinition] | None = None,
+        guardrails_config: GuardrailsConfig | None = None,
+        io_map: dict[str, str] | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
@@ -354,9 +354,9 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
 
     def _apply_io_mapping(
         self,
-        base_inputs: Dict[str, Any],
-        context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        base_inputs: dict[str, Any],
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Apply io_map transformations to fill missing inputs using JSONPath.
 
@@ -408,8 +408,8 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
 
     def _validate_resolved_inputs(
         self,
-        resolved_inputs: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        resolved_inputs: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Validate that resolved inputs can create agent input schema.
 
@@ -441,7 +441,7 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         self,
         node_state: NodeState,
         global_state: GlobalState,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Resolve inputs for the agent using JSONPath for complex cross-node data access.
 
