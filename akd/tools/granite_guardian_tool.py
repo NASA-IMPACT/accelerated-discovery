@@ -94,10 +94,11 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     """
     Configuration for Granite Guardian Tool.
     """
-
+    print("from core")
     ollama_base_url: HttpUrl = Field(
         default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://ollama:11434/")),
     )
+    print("ollama base url is ",ollama_base_url )
     model: GuardianModelID = Field(
         default=GuardianModelID.GUARDIAN_8B,
         description="Granite Guardian model to use.",
