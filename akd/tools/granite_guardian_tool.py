@@ -98,7 +98,7 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     ollama_base_url: HttpUrl = Field(
         default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://Ollama-Ollam-3YFf3jFSw3Dc-1401538839.us-west-2.elb.amazonaws.com")),
     )
-    print("ollama base url is ",ollama_base_url )
+    print("new ollama base url is ",ollama_base_url )
     model: GuardianModelID = Field(
         default=GuardianModelID.GUARDIAN_8B,
         description="Granite Guardian model to use.",
@@ -161,7 +161,7 @@ class GraniteGuardianTool(
         return GraniteGuardianOutputSchema(risk_results=outputs)
 
     def _call_guardian(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
-        print("url is",self.config.ollama_base_url )
+        print("new url is",self.config.ollama_base_url )
 
         try:
             if self.ollama_type == OllamaType.CHAT:
