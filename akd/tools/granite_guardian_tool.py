@@ -96,7 +96,7 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     """
     print("from core")
     ollama_base_url: HttpUrl = Field(
-        default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://ollama:11434/")),
+        default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://Ollama-Ollam-3YFf3jFSw3Dc-1401538839.us-west-2.elb.amazonaws.com")),
     )
     print("ollama base url is ",ollama_base_url )
     model: GuardianModelID = Field(
