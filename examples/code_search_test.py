@@ -16,9 +16,11 @@ from akd.tools.code_search import (
     CombinedCodeSearchTool,
     CombinedCodeSearchToolConfig,
 )
+from akd.agents.search import LitSearchAgentInputSchema
+from akd.agents.search import CodeSearchAgent, CodeSearchAgentConfig
 
 
-# Code Search Tool
+# Local Code Search Tool
 async def local_repo_search_test():
     """An async function to run the tool."""
 
@@ -60,6 +62,7 @@ async def github_search_test():
         print("-" * 100)
 
 
+# SDE Code Search Tool
 async def sde_search_test():
     """An async function to run the tool."""
 
@@ -105,6 +108,27 @@ async def combined_code_search_test():
         print("-" * 100)
 
 
+# Code Search Agent
+async def code_search_agent_test():
+    """An async function to run the agent."""
+
+    print("Initializing the code search agent...")
+    cfg = CodeSearchAgentConfig()
+    agent = CodeSearchAgent(config=cfg)
+
+    search_input = LitSearchAgentInputSchema(query="landslide nepal", max_results=10)
+
+    print("Running the search...")
+    output = await agent.arun(search_input)
+
+    print("\n--- Search Results ---")
+    for result in output.results:
+        print(result["url"])
+        print(result["title"])
+        print(result["content"][:100])
+        print("-" * 100)
+
+
 if __name__ == "__main__":
     print("Running local repo search test...")
     asyncio.run(local_repo_search_test())
@@ -114,3 +138,5 @@ if __name__ == "__main__":
     asyncio.run(sde_search_test())
     print("Running combined code search test...")
     asyncio.run(combined_code_search_test())
+    print("Running code search agent test...")
+    asyncio.run(code_search_agent_test())
