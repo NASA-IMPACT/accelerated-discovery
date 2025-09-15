@@ -398,10 +398,8 @@ class TestRealAgentMappings:
             results=[
                 {
                     "source": "https://example.com/solar-paper",
-                    "result": {
-                        "title": "Advanced Solar Cell Technologies",
-                        "content": "Recent breakthroughs in perovskite solar cells...",
-                    },
+                    "title": "Advanced Solar Cell Technologies",
+                    "content": "Recent breakthroughs in perovskite solar cells...",
                 },
             ],
             category="science",
@@ -467,13 +465,12 @@ class TestRealAgentMappings:
 
         lit_output = LitSearchAgentOutputSchema(
             results=[
-                ExtractionDTO(
-                    source="research_paper.pdf",
-                    result={
-                        "content": "Solar cell efficiency has reached 47.1% using concentrated photovoltaics",
-                    },
-                ),
+                {
+                    "source": "research_paper.pdf",
+                    "content": "Solar cell efficiency has reached 47.1% using concentrated photovoltaics",
+                },
             ],
+            category="science",
         )
 
         extraction_result = await mapper.arun(
