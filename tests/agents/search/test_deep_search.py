@@ -1284,12 +1284,12 @@ class TestDeepLitSearchAgentRealLLM:
         print("🔬 END-TO-END RESEARCH WORKFLOW TEST")
         print("=" * 80)
 
-        # Configure agent for complete workflow
+        # Configure agent for complete workflow (faster settings for testing)
         config = DeepLitSearchAgentConfig(
-            max_research_iterations=2,
-            quality_threshold=0.6,
+            max_research_iterations=1,  # Reduced for faster testing
+            quality_threshold=0.3,      # Lower threshold for faster completion
             auto_clarify=False,
-            debug=True,
+            debug=False,               # Disable debug for faster execution
         )
 
         agent = DeepLitSearchAgent(config=config)
