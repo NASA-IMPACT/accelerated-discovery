@@ -191,36 +191,6 @@ OUTPUT (STRICT JSON SCHEMA ENFORCEMENT BY TOOL):
 - evidence_quality_score: 0.0–1.0
 - citations: structured per source
 
-<<<<<<< HEAD
-4. **Research Quality Assurance**
-   - Maintain scientific rigor throughout
-   - Provide proper attribution for all claims
-   - Acknowledge limitations and gaps
-   - Avoid overgeneralization or speculation
-
-RESEARCH PROCESS:
-1. Parse and understand the detailed research instructions
-2. Plan initial search strategy and keywords
-3. Execute searches and evaluate results
-4. Identify knowledge gaps and refine approach
-5. Iterate until quality threshold is met
-6. Synthesize findings into comprehensive report
-
-OUTPUT REQUIREMENTS:
-- Well-structured research report with clear sections
-- Executive summary of key findings
-- Detailed evidence with proper citations
-- Identification of gaps or areas for future research
-- Objective presentation of conflicting viewpoints
-- Tables, comparisons, or visualizations where helpful
-
-QUALITY STANDARDS:
-- Comprehensive coverage of the topic
-- Balanced representation of different perspectives
-- Clear distinction between evidence and interpretation
-- Appropriate depth for the intended use
-- Professional, academic writing style"""
-=======
 STYLE:
 - Evidence-based, objective, academic tone. Distinguish facts vs interpretation.
  - Call out uncertainties and inconsistencies explicitly.
@@ -251,7 +221,6 @@ Formatting:
 
 These criteria will later be used by automated evaluators to judge model outputs. Phrase them clearly and practically, assuming they will be applied by another LLM or rule-based system.
 
-Do not include the risk definition or conversation in your response — only return the list of criteria.
+Do not include the risk definition or conversation in your response - only return the list of criteria.
 
 """
->>>>>>> 1bdb079 (Refactor prompts in prompts.py for clarity and improved structure)
