@@ -95,7 +95,7 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     Configuration for Granite Guardian Tool.
     """
     ollama_base_url: HttpUrl = Field(
-        default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://Ollama-Ollam-3YFf3jFSw3Dc-1401538839.us-west-2.elb.amazonaws.com")),
+        default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")),
     )
     model: GuardianModelID = Field(
         default=GuardianModelID.GUARDIAN_2B,
