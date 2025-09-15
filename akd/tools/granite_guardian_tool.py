@@ -94,11 +94,9 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     """
     Configuration for Granite Guardian Tool.
     """
-    print("from core")
     ollama_base_url: HttpUrl = Field(
         default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://Ollama-Ollam-3YFf3jFSw3Dc-1401538839.us-west-2.elb.amazonaws.com")),
     )
-    print("new ollama base url is ",ollama_base_url )
     model: GuardianModelID = Field(
         default=GuardianModelID.GUARDIAN_2B,
         description="Granite Guardian model to use.",
@@ -138,7 +136,6 @@ class GraniteGuardianTool(
         self.snippet_n_chars = config.snippet_n_chars
         self.ollama_type = config.ollama_type
         self.ollama_client = Client(host=str(config.ollama_base_url))
-        print(f"Ollama client initialized with: {config.ollama_base_url}")
 
     async def _arun(
         self,
@@ -163,14 +160,10 @@ class GraniteGuardianTool(
         return GraniteGuardianOutputSchema(risk_results=outputs)
 
     def _call_guardian(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
-        print("new url is",self.config.ollama_base_url )
-
         try:
             if self.ollama_type == OllamaType.CHAT:
-                print("i came here", self.model)
                 result = self.ollama_client.chat(model="granite3.3:2b", messages=messages)
                 #result = chat(model=self.model, messages=messages)
-                print("result is :", result)
 
                 content = result.message.content
             elif self.ollama_type == OllamaType.SERVER:
@@ -181,7 +174,6 @@ class GraniteGuardianTool(
                 label = re.findall(r"\b(yes|no)\b", content, flags=re.IGNORECASE)[
                     0
                 ].lower()
-                print("label is :", label)
             except Exception as e:
                 logger.error(f"[GuardianTool] Ollama error: {e}")
                 return {"error": str(e)}
