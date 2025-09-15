@@ -370,11 +370,11 @@ class DeepLitSearchAgent(LitBaseAgent):
         queries: List[str],
         original_query: str | None = None,
         is_reformulated: bool = False,
-    ) -> List[DeepSearchResultItem]:
+    ) -> List[SearchResultItem]:
         """Execute searches using available search tools."""
         all_results = []
 
-        # Launch all configured search tools concurrently
+        # Use primary search tool (SearchPipeline)
         tasks: List[asyncio.Task] = []
         tool_names: List[str] = []
 
@@ -404,10 +404,10 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     def _deduplicate_results(
         self,
-        new_results: List[DeepSearchResultItem],
-        existing_results: List[DeepSearchResultItem],
-    ) -> List[DeepSearchResultItem]:
-        """Remove duplicate results based on URL and title."""
+        new_results: List[SearchResultItem],
+        existing_results: List[SearchResultItem],
+    ) -> List[SearchResultItem]:
+        """Remove duplicate results based on URL or title."""
         existing_urls = {r.url for r in existing_results}
         existing_titles = {r.title.lower() for r in existing_results if r.title}
 
@@ -421,7 +421,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
     async def _evaluate_research_quality(
         self,
-        results: List[DeepSearchResultItem],
+        results: List[SearchResultItem],
         query: str,
     ) -> float:
         """Evaluate the quality of research results."""
@@ -588,14 +588,9 @@ class DeepLitSearchAgent(LitBaseAgent):
                 "content": result.content,
                 "category": getattr(result, "category", "science"),
             }
-            # Preserve relevancy information if available
-            if (
-                hasattr(result, "relevancy_score")
-                and result.relevancy_score is not None
-            ):
-                result_dict["relevancy_score"] = result.relevancy_score
-            if hasattr(result, "should_fetch_full_content"):
-                result_dict["full_content_fetched"] = result.should_fetch_full_content
+            # Preserve any additional metadata from pipeline processing and extra fields
+            if hasattr(result, "extra") and result.extra:
+                result_dict["extra"] = result.extra
             results_as_dicts.append(result_dict)
 
         # Add research report as the first result
