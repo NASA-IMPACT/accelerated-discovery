@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from loguru import logger
 from pydantic import Field
-from typing import Optional
+from typing import Literal
+import os
 
 from akd.tools.code_search import (
     LocalRepoCodeSearchTool,
@@ -11,6 +12,7 @@ from akd.tools.code_search import (
     SDECodeSearchToolConfig,
     CombinedCodeSearchTool,
     CombinedCodeSearchToolConfig,
+    CodeSearchTool,
 )
 from akd.agents.query import FollowUpQueryAgent, QueryAgent
 from akd.agents.relevancy import MultiRubricRelevancyAgent
@@ -41,21 +43,23 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     embedding_model_name: str = Field(
         default="thenlper/gte-large", description="Embedding model for local search"
     )
-    data_file: Optional[str] = Field(
+    data_file: str | None = Field(
         default=None, description="Path to local repository data file"
     )
-    google_drive_file_id: Optional[str] = Field(
+    google_drive_file_id: str | None = Field(
         default="15kxTyLeBCPL82WjMTyDytcXag85vglCP",
         description="Google Drive file ID for repository database, uses gte-large embeddings",
     )
 
     # SDE search configuration
     sde_base_url: str = Field(
-        default="https://d2kqty7z3q8ugg.cloudfront.net/api/code/search",
+        default=os.getenv(
+            "SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
+        ),
         description="SDE search API base URL",
     )
-    sde_search_type: str = Field(
-        default="vector", description="SDE search type (vector, hybrid, keyword)"
+    sde_search_type: Literal["vector", "hybrid", "keyword"] = Field(
+        default="vector", description="SDE search type"
     )
     sde_page_size: int = Field(default=100, description="SDE search page size")
 
@@ -75,18 +79,17 @@ class CodeSearchAgent:
 
     def __init__(
         self,
-        config: Optional[CodeSearchAgentConfig] = None,
-        search_tool: Optional[CombinedCodeSearchTool] = None,
-        query_agent: Optional[QueryAgent] = None,
-        followup_query_agent: Optional[FollowUpQueryAgent] = None,
-        relevancy_agent: Optional[MultiRubricRelevancyAgent] = None,
-        debug: Optional[bool] = None,
+        config: CodeSearchAgentConfig | None = None,
+        search_tool: CodeSearchTool | None = None,
+        query_agent: QueryAgent | None = None,
+        followup_query_agent: FollowUpQueryAgent | None = None,
+        relevancy_agent: MultiRubricRelevancyAgent | None = None,
+        debug: bool = False,
     ):
         """Initialize CodeSearchAgent with custom components."""
 
         self.config = config or CodeSearchAgentConfig()
-        if debug is not None:
-            self.config.debug = debug
+        self.config.debug = debug
 
         # Setup search tool
         self.search_tool = search_tool or self._setup_search_tool()
