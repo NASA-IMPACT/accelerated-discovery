@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 import requests
 from loguru import logger
-from ollama import chat
+from ollama import chat, Client 
 from pydantic import HttpUrl, model_validator
 from pydantic.fields import Field
 from typing_extensions import Self
@@ -137,6 +137,8 @@ class GraniteGuardianTool(
         self.default_risk_type = config.default_risk_type
         self.snippet_n_chars = config.snippet_n_chars
         self.ollama_type = config.ollama_type
+        self.ollama_client = Client(host=str(config.ollama_base_url))
+        print(f"Ollama client initialized with: {config.ollama_base_url}")
 
     async def _arun(
         self,
@@ -166,7 +168,8 @@ class GraniteGuardianTool(
         try:
             if self.ollama_type == OllamaType.CHAT:
                 print("i came here")
-                result = chat(model=self.model, messages=messages, host=str(self.config.ollama_base_url))
+                result = self.ollama_client.chat(model=self.model, messages=messages)
+                #result = chat(model=self.model, messages=messages)
                 print("result is :", result)
 
                 content = result.message.content
