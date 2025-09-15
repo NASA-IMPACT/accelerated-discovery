@@ -94,7 +94,7 @@ class DeepLitSearchAgent(LitBaseAgent):
     """
 
     input_schema = LitSearchAgentInputSchema
-    output_schema = DeepLitSearchAgentOutputSchema
+    output_schema = LitSearchAgentOutputSchema
     config_schema = DeepLitSearchAgentConfig
 
     def __init__(

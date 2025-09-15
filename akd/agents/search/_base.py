@@ -2,7 +2,7 @@
 Base classes and shared utilities for literature search agents.
 """
 
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
 
@@ -88,7 +88,10 @@ class LitSearchAgentInputSchema(SearchAgentInputSchema):
 class LitSearchAgentOutputSchema(SearchAgentOutputSchema):
     """Base output schema for literature search agents."""
 
-    pass
+    extra: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra metadata and synthesis information",
+    )
 
 
 class LitSearchAgentConfig(SearchAgentConfig):
