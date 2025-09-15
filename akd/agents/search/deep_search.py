@@ -571,21 +571,6 @@ class DeepLitSearchAgent(LitBaseAgent):
                 result_dict["extra"] = result.extra
             results_as_dicts.append(result_dict)
 
-        # Add research report as the first result
-        if results_as_dicts:
-            results_as_dicts.insert(
-                0,
-                {
-                    "url": "deep-research://report",
-                    "title": "Deep Research Report",
-                    "content": research_output["research_report"],
-                    "category": "research",
-                    "key_findings": research_output["key_findings"],
-                    "quality_score": research_output["evidence_quality_score"],
-                    "iterations": research_output["iterations_performed"],
-                },
-            )
-
         return LitSearchAgentOutputSchema(
             results=results_as_dicts,
             category=params.category,
