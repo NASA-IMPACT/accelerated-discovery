@@ -141,7 +141,7 @@ class ResearchSynthesisComponent:
         # Create input for the agent
         agent_input = ResearchSynthesisInputSchema(
             query=original_query,
-            search_results=managed_results,
+            search_results=results,
             context=context,
         )
 
@@ -149,10 +149,10 @@ class ResearchSynthesisComponent:
             # Debug preview of input (200 chars cap)
             if self.debug:
                 preview_titles = ", ".join(
-                    [(r.title or "Untitled")[:40] for r in managed_results[:5]]
+                    [(r.title or "Untitled")[:40] for r in results[:5]]
                 )[:200]
                 logger.debug(
-                    f"Synthesis input preview | query: {original_query[:200]} | results: {len(managed_results)} | titles: {preview_titles} | context: {context[:200]}"
+                    f"Synthesis input preview | query: {original_query[:200]} | results: {len(results)} | titles: {preview_titles} | context: {context[:200]}"
                 )
 
             # Use the agent to synthesize the research
