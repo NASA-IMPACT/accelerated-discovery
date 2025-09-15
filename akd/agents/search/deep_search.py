@@ -413,9 +413,10 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         unique_results = []
         for result in new_results:
-            if result.url not in existing_urls:
-                if not result.title or result.title.lower() not in existing_titles:
-                    unique_results.append(result)
+            if result.url not in existing_urls and (
+                not result.title or result.title.lower() not in existing_titles
+            ):
+                unique_results.append(result)
 
         return unique_results
 
