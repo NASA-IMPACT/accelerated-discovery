@@ -8,6 +8,10 @@ from loguru import logger
 from pydantic import Field
 
 from akd.structures import SearchResultItem
+from akd.tools.link_relevancy_assessor import (
+    LinkRelevancyAssessor,
+    LinkRelevancyAssessorConfig,
+)
 from akd.tools.resolvers import (
     ADSResolver,
     ArxivResolver,
@@ -56,10 +60,6 @@ class SearchPipelineConfig(SearchToolConfig):
         description="Whether to preserve original search result content alongside scraped content",
     )
 
-    enable_scraping: bool = Field(
-        default=True,
-        description="Whether to enable the scraping step in the pipeline",
-    )
     scraping_mode: SearchPipelineScrapingMode = Field(
         default=SearchPipelineScrapingMode.ALWAYS_ON,
         description="Mode for enabling scraping: always_on, always_off, link_assessment",
@@ -74,9 +74,15 @@ class SearchPipelineConfig(SearchToolConfig):
         default=False,
         description="Whether to fail the entire pipeline if scraping fails for any result",
     )
-    min_successful_scrapes: Optional[int] = Field(
+    min_successful_scrapes: int | None = Field(
         default=None,
         description="Minimum number of successful scrapes required (None = no minimum)",
+    )
+
+    # Link assessment configuration
+    link_relevancy_assessor_config: LinkRelevancyAssessorConfig = Field(
+        default_factory=LinkRelevancyAssessorConfig,
+        description="Configuration for the LinkRelevancyAssessor when using LINK_ASSESSMENT mode",
     )
 
 
@@ -132,9 +138,10 @@ class SearchPipeline(SearchTool):
     def __init__(
         self,
         search_tool: SearchTool,
-        resolver: Optional[BaseArticleResolver] = None,
-        scraper: Optional[ScraperToolBase] = None,
-        config: Optional[SearchPipelineConfig] = None,
+        resolver: BaseArticleResolver | None = None,
+        scraper: ScraperToolBase | None = None,
+        link_relevancy_assessor: LinkRelevancyAssessor | None = None,
+        config: SearchPipelineConfig | None = None,
         debug: bool = False,
     ):
         """
@@ -144,6 +151,7 @@ class SearchPipeline(SearchTool):
             search_tool: The underlying search tool (e.g., SearxNG, Semantic Scholar)
             resolver: Article resolver for open access URLs (defaults to ResearchArticleResolver)
             scraper: Content scraper (defaults to CompositeScraper)
+            link_relevancy_assessor: Link relevancy assessor (defaults to LinkRelevancyAssessor)
             config: Pipeline configuration
             debug: Enable debug logging
         """
@@ -153,12 +161,19 @@ class SearchPipeline(SearchTool):
         self.search_tool = search_tool
         self.resolver = resolver or self._default_research_article_resolver
         self.scraper = scraper or self._default_scraper
+        self.link_relevancy_assessor = link_relevancy_assessor or LinkRelevancyAssessor(
+            config=config.link_relevancy_assessor_config,
+            debug=debug,
+        )
 
         if debug:
             logger.debug("Initialized SearchPipeline with:")
             logger.debug(f"  - Search tool: {search_tool.__class__.__name__}")
             logger.debug(f"  - Resolver: {self.resolver.__class__.__name__}")
             logger.debug(f"  - Scraper: {self.scraper.__class__.__name__}")
+            logger.debug(
+                f"  - Link relevancy assessor: {self.link_relevancy_assessor.__class__.__name__}",
+            )
 
     async def _resolve_essential_metadata(
         self,
@@ -234,15 +249,63 @@ class SearchPipeline(SearchTool):
                 raise self.ScrapingError(url, msg)
             return None
 
+    async def _assess_link_relevancy(
+        self,
+        results: list[SearchResultItem],
+        query: str,
+        domain_context: str | None = None,
+    ) -> list[SearchResultItem]:
+        """
+        Assess the relevancy of search results using LinkRelevancyAssessor.
+
+        Args:
+            results: List of search results to assess
+            query: The search query for relevancy assessment
+            domain_context: Optional domain context for better assessment
+
+        Returns:
+            List of results with relevancy assessment metadata
+        """
+        if not results:
+            return results
+
+        try:
+            assessment_input = self.link_relevancy_assessor.input_schema(
+                search_results=results,
+                original_query=query,
+                domain_context=domain_context,
+            )
+
+            assessment_output = await self.link_relevancy_assessor.arun(
+                assessment_input,
+            )
+
+            if self.debug:
+                logger.debug(
+                    f"Link relevancy assessment completed. "
+                    f"Assessed: {len(assessment_output.assessed_results)}, "
+                    f"High relevancy: {len(assessment_output.high_relevancy_results)}",
+                )
+
+            return assessment_output.assessed_results
+
+        except Exception as e:
+            if self.debug:
+                logger.warning(f"Link relevancy assessment failed: {e}")
+            # Return original results if assessment fails
+            return results
+
     async def _process_single_result(
         self,
         result: SearchResultItem,
+        query: str | None = None,
     ) -> SearchResultItem:
         """
         Process a single search result through the full pipeline.
 
         Args:
             result: Original search result
+            query: Search query for relevancy assessment (required for LINK_ASSESSMENT mode)
 
         Returns:
             Enhanced search result with optional scraped content
@@ -253,11 +316,44 @@ class SearchPipeline(SearchTool):
 
             scraping_url = resolved_result.url
             scraped_content = None
-            if self.enable_scraping:
+            should_scrape = False
+
+            if self.scraping_mode == SearchPipelineScrapingMode.ALWAYS_ON:
+                should_scrape = True
+            elif self.scraping_mode == SearchPipelineScrapingMode.ALWAYS_OFF:
+                should_scrape = False
+            elif self.scraping_mode == SearchPipelineScrapingMode.LINK_ASSESSMENT:
+                # For LINK_ASSESSMENT mode, check if result has been assessed
+                should_scrape = result.extra.get("should_fetch_full_content", False)
+                if "should_fetch_full_content" not in result.extra and query:
+                    # If not assessed yet, perform assessment for this single result
+                    assessed_results = await self._assess_link_relevancy(
+                        [result],
+                        query,
+                    )
+                    if assessed_results:
+                        should_scrape = assessed_results[0].extra.get(
+                            "should_fetch_full_content",
+                            False,
+                        )
+                        # Update result with assessment metadata
+                        result.score = getattr(assessed_results[0], "score", None)
+                        if (
+                            hasattr(assessed_results[0], "extra")
+                            and "relevancy_assessment" in assessed_results[0].extra
+                        ):
+                            result.extra["relevancy_assessment"] = assessed_results[
+                                0
+                            ].extra["relevancy_assessment"]
+                        result.extra["should_fetch_full_content"] = should_scrape
+
+            if should_scrape:
                 scraped_content = await self._scrape_content(scraping_url)
             else:
                 if self.debug:
-                    logger.debug(f"Skipping scraping for {result.title}")
+                    logger.debug(
+                        f"Skipping scraping for {result.title} (mode: {self.scraping_mode})",
+                    )
 
             # Step 3: Create enhanced result
             search_item_data = resolved_result.model_dump(
@@ -278,7 +374,8 @@ class SearchPipeline(SearchTool):
 
             enhanced_result.extra.update(
                 {
-                    "scraping_performed": self.enable_scraping,
+                    "scraping_mode": self.scraping_mode.value,
+                    "scraping_performed": should_scrape,
                     "full_text_scraped": scraped_content is not None,
                     "resolver_used": resolved_result.resolvers
                     if hasattr(resolved_result, "resolvers")
@@ -287,7 +384,7 @@ class SearchPipeline(SearchTool):
                 },
             )
 
-            if self.enable_scraping:
+            if should_scrape:
                 enhanced_result.extra["scraper_used"] = self.scraper.__class__.__name__
 
                 if scraped_content:
@@ -309,7 +406,8 @@ class SearchPipeline(SearchTool):
 
             enhanced_result.extra.update(
                 {
-                    "scraping_performed": self.enable_scraping,
+                    "scraping_mode": self.scraping_mode.value,
+                    "scraping_performed": False,
                     "full_text_scraped": False,
                     "processing_error": str(e),
                     "scraping_attempted_url": scraping_url,
@@ -340,7 +438,7 @@ class SearchPipeline(SearchTool):
             logger.info(
                 f" Starting SearchPipeline for {len(params.queries)} queries",
             )
-            logger.info(f"Scraping enabled: {self.enable_scraping}")
+            logger.info(f"Scraping mode: {self.scraping_mode}")
 
         # Step 1: Get initial search result schema
         params_search = self.search_tool.input_schema(**params.model_dump())
@@ -354,7 +452,17 @@ class SearchPipeline(SearchTool):
         if self.debug:
             logger.info(f"Processing {len(search_results.results)} search results")
 
-        # Step 2: Process results through the pipeline
+        # Step 2: Perform batch link assessment if needed
+        results_to_process = search_results.results
+        if self.scraping_mode == SearchPipelineScrapingMode.LINK_ASSESSMENT:
+            # Get the main query for assessment (use first query if multiple)
+            main_query = params.queries[0] if params.queries else ""
+            results_to_process = await self._assess_link_relevancy(
+                search_results.results,
+                main_query,
+            )
+
+        # Step 3: Process results through the pipeline
         if self.parallel_processing:
             # Process in parallel with concurrency limit
             semaphore = asyncio.Semaphore(self.max_concurrent_scrapes)
@@ -364,7 +472,7 @@ class SearchPipeline(SearchTool):
                     return await self._process_single_result(result)
 
             enhanced_results = await asyncio.gather(
-                *[process_with_semaphore(result) for result in search_results.results],
+                *[process_with_semaphore(result) for result in results_to_process],
                 return_exceptions=not self.fail_on_scraping_errors,
             )
 
@@ -378,7 +486,7 @@ class SearchPipeline(SearchTool):
         else:
             # Process sequentially
             enhanced_results = []
-            for result in search_results.results:
+            for result in results_to_process:
                 try:
                     enhanced_result = await self._process_single_result(result)
                     enhanced_results.append(enhanced_result)
@@ -388,8 +496,8 @@ class SearchPipeline(SearchTool):
                     if self.debug:
                         logger.error(f"Failed to process result {result.title}: {e}")
 
-        # Step 3: Validate results
-        if self.enable_scraping:
+        # Step 4: Validate results
+        if self.scraping_mode != SearchPipelineScrapingMode.ALWAYS_OFF:
             successful_scrapes = sum(
                 1
                 for result in enhanced_results
