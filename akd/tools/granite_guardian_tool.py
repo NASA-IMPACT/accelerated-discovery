@@ -162,7 +162,7 @@ class GraniteGuardianTool(
     def _call_guardian(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         try:
             if self.ollama_type == OllamaType.CHAT:
-                result = self.ollama_client.chat(model="granite3-guardian:2b", messages=messages)
+                result = self.ollama_client.chat(model=self.model, messages=messages)
                 #result = chat(model=self.model, messages=messages)
 
                 content = result.message.content
