@@ -19,6 +19,11 @@ from akd.tools.code_search import (
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
 )
+from akd.agents.search import (
+    CodeSearchAgent,
+    CodeSearchAgentConfig,
+    LitSearchAgentInputSchema,
+)
 from akd.tools.misc import Embedder
 from akd.tools.search import SearxNGSearchToolConfig
 from akd.utils import google_drive_downloader
@@ -35,6 +40,18 @@ def validate_output_structure(output):
         assert hasattr(result, "url")
         assert hasattr(result, "content")
         assert result.content and result.content.strip()
+
+
+def validate_agent_output_structure(output):
+    assert hasattr(output, "results")
+    assert isinstance(output.results, list)
+    assert len(output.results) > 0
+
+    for result in output.results:
+        assert isinstance(result, dict)
+        assert "url" in result
+        assert "content" in result
+        assert result["content"] and result["content"].strip()
 
 
 """Initialize the tools"""
@@ -57,10 +74,17 @@ def sde_tool():
     config = SDECodeSearchToolConfig(debug=True)
     return SDECodeSearchTool(config=config)
 
+
 @pytest.fixture
 def embedder():
     model = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
     return Embedder(model_name=model)
+
+
+@pytest.fixture
+def code_search_agent():
+    config = CodeSearchAgentConfig(debug=True)
+    return CodeSearchAgent(config=config)
 
 
 """Test1: Google Drive Link"""
@@ -194,3 +218,13 @@ async def test_sde_code_search(sde_tool):
     # Output structure validation
     output = await sde_tool._arun(input_params)
     validate_output_structure(output)
+
+
+"""Test9: Code Search Agent"""
+
+
+@pytest.mark.asyncio
+async def test_code_search_agent(code_search_agent):
+    input_params = LitSearchAgentInputSchema(query="weather prediction", max_results=5)
+    output = await code_search_agent.arun(input_params)
+    validate_agent_output_structure(output)
