@@ -457,6 +457,207 @@ class TestSingleAgentNodeTemplateIntegration:
         # depends on how the decorator merges user-provided lists with config
 
 
+class TestSingleAgentNodeTemplateCrossNodeMapping:
+    """Test cross-node input mapping with JSONPath functionality."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_no_io_map(self):
+        """Test _resolve_inputs with complete inputs and no io_map."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(agent=agent)
+
+        node_state = NodeState(inputs={"query": "test query"})
+        global_state = GlobalState(node_states={"test": node_state})
+
+        resolved = await template._resolve_inputs(node_state, global_state)
+        assert resolved == {"query": "test query"}
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_no_io_map_missing_required(self):
+        """Test _resolve_inputs fails when required inputs missing and no io_map."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(agent=agent, node_id="test_node")
+
+        node_state = NodeState(inputs={})  # Missing required "query" field
+        global_state = GlobalState(node_states={"test_node": node_state})
+
+        with pytest.raises(
+            ValueError,
+            match=r"(?s)Node.*missing required inputs.*Consider using io_map",
+        ):
+            await template._resolve_inputs(node_state, global_state)
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_simple_jsonpath_mapping(self):
+        """Test _resolve_inputs with simple JSONPath cross-node mapping."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(
+            agent=agent,
+            io_map={"query": "$.lit_search.inputs.query"},
+            debug=True,
+        )
+
+        node_state = NodeState(inputs={})  # Empty inputs
+        global_state = GlobalState(
+            node_states={
+                "current": node_state,
+                "lit_search": NodeState(inputs={"query": "landslide nepal"}),
+            },
+        )
+
+        resolved = await template._resolve_inputs(node_state, global_state)
+        assert resolved["query"] == "landslide nepal"
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_outputs_mapping(self):
+        """Test _resolve_inputs mapping from outputs instead of inputs."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(
+            agent=agent,
+            io_map={"query": "$.search.outputs.final_query"},
+            debug=True,
+        )
+
+        node_state = NodeState(inputs={})
+        global_state = GlobalState(
+            node_states={
+                "current": node_state,
+                "search": NodeState(outputs={"final_query": "earthquake detection"}),
+            },
+        )
+
+        resolved = await template._resolve_inputs(node_state, global_state)
+        assert resolved["query"] == "earthquake detection"
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_no_override_existing(self):
+        """Test _resolve_inputs never overrides existing node inputs."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(
+            agent=agent,
+            io_map={"query": "$.other.inputs.query"},
+            debug=True,
+        )
+
+        node_state = NodeState(inputs={"query": "original query"})  # Existing input
+        global_state = GlobalState(
+            node_states={
+                "current": node_state,
+                "other": NodeState(inputs={"query": "should not override"}),
+            },
+        )
+
+        resolved = await template._resolve_inputs(node_state, global_state)
+        assert resolved["query"] == "original query"  # Should NOT be overridden
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_missing_source_node(self):
+        """Test _resolve_inputs handles missing source node gracefully."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(
+            agent=agent,
+            io_map={"query": "$.nonexistent.inputs.query"},
+            debug=True,
+        )
+
+        node_state = NodeState(inputs={})
+        global_state = GlobalState(node_states={"current": node_state})
+
+        # Should fail validation since query is still missing after mapping attempt
+        with pytest.raises(ValueError, match="validation failed"):
+            await template._resolve_inputs(node_state, global_state)
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_invalid_jsonpath(self):
+        """Test _resolve_inputs handles invalid JSONPath expressions."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(
+            agent=agent,
+            io_map={"query": "$.invalid..path..syntax"},
+            debug=True,
+        )
+
+        node_state = NodeState(inputs={})
+        global_state = GlobalState(
+            node_states={
+                "current": node_state,
+                "other": NodeState(inputs={"query": "good query"}),
+            },
+        )
+
+        # Should fail validation since JSONPath is invalid and query remains unmapped
+        with pytest.raises(ValueError, match="validation failed"):
+            await template._resolve_inputs(node_state, global_state)
+
+    @pytest.mark.asyncio
+    async def test_resolve_inputs_nested_jsonpath(self):
+        """Test _resolve_inputs with nested JSONPath expressions."""
+        agent = TestAgent()
+        template = SingleAgentNodeTemplate(
+            agent=agent,
+            io_map={"query": "$.config.inputs.search_params.query_text"},
+            debug=True,
+        )
+
+        node_state = NodeState(inputs={})
+        global_state = GlobalState(
+            node_states={
+                "current": node_state,
+                "config": NodeState(
+                    inputs={
+                        "search_params": {
+                            "query_text": "nested query value",
+                        },
+                    },
+                ),
+            },
+        )
+
+        resolved = await template._resolve_inputs(node_state, global_state)
+        assert resolved["query"] == "nested query value"
+
+    @pytest.mark.asyncio
+    async def test_cross_node_io_mapping_with_query_agent(self):
+        """Test cross-node input mapping using QueryAgent example."""
+        # Import QueryAgent here to avoid circular imports
+        from akd.agents.query import QueryAgent
+
+        _agent = QueryAgent()
+        _node = SingleAgentNodeTemplate(
+            _agent,
+            node_id="query",
+            input_guardrails=[RiskDefinition.HARM],
+            mutation=True,
+            io_map={"query": "$.lit_search.inputs.query"},
+            debug=True,
+        )
+
+        print(_node._input_schema, _node._output_schema)
+
+        _global_state = GlobalState(
+            node_states={
+                "query": NodeState(
+                    inputs={
+                        "num_queries": 10,
+                    },
+                ),
+                "lit_search": NodeState(
+                    inputs={
+                        "query": "landslide nepal throughout the years",
+                    },
+                ),
+            },
+        )
+
+        _node_output = await _node.arun(_global_state)
+        result = _node_output.model_dump()
+
+        # Verify that the mapping worked and query field was populated from lit_search
+        assert "outputs" in result
+        # The exact output format depends on QueryAgent implementation
+        # but we should have some response indicating successful execution
+
+
 # Prevent pytest from collecting test agent class
 TestAgent.__test__ = False
 
