@@ -118,7 +118,7 @@ class TestSearxNGSearchToolSchemas:
         input_schema = SearxNGSearchToolInputSchema(queries=["test"])
 
         assert input_schema.category == "science"
-        assert input_schema.max_results == 10
+        assert input_schema.max_results == None
 
     def test_output_schema_validation(self, sample_search_result_items):
         """Test output schema validation."""
