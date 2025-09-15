@@ -100,7 +100,7 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     )
     print("new ollama base url is ",ollama_base_url )
     model: GuardianModelID = Field(
-        default=GuardianModelID.GUARDIAN_8B,
+        default=GuardianModelID.GUARDIAN_2B,
         description="Granite Guardian model to use.",
     )
     ollama_type: OllamaType = Field(
