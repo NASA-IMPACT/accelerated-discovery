@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from enum import Enum
 from typing import Optional
 
 from loguru import logger
@@ -8,13 +9,13 @@ from pydantic import Field
 
 from akd.structures import SearchResultItem
 from akd.tools.resolvers import (
-    ResearchArticleResolver,
-    CrossRefDoiResolver,
+    ADSResolver,
     ArxivResolver,
-    ADSResolver, 
-    DOIResolver,
-    PDFUrlResolver, 
     BaseArticleResolver,
+    CrossRefDoiResolver,
+    DOIResolver,
+    PDFUrlResolver,
+    ResearchArticleResolver,
 )
 from akd.tools.resolvers._base import ResolverOutputSchema
 from akd.tools.resolvers.unpaywall import UnpaywallResolver
@@ -30,6 +31,12 @@ from ._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
+
+
+class SearchPipelineScrapingMode(str, Enum):
+    ALWAYS_ON = "always_on"
+    ALWAYS_OFF = "always_off"
+    LINK_ASSESSMENT = "link_assessment"
 
 
 class SearchPipelineConfig(SearchToolConfig):
@@ -52,7 +59,11 @@ class SearchPipelineConfig(SearchToolConfig):
     enable_scraping: bool = Field(
         default=True,
         description="Whether to enable the scraping step in the pipeline",
-    ) 
+    )
+    scraping_mode: SearchPipelineScrapingMode = Field(
+        default=SearchPipelineScrapingMode.ALWAYS_ON,
+        description="Mode for enabling scraping: always_on, always_off, link_assessment",
+    )
 
     scraping_timeout: int = Field(
         default=30,
@@ -91,24 +102,24 @@ class SearchPipeline(SearchTool):
 
     class ScrapingError(Exception):
         """Raised when scraping fails or times out in SearchPipeline."""
+
         def __init__(self, url: str, message: str):
             super().__init__(f"Scraping failed for {url}: {message}")
             self.url = url
             self.message = message
 
-
     @property
     def _default_research_article_resolver(self) -> ResearchArticleResolver:
         return ResearchArticleResolver(
-        PDFUrlResolver(debug=self.debug),
-        ArxivResolver(debug=self.debug),
-        ADSResolver(debug=self.debug),
-        DOIResolver(debug=self.debug),
-        CrossRefDoiResolver(debug=self.debug),
-        UnpaywallResolver(debug=self.debug),
-        debug=self.debug,
+            PDFUrlResolver(debug=self.debug),
+            ArxivResolver(debug=self.debug),
+            ADSResolver(debug=self.debug),
+            DOIResolver(debug=self.debug),
+            CrossRefDoiResolver(debug=self.debug),
+            UnpaywallResolver(debug=self.debug),
+            debug=self.debug,
         )
-    
+
     @property
     def _default_scraper(self) -> ScraperToolBase:
         return CompositeScraper(
@@ -117,7 +128,6 @@ class SearchPipeline(SearchTool):
             SimpleWebScraper(debug=self.debug),
             SimplePDFScraper(debug=self.debug),
         )
-
 
     def __init__(
         self,
@@ -150,7 +160,10 @@ class SearchPipeline(SearchTool):
             logger.debug(f"  - Resolver: {self.resolver.__class__.__name__}")
             logger.debug(f"  - Scraper: {self.scraper.__class__.__name__}")
 
-    async def _resolve_essential_metadata(self, result: SearchResultItem) -> Optional[ResolverOutputSchema]:
+    async def _resolve_essential_metadata(
+        self,
+        result: SearchResultItem,
+    ) -> Optional[ResolverOutputSchema]:
         """
         Resolve the open access URL for a search result.
 
@@ -193,7 +206,9 @@ class SearchPipeline(SearchTool):
             if scraper_output.content and scraper_output.content.strip():
                 content = scraper_output.content.strip()
                 if self.debug:
-                    logger.debug(f"Successfully scraped {len(content)} characters from {url}")
+                    logger.debug(
+                        f"Successfully scraped {len(content)} characters from {url}",
+                    )
                 return content
             else:
                 msg = "No content scraped"
@@ -218,7 +233,6 @@ class SearchPipeline(SearchTool):
             if self.fail_on_scraping_errors:
                 raise self.ScrapingError(url, msg)
             return None
- 
 
     async def _process_single_result(
         self,
@@ -236,7 +250,7 @@ class SearchPipeline(SearchTool):
         try:
             # Step 1: URL resolution (always performed)
             resolved_result = await self._resolve_essential_metadata(result)
-            
+
             scraping_url = resolved_result.url
             scraped_content = None
             if self.enable_scraping:
@@ -247,7 +261,7 @@ class SearchPipeline(SearchTool):
 
             # Step 3: Create enhanced result
             search_item_data = resolved_result.model_dump(
-                include=set(SearchResultItem.model_fields.keys())
+                include=set(SearchResultItem.model_fields.keys()),
             )
             enhanced_result = SearchResultItem(**search_item_data)
 
@@ -261,17 +275,21 @@ class SearchPipeline(SearchTool):
                 else:
                     # Replace with scraped content
                     enhanced_result.content = scraped_content
-                
-            enhanced_result.extra.update({
-                "scraping_performed": self.enable_scraping,
-                "full_text_scraped": scraped_content is not None,
-                "resolver_used": resolved_result.resolvers if hasattr(resolved_result, 'resolvers') else None,
-                "original_url": result.url,
-            })
-                
+
+            enhanced_result.extra.update(
+                {
+                    "scraping_performed": self.enable_scraping,
+                    "full_text_scraped": scraped_content is not None,
+                    "resolver_used": resolved_result.resolvers
+                    if hasattr(resolved_result, "resolvers")
+                    else None,
+                    "original_url": result.url,
+                },
+            )
+
             if self.enable_scraping:
                 enhanced_result.extra["scraper_used"] = self.scraper.__class__.__name__
-                
+
                 if scraped_content:
                     enhanced_result.extra["scraped_url"] = scraping_url
                 else:
@@ -289,12 +307,14 @@ class SearchPipeline(SearchTool):
             # Return original result with error metadata
             enhanced_result = result.model_copy()
 
-            enhanced_result.extra.update({
-                "scraping_performed": self.enable_scraping,
-                "full_text_scraped": False,
-                "processing_error": str(e),
-                "scraping_attempted_url": scraping_url,
-            })
+            enhanced_result.extra.update(
+                {
+                    "scraping_performed": self.enable_scraping,
+                    "full_text_scraped": False,
+                    "processing_error": str(e),
+                    "scraping_attempted_url": scraping_url,
+                },
+            )
 
             return enhanced_result
 
