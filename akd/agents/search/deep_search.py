@@ -25,34 +25,7 @@ from akd.agents.relevancy import (
     MultiRubricRelevancyInputSchema,
 )
 from akd.structures import SearchResultItem
-from akd.tools.link_relevancy_assessor import (
-    LinkRelevancyAssessor,
-    LinkRelevancyAssessorConfig,
-    LinkRelevancyAssessorInputSchema,
-)
-from akd.tools.resolvers import (
-    ADSResolver,
-    ArxivResolver,
-    CrossRefDoiResolver,
-    DOIResolver,
-    PDFUrlResolver,
-    ResearchArticleResolver,
-    UnpaywallResolver,
-)
-from akd.tools.scrapers import (
-    ScraperToolInputSchema,
-    SimplePDFScraper,
-    SimpleWebScraper,
-)
-from akd.tools.scrapers.composite import CompositeScraper
-from akd.tools.scrapers.omni import DoclingScraper
-from akd.tools.scrapers.web_scrapers import Crawl4AIWebScraper
-from akd.tools.search.searxng_search import SearxNGSearchTool
-from akd.tools.search.semantic_scholar_search import (
-    SemanticScholarSearchTool,
-    SemanticScholarSearchToolInputSchema,
-)
-from akd.tools.source_validator import SourceValidator, SourceValidatorInputSchema
+from akd.tools.search.pipeline import SearchPipeline
 
 from ._base import (
     LitBaseAgent,
@@ -127,45 +100,6 @@ class DeepLitSearchAgentConfig(LitSearchAgentConfig):
         description="Enable streaming of research progress",
     )
 
-    # Search tool selection
-    use_semantic_scholar: bool = Field(
-        default=True,
-        description="Include Semantic Scholar in searches",
-    )
-
-    # Link relevancy assessment
-    enable_per_link_assessment: bool = Field(
-        default=True,
-        description="Enable per-link relevancy assessment",
-    )
-    min_relevancy_score: float = Field(
-        default=0.3,
-        ge=0.0,
-        le=1.0,
-        description="Minimum relevancy score to include link in results",
-    )
-    full_content_threshold: float = Field(
-        default=0.7,
-        ge=0.0,
-        le=1.0,
-        description="Relevancy score threshold to trigger full content fetching",
-    )
-    enable_full_content_scraping: bool = Field(
-        default=True,
-        description="Enable scraping of full content for high-relevancy links",
-    )
-
-    # Notebook compatibility options (accepted but not strictly required here)
-    # Some callers may provide a concrete search tool via config; we accept and ignore it.
-    search_tool: Any | None = Field(
-        default=None,
-        description="Optional search tool; accepted for compatibility, not used",
-    )
-    source_validation: bool = Field(
-        default=True,
-        description="Enable ISSN-based source validation",
-    )
-
 
 class DeepLitSearchAgent(LitBaseAgent):
     """
@@ -182,19 +116,17 @@ class DeepLitSearchAgent(LitBaseAgent):
     to work within the akd framework using embedded components.
     """
 
+    input_schema = LitSearchAgentInputSchema
+    output_schema = DeepLitSearchAgentOutputSchema
     config_schema = DeepLitSearchAgentConfig
 
     def __init__(
         self,
         config: DeepLitSearchAgentConfig | None = None,
-        search_tool=None,
-        semantic_scholar_tool: SemanticScholarSearchTool | None = None,
+        search_pipeline: SearchPipeline | None = None,
         query_agent: QueryAgent | None = None,
         followup_query_agent: FollowUpQueryAgent | None = None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
-        link_relevancy_assessor: LinkRelevancyAssessor | None = None,
-        web_scraper: SimpleWebScraper | None = None,
-        pdf_scraper: SimplePDFScraper | None = None,
         triage_component: TriageComponent | None = None,
         clarification_component: ClarificationComponent | None = None,
         instruction_component: InstructionBuilderComponent | None = None,
@@ -206,81 +138,20 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         self.query_agent = query_agent or QueryAgent()
         self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
-
-        # Initialize search tools
-        self.search_tool = search_tool or SearxNGSearchTool()
-        self.semantic_scholar_tool = (
-            (semantic_scholar_tool or SemanticScholarSearchTool())
-            if self.config.use_semantic_scholar
-            else None
-        )
-
-        # Initialize relevancy agent
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
 
-        # Compose active search tools
-        self.search_tools: List[Any] = []
-        if self.search_tool is not None:
-            self.search_tools.append(self.search_tool)
-        if self.semantic_scholar_tool is not None:
-            self.search_tools.append(self.semantic_scholar_tool)
+        # Initialize search pipeline with default tools
+        if search_pipeline is None:
+            # SearchPipeline will use its default search tool internally
+            from akd.tools.search.searxng_search import SearxNGSearchTool
 
-        # Initialize link relevancy assessor if enabled
-        if self.config.enable_per_link_assessment:
-            if link_relevancy_assessor is not None:
-                self.link_relevancy_assessor = link_relevancy_assessor
-            else:
-                assessor_config = LinkRelevancyAssessorConfig(
-                    min_relevancy_score=self.config.min_relevancy_score,
-                    full_content_threshold=self.config.full_content_threshold,
-                    debug=debug,
-                )
-                self.link_relevancy_assessor = LinkRelevancyAssessor(
-                    config=assessor_config,
-                    relevancy_agent=self.relevancy_agent,
-                    debug=debug,
-                )
-        else:
-            self.link_relevancy_assessor = (
-                link_relevancy_assessor  # Could be None or an injected instance
-            )
-
-        # Initialize scrapers/resolvers for full content fetching
-        if self.config.enable_full_content_scraping:
-            # Centralized, best-defaults resolver and scraper
-            self.resolver = (
-                web_scraper  # type: ignore[assignment]
-                if False
-                else ResearchArticleResolver(
-                    PDFUrlResolver(debug=debug),
-                    ArxivResolver(debug=debug),
-                    ADSResolver(debug=debug),
-                    DOIResolver(debug=debug),
-                    CrossRefDoiResolver(debug=debug),
-                    UnpaywallResolver(debug=debug),
-                    debug=debug,
-                )
-            )
-            # Build a composite scraper once; prefer Docling, then Crawl4AI, then simple web/pdf
-            self.scraper = CompositeScraper(
-                DoclingScraper(debug=debug),
-                Crawl4AIWebScraper(debug=debug),
-                (web_scraper or SimpleWebScraper(debug=debug)),
-                (pdf_scraper or SimplePDFScraper(debug=debug)),
+            default_search_tool = SearxNGSearchTool(debug=debug)
+            self.search_tool = SearchPipeline(
+                search_tool=default_search_tool,
                 debug=debug,
             )
         else:
-            self.resolver = None
-            self.scraper = None
-
-        # Optional source validator (ISSN whitelist). Ensure attribute always exists.
-        self._source_validator = None
-        try:
-            if getattr(self.config, "source_validation", False):
-                self._source_validator = SourceValidator(debug=debug)
-        except Exception as e:
-            if self.debug:
-                logger.warning(f"Failed to initialize SourceValidator: {e}")
+            self.search_tool = search_pipeline
 
         # Initialize embedded components
         self.triage_component = triage_component or TriageComponent(debug=debug)
@@ -506,20 +377,16 @@ class DeepLitSearchAgent(LitBaseAgent):
         # Launch all configured search tools concurrently
         tasks: List[asyncio.Task] = []
         tool_names: List[str] = []
-        for tool in getattr(self, "search_tools", []):
-            try:
-                # Use each tool's own input schema to ensure compatibility
-                tool_input = tool.input_schema(
-                    queries=queries,
-                    max_results=20,
-                    category="science",
-                )
-                tasks.append(asyncio.create_task(tool.arun(tool_input)))
-                tool_names.append(type(tool).__name__)
-            except Exception as e:
-                logger.warning(
-                    f"Skipping tool {type(tool).__name__} due to init error: {e}",
-                )
+
+        # Primary search tool
+        try:
+            tool_input = self.search_tool.input_schema(
+                queries=queries,
+            )
+            tasks.append(asyncio.create_task(self.search_tool.arun(tool_input)))
+            tool_names.append(type(self.search_tool).__name__)
+        except Exception as e:
+            logger.warning(f"search tool error: {e}")
 
         if tasks:
             results_or_errors = await asyncio.gather(*tasks, return_exceptions=True)
@@ -533,140 +400,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 except Exception as e:  # defensive against unexpected shapes
                     logger.warning(f"{name} unexpected search result shape: {e}")
 
-        all_results = list(
-            map(lambda r: DeepSearchResultItem(**r.model_dump()), all_results),
-        )
-
-        # Optional source validation (ISSN whitelist) handled intrinsically by the validator
-        if self._source_validator and all_results:
-            try:
-                input_payload = self._source_validator.input_schema(
-                    search_results=all_results,
-                )
-                validation_output = await self._source_validator.arun(input_payload)
-                # Keep only items that passed validation
-                filtered: List[DeepSearchResultItem] = []
-                for item, v in zip(all_results, validation_output.validated_results):
-                    if v.is_whitelisted:
-                        filtered.append(item)
-                if self.debug:
-                    logger.debug(
-                        "Source validation filter: kept %d of %d results",
-                        len(filtered),
-                        len(all_results),
-                    )
-                all_results = filtered
-            except Exception as e:
-                logger.warning(
-                    f"Source validation failed; dropping results due to strict validation mode: {e}",
-                )
-                all_results = []
-        # Apply per-link relevancy assessment if enabled
-        if self.link_relevancy_assessor and all_results:
-            if self.debug:
-                logger.debug(
-                    f"Assessing relevancy for {len(all_results)} search results",
-                )
-
-            reformulated_query = None
-            if is_reformulated and original_query:
-                reformulated_query = (
-                    queries[0] if queries and queries[0] != original_query else None
-                )
-
-            assessor_input = LinkRelevancyAssessorInputSchema(
-                search_results=all_results,
-                original_query=original_query or queries[0],
-                reformulated_query=reformulated_query,
-                domain_context=f"Research iteration with {len(queries)} query variations"
-                if len(queries) > 1
-                else None,
-            )
-
-            try:
-                assessment_output = await self.link_relevancy_assessor.arun(
-                    assessor_input,
-                )
-                if self.debug:
-                    logger.debug(
-                        f"Relevancy assessment summary: {assessment_output.assessment_summary}",
-                    )
-                all_results = assessment_output.filtered_results
-            except Exception as e:
-                logger.warning(f"Error in relevancy assessment: {e}")
-
-        # Fetch full content for high-relevancy results if enabled
-        if getattr(self, "scraper", None) and all_results:
-            logger.info(
-                f"Fetching full content for high-relevancy {len(all_results)} results...",
-            )
-            all_results = await self._fetch_full_content_for_high_relevancy(all_results)
-
         return all_results
-
-    async def _fetch_full_content_for_high_relevancy(
-        self,
-        results: List[DeepSearchResultItem],
-    ) -> List[DeepSearchResultItem]:
-        """Fetch full content for results marked as high-relevancy."""
-        high_relevancy_results = [
-            r for r in results if getattr(r, "should_fetch_full_content", False)
-        ]
-
-        if not high_relevancy_results:
-            return results
-
-        if self.debug:
-            logger.debug(
-                f"Fetching full content for {len(high_relevancy_results)} high-relevancy results",
-            )
-
-        for result in high_relevancy_results:
-            try:
-                # Determine best target URL: prefer explicit PDF, else resolved OA URL, else original
-                target_url: str = str(result.url)
-                # Try resolver once to improve URL and enrich metadata
-                if getattr(self, "resolver", None) is not None:
-                    try:
-                        resolved = await self.resolver.arun(
-                            self.resolver.input_schema(**result.model_dump()),
-                        )
-                        target_url = str(
-                            resolved.resolved_url or resolved.url or result.url,
-                        )
-                        if getattr(resolved, "doi", None):
-                            result.doi = resolved.doi
-                        if getattr(resolved, "authors", None):
-                            result.authors = resolved.authors
-                    except Exception as e:
-                        if self.debug:
-                            logger.debug(f"Resolution failed for {result.url}: {e}")
-
-                # If the result already carries a direct PDF URL, prefer it
-                if getattr(result, "pdf_url", None):
-                    target_url = str(result.pdf_url)
-
-                # Scrape once using the composite scraper
-                web_content = await self.scraper.arun(
-                    ScraperToolInputSchema(url=target_url),
-                )
-                if (
-                    web_content
-                    and web_content.content
-                    and len(web_content.content) > len(result.content or "")
-                ):
-                    result.content = web_content.content
-                    if self.debug:
-                        logger.debug(
-                            f"Fetched content for {target_url} ({len(result.content)} chars)",
-                        )
-
-            except Exception as e:
-                if self.debug:
-                    logger.debug(f"Content fetching failed for {result.url}: {e}")
-                continue
-
-        return results
 
     def _deduplicate_results(
         self,
