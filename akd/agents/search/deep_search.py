@@ -41,29 +41,6 @@ from .components import (
 )
 
 
-class DeepSearchResultItem(SearchResultItem):
-    """
-    Extended SearchResultItem to include additional fields for deep research.
-    This class can be used to store additional metadata like relevancy scores,
-    full content fetching status, etc.
-
-    Note:
-        - Needed for LinkRelevancyAssessor and DeepLitSearchAgent to handle additional metadata and processing.
-    """
-
-    should_fetch_full_content: bool = Field(
-        False,
-        description="Whether to fetch full content for this result",
-    )
-    query_alignment_details: Dict[str, Any] | None = Field(
-        default_factory=lambda: {},
-        description="Details on how this result aligns with the original query",
-    )
-    relevancy_assessment: Dict[str, Any] | None = Field(
-        default_factory=lambda: {},
-        description="Relevancy assessment details for this result",
-    )
-
 
 class DeepLitSearchAgentConfig(LitSearchAgentConfig):
     """
@@ -613,4 +590,10 @@ class DeepLitSearchAgent(LitBaseAgent):
             results=results_as_dicts,
             category=params.category,
             iterations_performed=research_output["iterations_performed"],
+            extra={
+                "research_report": research_output["research_report"],
+                "key_findings": research_output["key_findings"],
+                "evidence_quality_score": research_output["evidence_quality_score"],
+                "citations": research_output["citations"],
+            },
         )
