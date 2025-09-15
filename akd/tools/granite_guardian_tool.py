@@ -167,8 +167,8 @@ class GraniteGuardianTool(
 
         try:
             if self.ollama_type == OllamaType.CHAT:
-                print("i came here")
-                result = self.ollama_client.chat(model=self.model,model="granite3.3:2b", messages=messages)
+                print("i came here", self.model)
+                result = self.ollama_client.chat(model="granite3.3:2b", messages=messages)
                 #result = chat(model=self.model, messages=messages)
                 print("result is :", result)
 
