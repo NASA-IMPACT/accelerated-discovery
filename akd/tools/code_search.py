@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Literal, Optional
+from typing import Literal, Optional, Literal
 import requests
 import json
 import time
@@ -679,7 +679,7 @@ class SDECodeSearchToolConfig(CodeSearchToolConfig):
         description="Headers for the SDE API",
     )
     debug: bool = False
-    search_mode: str = "hybrid"  # "hybrid","vector","keyword"
+    search_mode: Literal["hybrid", "vector", "keyword"] = "hybrid"
 
 
 class SDECodeSearchTool(CodeSearchTool):
