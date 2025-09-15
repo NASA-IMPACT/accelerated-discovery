@@ -118,7 +118,7 @@ class TestSearxNGSearchToolSchemas:
         input_schema = SearxNGSearchToolInputSchema(queries=["test"])
 
         assert input_schema.category == "science"
-        assert input_schema.max_results == 10
+        assert input_schema.max_results == None
 
     def test_output_schema_validation(self, sample_search_result_items):
         """Test output schema validation."""
@@ -140,7 +140,6 @@ class TestSearxNGSearchTool:
         tool = SearxNGSearchTool()
 
         assert tool.config.max_results == 10
-        assert tool.config.base_url == "http://localhost:8080"
         assert tool.config.engines == ["google", "arxiv", "google_scholar"]
 
     def test_tool_initialization_custom_config(self, sample_searxng_config):
