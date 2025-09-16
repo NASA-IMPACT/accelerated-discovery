@@ -151,7 +151,7 @@ class ContentCondensationComponent(LangBaseAgent):
         results_with_content = [
             r
             for r in params.search_results
-            if r.content and len(r.content.strip()) >= 100
+            if r.content and len(r.content.strip()) >= self.config.min_content_length
         ]
 
         if not results_with_content:
@@ -185,7 +185,7 @@ class ContentCondensationComponent(LangBaseAgent):
         # Condense each result
         condensed_results = []
         for result in params.search_results:
-            if result.content and len(result.content.strip()) >= 100:
+            if result.content and len(result.content.strip()) >= self.config.min_content_length:
                 condensed = await self._condense_single_result(
                     result, params.research_question, tokens_per_result
                 )
