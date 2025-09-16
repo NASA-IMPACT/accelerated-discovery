@@ -21,11 +21,18 @@ from akd.agents.query import (
     QueryAgentInputSchema,
 )
 from akd.agents.relevancy import (
+    ContentDepthLabel,
+    EvidenceQualityLabel,
+    MethodologicalRelevanceLabel,
     MultiRubricRelevancyAgent,
     MultiRubricRelevancyInputSchema,
+    RecencyRelevanceLabel,
+    ScopeRelevanceLabel,
+    TopicAlignmentLabel,
 )
 from akd.structures import SearchResultItem
 from akd.tools.search.pipeline import SearchPipeline
+from akd.tools.search.searxng_search import SearxNGSearchTool
 
 from ._base import (
     LitBaseAgent,
@@ -120,8 +127,6 @@ class DeepLitSearchAgent(LitBaseAgent):
         # Initialize search pipeline with default tools
         if search_pipeline is None:
             # SearchPipeline will use its default search tool internally
-            from akd.tools.search.searxng_search import SearxNGSearchTool
-
             default_search_tool = SearxNGSearchTool(debug=debug)
             self.search_tool = SearchPipeline(
                 search_tool=default_search_tool,
@@ -432,15 +437,6 @@ class DeepLitSearchAgent(LitBaseAgent):
             )
 
         # Calculate quality score from rubrics
-        from akd.agents.relevancy import (
-            ContentDepthLabel,
-            EvidenceQualityLabel,
-            MethodologicalRelevanceLabel,
-            RecencyRelevanceLabel,
-            ScopeRelevanceLabel,
-            TopicAlignmentLabel,
-        )
-
         positive_count = sum(
             [
                 rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED,
