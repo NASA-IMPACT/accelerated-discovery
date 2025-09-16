@@ -87,7 +87,7 @@ class ContentCondensationComponent(LangBaseAgent):
         self, result: SearchResultItem, research_question: str, target_tokens: int
     ) -> SearchResultItem:
         """Condense content in a single search result."""
-        if not result.content or len(result.content.strip()) < 100:
+        if not result.content or len(result.content.strip()) < self.config.min_content_length:
             return result
 
         original_tokens = self._count_tokens(result.content)
@@ -117,7 +117,7 @@ class ContentCondensationComponent(LangBaseAgent):
                 condensed_content == "[NO RELEVANT CONTENT]"
                 or len(condensed_content) < 10
             ):
-                condensed_content = ""
+                condensed_content = result.content or ""
 
             # Create new result with condensed content
             condensed_result = result.model_copy()
