@@ -553,23 +553,9 @@ class DeepLitSearchAgent(LitBaseAgent):
             original_query,
         )
 
-        # Step 5: Convert research output to agent output format
-        # Convert SearchResultItem objects to dictionaries for output
-        results_as_dicts = []
-        for result in research_output["results"]:
-            result_dict = {
-                "url": str(result.url),
-                "title": result.title or "Untitled",
-                "content": result.content,
-                "category": getattr(result, "category", "science"),
-            }
-            # Preserve any additional metadata from pipeline processing and extra fields
-            if hasattr(result, "extra") and result.extra:
-                result_dict["extra"] = result.extra
-            results_as_dicts.append(result_dict)
-
+        # Step 5: Return research output with SearchResultItem objects directly
         return LitSearchAgentOutputSchema(
-            results=results_as_dicts,
+            results=research_output["results"],
             category=params.category,
             iterations_performed=research_output["iterations_performed"],
             extra={
