@@ -10,13 +10,14 @@ from pydantic import Field
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 from akd.configs.prompts import CLARIFYING_AGENT_PROMPT
+from akd.structures import SearchResultItem
 
 
 class ClarifyingAgentInputSchema(InputSchema):
     """Input schema for clarifying agent."""
 
     query: str = Field(..., description="Query that needs clarification")
-    search_results: Optional[List[Dict]] = Field(
+    search_results: Optional[List[SearchResultItem]] = Field(
         default=None, description="Existing search results for context"
     )
 
@@ -65,13 +66,17 @@ class ClarificationComponent:
         self._agent.output_schema = ClarifyingAgentOutputSchema
 
     async def process(
-        self, query: str, mock_answers: Optional[Dict[str, str]] = None
+        self,
+        query: str,
+        search_results: Optional[List[SearchResultItem]] = None,
+        mock_answers: Optional[Dict[str, str]] = None
     ) -> Tuple[str, List[str]]:
         """
         Generate clarifying questions and create enriched query.
 
         Args:
             query: The original research query
+            search_results: Optional existing search results for context
             mock_answers: Optional mock answers for testing
 
         Returns:
