@@ -65,9 +65,9 @@ async def test_deep_lit_search_agent():
         if result.results:
             first_result = result.results[0]
             print("\n📄 First result preview:")
-            print(f"   - Title: {first_result.get('title', 'N/A')[:100]}...")
-            print(f"   - URL: {first_result.get('url', 'N/A')}")
-            print(f"   - Has extra fields: {'extra' in first_result}")
+            print(f"   - Title: {getattr(first_result, 'title', 'N/A')[:100]}...")
+            print(f"   - URL: {getattr(first_result, 'url', 'N/A')}")
+            print(f"   - Has extra fields: {hasattr(first_result, 'extra') and first_result.extra is not None}")
 
         # Show synthesis summary if available
         if result.extra.get("research_report"):
