@@ -455,7 +455,6 @@ class SearchPipeline(SearchTool):
         # Step 2: Perform batch link assessment if needed
         results_to_process = search_results.results
         if self.scraping_mode == SearchPipelineScrapingMode.LINK_ASSESSMENT:
-            # Get the main query for assessment (use first query if multiple)
             main_query = " OR ".join(params.queries) if params.queries else ""
             results_to_process = await self._assess_link_relevancy(
                 search_results.results,
