@@ -269,7 +269,8 @@ class TestDeepLitSearchAgentComponents:
         assert len(agent.clarification_history) == 3
         mock_clarification_component.process.assert_called_once_with(
             "vague query",
-            None,
+            search_results=None,
+            mock_answers=None,
         )
 
     @pytest.mark.asyncio
@@ -293,7 +294,8 @@ class TestDeepLitSearchAgentComponents:
         assert enriched_query == "refined query based on answers"
         mock_clarification_component.process.assert_called_once_with(
             "query",
-            mock_answers,
+            search_results=None,
+            mock_answers=mock_answers,
         )
 
     @pytest.mark.asyncio
@@ -770,8 +772,8 @@ class TestDeepLitSearchAgentIntegration:
 
         # Check that search results are preserved
         search_result = result.results[0]
-        assert search_result["url"] == "http://example.com/ai1"
-        assert search_result["title"] == "AI Applications in Healthcare"
+        assert str(search_result.url) == "http://example.com/ai1"
+        assert search_result.title == "AI Applications in Healthcare"
 
         # Verify components were called
         mock_triage_component.process.assert_called()
@@ -1317,29 +1319,29 @@ class TestDeepLitSearchAgentRealLLM:
 
         # Print research report if available
         first_result = result.results[0]
-        if first_result.get("url") == "deep-research://report":
+        if str(first_result.url) == "deep-research://report":
             print("\n📑 RESEARCH REPORT")
             print("-" * 60)
-            print(f"Title: {first_result.get('title', 'N/A')}")
-            print(f"Quality Score: {first_result.get('quality_score', 'N/A')}")
+            print(f"Title: {getattr(first_result, 'title', 'N/A')}")
+            print(f"Quality Score: {getattr(first_result, 'quality_score', 'N/A')}")
 
-            content = first_result.get("content", "")
+            content = getattr(first_result, 'content', "")
             print(f"\nContent ({len(content)} chars):")
             print(content[:800] + "..." if len(content) > 800 else content)
 
-            key_findings = first_result.get("key_findings", [])
+            key_findings = getattr(first_result, 'key_findings', [])
             if key_findings:
                 print(f"\n🔍 KEY FINDINGS ({len(key_findings)}):")
                 for i, finding in enumerate(key_findings[:3], 1):
                     print(f"  {i}. {finding}")
 
-            sources = first_result.get("sources_consulted", [])
+            sources = getattr(first_result, 'sources_consulted', [])
             if sources:
                 print(f"\n📚 SOURCES CONSULTED ({len(sources)}):")
                 for i, source in enumerate(sources[:3], 1):
                     print(f"  {i}. {source}")
 
-            citations = first_result.get("citations", [])
+            citations = getattr(first_result, 'citations', [])
             if citations:
                 print(f"\n📝 CITATIONS ({len(citations)}):")
                 for i, citation in enumerate(citations[:2], 1):
@@ -1350,12 +1352,12 @@ class TestDeepLitSearchAgentRealLLM:
         if search_results:
             print(f"\n🔎 SEARCH RESULTS ({len(search_results)}):")
             for i, item in enumerate(search_results[:3], 1):
-                title = item.get("title", "N/A")
-                url = item.get("url", "N/A")
+                title = getattr(item, 'title', 'N/A')
+                url = str(getattr(item, 'url', 'N/A'))
                 print(f"  {i}. {title}")
                 print(f"     URL: {url}")
 
-                content = item.get("content", "")
+                content = getattr(item, 'content', '')
                 if content:
                     preview = content[:150] + "..." if len(content) > 150 else content
                     print(f"     Preview: {preview}")
@@ -1365,7 +1367,7 @@ class TestDeepLitSearchAgentRealLLM:
         print("=" * 80)
 
         # Test assertions
-        first_result_content = result.results[0].get("content", "")
+        first_result_content = getattr(result.results[0], 'content', '')
         assert isinstance(first_result_content, str), (
             "Report should have content"
         )
