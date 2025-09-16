@@ -85,7 +85,9 @@ class ClarificationComponent:
         if self.debug:
             logger.debug(f"Generating clarifying questions for: {query}")
 
-        clarifying_input = ClarifyingAgentInputSchema(query=query)
+        clarifying_input = ClarifyingAgentInputSchema(
+            query=query, search_results=search_results
+        )
         clarifying_output = await self._agent.arun(clarifying_input)
 
         if self.debug:
@@ -95,6 +97,12 @@ class ClarificationComponent:
             logger.debug(
                 f"Clarification output preview | questions: {str(clarifying_output.clarifying_questions)[:200]} | reasoning: {clarifying_output.reasoning[:200]}"
             )
+
+        # Check if clarification is actually needed
+        if not clarifying_output.needs_clarification:
+            if self.debug:
+                logger.debug("No clarification needed, returning original query")
+            return query, []
 
         # TODO: In live AKD workflow, this would be an interrupt / interaction with the user
         # For now, we'll use mock answers or default responses
