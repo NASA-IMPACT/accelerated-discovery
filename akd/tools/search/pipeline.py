@@ -202,7 +202,7 @@ class SearchPipeline(SearchTool):
             # Fall back to pdf_url or original url
             return ResolverOutputSchema(**result.model_dump())
 
-    async def _scrape_content(self, url: str) -> Optional[str]:
+    async def _scrape_content(self, url: str) -> str | None:
         """
         Scrape full text content from a URL.
 
@@ -295,6 +295,133 @@ class SearchPipeline(SearchTool):
             # Return original results if assessment fails
             return results
 
+    async def _should_scrape_content(
+        self,
+        result: SearchResultItem,
+        query: str | None = None,
+    ) -> tuple[bool, SearchResultItem]:
+        """
+        Determine if content should be scraped based on scraping mode.
+
+        Args:
+            result: Search result to evaluate
+            query: Search query for relevancy assessment (required for LINK_ASSESSMENT mode)
+
+        Returns:
+            Tuple of (should_scrape, updated_result_with_assessment)
+        """
+        if self.config.scraping_mode == SearchPipelineScrapingMode.ALWAYS_ON:
+            return True, result
+
+        if self.config.scraping_mode == SearchPipelineScrapingMode.ALWAYS_OFF:
+            return False, result
+
+        if self.config.scraping_mode == SearchPipelineScrapingMode.LINK_ASSESSMENT:
+            # Check if result already has assessment
+            if "should_fetch_full_content" in result.extra:
+                return result.extra["should_fetch_full_content"], result
+
+            # Perform assessment if not already done and query is available
+            if query:
+                assessed_results = await self._assess_link_relevancy([result], query)
+                if assessed_results:
+                    assessed_result = assessed_results[0]
+                    should_scrape = assessed_result.extra.get(
+                        "should_fetch_full_content",
+                        False,
+                    )
+
+                    # Update result with assessment metadata
+                    updated_result = result.model_copy()
+                    updated_result.score = getattr(assessed_result, "score", None)
+
+                    if (
+                        hasattr(assessed_result, "extra")
+                        and "relevancy_assessment" in assessed_result.extra
+                    ):
+                        updated_result.extra["relevancy_assessment"] = (
+                            assessed_result.extra["relevancy_assessment"]
+                        )
+
+                    updated_result.extra["should_fetch_full_content"] = should_scrape
+                    return should_scrape, updated_result
+
+            # Default to no scraping if assessment fails or no query
+            return False, result
+
+        # Default case (shouldn't reach here)
+        return False, result
+
+    def _process_scraped_content(
+        self,
+        result: SearchResultItem,
+        scraped_content: str | None,
+    ) -> str:
+        """
+        Process and combine scraped content with original content.
+
+        Args:
+            result: Original search result
+            scraped_content: Content scraped from the URL
+
+        Returns:
+            Final content to use in the enhanced result
+        """
+        if not scraped_content:
+            return result.content or ""
+
+        if self.include_original_content and result.content:
+            return f"{result.content}\n\n--- FULL TEXT ---\n\n{scraped_content}"
+
+        return scraped_content
+
+    def _build_result_metadata(
+        self,
+        result: SearchResultItem,
+        resolved_result: ResolverOutputSchema | None,
+        should_scrape: bool,
+        scraped_content: str | None,
+        scraping_url: str,
+        error: str | None = None,
+    ) -> dict:
+        """
+        Build metadata dictionary for the enhanced result.
+
+        Args:
+            result: Original search result
+            resolved_result: Resolved metadata result (None if resolution failed)
+            should_scrape: Whether scraping was intended
+            scraped_content: Actual scraped content (None if failed/skipped)
+            scraping_url: URL that was used for scraping
+            error: Error message if processing failed
+
+        Returns:
+            Metadata dictionary to update result.extra
+        """
+        metadata = {
+            "scraping_mode": self.scraping_mode.value,
+            "scraping_performed": should_scrape,
+            "full_text_scraped": scraped_content is not None,
+            "original_url": result.url,
+            "resolver_used": resolved_result.resolvers
+            if resolved_result and hasattr(resolved_result, "resolvers")
+            else [],
+        }
+
+        if should_scrape:
+            metadata["scraper_used"] = self.scraper.__class__.__name__
+            if scraped_content:
+                metadata["scraped_url"] = scraping_url
+            else:
+                metadata["scraping_attempted_url"] = scraping_url
+
+        if error:
+            metadata["processing_error"] = error
+            if not scraped_content:
+                metadata["scraping_attempted_url"] = scraping_url
+
+        return metadata
+
     async def _process_single_result(
         self,
         result: SearchResultItem,
@@ -310,43 +437,20 @@ class SearchPipeline(SearchTool):
         Returns:
             Enhanced search result with optional scraped content
         """
+        scraping_url = None
         try:
             # Step 1: URL resolution (always performed)
             resolved_result = await self._resolve_essential_metadata(result)
-
             scraping_url = resolved_result.url
+
+            # Step 2: Determine if content should be scraped
+            should_scrape, updated_result = await self._should_scrape_content(
+                result,
+                query,
+            )
+
+            # Step 3: Scrape content if needed
             scraped_content = None
-            should_scrape = False
-
-            if self.scraping_mode == SearchPipelineScrapingMode.ALWAYS_ON:
-                should_scrape = True
-            elif self.scraping_mode == SearchPipelineScrapingMode.ALWAYS_OFF:
-                should_scrape = False
-            elif self.scraping_mode == SearchPipelineScrapingMode.LINK_ASSESSMENT:
-                # For LINK_ASSESSMENT mode, check if result has been assessed
-                should_scrape = result.extra.get("should_fetch_full_content", False)
-                if "should_fetch_full_content" not in result.extra and query:
-                    # If not assessed yet, perform assessment for this single result
-                    assessed_results = await self._assess_link_relevancy(
-                        [result],
-                        query,
-                    )
-                    if assessed_results:
-                        should_scrape = assessed_results[0].extra.get(
-                            "should_fetch_full_content",
-                            False,
-                        )
-                        # Update result with assessment metadata
-                        result.score = getattr(assessed_results[0], "score", None)
-                        if (
-                            hasattr(assessed_results[0], "extra")
-                            and "relevancy_assessment" in assessed_results[0].extra
-                        ):
-                            result.extra["relevancy_assessment"] = assessed_results[
-                                0
-                            ].extra["relevancy_assessment"]
-                        result.extra["should_fetch_full_content"] = should_scrape
-
             if should_scrape:
                 scraped_content = await self._scrape_content(scraping_url)
             else:
@@ -355,42 +459,32 @@ class SearchPipeline(SearchTool):
                         f"Skipping scraping for {result.title} (mode: {self.scraping_mode})",
                     )
 
-            # Step 3: Create enhanced result
+            # Step 4: Create enhanced result
             search_item_data = resolved_result.model_dump(
                 include=set(SearchResultItem.model_fields.keys()),
             )
             enhanced_result = SearchResultItem(**search_item_data)
 
-            # Handle content based on what was performed
-            if scraped_content:
-                if self.include_original_content and result.content:
-                    # Combine original and scraped content
-                    enhanced_result.content = (
-                        f"{result.content}\n\n--- FULL TEXT ---\n\n{scraped_content}"
-                    )
-                else:
-                    # Replace with scraped content
-                    enhanced_result.content = scraped_content
-
-            enhanced_result.extra.update(
-                {
-                    "scraping_mode": self.scraping_mode.value,
-                    "scraping_performed": should_scrape,
-                    "full_text_scraped": scraped_content is not None,
-                    "resolver_used": resolved_result.resolvers
-                    if hasattr(resolved_result, "resolvers")
-                    else None,
-                    "original_url": result.url,
-                },
+            # Step 5: Set processed content
+            enhanced_result.content = self._process_scraped_content(
+                updated_result,
+                scraped_content,
             )
 
-            if should_scrape:
-                enhanced_result.extra["scraper_used"] = self.scraper.__class__.__name__
+            # Step 6: Update with assessment data if available
+            if updated_result != result:
+                enhanced_result.score = updated_result.score
+                enhanced_result.extra.update(updated_result.extra)
 
-                if scraped_content:
-                    enhanced_result.extra["scraped_url"] = scraping_url
-                else:
-                    enhanced_result.extra["scraping_attempted_url"] = scraping_url
+            # Step 7: Add pipeline metadata
+            metadata = self._build_result_metadata(
+                updated_result,
+                resolved_result,
+                should_scrape,
+                scraped_content,
+                scraping_url,
+            )
+            enhanced_result.extra.update(metadata)
 
             return enhanced_result
 
@@ -403,16 +497,15 @@ class SearchPipeline(SearchTool):
 
             # Return original result with error metadata
             enhanced_result = result.model_copy()
-
-            enhanced_result.extra.update(
-                {
-                    "scraping_mode": self.scraping_mode.value,
-                    "scraping_performed": False,
-                    "full_text_scraped": False,
-                    "processing_error": str(e),
-                    "scraping_attempted_url": scraping_url,
-                },
+            error_metadata = self._build_result_metadata(
+                result,
+                None,  # No resolved result in error case
+                False,  # No scraping performed
+                None,  # No scraped content
+                scraping_url or result.url,
+                error=str(e),
             )
+            enhanced_result.extra.update(error_metadata)
 
             return enhanced_result
 
