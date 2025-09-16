@@ -51,6 +51,9 @@ class ContentCondensationConfig(BaseAgentConfig):
     temperature: float = Field(
         default=0.1, description="Temperature for content condensation"
     )
+    min_content_length: int = Field(
+        default=100, description="Minimum content length to consider for condensation"
+    )
 
 
 class ContentCondensationComponent(LangBaseAgent):
