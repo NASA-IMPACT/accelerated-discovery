@@ -3,6 +3,7 @@ from __future__ import annotations
 from loguru import logger
 from pydantic import Field
 from typing import Literal
+import requests
 import os
 
 from akd.tools.code_search import (
@@ -91,8 +92,11 @@ class CodeSearchAgent:
         self.config = config or CodeSearchAgentConfig()
         self.config.debug = debug
 
-        # Setup search tool
-        self.search_tool = search_tool or self._setup_search_tool()
+        # Setup search tool, prefer to use the provided search tool
+        if search_tool is not None:
+            self.search_tool = search_tool
+        else:
+            self.search_tool = self._setup_search_tool()
 
         # Setup agents
         self.query_agent = query_agent or self._setup_query_agent()
@@ -118,33 +122,87 @@ class CodeSearchAgent:
 
         # Setup local search tool
         if self.config.use_local_search:
-            local_config = LocalRepoCodeSearchToolConfig(
-                embedding_model_name=self.config.embedding_model_name
-            )
+            try:
+                local_config = LocalRepoCodeSearchToolConfig(
+                    embedding_model_name=self.config.embedding_model_name
+                )
 
-            # Use data_file if provided, otherwise use google_drive_file_id
-            if self.config.data_file:
-                local_config.data_file = self.config.data_file
-            elif self.config.google_drive_file_id:
-                local_config.google_drive_file_id = self.config.google_drive_file_id
+                if self.config.data_file:
+                    if not os.path.exists(self.config.data_file):
+                        if self.config.debug:
+                            logger.warning(
+                                f"[CodeSearchAgent] Local data_file not found: {self.config.data_file}. Skipping local search tool."
+                            )
+                        local_config = None
+                    else:
+                        local_config.data_file = self.config.data_file
+                elif self.config.google_drive_file_id:
+                    local_config.google_drive_file_id = self.config.google_drive_file_id
+                else:
+                    if self.config.debug:
+                        logger.warning(
+                            "[CodeSearchAgent] No data_file or google_drive_file_id provided for local search. Skipping local search tool."
+                        )
+                    local_config = None
 
-            local_tool = LocalRepoCodeSearchTool(config=local_config)
-            tools.append(local_tool)
+                if local_config is not None:
+                    local_tool = LocalRepoCodeSearchTool(config=local_config)
+                    tools.append(local_tool)
+
+            except Exception as e:
+                if self.config.debug:
+                    logger.warning(
+                        f"[CodeSearchAgent] LocalRepoCodeSearchTool unavailable; continuing without it. Reason: {e}"
+                    )
 
         # Setup SDE search tool
         if self.config.use_sde_search:
-            sde_config = SDECodeSearchToolConfig(
-                base_url=self.config.sde_base_url,
-                debug=self.config.debug,
-                search_mode=self.config.sde_search_type,
-                page_size=self.config.sde_page_size,
-            )
-            sde_tool = SDECodeSearchTool(config=sde_config)
-            tools.append(sde_tool)
+            try:
+                url = self.config.sde_base_url
+                # Sanity check on URL
+                if not (url.startswith("http://") or url.startswith("https://")):
+                    if self.config.debug:
+                        logger.warning(
+                            f"[CodeSearchAgent] sde_base_url '{url}' is not a valid URL."
+                        )
 
+                reachable = True
+                try:
+                    # Check if the URL is reachable
+                    requests.head(url, timeout=5, allow_redirects=True)
+                    if self.config.debug:
+                        logger.info(
+                            f"[CodeSearchAgent] Verified reachability of SDE URL: {url}"
+                        )
+                except requests.RequestException as e:
+                    reachable = False
+                    if self.config.debug:
+                        logger.warning(
+                            f"[CodeSearchAgent] Could not reach SDE URL '{url}'. Skipping SDE tool. Reason: {e}"
+                        )
+
+                if reachable:
+                    sde_config = SDECodeSearchToolConfig(
+                        base_url=url,
+                        debug=self.config.debug,
+                        search_mode=self.config.sde_search_type,
+                        page_size=self.config.sde_page_size,
+                    )
+                    sde_tool = SDECodeSearchTool(config=sde_config)
+                    tools.append(sde_tool)
+
+            except Exception as e:
+                if self.config.debug:
+                    logger.warning(
+                        f"[CodeSearchAgent] SDECodeSearchTool unavailable; continuing without it. Reason: {e}"
+                    )
+
+        # Finalize or fail
         if not tools:
-            logger.error("No search tools enabled")
-            raise ValueError("No search tools enabled")
+            logger.error(
+                "[CodeSearchAgent] No search tools could be initialized (local and SDE both unavailable)."
+            )
+            raise ValueError("No search tools available")
 
         # Create combined tool
         combined_config = CombinedCodeSearchToolConfig(
