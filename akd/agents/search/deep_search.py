@@ -192,7 +192,8 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         enriched_query, clarifications = await self.clarification_component.process(
             query,
-            mock_answers,
+            search_results=None,  # No search results available at clarification stage
+            mock_answers=mock_answers,
         )
 
         self.clarification_history.extend(clarifications)
