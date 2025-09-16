@@ -254,6 +254,8 @@ class SearchPipeline(SearchTool):
         results: list[SearchResultItem],
         query: str,
         domain_context: str | None = None,
+        original_query: str | None = None,
+        reformulated_query: str | None = None,
     ) -> list[SearchResultItem]:
         """
         Assess the relevancy of search results using LinkRelevancyAssessor.
@@ -262,6 +264,8 @@ class SearchPipeline(SearchTool):
             results: List of search results to assess
             query: The search query for relevancy assessment
             domain_context: Optional domain context for better assessment
+            original_query: Original query for reformulation context
+            reformulated_query: Reformulated query for context
 
         Returns:
             List of results with relevancy assessment metadata
@@ -269,10 +273,16 @@ class SearchPipeline(SearchTool):
         if not results:
             return results
 
+        if self.debug:
+            logger.debug(
+                f"Assessing relevancy for {len(results)} results using query: {query} | context: {domain_context} | original: {original_query} | reformulated: {reformulated_query}",
+            )
+
         try:
             assessment_input = self.link_relevancy_assessor.input_schema(
                 search_results=results,
-                original_query=query,
+                original_query=original_query or query,
+                reformulated_query=reformulated_query,
                 domain_context=domain_context,
             )
 
@@ -519,7 +529,10 @@ class SearchPipeline(SearchTool):
 
         Args:
             params: Search parameters
-            **kwargs: Additional parameters
+            **kwargs: Additional parameters including:
+                - original_query: Original query for reformulation context
+                - reformulated_query: Reformulated query for context
+                - domain_context: Domain context for relevancy assessment
 
         Returns:
             Search results enhanced with full text content
@@ -527,6 +540,7 @@ class SearchPipeline(SearchTool):
         Raises:
             Exception: If the pipeline fails and fail_on_scraping_errors is True
         """
+
         if self.debug:
             logger.info(
                 f" Starting SearchPipeline for {len(params.queries)} queries",
@@ -550,8 +564,11 @@ class SearchPipeline(SearchTool):
         if self.scraping_mode == SearchPipelineScrapingMode.LINK_ASSESSMENT:
             main_query = " OR ".join(params.queries) if params.queries else ""
             results_to_process = await self._assess_link_relevancy(
-                search_results.results,
-                main_query,
+                results=search_results.results,
+                query=main_query,
+                domain_context=kwargs.get("domain_context"),
+                original_query=kwargs.get("original_query"),
+                reformulated_query=kwargs.get("reformulated_query"),
             )
 
         # Step 3: Process results through the pipeline
