@@ -39,7 +39,7 @@ class GuardrailsConfig(BaseConfig):
     )
 
     ollama_type: OllamaType = Field(
-        default=OllamaType.CHAT,
+        default=OllamaType.SERVER,
         description="Ollama interface type to use",
     )
 
