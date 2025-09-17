@@ -31,6 +31,7 @@ from akd.agents.relevancy import (
     TopicAlignmentLabel,
 )
 from akd.structures import SearchResultItem
+from akd.tools.search import SearchTool
 from akd.tools.search.pipeline import SearchPipeline
 from akd.tools.search.searxng_search import SearxNGSearchTool
 
@@ -46,7 +47,6 @@ from .components import (
     ResearchSynthesisComponent,
     TriageComponent,
 )
-
 
 
 class DeepLitSearchAgentConfig(LitSearchAgentConfig):
@@ -107,7 +107,7 @@ class DeepLitSearchAgent(LitBaseAgent):
     def __init__(
         self,
         config: DeepLitSearchAgentConfig | None = None,
-        search_pipeline: SearchPipeline | None = None,
+        search_tool: SearchTool | SearchPipeline | None = None,
         query_agent: QueryAgent | None = None,
         followup_query_agent: FollowUpQueryAgent | None = None,
         relevancy_agent: MultiRubricRelevancyAgent | None = None,
@@ -117,23 +117,31 @@ class DeepLitSearchAgent(LitBaseAgent):
         research_synthesis_component: ResearchSynthesisComponent | None = None,
         debug: bool = False,
     ) -> None:
-        """Initialize the DeepLitSearchAgent with embedded components."""
+        """Initialize the DeepLitSearchAgent with embedded components.
+        Args:
+            config: Configuration for the agent.
+            search_tool: Primary search tool or pipeline to use.
+                Note: SearchPipeline is also an implementation of SearchTool.
+            query_agent: Agent for generating initial search queries.
+            followup_query_agent: Agent for refining search queries.
+            relevancy_agent: Agent for evaluating research quality.
+            triage_component: Embedded component for query triage.
+            clarification_component: Embedded component for query clarification.
+            instruction_component: Embedded component for building research instructions.
+            research_synthesis_component: Embedded component for synthesizing research findings.
+            debug: Enable debug logging.
+        """
         super().__init__(config=config or DeepLitSearchAgentConfig(), debug=debug)
 
         self.query_agent = query_agent or QueryAgent()
         self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
 
-        # Initialize search pipeline with default tools
-        if search_pipeline is None:
-            # SearchPipeline will use its default search tool internally
-            default_search_tool = SearxNGSearchTool(debug=debug)
-            self.search_tool = SearchPipeline(
-                search_tool=default_search_tool,
-                debug=debug,
-            )
-        else:
-            self.search_tool = search_pipeline
+        # default to searxng-based pipeline if no search tool provided
+        self.search_tool = search_tool or SearchPipeline(
+            search_tool=SearxNGSearchTool(debug=debug),
+            debug=debug,
+        )
 
         # Initialize embedded components
         self.triage_component = triage_component or TriageComponent(debug=debug)
