@@ -256,7 +256,7 @@ class LinkRelevancyAssessor(BaseTool):
         if not result.content:
             # No content to assess, assign low relevancy
             result.score = 0.1
-            result.should_fetch_full_content = False
+            result.extra["should_fetch_full_content"] = False
             return result
 
         # Check cache first
@@ -285,7 +285,7 @@ class LinkRelevancyAssessor(BaseTool):
                 logger.warning(f"Error assessing relevancy for {result.url}: {e}")
                 # Assign default low relevancy on error
                 result.score = 0.2
-                result.should_fetch_full_content = False
+                result.extra["should_fetch_full_content"] = False
                 return result
 
         # Calculate numeric score
@@ -293,15 +293,15 @@ class LinkRelevancyAssessor(BaseTool):
 
         # Update result with relevancy metadata
         result.score = relevancy_score
-        result.relevancy_assessment = assessment.model_dump()
-        result.should_fetch_full_content = (
+        result.extra["relevancy_assessment"] = assessment.model_dump()
+        result.extra["should_fetch_full_content"] = (
             relevancy_score >= self.full_content_threshold
         )
 
         if self.debug:
             logger.debug(
                 f"Assessed {result.url}: score={relevancy_score:.2f}, "
-                f"should_fetch={result.should_fetch_full_content}",
+                f"should_fetch={result.extra.get('should_fetch_full_content', False)}",
             )
 
         return result
@@ -347,25 +347,25 @@ class LinkRelevancyAssessor(BaseTool):
                     batch_results,
                     reformulated_results,
                 ):
-                    if reform_result.relevancy_score > orig_result.relevancy_score:
+                    if reform_result.score > orig_result.score:
                         # Use reformulated query assessment
-                        orig_result.score = reform_result.relevancy_score
-                        orig_result.relevancy_assessment = (
-                            reform_result.relevancy_assessment
+                        orig_result.score = reform_result.score
+                        orig_result.extra["relevancy_assessment"] = (
+                            reform_result.extra.get("relevancy_assessment")
                         )
-                        orig_result.should_fetch_full_content = (
-                            reform_result.should_fetch_full_content
+                        orig_result.extra["should_fetch_full_content"] = (
+                            reform_result.extra.get("should_fetch_full_content", False)
                         )
-                        orig_result.query_alignment_details = {
+                        orig_result.extra["query_alignment_details"] = {
                             "best_query": "reformulated",
-                            "original_score": orig_result.relevancy_score,
-                            "reformulated_score": reform_result.relevancy_score,
+                            "original_score": orig_result.score,
+                            "reformulated_score": reform_result.score,
                         }
                     else:
-                        orig_result.query_alignment_details = {
+                        orig_result.extra["query_alignment_details"] = {
                             "best_query": "original",
-                            "original_score": orig_result.relevancy_score,
-                            "reformulated_score": reform_result.relevancy_score,
+                            "original_score": orig_result.score,
+                            "reformulated_score": reform_result.score,
                         }
 
             assessed_results.extend(batch_results)
@@ -390,10 +390,8 @@ class LinkRelevancyAssessor(BaseTool):
                 "filtered_count": 0,
             }
 
-        assessed_results = [r for r in results if r.relevancy_score is not None]
-        scores = [
-            r.relevancy_score for r in assessed_results if r.relevancy_score is not None
-        ]
+        assessed_results = [r for r in results if r.score is not None]
+        scores = [r.score for r in assessed_results if r.score is not None]
 
         return {
             "total_results": len(results),
@@ -402,14 +400,10 @@ class LinkRelevancyAssessor(BaseTool):
             "min_relevancy_score": min(scores) if scores else 0.0,
             "max_relevancy_score": max(scores) if scores else 0.0,
             "high_relevancy_count": len(
-                [r for r in results if r.should_fetch_full_content],
+                [r for r in results if r.extra.get("should_fetch_full_content", False)],
             ),
             "filtered_count": len(
-                [
-                    r
-                    for r in assessed_results
-                    if r.relevancy_score >= self.min_relevancy_score
-                ],
+                [r for r in assessed_results if r.score >= self.min_relevancy_score],
             ),
             "cache_hits": len(self._assessment_cache) if self.enable_caching else 0,
         }
@@ -436,13 +430,14 @@ class LinkRelevancyAssessor(BaseTool):
         filtered_results = [
             result
             for result in assessed_results
-            if result.relevancy_score is not None
-            and result.relevancy_score >= self.min_relevancy_score
+            if result.score is not None and result.score >= self.min_relevancy_score
         ]
 
         # Identify high-relevancy results for full content fetching
         high_relevancy_results = [
-            result for result in assessed_results if result.should_fetch_full_content
+            result
+            for result in assessed_results
+            if result.extra.get("should_fetch_full_content", False)
         ]
 
         # Create assessment summary

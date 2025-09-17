@@ -29,7 +29,7 @@ class TestSearxNGSearchToolConfig:
         assert config.score_cutoff == 0.25
         assert config.strict is False
         assert config.debug is False
-        assert config.engines == ["google", "arxiv", "google_scholar"]
+        assert config.engines == ["arxiv", "google_scholar"]
 
     def test_config_with_custom_values(self):
         """Test configuration with custom values."""
@@ -118,7 +118,7 @@ class TestSearxNGSearchToolSchemas:
         input_schema = SearxNGSearchToolInputSchema(queries=["test"])
 
         assert input_schema.category == "science"
-        assert input_schema.max_results == None
+        assert input_schema.max_results is None
 
     def test_output_schema_validation(self, sample_search_result_items):
         """Test output schema validation."""
@@ -140,7 +140,7 @@ class TestSearxNGSearchTool:
         tool = SearxNGSearchTool()
 
         assert tool.config.max_results == 10
-        assert tool.config.engines == ["google", "arxiv", "google_scholar"]
+        assert tool.config.engines == ["arxiv", "google_scholar"]
 
     def test_tool_initialization_custom_config(self, sample_searxng_config):
         """Test tool initialization with custom config."""
