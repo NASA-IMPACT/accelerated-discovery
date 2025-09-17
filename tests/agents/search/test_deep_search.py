@@ -88,7 +88,7 @@ class TestDeepLitSearchAgent:
     def test_initialization_minimal_config(self):
         """Test initialization with minimal features enabled."""
         config = DeepLitSearchAgentConfig()
-        agent = DeepLitSearchAgent(config=config)
+        agent = DeepLitSearchAgent(config=config)  # noqa
 
     def test_initialization_custom_tools(self):
         """Test initialization with custom tools."""
@@ -98,7 +98,7 @@ class TestDeepLitSearchAgent:
         mock_relevancy_agent = Mock()
 
         agent = DeepLitSearchAgent(
-            search_pipeline=mock_search_pipeline,
+            search_tool=mock_search_pipeline,
             relevancy_agent=mock_relevancy_agent,
         )
 
@@ -130,6 +130,7 @@ class TestDeepLitSearchAgent:
             ResearchSynthesisComponent,
             TriageComponent,
         )
+
         # Create mock instances
         mock_query_agent = Mock(spec=QueryAgent)
         mock_followup_agent = Mock(spec=FollowUpQueryAgent)
@@ -510,7 +511,7 @@ class TestDeepLitSearchAgentSearchExecution:
 
         # Create agent with semantic scholar disabled
         config = DeepLitSearchAgentConfig()
-        agent = DeepLitSearchAgent(config=config, search_pipeline=mock_search_pipeline)
+        agent = DeepLitSearchAgent(config=config, search_tool=mock_search_pipeline)
 
         queries = ["artificial intelligence applications", "machine learning research"]
         results = await agent._execute_searches(queries)
@@ -541,7 +542,7 @@ class TestDeepLitSearchAgentSearchExecution:
         config = DeepLitSearchAgentConfig()
         agent = DeepLitSearchAgent(
             config=config,
-            search_pipeline=mock_search_pipeline,
+            search_tool=mock_search_pipeline,
         )
 
         queries = ["machine learning research"]
@@ -566,8 +567,8 @@ class TestDeepLitSearchAgentSearchExecution:
                 category="science",
                 extra={
                     "full_text_scraped": True,
-                    "relevancy_assessment": {"score": 0.9}
-                }
+                    "relevancy_assessment": {"score": 0.9},
+                },
             ),
         ]
         mock_search_pipeline.arun.return_value = mock_search_result
@@ -577,7 +578,7 @@ class TestDeepLitSearchAgentSearchExecution:
         config = DeepLitSearchAgentConfig()
         agent = DeepLitSearchAgent(
             config=config,
-            search_pipeline=mock_search_pipeline
+            search_tool=mock_search_pipeline,
         )
 
         queries = ["machine learning"]
@@ -715,7 +716,7 @@ class TestDeepLitSearchAgentIntegration:
                 extra={
                     "scraping_performed": True,
                     "full_text_scraped": True,
-                }
+                },
             ),
         ]
         mock_search_pipeline.arun.return_value = mock_search_result
@@ -743,7 +744,7 @@ class TestDeepLitSearchAgentIntegration:
         )
         agent = DeepLitSearchAgent(
             config=config,
-            search_pipeline=mock_search_pipeline,
+            search_tool=mock_search_pipeline,
             relevancy_agent=mock_relevancy_agent,
         )
 
@@ -765,7 +766,10 @@ class TestDeepLitSearchAgentIntegration:
         assert len(result.results) >= 1
 
         # Check that the research synthesis fields are populated
-        assert result.extra["research_report"] == "Comprehensive research report on AI applications"
+        assert (
+            result.extra["research_report"]
+            == "Comprehensive research report on AI applications"
+        )
         assert result.extra["key_findings"] == ["Finding 1", "Finding 2"]
         assert result.extra["evidence_quality_score"] == 0.85
         assert result.extra["citations"] == ["Citation 1", "Citation 2"]
@@ -850,7 +854,7 @@ class TestDeepLitSearchAgentIntegration:
         )
         agent = DeepLitSearchAgent(
             config=config,
-            search_pipeline=mock_search_pipeline,
+            search_tool=mock_search_pipeline,
             relevancy_agent=mock_relevancy_agent,
         )
 
@@ -870,7 +874,10 @@ class TestDeepLitSearchAgentIntegration:
         assert "What specific healthcare domain?" in agent.clarification_history
 
         # Verify enhanced research report in synthesis fields
-        assert result.extra["research_report"] == "Enhanced research report with clarifications"
+        assert (
+            result.extra["research_report"]
+            == "Enhanced research report with clarifications"
+        )
 
         # Verify all components were called
         mock_triage_component.process.assert_called()
@@ -958,7 +965,7 @@ class TestDeepLitSearchAgentIntegration:
         )
         agent = DeepLitSearchAgent(
             config=config,
-            search_pipeline=mock_search_pipeline,
+            search_tool=mock_search_pipeline,
             relevancy_agent=mock_relevancy_agent,
         )
 
@@ -1040,7 +1047,7 @@ class TestDeepLitSearchAgentErrorHandling:
         )
         agent = DeepLitSearchAgent(
             config=config,
-            search_pipeline=mock_search_pipeline,
+            search_tool=mock_search_pipeline,
             relevancy_agent=mock_relevancy_agent,
         )
 
@@ -1087,8 +1094,8 @@ class TestDeepLitSearchAgentCoreMethods:
                 category="science",
                 extra={
                     "scraping_performed": True,
-                    "full_text_scraped": False  # Content not enhanced
-                }
+                    "full_text_scraped": False,  # Content not enhanced
+                },
             ),
             SearchResultItem(
                 query="test",
@@ -1098,8 +1105,8 @@ class TestDeepLitSearchAgentCoreMethods:
                 category="science",
                 extra={
                     "scraping_performed": True,
-                    "full_text_scraped": True  # Content enhanced
-                }
+                    "full_text_scraped": True,  # Content enhanced
+                },
             ),
         ]
         mock_search_pipeline.arun.return_value = mock_search_result
@@ -1108,7 +1115,7 @@ class TestDeepLitSearchAgentCoreMethods:
         config = DeepLitSearchAgentConfig()
         agent = DeepLitSearchAgent(
             config=config,
-            search_pipeline=mock_search_pipeline
+            search_tool=mock_search_pipeline,
         )
 
         results = await agent._execute_searches(["test query"])
@@ -1289,9 +1296,9 @@ class TestDeepLitSearchAgentRealLLM:
         # Configure agent for complete workflow (faster settings for testing)
         config = DeepLitSearchAgentConfig(
             max_research_iterations=1,  # Reduced for faster testing
-            quality_threshold=0.3,      # Lower threshold for faster completion
+            quality_threshold=0.3,  # Lower threshold for faster completion
             auto_clarify=False,
-            debug=False,               # Disable debug for faster execution
+            debug=False,  # Disable debug for faster execution
         )
 
         agent = DeepLitSearchAgent(config=config)
@@ -1325,23 +1332,23 @@ class TestDeepLitSearchAgentRealLLM:
             print(f"Title: {getattr(first_result, 'title', 'N/A')}")
             print(f"Quality Score: {getattr(first_result, 'quality_score', 'N/A')}")
 
-            content = getattr(first_result, 'content', "")
+            content = getattr(first_result, "content", "")
             print(f"\nContent ({len(content)} chars):")
             print(content[:800] + "..." if len(content) > 800 else content)
 
-            key_findings = getattr(first_result, 'key_findings', [])
+            key_findings = getattr(first_result, "key_findings", [])
             if key_findings:
                 print(f"\n🔍 KEY FINDINGS ({len(key_findings)}):")
                 for i, finding in enumerate(key_findings[:3], 1):
                     print(f"  {i}. {finding}")
 
-            sources = getattr(first_result, 'sources_consulted', [])
+            sources = getattr(first_result, "sources_consulted", [])
             if sources:
                 print(f"\n📚 SOURCES CONSULTED ({len(sources)}):")
                 for i, source in enumerate(sources[:3], 1):
                     print(f"  {i}. {source}")
 
-            citations = getattr(first_result, 'citations', [])
+            citations = getattr(first_result, "citations", [])
             if citations:
                 print(f"\n📝 CITATIONS ({len(citations)}):")
                 for i, citation in enumerate(citations[:2], 1):
@@ -1352,12 +1359,12 @@ class TestDeepLitSearchAgentRealLLM:
         if search_results:
             print(f"\n🔎 SEARCH RESULTS ({len(search_results)}):")
             for i, item in enumerate(search_results[:3], 1):
-                title = getattr(item, 'title', 'N/A')
-                url = str(getattr(item, 'url', 'N/A'))
+                title = getattr(item, "title", "N/A")
+                url = str(getattr(item, "url", "N/A"))
                 print(f"  {i}. {title}")
                 print(f"     URL: {url}")
 
-                content = getattr(item, 'content', '')
+                content = getattr(item, "content", "")
                 if content:
                     preview = content[:150] + "..." if len(content) > 150 else content
                     print(f"     Preview: {preview}")
@@ -1367,14 +1374,10 @@ class TestDeepLitSearchAgentRealLLM:
         print("=" * 80)
 
         # Test assertions
-        first_result_content = getattr(result.results[0], 'content', '')
-        assert isinstance(first_result_content, str), (
-            "Report should have content"
-        )
+        first_result_content = getattr(result.results[0], "content", "")
+        assert isinstance(first_result_content, str), "Report should have content"
         # More flexible assertion - just check that some content exists
-        assert len(first_result_content) > 0, (
-            "Report should have some content"
-        )
+        assert len(first_result_content) > 0, "Report should have some content"
 
 
 if __name__ == "__main__":

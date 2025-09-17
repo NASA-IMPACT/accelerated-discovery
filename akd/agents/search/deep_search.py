@@ -369,12 +369,33 @@ class DeepLitSearchAgent(LitBaseAgent):
         tasks: List[asyncio.Task] = []
         tool_names: List[str] = []
 
+        reformulated_query = None
+        if is_reformulated and original_query:
+            reformulated_query = (
+                queries[0] if queries and queries[0] != original_query else None
+            )
+
+        domain_context = (
+            f"Research iteration with {len(queries)} query variations"
+            if len(queries) > 1
+            else None
+        )
+
         # Primary search tool
         try:
             tool_input = self.search_tool.input_schema(
                 queries=queries,
             )
-            tasks.append(asyncio.create_task(self.search_tool.arun(tool_input)))
+            tasks.append(
+                asyncio.create_task(
+                    self.search_tool.arun(
+                        tool_input,
+                        original_query=original_query,
+                        reformulated_query=reformulated_query,
+                        domain_context=domain_context,
+                    ),
+                ),
+            )
             tool_names.append(type(self.search_tool).__name__)
         except Exception as e:
             logger.warning(f"search tool error: {e}")
