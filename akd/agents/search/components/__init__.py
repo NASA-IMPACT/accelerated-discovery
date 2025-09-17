@@ -6,13 +6,15 @@ providing deep integration of research workflow capabilities.
 """
 
 from .triage import TriageComponent
-from .clarification import ClarificationComponent  
+from .clarification import ClarificationComponent
+from .content_condensation import ContentCondensationComponent
 from .instruction_builder import InstructionBuilderComponent
 from .research_synthesis import ResearchSynthesisComponent
 
 __all__ = [
     "TriageComponent",
     "ClarificationComponent",
-    "InstructionBuilderComponent", 
+    "ContentCondensationComponent",
+    "InstructionBuilderComponent",
     "ResearchSynthesisComponent",
 ]
