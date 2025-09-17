@@ -298,7 +298,7 @@ class SearchPipeline(SearchTool):
                     f"High relevancy: {len(assessment_output.high_relevancy_results)}",
                 )
 
-            return assessment_output.assessed_results
+            return assessment_output.filtered_results
 
         except Exception as e:
             if self.debug:
