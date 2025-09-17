@@ -35,6 +35,7 @@ from ._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
+from .searxng_search import SearxNGSearchTool
 
 
 class SearchPipelineScrapingMode(str, Enum):
@@ -114,30 +115,9 @@ class SearchPipeline(SearchTool):
             self.url = url
             self.message = message
 
-    @property
-    def _default_research_article_resolver(self) -> ResearchArticleResolver:
-        return ResearchArticleResolver(
-            PDFUrlResolver(debug=self.debug),
-            ArxivResolver(debug=self.debug),
-            ADSResolver(debug=self.debug),
-            DOIResolver(debug=self.debug),
-            CrossRefDoiResolver(debug=self.debug),
-            UnpaywallResolver(debug=self.debug),
-            debug=self.debug,
-        )
-
-    @property
-    def _default_scraper(self) -> ScraperToolBase:
-        return CompositeScraper(
-            DoclingScraper(debug=self.debug),
-            Crawl4AIWebScraper(debug=self.debug),
-            SimpleWebScraper(debug=self.debug),
-            SimplePDFScraper(debug=self.debug),
-        )
-
     def __init__(
         self,
-        search_tool: SearchTool,
+        search_tool: SearchTool | None = None,
         resolver: BaseArticleResolver | None = None,
         scraper: ScraperToolBase | None = None,
         link_relevancy_assessor: LinkRelevancyAssessor | None = None,
@@ -158,7 +138,7 @@ class SearchPipeline(SearchTool):
         config = config or SearchPipelineConfig()
         super().__init__(config, debug)
 
-        self.search_tool = search_tool
+        self.search_tool = search_tool or SearxNGSearchTool(debug=debug)
         self.resolver = resolver or self._default_research_article_resolver
         self.scraper = scraper or self._default_scraper
         self.link_relevancy_assessor = link_relevancy_assessor or LinkRelevancyAssessor(
@@ -174,6 +154,27 @@ class SearchPipeline(SearchTool):
             logger.debug(
                 f"  - Link relevancy assessor: {self.link_relevancy_assessor.__class__.__name__}",
             )
+
+    @property
+    def _default_research_article_resolver(self) -> ResearchArticleResolver:
+        return ResearchArticleResolver(
+            PDFUrlResolver(debug=self.debug),
+            ArxivResolver(debug=self.debug),
+            ADSResolver(debug=self.debug),
+            DOIResolver(debug=self.debug),
+            CrossRefDoiResolver(debug=self.debug),
+            UnpaywallResolver(debug=self.debug),
+            debug=self.debug,
+        )
+
+    @property
+    def _default_scraper(self) -> ScraperToolBase:
+        return CompositeScraper(
+            DoclingScraper(debug=self.debug),
+            Crawl4AIWebScraper(debug=self.debug),
+            SimpleWebScraper(debug=self.debug),
+            SimplePDFScraper(debug=self.debug),
+        )
 
     async def _resolve_essential_metadata(
         self,
