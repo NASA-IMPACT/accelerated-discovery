@@ -23,7 +23,7 @@ from .nodes import (
     write_article,
     write_sections,
 )
-from .structures import Perspectives, ResearchState
+from .structures import Outline, Perspectives, ResearchState
 
 
 class StormInputSchema(InputSchema):
@@ -62,6 +62,10 @@ class StormOutputSchema(OutputSchema):
     search_results: list = Field(
         ...,
         description="Search results collected by aspect search",
+    )
+    outline: Outline = Field(
+        ...,
+        description="Outline of the article",
     )
 
 
@@ -227,6 +231,7 @@ class StormAgent(BaseAgent):
             perspectives=article_state["perspectives"],
             references=article_state["references"],
             search_results=article_state["search_results"],
+            outline=article_state["outline"],
         )
 
     async def _arun(self, params: StormInputSchema, **kwargs) -> StormOutputSchema:
