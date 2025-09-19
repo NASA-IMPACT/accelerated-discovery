@@ -45,6 +45,7 @@ dependencies = [
     "tiktoken>=0.9.0",
     "rapidfuzz>=3.13.0",
     "undetected-chromedriver>=3.5.5",
+    "jsonpath-ng>=1.6.1",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
 ]
 

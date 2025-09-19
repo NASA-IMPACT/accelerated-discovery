@@ -19,6 +19,9 @@ class InstructionBuilderInputSchema(InputSchema):
     context: Optional[str] = Field(
         default=None, description="Additional context for instruction building"
     )
+    clarifications: Optional[List[str]] = Field(
+        default=None, description="Clarifications gathered from the user/loop"
+    )
 
 
 class InstructionBuilderOutputSchema(OutputSchema):
@@ -85,6 +88,14 @@ class InstructionBuilderComponent:
             clarifications=clarifications,
         )
 
+        # Debug preview of input (200 chars cap)
+        if self.debug:
+            preview_context = (instruction_input.context or "")[:200]
+            preview_clar = ("; ".join(clarifications or []))[:200]
+            logger.debug(
+                f"InstructionBuilder input preview | query: {query[:200]} | context: {preview_context} | clarifications: {preview_clar}"
+            )
+
         instruction_output = await self._agent.arun(instruction_input)
 
         if self.debug:
@@ -92,5 +103,8 @@ class InstructionBuilderComponent:
                 f"Generated research instructions ({len(instruction_output.research_instructions)} chars)"
             )
             logger.debug(f"Key concepts: {instruction_output.key_concepts}")
+            logger.debug(
+                f"InstructionBuilder output preview | research_instructions: {instruction_output.research_instructions[:200]} | search_strategy: {instruction_output.search_strategy[:200]}"
+            )
 
         return instruction_output.research_instructions

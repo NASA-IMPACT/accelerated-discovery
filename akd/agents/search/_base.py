@@ -2,11 +2,12 @@
 Base classes and shared utilities for literature search agents.
 """
 
-from typing import List
+from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field
 
 from akd.agents._base import BaseAgent, BaseAgentConfig
+from akd.structures import SearchResultItem
 from akd.tools.search._base import (
     SearchTool,
     SearchToolInputSchema,
@@ -32,7 +33,7 @@ class SearchAgentInputSchema(SearchToolInputSchema):
 class SearchAgentOutputSchema(SearchToolOutputSchema):
     """Base output schema for literature search agents."""
 
-    results: List[dict] = Field(..., description="List of search results")
+    results: List[SearchResultItem] = Field(..., description="List of search results")
     category: str = Field(..., description="Search category")
     iterations_performed: int = Field(
         default=1,
@@ -88,7 +89,10 @@ class LitSearchAgentInputSchema(SearchAgentInputSchema):
 class LitSearchAgentOutputSchema(SearchAgentOutputSchema):
     """Base output schema for literature search agents."""
 
-    pass
+    extra: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra metadata and synthesis information",
+    )
 
 
 class LitSearchAgentConfig(SearchAgentConfig):

@@ -1,7 +1,8 @@
 import uuid
 from abc import abstractmethod
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict
 
+from jsonpath_ng import parse as jsonpath_parse
 from loguru import logger
 
 from akd._base import AbstractBase
@@ -33,10 +34,10 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
 
     def __init__(
         self,
-        node_id: Optional[str] = None,
-        input_guardrails: List[CallableSpec] | None = None,
-        output_guardrails: List[CallableSpec] | None = None,
-        tool_runner: Optional[ToolRunner] = None,
+        node_id: str | None = None,
+        input_guardrails: list[CallableSpec] | None = None,
+        output_guardrails: list[CallableSpec] | None = None,
+        tool_runner: ToolRunner | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
@@ -111,9 +112,9 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
 
     async def _apply_guardrails(
         self,
-        guardrails: List[CallableSpec],
-        data: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        guardrails: list[CallableSpec],
+        data: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Note:
             If guardrails are callables,
@@ -124,7 +125,7 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
             If they are Tuple,
             the 2nd element is the mapping of input keys.
         """
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         for guard in guardrails:
             if isinstance(guard, tuple):
                 name = guard[0].__class__.__name__
@@ -181,10 +182,10 @@ class SupervisedNodeTemplate(AbstractNodeTemplate):
     def __init__(
         self,
         supervisor: BaseSupervisor,
-        input_guardrails: List[CallableSpec] | None = None,
-        output_guardrails: List[CallableSpec] | None = None,
-        node_id: Optional[str] = None,
-        tool_runner: Optional[ToolRunner] = None,
+        input_guardrails: list[CallableSpec] | None = None,
+        output_guardrails: list[CallableSpec] | None = None,
+        node_id: str | None = None,
+        tool_runner: ToolRunner | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
@@ -250,10 +251,11 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
     def __init__(
         self,
         agent: BaseAgent,
-        node_id: Optional[str] = None,
-        input_guardrails: Optional[List[RiskDefinition]] = None,
-        output_guardrails: Optional[List[RiskDefinition]] = None,
-        guardrails_config: Optional[GuardrailsConfig] = None,
+        node_id: str | None = None,
+        input_guardrails: list[RiskDefinition] | None = None,
+        output_guardrails: list[RiskDefinition] | None = None,
+        guardrails_config: GuardrailsConfig | None = None,
+        io_map: dict[str, str] | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
@@ -266,6 +268,7 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
             input_guardrails: RiskDefinition list for AI safety input validation
             output_guardrails: RiskDefinition list for AI safety output validation
             guardrails_config: Configuration for RiskDefinition-style guardrails
+            io_map: Optional mapping of input fields to other node fields (e.g., {"query": "lit_search.query"})
             node_id: Unique identifier for this node
             tool_runner: Tool runner instance
             mutation: Whether to mutate global state in place
@@ -297,6 +300,9 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         self._input_schema = self.agent.input_schema
         self._output_schema = self.agent.output_schema
 
+        # Store io_map for cross-node input mapping with JSONPath support
+        self.io_map = io_map or {}
+
         # Call parent constructor with no CallableSpec guardrails (agent handles its own guardrails)
         super().__init__(
             input_guardrails=[],  # no need to run callable spec guardrails
@@ -307,15 +313,188 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
             **kwargs,
         )
 
+    def _build_jsonpath_context(
+        self,
+        node_state: NodeState,
+        global_state: GlobalState,
+    ) -> Dict[str, Any]:
+        """
+        Build JSONPath context from global state for cross-node data access.
+
+        Args:
+            node_state: Current node's state
+            global_state: Global state containing all node states
+
+        Returns:
+            Dictionary context for JSONPath expressions
+        """
+        context = {
+            # Current node access
+            "current": {
+                "inputs": node_state.inputs,
+                "outputs": node_state.outputs,
+            },
+            # All other nodes
+            **{
+                node_id: {
+                    "inputs": ns.inputs,
+                    "outputs": ns.outputs,
+                }
+                for node_id, ns in global_state.node_states.items()
+            },
+        }
+
+        if self.debug:
+            logger.debug(
+                f"[SingleAgentNodeTemplate {self.node_id}] "
+                f"JSONPath context keys: {list(context.keys())}",
+            )
+
+        return context
+
+    def _apply_io_mapping(
+        self,
+        base_inputs: dict[str, Any],
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Apply io_map transformations to fill missing inputs using JSONPath.
+
+        Args:
+            base_inputs: Starting inputs (never overridden)
+            context: JSONPath context for expression evaluation
+
+        Returns:
+            Dictionary with resolved inputs from io_map
+        """
+        resolved_inputs = base_inputs.copy()
+
+        # Apply io_map using JSONPath to fill missing fields
+        for target_field, jsonpath_expr in self.io_map.items():
+            if target_field in resolved_inputs:
+                if self.debug:
+                    logger.debug(
+                        f"[SingleAgentNodeTemplate {self.node_id}] "
+                        f"Skipping '{target_field}' - already exists in inputs",
+                    )
+                continue  # Don't override existing inputs
+
+            try:
+                jsonpath = jsonpath_parse(jsonpath_expr)
+                matches = jsonpath.find(context)
+
+                if matches:
+                    # Use first match
+                    resolved_inputs[target_field] = matches[0].value
+                    if self.debug:
+                        logger.debug(
+                            f"[SingleAgentNodeTemplate {self.node_id}] "
+                            f"Mapped '{target_field}' from '{jsonpath_expr}': {matches[0].value}",
+                        )
+                else:
+                    if self.debug:
+                        logger.warning(
+                            f"[SingleAgentNodeTemplate {self.node_id}] "
+                            f"JSONPath '{jsonpath_expr}' returned no matches for field '{target_field}'",
+                        )
+
+            except Exception as e:
+                logger.warning(
+                    f"[SingleAgentNodeTemplate {self.node_id}] "
+                    f"JSONPath '{jsonpath_expr}' failed for field '{target_field}': {e}",
+                )
+
+        return resolved_inputs
+
+    def _validate_resolved_inputs(
+        self,
+        resolved_inputs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Validate that resolved inputs can create agent input schema.
+
+        Args:
+            resolved_inputs: Dictionary of resolved inputs
+
+        Returns:
+            Same dictionary if validation passes
+
+        Raises:
+            ValueError: If validation fails
+        """
+        try:
+            self.agent.input_schema(**resolved_inputs)
+            if self.debug:
+                logger.debug(
+                    f"[SingleAgentNodeTemplate {self.node_id}] "
+                    f"Successfully resolved inputs: {resolved_inputs}",
+                )
+            return resolved_inputs
+
+        except Exception as validation_error:
+            raise ValueError(
+                f"Failed to resolve required inputs for agent {self.agent.__class__.__name__} "
+                f"in node '{self.node_id}'. After applying io_map, validation failed: {validation_error}",
+            )
+
+    async def _resolve_inputs(
+        self,
+        node_state: NodeState,
+        global_state: GlobalState,
+    ) -> dict[str, Any]:
+        """
+        Resolve inputs for the agent using JSONPath for complex cross-node data access.
+
+        Supports merging current node inputs with data from other nodes using JSONPath expressions.
+        Never overrides existing inputs in the current node - only fills missing fields.
+
+        Args:
+            node_state: Current node's state
+            global_state: Global state containing all node states
+
+        Returns:
+            Dictionary of resolved inputs for the agent
+
+        Examples:
+            io_map = {
+                "query": "$.lit_search.outputs.query",              # Simple field access
+                "context": "$.preprocessing.outputs.cleaned_text",  # Cross-node data
+                "limit": "$.config.inputs.params.limit",            # Nested access
+                "results": "$.search.outputs.items[*].title"        # Array extraction
+            }
+        """
+        # Start with node's existing inputs (never override existing)
+        resolved_inputs = node_state.inputs.copy()
+
+        # If no io_map configured, just validate and return current inputs
+        if not self.io_map:
+            try:
+                return self._validate_resolved_inputs(resolved_inputs)
+            except ValueError as e:
+                raise ValueError(
+                    f"Node '{self.node_id}' missing required inputs for agent "
+                    f"{self.agent.__class__.__name__}. Consider using io_map parameter.\nError: {e}",
+                ) from e
+
+        # Build JSONPath context and apply io_map transformations
+        context = self._build_jsonpath_context(node_state, global_state)
+        resolved_inputs = self._apply_io_mapping(resolved_inputs, context)
+
+        # Validate and return final inputs
+        return self._validate_resolved_inputs(resolved_inputs)
+
     async def _execute(
         self,
         node_state: NodeState,
         global_state: GlobalState,
     ) -> NodeState:
-        """Execute the agent using the node state inputs."""
+        """Execute the agent using enhanced input resolution with cross-node data access."""
         try:
-            # Extract inputs from node state and create agent input schema instance
-            agent_input = self.agent.input_schema(**node_state.inputs)
+            # Resolve inputs using JSONPath-based cross-node mapping
+            resolved_inputs = await self._resolve_inputs(node_state, global_state)
+
+            # Create agent input schema instance
+            agent_input = self.agent.input_schema(**resolved_inputs)
 
             if self.debug:
                 logger.debug(
