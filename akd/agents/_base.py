@@ -275,10 +275,17 @@ class InstructorBaseAgent[
             },
         ] + self.memory
 
+        # GPT-5 series only supports temperature=1, override if needed
+        temperature = (
+            1.0
+            if self.model_name and self.model_name.startswith("gpt-5")
+            else self.temperature
+        )
+
         response = await self.client.chat.completions.create(
             messages=messages,
             model=self.model_name,
-            temperature=self.temperature,
+            temperature=temperature,
             response_model=instructor_model,
         )
 

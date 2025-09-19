@@ -59,18 +59,117 @@ class DataSearchResult(BaseModel):
     )
 
 
+# New Workflow Schemas
+class TopicResult(BaseModel):
+    """Complete search result for a single topic."""
+
+    topic: Dict[str, Any] = Field(
+        ...,
+        description="The topic that was processed",
+    )
+    data_source: str = Field(
+        ...,
+        description="Data source used (e.g., 'CMR', 'USGS')",
+    )
+    decomposition_results: List["DecompositionResult"] = Field(
+        default_factory=list,
+        description="Results for each scientific decomposition of this topic",
+    )
+    note: Optional[str] = Field(
+        None,
+        description="Note about data availability or alternative sources",
+    )
+
+
+class DecompositionResult(BaseModel):
+    """Search result for a single scientific decomposition."""
+
+    decomposition: Dict[str, Any] = Field(
+        ...,
+        description="The scientific decomposition that was processed",
+    )
+    query_approaches: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Known parameter approaches generated",
+    )
+    searchable_queries: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Complete queries with known + searchable parameters",
+    )
+    collections: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Ranked and filtered collections for this decomposition",
+    )
+    granules: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Data granules/files found for this decomposition",
+    )
+    total_collections_found: int = Field(
+        default=0,
+        description="Total collections found before ranking/filtering",
+    )
+    total_granules_found: int = Field(
+        default=0,
+        description="Total granules found for this decomposition",
+    )
+
+
+# Legacy Schema (for backward compatibility)
+class AngleSearchResult(BaseModel):
+    """Complete search result for a single scientific angle."""
+
+    scientific_angle: Dict[str, Any] = Field(
+        ...,
+        description="The scientific angle that generated this result",
+    )
+    cmr_queries: List[Dict[str, Any]] = Field(
+        ...,
+        description="CMR queries generated for this angle",
+    )
+    collections: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Deduplicated and ranked collections for this angle",
+    )
+    granules: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Data granules/files found for this angle",
+    )
+    total_collections_found: int = Field(
+        default=0,
+        description="Total collections found before deduplication/ranking",
+    )
+    total_granules_found: int = Field(
+        default=0,
+        description="Total granules found for this angle",
+    )
+
+
 class DataSearchAgentOutputSchema(OutputSchema):
     """Base output schema for data search agents."""
 
-    granules: List[dict] = Field(
-        ...,
-        description="List of discovered data files/granules",
+    # New workflow structure
+    topics: List[TopicResult] = Field(
+        default_factory=list,
+        description="Search results organized by topic and decomposition",
     )
     search_metadata: dict = Field(..., description="Search provenance and metadata")
-    total_results: int = Field(..., description="Total number of results found")
+    total_results: int = Field(
+        ...,
+        description="Total number of results found across all topics",
+    )
+
+    # Legacy structure for backward compatibility during transition
+    angles: List[AngleSearchResult] = Field(
+        default_factory=list,
+        description="Search results organized by scientific angle (legacy)",
+    )
+    granules: List[dict] = Field(
+        default_factory=list,
+        description="Flattened list of all granules (for backward compatibility)",
+    )
     collections_searched: List[dict] = Field(
         default_factory=list,
-        description="Collections that were searched",
+        description="Flattened list of all collections (for backward compatibility)",
     )
 
 

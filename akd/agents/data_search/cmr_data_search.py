@@ -8,26 +8,46 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, List
 
-from pydantic import Field, HttpUrl
+# Temporary compatibility class for legacy methods
+from pydantic import BaseModel, Field, HttpUrl
 
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
 from akd.utils.logging import ContextualLogger, log_component_action, log_search_event
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
-from ._base import (
+from ._base import (  # New workflow schemas; Base schemas; Legacy schemas
+    AngleSearchResult,
     BaseDataSearchAgent,
     CollectionSynthesisResult,
     DataSearchAgentConfig,
     DataSearchAgentInputSchema,
     DataSearchAgentOutputSchema,
+    DecompositionResult,
     GranuleSynthesisResult,
+    TopicResult,
 )
-from .components import (
-    CMRQueryGenerationComponent,
-    ScientificAnglesComponent,
-    ScientificExpansionComponent,
+from .components import (  # New workflow components
+    KnownParametersComponent,
+    RepositoryRouterComponent,
+    ScientificDecomposition,
+    ScientificDecompositionComponent,
+    SearchableParametersComponent,
+    SearchableQuery,
+    Topic,
+    TopicSplittingComponent,
 )
-from .components.scientific_angles import ScientificAngle
+from .components.collection_ranking import (
+    CollectionRankingComponent,
+    CollectionRankingInputSchema,
+)
+from .components.repository_router import NASARepositoryEnum
+
+
+class ScientificAngle(BaseModel):
+    """Legacy compatibility class - not used in new workflow."""
+
+    title: str = Field(..., description="Title of the scientific angle")
+    scientific_justification: str = Field(..., description="Scientific justification")
 
 
 class CMRDataSearchAgentConfig(DataSearchAgentConfig):
@@ -65,6 +85,34 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
         description="Timeout for granule searches in seconds",
     )
 
+    # Model configuration for pipeline components
+    topic_splitting_model: str = Field(
+        default="gpt-4o",
+        description="Model to use for topic splitting",
+    )
+    scientific_decomposition_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for scientific decomposition",
+    )
+    repository_routing_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for repository routing decisions",
+    )
+    collection_ranking_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for collection ranking and selection",
+    )
+    cmr_query_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for CMR query generation",
+    )
+
+    # Legacy compatibility
+    angle_generation_model: str = Field(
+        default="gpt-4o",
+        description="Legacy parameter - now maps to topic_splitting_model for backward compatibility",
+    )
+
 
 class CMRDataSearchAgent(BaseDataSearchAgent):
     """
@@ -93,9 +141,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         config: CMRDataSearchAgentConfig | None = None,
         collection_search_tool: CMRCollectionSearchTool | None = None,
         granule_search_tool: CMRGranuleSearchTool | None = None,
-        scientific_expansion_component: ScientificExpansionComponent | None = None,
-        scientific_angles_component: ScientificAnglesComponent | None = None,
-        cmr_query_generation_component: CMRQueryGenerationComponent | None = None,
         debug: bool = False,
     ) -> None:
         """Initialize the CMR Data Search Agent."""
@@ -128,15 +173,47 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             )
         )
 
-        # Initialize new LLM-driven components
-        self.scientific_expansion_component = (
-            scientific_expansion_component or ScientificExpansionComponent(debug=debug)
+        # Initialize LLM-driven components with model-specific configurations
+        from akd.agents._base import BaseAgentConfig
+
+        # Create configs for each component with specific models
+        topic_config = BaseAgentConfig(model_name=self.config.topic_splitting_model)
+        router_config = BaseAgentConfig(model_name=self.config.repository_routing_model)
+        decomp_config = BaseAgentConfig(
+            model_name=self.config.scientific_decomposition_model,
         )
-        self.scientific_angles_component = (
-            scientific_angles_component or ScientificAnglesComponent(debug=debug)
+        known_params_config = BaseAgentConfig(model_name=self.config.cmr_query_model)
+        searchable_params_config = BaseAgentConfig(
+            model_name=self.config.cmr_query_model,
         )
-        self.cmr_query_generation_component = (
-            cmr_query_generation_component or CMRQueryGenerationComponent(debug=debug)
+        ranking_config = BaseAgentConfig(
+            model_name=self.config.collection_ranking_model,
+        )
+
+        # New workflow components
+        self.topic_splitting_component = TopicSplittingComponent(
+            config=topic_config,
+            debug=debug,
+        )
+        self.repository_router_component = RepositoryRouterComponent(
+            config=router_config,
+            debug=debug,
+        )
+        self.scientific_decomposition_component = ScientificDecompositionComponent(
+            config=decomp_config,
+            debug=debug,
+        )
+        self.known_parameters_component = KnownParametersComponent(
+            config=known_params_config,
+            debug=debug,
+        )
+        self.searchable_parameters_component = SearchableParametersComponent(
+            config=searchable_params_config,
+            debug=debug,
+        )
+        self.collection_ranking_component = CollectionRankingComponent(
+            config=ranking_config,
+            debug=debug,
         )
 
         # Track search state
@@ -195,7 +272,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         **kwargs: Any,
     ) -> DataSearchAgentOutputSchema:
         """
-        Execute the complete CMR data search workflow.
+        Execute the topic-based CMR data search workflow.
 
         Args:
             params: Input parameters with natural language query
@@ -220,7 +297,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             "SEARCH_STARTED",
             {"query": original_query, "start_time": search_start_time.isoformat()},
         )
-        search_logger.info(f"Starting CMR data search: '{original_query}'")
+        search_logger.info(f"Starting topic-based data search: '{original_query}'")
 
         # Wait for progress handler to be ready before starting
         await self._wait_for_progress_handler_ready()
@@ -229,241 +306,106 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         await self._emit_progress_safely("on_search_started", original_query)
 
         try:
-            # Step 1: Scientific Expansion (Document Retrieval)
-            log_component_action(
-                "ScientificExpansion",
-                "STARTED",
-                {"query": original_query},
-            )
-            search_logger.info("Step 1: Retrieving relevant scientific documents")
+            # Step 1: Topic Splitting
+            log_component_action("TopicSplitting", "STARTED", {"query": original_query})
+            search_logger.info("Step 1: Identifying functional topics")
 
-            await self._emit_progress_safely("on_scientific_expansion_started")
-
-            documents = await self.scientific_expansion_component.process(
-                original_query,
-            )
-
-            await self._emit_progress_safely(
-                "on_scientific_expansion_completed",
-                documents,
-            )
-
-            # Step 2: Scientific Angles Generation
-            log_component_action(
-                "ScientificAngles",
-                "STARTED",
-                {"documents_count": len(documents)},
-            )
-            search_logger.info("Step 2: Generating scientific angles")
-
-            await self._emit_progress_safely("on_scientific_angles_started")
-
-            angles_output = await self.scientific_angles_component.process(
-                original_query,
-                documents,
-            )
-
-            # Convert ScientificAngle objects to dicts for JSON serialization
-            angles_data = safe_model_dump_list(angles_output.angles)
-            await self._emit_progress_safely(
-                "on_scientific_angles_generated",
-                angles_data,
-            )
-
-            # Step 3: CMR Query Generation for Each Angle
-            log_component_action(
-                "CMRQueryGeneration",
-                "STARTED",
-                {"angles_count": len(angles_output.angles)},
-            )
+            topics_output = await self.topic_splitting_component.process(original_query)
             search_logger.info(
-                f"Step 3: Generating CMR queries for {len(angles_output.angles)} angles",
+                f"Identified {len(topics_output.topics)} functional topics",
             )
 
-            await self._emit_progress_safely("on_cmr_queries_started")
+            # Step 2: Repository Router (process each topic individually)
+            log_component_action(
+                "RepositoryRouter",
+                "STARTED",
+                {"topics_count": len(topics_output.topics)},
+            )
+            search_logger.info("Step 2: Routing topics to data sources")
 
-            all_cmr_queries = []
-            for angle in angles_output.angles:
-                cmr_queries_output = await self.cmr_query_generation_component.process(
-                    angle,
+            routes = []
+            for topic in topics_output.topics:
+                routing_output = await self.repository_router_component.process(
                     original_query,
+                    topic,
                 )
-                all_cmr_queries.extend(cmr_queries_output.search_queries)
+                routes.append(routing_output.route)
 
-            # Convert CMR query objects to dicts for JSON serialization
-            queries_data = safe_model_dump_list(all_cmr_queries)
+            # Step 3: Process each topic based on its own route
+            topic_results = []
+            for i, (topic, route) in enumerate(
+                zip(topics_output.topics, routes),
+                start=1,
+            ):
+                repos = [r.strip() for r in route.repositories]
+                search_logger.info(f"Routing for topic {i}: {topic.title} → {repos}")
 
-            log_component_action(
-                "CMRQueryGeneration",
-                "COMPLETED",
-                {"queries_generated": len(queries_data)},
+                # Check if CMR is in the repositories
+                has_cmr = NASARepositoryEnum.CMR in route.repositories
+                if has_cmr:
+                    search_logger.info(f"Processing topic {i} via CMR")
+                    topic_result = await self._process_single_topic(
+                        topic,
+                        original_query,
+                        params,
+                    )
+                    topic_results.append(topic_result)
+                else:
+                    default_repo = repos[0] if repos else "Unknown"
+                    note_text = (
+                        "; ".join(route.rationales) if route.rationales else None
+                    )
+                    topic_results.append(
+                        TopicResult(
+                            topic=safe_model_dump(topic),
+                            data_source=default_repo,
+                            decomposition_results=[],
+                            note=note_text
+                            or f"Routed to {default_repo}; CMR not selected",
+                        ),
+                    )
+
+            # Calculate totals
+            total_granules = sum(
+                sum(dr.total_granules_found for dr in tr.decomposition_results)
+                for tr in topic_results
             )
-            search_logger.debug(f"Generated {len(queries_data)} CMR queries")
-            await self._emit_progress_safely("on_cmr_queries_generated", queries_data)
-
-            # Step 4: Collection Search
-            log_component_action(
-                "CollectionSearch",
-                "STARTED",
-                {"queries_count": len(all_cmr_queries)},
-            )
-            search_logger.info(
-                f"Step 4: Executing {len(all_cmr_queries)} collection searches",
-            )
-
-            await self._emit_progress_safely(
-                "on_collections_search_started",
-                len(all_cmr_queries),
-            )
-
-            collection_results = await self._search_collections_with_cmr_queries(
-                all_cmr_queries,
-                params,
-            )
-
-            # Count collection results for progress reporting (but don't send raw collections)
-            total_collections_found = 0
-            for result_dict in collection_results:
-                if isinstance(result_dict, dict) and "collections" in result_dict:
-                    collections = result_dict.get("collections", [])
-                    if isinstance(collections, list):
-                        total_collections_found += len(collections)
-
-            log_component_action(
-                "CollectionSearch",
-                "COMPLETED",
-                {"total_collections_found": total_collections_found},
-            )
-            search_logger.info(
-                f"Found {total_collections_found} collections from searches",
-            )
-
-            # Send only a summary message, not the raw collections
-            await self._emit_progress_safely(
-                "on_collections_search_completed",
-                {
-                    "total_collections_found": total_collections_found,
-                    "message": f"Found {total_collections_found} collections from {len(collection_results)} searches",
-                },
-            )
-
-            # Step 5: Collection Synthesis
-            log_component_action(
-                "CollectionSynthesis",
-                "STARTED",
-                {"total_collections": total_collections_found},
-            )
-            search_logger.info("Step 5: Ranking and filtering collections")
-
-            await self._emit_progress_safely("on_collections_synthesis_started")
-
-            # Convert to legacy format for synthesis component
-            legacy_query_params = self._create_legacy_query_params(
-                original_query,
-                angles_output.angles,
-            )
-            synthesis_result = await self._synthesize_collections(
-                collection_results,
-                legacy_query_params,
-            )
-
-            if not synthesis_result.selected_collections:
-                log_search_event(
-                    search_id,
-                    "NO_COLLECTIONS_FOUND",
-                    {"reason": "No relevant collections found"},
-                )
-                search_logger.warning("No relevant collections found")
-                return self._create_empty_response(
-                    original_query,
-                    "No relevant collections found",
-                )
-
-            log_component_action(
-                "CollectionSynthesis",
-                "COMPLETED",
-                {"selected_collections": len(synthesis_result.selected_collections)},
-            )
-            search_logger.info(
-                f"Selected {len(synthesis_result.selected_collections)} collections for data search",
-            )
-
-            # Convert collection objects to dicts for JSON serialization
-            collections_data = safe_model_dump_list(
-                synthesis_result.selected_collections,
-            )
-
-            await self._emit_progress_safely(
-                "on_collections_synthesized",
-                collections_data,
-            )
-
-            # Step 6: Granule Search
-            log_component_action(
-                "GranuleSearch",
-                "STARTED",
-                {"collections_count": len(synthesis_result.selected_collections)},
-            )
-            search_logger.info(
-                f"Step 6: Searching for granules in {len(synthesis_result.selected_collections)} collections",
-            )
-
-            await self._emit_progress_safely(
-                "on_granules_search_started",
-                len(synthesis_result.selected_collections),
-            )
-
-            granule_results = await self._search_granules(
-                synthesis_result.selected_collections,
-                legacy_query_params,
-                params,
-            )
-
-            # Step 7: Granule Synthesis
-            log_component_action("GranuleSynthesis", "STARTED")
-            search_logger.info("Step 7: Synthesizing final results")
-
-            final_result = await self._synthesize_granules(
-                granule_results,
-                synthesis_result.selected_collections,
-                legacy_query_params,
-                search_start_time,
-            )
-
-            # Calculate total file size
-            total_size_mb = 0.0
-            for granule in final_result.granules:
-                if isinstance(granule, dict) and granule.get("file_size_mb"):
-                    total_size_mb += float(granule["file_size_mb"])
-
-            await self._emit_progress_safely(
-                "on_granules_found",
-                final_result.granules,
-                total_size_mb if total_size_mb > 0 else None,
-            )
-
-            # Create response
-            total_granules = len(final_result.granules)
 
             search_duration = (datetime.now() - search_start_time).total_seconds()
-            log_search_event(
-                search_id,
-                "SEARCH_COMPLETED",
+
+            log_component_action(
+                "TopicProcessing",
+                "COMPLETED",
                 {
-                    "granules_found": total_granules,
+                    "topics_processed": len(topic_results),
+                    "total_granules": total_granules,
                     "duration_seconds": search_duration,
-                    "collections_searched": len(synthesis_result.selected_collections),
                 },
             )
+
             search_logger.info(
-                f"CMR Data Search completed: {total_granules} granules found in {search_duration:.1f}s",
+                f"Topic-based search completed: {total_granules} granules found across {len(topic_results)} topics in {search_duration:.1f}s",
             )
 
+            # Build search metadata
+            search_metadata = {
+                "search_id": search_id,
+                "original_query": original_query,
+                "timestamp": search_start_time.isoformat(),
+                "duration_seconds": search_duration,
+                "topics_processed": len(topic_results),
+                "workflow_version": "topic-decomposition-v1",
+            }
+
+            # Create topic-organized response
             final_response = DataSearchAgentOutputSchema(
-                granules=final_result.granules,
-                search_metadata=final_result.search_metadata,
+                topics=topic_results,
+                search_metadata=search_metadata,
                 total_results=total_granules,
-                collections_searched=synthesis_result.selected_collections,
+                # Empty legacy fields for schema compatibility
+                angles=[],
+                granules=[],
+                collections_searched=[],
             )
 
             await self._emit_progress_safely(
@@ -474,13 +416,300 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             return final_response
 
         except Exception as e:
-            error_msg = f"CMR data search failed: {e}"
+            error_msg = f"Topic-based data search failed: {e}"
             log_search_event(search_id, "SEARCH_FAILED", {"error": str(e)})
             search_logger.error(error_msg)
 
             await self._emit_progress_safely("on_search_error", error_msg)
 
             return self._create_error_response(original_query, error_msg)
+
+    async def _process_single_topic(
+        self,
+        topic: Topic,
+        original_query: str,
+        params: DataSearchAgentInputSchema,
+    ) -> TopicResult:
+        """
+        Process a single topic through the complete pipeline.
+
+        Args:
+            topic: Topic to process
+            original_query: Original research question
+            params: Search parameters
+
+        Returns:
+            Complete topic result with all decompositions
+        """
+        search_logger = ContextualLogger("topic_processing")
+        search_logger.info(f"Processing topic: {topic.title}")
+
+        # Scientific Decomposition
+        log_component_action(
+            "ScientificDecomposition",
+            "STARTED",
+            {"topic": topic.title},
+        )
+        decomp_output = await self.scientific_decomposition_component.process(
+            original_query,
+            topic,
+        )
+        search_logger.info(
+            f"Generated {len(decomp_output.decompositions)} decompositions for topic '{topic.title}'",
+        )
+
+        # Process each decomposition
+        decomp_results = []
+        for i, decomp in enumerate(decomp_output.decompositions):
+            search_logger.info(
+                f"Processing decomposition {i + 1}/{len(decomp_output.decompositions)}: {decomp.title}",
+            )
+            decomp_result = await self._process_single_decomposition(
+                topic,
+                decomp,
+                original_query,
+                params,
+            )
+            decomp_results.append(decomp_result)
+
+        return TopicResult(
+            topic=safe_model_dump(topic),
+            data_source="CMR",
+            decomposition_results=decomp_results,
+        )
+
+    async def _process_single_decomposition(
+        self,
+        topic: Topic,
+        decomp: ScientificDecomposition,
+        original_query: str,
+        params: DataSearchAgentInputSchema,
+    ) -> DecompositionResult:
+        """
+        Process a single decomposition through parameter generation, search, and ranking.
+
+        Args:
+            topic: Parent topic
+            decomp: Scientific decomposition to process
+            original_query: Original research question
+            params: Search parameters
+
+        Returns:
+            Complete decomposition result
+        """
+        search_logger = ContextualLogger("decomposition_processing")
+        search_logger.info(f"Processing decomposition: {decomp.title}")
+
+        # Known Parameters
+        log_component_action(
+            "KnownParameters",
+            "STARTED",
+            {"decomposition": decomp.title},
+        )
+        known_params_output = await self.known_parameters_component.process(
+            original_query,
+            topic,
+            decomp,
+        )
+        search_logger.info(
+            f"Generated {len(known_params_output.query_approaches)} query approaches",
+        )
+
+        # Searchable Parameters
+        log_component_action(
+            "SearchableParameters",
+            "STARTED",
+            {"approaches": len(known_params_output.query_approaches)},
+        )
+        searchable_output = await self.searchable_parameters_component.process(
+            original_query,
+            topic,
+            decomp,
+            known_params_output.query_approaches,
+        )
+        search_logger.info(
+            f"Generated {len(searchable_output.searchable_queries)} searchable queries",
+        )
+
+        # Query Execution
+        log_component_action(
+            "QueryExecution",
+            "STARTED",
+            {"queries": len(searchable_output.searchable_queries)},
+        )
+        collections = await self._execute_searchable_queries(
+            searchable_output.searchable_queries,
+            params,
+        )
+        search_logger.info(f"Found {len(collections)} collections from queries")
+
+        # Collection Ranking & Filtering
+        log_component_action(
+            "CollectionRanking",
+            "STARTED",
+            {"collections": len(collections)},
+        )
+        ranked_collections = await self._rank_collections(
+            collections,
+            original_query,
+            topic,
+            decomp,
+        )
+        search_logger.info(f"Ranked to {len(ranked_collections)} top collections")
+
+        # Granule Search
+        log_component_action(
+            "GranuleSearch",
+            "STARTED",
+            {"collections": len(ranked_collections)},
+        )
+        granules = await self._search_granules_for_collections(
+            ranked_collections,
+            params,
+        )
+        search_logger.info(f"Found {len(granules)} granules")
+
+        return DecompositionResult(
+            decomposition=safe_model_dump(decomp),
+            query_approaches=safe_model_dump_list(known_params_output.query_approaches),
+            searchable_queries=safe_model_dump_list(
+                searchable_output.searchable_queries,
+            ),
+            collections=ranked_collections,
+            granules=granules,
+            total_collections_found=len(collections),
+            total_granules_found=len(granules),
+        )
+
+    async def _execute_searchable_queries(
+        self,
+        searchable_queries: List[SearchableQuery],
+        params: DataSearchAgentInputSchema,
+    ) -> List[Dict[str, Any]]:
+        """Execute searchable queries and return collections."""
+        all_collections = []
+
+        for query in searchable_queries:
+            # Convert SearchableQuery to tool parameters
+            search_params = {}
+
+            # Add known parameters
+            if query.instrument:
+                search_params["instrument"] = query.instrument
+            if query.platform:
+                search_params["platform"] = query.platform
+            if query.temporal:
+                search_params["temporal"] = query.temporal
+            if query.bounding_box:
+                search_params["bounding_box"] = query.bounding_box
+
+            # Add searchable parameters
+            if query.combined_keyword_string:
+                search_params["keyword"] = query.combined_keyword_string
+
+            # Override with explicit input parameters
+            if params.temporal_range:
+                search_params["temporal"] = params.temporal_range
+            if params.spatial_bounds:
+                search_params["bounding_box"] = params.spatial_bounds
+
+            # Add pagination
+            search_params["page_size"] = self.config.collection_search_page_size
+
+            try:
+                # Execute search
+                tool_input = self.collection_search_tool.input_schema(**search_params)
+                result = await self.collection_search_tool.arun(tool_input)
+
+                # Extract collections
+                if hasattr(result, "collections") and result.collections:
+                    all_collections.extend(result.collections)
+
+            except Exception as e:
+                search_logger = ContextualLogger("query_execution")
+                search_logger.warning(f"Query execution failed: {e}")
+
+        return all_collections
+
+    async def _rank_collections(
+        self,
+        collections: List[Dict[str, Any]],
+        original_query: str,
+        topic: Topic,
+        decomp: ScientificDecomposition,
+    ) -> List[Dict[str, Any]]:
+        """Rank collections using the collection ranking component."""
+        if not collections:
+            return []
+
+        # Limit collections if too many
+        if len(collections) <= self.config.max_collections_to_search:
+            return collections
+
+        # Use collection ranking component
+        ranking_input = CollectionRankingInputSchema(
+            original_query=original_query,
+            scientific_angle=safe_model_dump(decomp),  # Use decomposition as "angle"
+            collections=collections,
+            max_collections=self.config.max_collections_to_search,
+        )
+
+        try:
+            ranking_result = await self.collection_ranking_component.arun(ranking_input)
+            ranked_collections = [
+                collections[rc.collection_index]
+                for rc in ranking_result.ranked_collections
+                if 0 <= rc.collection_index < len(collections)
+            ]
+            return ranked_collections
+        except Exception as e:
+            search_logger = ContextualLogger("collection_ranking")
+            search_logger.error(f"Collection ranking failed: {e}")
+            raise RuntimeError("Collection ranking failed") from e
+
+    async def _search_granules_for_collections(
+        self,
+        collections: List[Dict[str, Any]],
+        params: DataSearchAgentInputSchema,
+    ) -> List[Dict[str, Any]]:
+        """Search for granules in the provided collections."""
+        all_granules = []
+
+        for collection in collections:
+            concept_id = collection.get("concept_id")
+            if not concept_id:
+                continue
+
+            # Build granule search parameters
+            granule_params = {
+                "collection_concept_id": concept_id,
+                "page_size": self.config.granule_search_page_size,
+            }
+
+            # Add temporal/spatial constraints from input params
+            if params.temporal_range:
+                granule_params["temporal"] = params.temporal_range
+            if params.spatial_bounds:
+                granule_params["bounding_box"] = params.spatial_bounds
+
+            try:
+                # Execute granule search
+                granule_search_params = self.granule_search_tool.input_schema(
+                    **granule_params,
+                )
+                result = await self.granule_search_tool.arun(granule_search_params)
+
+                # Extract granules
+                if hasattr(result, "results") and result.results.get("granules"):
+                    all_granules.extend(result.results["granules"])
+
+            except Exception as e:
+                search_logger = ContextualLogger("granule_search")
+                search_logger.warning(
+                    f"Granule search failed for collection {concept_id}: {e}",
+                )
+
+        return all_granules
 
     async def _search_collections_with_cmr_queries(
         self,
@@ -581,6 +810,141 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         )
 
         return await self.collection_search_tool.arun(search_params)
+
+    def _deduplicate_collections_within_angle(
+        self,
+        collections: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Deduplicate collections within a single angle based on concept_id.
+
+        Args:
+            collections: List of collection dictionaries
+
+        Returns:
+            Deduplicated list of collections, preserving order of first occurrence
+        """
+        seen_concept_ids = set()
+        deduplicated = []
+
+        for collection in collections:
+            concept_id = collection.get("concept_id")
+            if concept_id and concept_id not in seen_concept_ids:
+                seen_concept_ids.add(concept_id)
+                deduplicated.append(collection)
+            elif not concept_id:
+                # Include collections without concept_id (shouldn't happen but be safe)
+                deduplicated.append(collection)
+
+        return deduplicated
+
+    async def _process_single_angle(
+        self,
+        angle: ScientificAngle,
+        original_query: str,
+        params: DataSearchAgentInputSchema,
+    ) -> AngleSearchResult:
+        """
+        Process a single scientific angle through the complete pipeline.
+
+        Args:
+            angle: Scientific angle to process
+            original_query: Original user query
+            params: Search parameters
+
+        Returns:
+            Complete search result for this angle
+        """
+        search_logger = ContextualLogger("angle_processing")
+        search_logger.info(f"Processing angle: {angle.title}")
+
+        # Step 3a: Generate CMR queries for this angle
+        cmr_queries_output = await self.cmr_query_generation_component.process(
+            angle,
+            original_query,
+        )
+        cmr_queries = cmr_queries_output.search_queries
+
+        # Step 3b: Execute collection searches for this angle's queries
+        collection_results = await self._search_collections_with_cmr_queries(
+            cmr_queries,
+            params,
+        )
+
+        # Step 3c: Extract and deduplicate collections for this angle
+        angle_collections = []
+        for result_dict in collection_results:
+            if isinstance(result_dict, dict) and "collections" in result_dict:
+                collections = result_dict["collections"]
+                if isinstance(collections, list):
+                    angle_collections.extend(collections)
+
+        # Deduplicate within this angle
+        deduplicated_collections = self._deduplicate_collections_within_angle(
+            angle_collections,
+        )
+        total_collections_found = len(angle_collections)
+
+        search_logger.info(
+            f"Found {total_collections_found} collections, {len(deduplicated_collections)} after deduplication",
+        )
+
+        # Step 3d: Rank collections for this angle (limit to top collections)
+        ranked_collections = deduplicated_collections
+        if len(deduplicated_collections) > self.config.max_collections_to_search:
+            # Use collection ranking component to select best collections
+
+            ranking_input = CollectionRankingInputSchema(
+                original_query=original_query,
+                scientific_angle=safe_model_dump(angle),
+                collections=deduplicated_collections,
+                max_collections=self.config.max_collections_to_search,
+            )
+
+            ranking_result = await self.collection_ranking_component.arun(ranking_input)
+            ranked_collections = [
+                deduplicated_collections[rc.collection_index]
+                for rc in ranking_result.ranked_collections
+                if 0 <= rc.collection_index < len(deduplicated_collections)
+            ]
+
+        search_logger.info(
+            f"Selected {len(ranked_collections)} collections for granule search",
+        )
+
+        # Step 3e: Search granules for this angle's collections
+        granule_results = []
+        if ranked_collections:
+            # Build legacy query params for granule search
+            legacy_query_params = self._create_legacy_query_params(
+                original_query,
+                [angle],
+            )
+            granule_results = await self._search_granules(
+                ranked_collections,
+                legacy_query_params,
+                params,
+            )
+
+        # Step 3f: Process granules for this angle
+        angle_granules = []
+        for result_dict in granule_results:
+            if isinstance(result_dict, dict) and "granules" in result_dict:
+                granules = result_dict["granules"]
+                if isinstance(granules, list):
+                    angle_granules.extend(granules)
+
+        search_logger.info(f"Found {len(angle_granules)} granules for angle")
+
+        # Return complete angle result
+        return AngleSearchResult(
+            scientific_angle=safe_model_dump(angle),
+            cmr_queries=safe_model_dump_list(cmr_queries),
+            collections=ranked_collections,
+            granules=angle_granules,
+            total_collections_found=total_collections_found,
+            total_granules_found=len(angle_granules),
+        )
 
     async def _synthesize_collections(
         self,
@@ -742,6 +1106,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
     ) -> DataSearchAgentOutputSchema:
         """Create empty response with explanation."""
         return DataSearchAgentOutputSchema(
+            angles=[],  # Required field in new schema
             granules=[],
             search_metadata={
                 "original_query": query,
@@ -760,6 +1125,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
     ) -> DataSearchAgentOutputSchema:
         """Create error response."""
         return DataSearchAgentOutputSchema(
+            angles=[],  # Required field in new schema
             granules=[],
             search_metadata={
                 "original_query": query,

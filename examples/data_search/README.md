@@ -90,7 +90,7 @@ The frontend will start on `http://localhost:3000`
 ### Error Handling
 - Clear error messages at each step
 - Connection status monitoring
-- Graceful fallbacks for failures
+- Explicit errors on failure (no silent fallbacks)
 
 ## API Endpoints
 
