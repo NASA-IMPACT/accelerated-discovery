@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,6 +9,7 @@ from akd.agents.storm.prompts import DRAFT_OUTLINE_PROMPT, REFINE_OUTLINE_PROMPT
 from akd.agents.storm.structures import Outline, OutlineSection, ResearchState
 from akd.agents.storm.tools import get_draft_outline, get_refined_outline, retrieve
 from akd.configs.project import get_project_settings
+from akd.tools.search import SearchResultItem
 
 
 @pytest.fixture
@@ -46,9 +47,23 @@ def dummy_state(dummy_topic, dummy_outline, dummy_perspectives):
         perspectives=dummy_perspectives,
         article="This is a dummy article",
         references={
-            "url_1": "content_1",
-            "url_2": "content_2",
+            "https://url1.com/": "content_1",
+            "https://url2.com/": "content_2",
         },
+        search_results=[
+            SearchResultItem(
+                title="dummy",
+                url="https://url1.com/",
+                query=dummy_topic,
+                content="content_1",
+            ),
+            SearchResultItem(
+                title="dummy",
+                url="https://url2.com/",
+                query=dummy_topic,
+                content="content_2",
+            ),
+        ],
     )
 
 
@@ -185,10 +200,13 @@ async def test_get_response_async(agent, dummy_topic, dummy_state):
     assert isinstance(result.article, str)
     assert isinstance(result.perspectives, Perspectives)
     assert isinstance(result.references, Dict)
+    assert isinstance(result.search_results, List)
+    assert isinstance(result.outline, Outline)
 
     assert len(result.article) != 0
     assert len(result.perspectives.editors) != 0
     assert len(result.references) != 0
+    assert len(result.search_results) != 0
 
 
 @pytest.mark.asyncio
@@ -217,9 +235,13 @@ async def test_get_response_async_debug(agent, dummy_state, dummy_topic):
     assert isinstance(result.article, str)
     assert isinstance(result.perspectives, Perspectives)
     assert isinstance(result.references, Dict)
+    assert isinstance(result.search_results, List)
+    assert isinstance(result.outline, Outline)
+
     assert len(result.article) != 0
     assert len(result.perspectives.editors) != 0
     assert len(result.references) != 0
+    assert len(result.search_results) != 0
 
     dummy_storm.get_state.assert_called_once_with(config=input_params.config)
 
@@ -233,6 +255,8 @@ async def test_arun(agent, dummy_topic, dummy_state):
             article=dummy_state["article"],
             references=dummy_state["references"],
             perspectives=dummy_state["perspectives"],
+            search_results=dummy_state["search_results"],
+            outline=dummy_state["outline"],
         ),
     )
     result = await agent.arun(params)

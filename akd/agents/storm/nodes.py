@@ -71,6 +71,7 @@ async def conduct_interviews(
         "perspectives": aspect_output.perspectives,
         "interview_results": aspect_output.interview_results,
         "references": aspect_output.references,
+        "search_results": aspect_output.search_results,
     }
 
 
