@@ -17,6 +17,8 @@ from pydantic import (
     field_validator,
 )
 
+from akd._base import IOSchema
+
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
 
@@ -34,7 +36,7 @@ except ImportError:
 # =============================================================================
 
 
-class SearchResultItem(BaseModel):
+class SearchResultItem(IOSchema):
     """Represents a single search result item with metadata."""
 
     # Required fields
@@ -72,15 +74,20 @@ class SearchResultItem(BaseModel):
         description="Tags for the search result",
     )
 
+    authors: list[str] | None = Field(
+        None,
+        description="List of authors for DOI resolution by title and author",
+    )
+
     score: float | None = Field(
         None,
         description="Relevance score of the search result",
     )
 
-    extra: dict[str, Any] | None = Field(
-        None,
-        description="Extra information from the search result",
-    )
+    extra: dict[str, Any] = Field(
+    default_factory=dict,
+    description="Extra information from the search result",
+)
 
     @computed_field
     @property

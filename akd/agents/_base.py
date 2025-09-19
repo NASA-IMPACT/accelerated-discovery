@@ -323,3 +323,30 @@ class InstructorBaseAgent[
         )
 
         return response
+
+    def __deepcopy__(self, memo):
+        """
+        Custom deepcopy implementation to handle unpickleable attributes.
+        """
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Manually copy attributes, re-initializing the client
+        for k, v in self.__dict__.items():
+            if k == "client":
+                # Re-create the client instead of copying it
+                setattr(
+                    result,
+                    k,
+                    instructor.from_openai(
+                        openai.AsyncOpenAI(
+                            api_key=self.api_key,
+                            base_url=str(self.base_url),
+                        ),
+                    ),
+                )
+            else:
+                setattr(result, k, __import__("copy").deepcopy(v, memo))
+
+        return result

@@ -90,9 +90,12 @@ class SourceValidatorConfig(BaseToolConfig):
     )
     whitelist_file_path: Optional[str] = Field(
         default_factory=lambda: str(
-            get_akd_root() / "docs" / "pubs_whitelist.json",
+            get_akd_root() / "docs" / "issn_whitelist_full.json",
         ),
-        description="Path to source whitelist JSON file",
+        description=(
+            "Path to ISSN whitelist JSON file. Can be a flat list of ISSNs, "
+            "an object with key 'issn', or a category map {category: [issns...]}."
+        ),
     )
     timeout_seconds: int = Field(
         default=30,
@@ -152,11 +155,9 @@ class SourceValidator(
             r"[\?&]doi=([^&\s]+)",
         ]
 
-    def _load_whitelist(self) -> Dict[str, Any]:
-        """Load source whitelist from JSON file."""
-        whitelist_path = (
-            self.config.whitelist_file_path
-            or get_akd_root() / "docs" / "pubs_whitelist.json"
+    def _load_whitelist(self) -> None:
+        whitelist_path = self.config.whitelist_file_path or str(
+            get_akd_root() / "docs" / "issn_whitelist_full.json"
         )
 
         try:

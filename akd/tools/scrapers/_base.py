@@ -32,6 +32,8 @@ class ScraperToolInputSchema(InputSchema):
 
 
 class ScrapedMetadata(SearchResultItem):
+    """Metadata extracted from the scraped webpage."""
+
     keywords: list[str] | None = Field(
         None,
         description="List of keywords from the webpage content.",
@@ -67,7 +69,7 @@ class ScraperToolConfig(BaseToolConfig):
         description="Format to export the scraped content.",
     )
     debug: bool = Field(
-        default=True,
+        default=False,
         description="Boolean flag for debug mode",
     )
 
@@ -102,6 +104,14 @@ class WebScraperToolConfig(ScraperToolConfig):
         default="en-US,en;q=0.5",
         description="Accept-Language header for HTTP requests.",
     )
+    accept_encoding: str = Field(
+        default="gzip, deflate",
+        description="Accept-Encoding header for HTTP requests.",
+    )
+    follow_redirects: bool = Field(
+        default=True,
+        description="Whether to follow HTTP redirects.",
+    )
 
     @computed_field
     def headers(self) -> dict[str, str]:
@@ -113,7 +123,9 @@ class WebScraperToolConfig(ScraperToolConfig):
             "User-Agent": self.user_agent,
             "Accept": self.accept_header,
             "Accept-Language": self.accept_language,
+            "Accept-Encoding": self.accept_encoding,
             "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
         }
 
 
@@ -395,7 +407,10 @@ class PDFScraper(ScraperToolBase):
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         headers = self.headers
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=self.follow_redirects,
+            ) as client:
                 async with client.stream("GET", url, headers=headers) as response:
                     response.raise_for_status()
 
