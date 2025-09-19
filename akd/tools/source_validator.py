@@ -30,7 +30,8 @@ class SourceInfo(BaseModel):
     title: str = Field(..., description="Source title (journal/proceedings)")
     publisher: Optional[str] = Field(None, description="Publisher name")
     issn: List[str] = Field(
-        default_factory=list, description="List of normalized ISSNs"
+        default_factory=list,
+        description="List of normalized ISSNs",
     )
     is_open_access: Optional[bool] = Field(None, description="Open access status")
     doi: str = Field(..., description="DOI of the article")
@@ -99,7 +100,7 @@ class SourceValidatorConfig(BaseToolConfig):
     )
     whitelist_file_path: Optional[str] = Field(
         default_factory=lambda: str(
-            get_akd_root() / "docs" / "issn_whitelist.json",
+            get_akd_root() / "docs" / "issn_whitelist_full.json",
         ),
         description=(
             "Path to ISSN whitelist JSON file. Can be a flat list of ISSNs, "
@@ -174,7 +175,7 @@ class SourceValidator(
 
     def _load_whitelist(self) -> None:
         whitelist_path = self.config.whitelist_file_path or str(
-            get_akd_root() / "docs" / "issn_whitelist.json"
+            get_akd_root() / "docs" / "issn_whitelist_full.json",
         )
 
         try:
@@ -222,7 +223,7 @@ class SourceValidator(
 
             if self.debug:
                 logger.info(
-                    f"Loaded {len(self._allowed_issn_set)} ISSNs in {len(set(issn_to_category.values()))} categories"
+                    f"Loaded {len(self._allowed_issn_set)} ISSNs in {len(set(issn_to_category.values()))} categories",
                 )
         except FileNotFoundError:
             logger.warning(f"ISSN whitelist not found: {whitelist_path}")
@@ -333,7 +334,7 @@ class SourceValidator(
             url_lower = (source_info.url or "").lower()
             doi_lower = (source_info.doi or "").lower()
             is_arxiv = "arxiv.org" in url_lower or doi_lower.startswith(
-                ("10.48550/arxiv", "10.48550/ARXIV")
+                ("10.48550/arxiv", "10.48550/ARXIV"),
             )
             if is_arxiv:
                 if self.debug:
@@ -343,7 +344,7 @@ class SourceValidator(
         if not self._allowed_issn_set:
             if self.debug:
                 logger.debug(
-                    f"REJECT (empty whitelist): {source_info.title} issns={source_info.issn}"
+                    f"REJECT (empty whitelist): {source_info.title} issns={source_info.issn}",
                 )
             return False, None, 0.0, None
 
@@ -352,7 +353,7 @@ class SourceValidator(
                 category = self._issn_to_category.get(issn)
                 if self.debug:
                     logger.debug(
-                        f"ACCEPT: {source_info.title} matched_issn={issn} category={category}"
+                        f"ACCEPT: {source_info.title} matched_issn={issn} category={category}",
                     )
                 return True, category, 1.0, issn
 
@@ -469,7 +470,7 @@ class SourceValidator(
                             matched_issn=None,
                             validation_errors=[f"Validation error: {str(result)}"],
                             confidence_score=0.0,
-                        )
+                        ),
                     )
                 else:
                     validated_results.append(result)

@@ -24,7 +24,8 @@ class ResearchSynthesisInputSchema(InputSchema):
 
     query: str = Field(..., description="Research query to synthesize")
     search_results: List[SearchResultItem] = Field(
-        ..., description="Search results to synthesize into a report"
+        ...,
+        description="Search results to synthesize into a report",
     )
     context: Optional[str] = Field(
         default=None,
@@ -36,15 +37,12 @@ class ResearchSynthesisOutputSchema(OutputSchema):
     """Output schema for the ResearchSynthesisAgent."""
 
     research_report: str = Field(
-        ..., description="Comprehensive research report in markdown format"
+        ...,
+        description="Comprehensive research report in markdown format",
     )
     key_findings: List[str] = Field(
         default_factory=list,
         description="Key research findings extracted from the sources",
-    )
-    sources_consulted: List[str] = Field(
-        default_factory=list,
-        description="URLs of sources that were analyzed",
     )
     evidence_quality_score: float = Field(
         default=0.5,
@@ -64,11 +62,11 @@ class ResearchSynthesisAgentConfig(BaseAgentConfig):
     system_prompt: str = DEEP_RESEARCH_AGENT_PROMPT
     model_name: str = "gpt-4o"
     temperature: float = 0.2
-    max_tokens: int = 4000
+    max_tokens: int = 60000
 
 
 class ResearchSynthesisAgent(
-    InstructorBaseAgent[ResearchSynthesisInputSchema, ResearchSynthesisOutputSchema]
+    InstructorBaseAgent[ResearchSynthesisInputSchema, ResearchSynthesisOutputSchema],
 ):
     """
     Agent that synthesizes research results into comprehensive reports.
@@ -114,10 +112,13 @@ class ResearchSynthesisComponent:
         else:
             # Create default condensation component
             condensation_config = ContentCondensationConfig(
-                model_name="gpt-4o-mini", temperature=0.1, debug=debug
+                model_name="gpt-4o-mini",
+                temperature=0.1,
+                debug=debug,
             )
             self._condensation_component = ContentCondensationComponent(
-                config=condensation_config, debug=debug
+                config=condensation_config,
+                debug=debug,
             )
 
     async def _condense_content_for_synthesis(
@@ -141,13 +142,13 @@ class ResearchSynthesisComponent:
             )
 
             condensation_output = await self._condensation_component.arun(
-                condensation_input
+                condensation_input,
             )
 
             if self.debug:
                 logger.debug(
                     f"Content condensation: {condensation_output.total_tokens_reduced} tokens reduced, "
-                    f"compression ratio: {condensation_output.compression_ratio:.3f}"
+                    f"compression ratio: {condensation_output.compression_ratio:.3f}",
                 )
 
             return condensation_output.condensed_results
@@ -178,7 +179,7 @@ class ResearchSynthesisComponent:
             iterations_performed: Number of iterations performed
 
         Returns:
-            Object with research_report, key_findings, sources_consulted,
+            Object with research_report, key_findings,
             evidence_quality_score, and citations attributes
         """
         if self.debug:
@@ -209,7 +210,7 @@ class ResearchSynthesisComponent:
 
             if self.debug:
                 logger.debug(
-                    f"Content condensation: {len(results)} -> {len(managed_results)} results"
+                    f"Content condensation: {len(results)} -> {len(managed_results)} results",
                 )
         except Exception as e:
             if self.debug:
@@ -224,6 +225,15 @@ class ResearchSynthesisComponent:
         )
 
         try:
+            # Debug preview of input (200 chars cap)
+            if self.debug:
+                preview_titles = ", ".join(
+                    [(r.title or "Untitled")[:40] for r in results[:5]],
+                )[:200]
+                logger.debug(
+                    f"Synthesis input preview | query: {original_query[:200]} | results: {len(results)} | titles: {preview_titles} | context: {context[:200]}",
+                )
+
             # Use the agent to synthesize the research
             agent_output = await self._agent.arun(agent_input)
 
@@ -231,6 +241,9 @@ class ResearchSynthesisComponent:
                 logger.debug("Agent synthesis completed successfully")
                 logger.debug(f"Key findings: {len(agent_output.key_findings)}")
                 logger.debug(f"Evidence quality: {agent_output.evidence_quality_score}")
+                logger.debug(
+                    f"Synthesis output preview | report: {agent_output.research_report[:200]}",
+                )
 
             # Return the agent output directly - it has the expected interface
             return agent_output
@@ -315,7 +328,6 @@ class ResearchSynthesisComponent:
         return ResearchSynthesisOutputSchema(
             research_report=report,
             key_findings=key_findings,
-            sources_consulted=source_urls,
             evidence_quality_score=avg_quality,
             citations=[{"url": url, "title": "N/A"} for url in source_urls],
         )

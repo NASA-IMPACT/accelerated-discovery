@@ -18,13 +18,14 @@ class ContentCondensationInputSchema(IOSchema):
     """Input schema for content condensation."""
 
     research_question: str = Field(
-        description="The research question to extract relevant content for"
+        description="The research question to extract relevant content for",
     )
     search_results: List[SearchResultItem] = Field(
-        description="Search results with full text content to condense"
+        description="Search results with full text content to condense",
     )
     max_tokens: int = Field(
-        default=4000, description="Maximum total tokens for condensed output"
+        default=40000,
+        description="Maximum total tokens for condensed output",
     )
 
 
@@ -32,13 +33,13 @@ class ContentCondensationOutputSchema(IOSchema):
     """Output schema for content condensation."""
 
     condensed_results: List[SearchResultItem] = Field(
-        description="Search results with condensed content"
+        description="Search results with condensed content",
     )
     total_tokens_reduced: int = Field(
-        description="Total tokens reduced through condensation"
+        description="Total tokens reduced through condensation",
     )
     compression_ratio: float = Field(
-        description="Ratio of final to original token count"
+        description="Ratio of final to original token count",
     )
 
 
@@ -46,10 +47,16 @@ class ContentCondensationConfig(BaseAgentConfig):
     """Configuration for content condensation."""
 
     model_name: str = Field(
-        default="gpt-4o-mini", description="Model to use for content condensation"
+        default="gpt-4o-mini",
+        description="Model to use for content condensation",
     )
     temperature: float = Field(
-        default=0.1, description="Temperature for content condensation"
+        default=0.1,
+        description="Temperature for content condensation",
+    )
+    min_content_length: int = Field(
+        default=100,
+        description="Minimum content length to consider for condensation",
     )
 
 
@@ -84,10 +91,16 @@ class ContentCondensationComponent(LangBaseAgent):
         return len(self.tokenizer.encode(text))
 
     async def _condense_single_result(
-        self, result: SearchResultItem, research_question: str, target_tokens: int
+        self,
+        result: SearchResultItem,
+        research_question: str,
+        target_tokens: int,
     ) -> SearchResultItem:
         """Condense content in a single search result."""
-        if not result.content or len(result.content.strip()) < 100:
+        if (
+            not result.content
+            or len(result.content.strip()) < self.config.min_content_length
+        ):
             return result
 
         original_tokens = self._count_tokens(result.content)
@@ -103,6 +116,11 @@ class ContentCondensationComponent(LangBaseAgent):
         )
 
         try:
+            if self.debug:
+                logger.debug(
+                    f"Condensation input preview | url: {result.url} | prompt: {prompt[:200]}",
+                )
+
             response = await self.client.ainvoke([{"role": "user", "content": prompt}])
 
             condensed_content = response.content.strip()
@@ -112,7 +130,7 @@ class ContentCondensationComponent(LangBaseAgent):
                 condensed_content == "[NO RELEVANT CONTENT]"
                 or len(condensed_content) < 10
             ):
-                condensed_content = ""
+                condensed_content = result.content or ""
 
             # Create new result with condensed content
             condensed_result = result.model_copy()
@@ -121,7 +139,10 @@ class ContentCondensationComponent(LangBaseAgent):
             if self.debug:
                 new_tokens = self._count_tokens(condensed_content)
                 logger.debug(
-                    f"Condensed {result.url}: {original_tokens} -> {new_tokens} tokens"
+                    f"Condensed {result.url}: {original_tokens} -> {new_tokens} tokens",
+                )
+                logger.debug(
+                    f"Condensation output preview | content: {condensed_content[:200]}",
                 )
 
             return condensed_result
@@ -132,7 +153,9 @@ class ContentCondensationComponent(LangBaseAgent):
             return result
 
     async def _arun(
-        self, params: ContentCondensationInputSchema, **kwargs
+        self,
+        params: ContentCondensationInputSchema,
+        **kwargs,
     ) -> ContentCondensationOutputSchema:
         """
         Condense content in search results to extract only information relevant
@@ -143,7 +166,7 @@ class ContentCondensationComponent(LangBaseAgent):
         results_with_content = [
             r
             for r in params.search_results
-            if r.content and len(r.content.strip()) >= 100
+            if r.content and len(r.content.strip()) >= self.config.min_content_length
         ]
 
         if not results_with_content:
@@ -160,7 +183,7 @@ class ContentCondensationComponent(LangBaseAgent):
 
         if self.debug:
             logger.debug(
-                f"Condensing {len(results_with_content)} results with {original_tokens} total tokens"
+                f"Condensing {len(results_with_content)} results with {original_tokens} total tokens",
             )
 
         # If already under limit, return as-is
@@ -177,9 +200,14 @@ class ContentCondensationComponent(LangBaseAgent):
         # Condense each result
         condensed_results = []
         for result in params.search_results:
-            if result.content and len(result.content.strip()) >= 100:
+            if (
+                result.content
+                and len(result.content.strip()) >= self.config.min_content_length
+            ):
                 condensed = await self._condense_single_result(
-                    result, params.research_question, tokens_per_result
+                    result,
+                    params.research_question,
+                    tokens_per_result,
                 )
                 condensed_results.append(condensed)
             else:
@@ -198,7 +226,7 @@ class ContentCondensationComponent(LangBaseAgent):
         if self.debug:
             logger.debug(
                 f"Condensation complete: {original_tokens} -> {final_tokens} tokens "
-                f"(reduced {tokens_reduced}, ratio: {compression_ratio:.3f})"
+                f"(reduced {tokens_reduced}, ratio: {compression_ratio:.3f})",
             )
 
         return ContentCondensationOutputSchema(
