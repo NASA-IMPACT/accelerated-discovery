@@ -4,7 +4,8 @@ from typing import Optional
 from langchain_community.vectorstores import InMemoryVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 from loguru import logger
@@ -57,6 +58,10 @@ class StormOutputSchema(OutputSchema):
     references: dict = Field(
         ...,
         description="References collected by aspect search",
+    )
+    search_results: list = Field(
+        ...,
+        description="Search results collected by aspect search",
     )
 
 
@@ -180,7 +185,9 @@ class StormAgent(BaseAgent):
 
         storm_builder.add_edge(START, nodes[0][0])
         storm_builder.add_edge(nodes[-1][0], END)
-        self.storm = storm_builder.compile(checkpointer=MemorySaver())
+        self.storm = storm_builder.compile(
+            checkpointer=InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=True)),
+        )
 
     async def get_response_async(
         self,
@@ -215,13 +222,11 @@ class StormAgent(BaseAgent):
                 {"topic": topic, "outline_sketch": outline_sketch},
                 config=config,
             )
-        article = article_state["article"]
-        perspectives = article_state["perspectives"]
-        references = article_state["references"]
         return StormOutputSchema(
-            article=article,
-            perspectives=perspectives,
-            references=references,
+            article=article_state["article"],
+            perspectives=article_state["perspectives"],
+            references=article_state["references"],
+            search_results=article_state["search_results"],
         )
 
     async def _arun(self, params: StormInputSchema, **kwargs) -> StormOutputSchema:

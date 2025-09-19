@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 from akd.agents.search.aspect_search.structures import InterviewState, Perspectives
+from akd.tools.search import SearchResultItem
 
 # =============================================================
 # Outline structures
@@ -110,6 +111,7 @@ class ResearchState(TypedDict):
     outline: Outline
     perspectives: Perspectives
     interview_results: List[InterviewState]
+    search_results: List[SearchResultItem]
     references: dict
     sections: List[ArticleSection]
     article: str
