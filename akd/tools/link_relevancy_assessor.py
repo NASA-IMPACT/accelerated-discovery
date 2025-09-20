@@ -253,6 +253,8 @@ class LinkRelevancyAssessor(BaseTool):
         domain_context: Optional[str] = None,
     ) -> SearchResultItem:
         """Assess relevancy for a single search result."""
+        # avoid mutation of original
+        result = result.model_copy()
         if not result.content:
             # No content to assess, assign low relevancy
             result.score = 0.1
@@ -349,8 +351,14 @@ class LinkRelevancyAssessor(BaseTool):
                     batch_results,
                     reformulated_results,
                 ):
-                    if reform_result.score > orig_result.score:
-                        # Use reformulated query assessment
+                    # Store original score before any mutations
+                    original_score = orig_result.score
+
+                    # Determine which query performed better
+                    use_reformulated = reform_result.score > orig_result.score
+
+                    # Apply reformulated assessment if it's better
+                    if use_reformulated:
                         orig_result.score = reform_result.score
                         orig_result.extra["relevancy_assessment"] = (
                             reform_result.extra.get("relevancy_assessment")
@@ -358,17 +366,15 @@ class LinkRelevancyAssessor(BaseTool):
                         orig_result.extra["should_fetch_full_content"] = (
                             reform_result.extra.get("should_fetch_full_content", False)
                         )
-                        orig_result.extra["query_alignment_details"] = {
-                            "best_query": "reformulated",
-                            "original_score": orig_result.score,
-                            "reformulated_score": reform_result.score,
-                        }
-                    else:
-                        orig_result.extra["query_alignment_details"] = {
-                            "best_query": "original",
-                            "original_score": orig_result.score,
-                            "reformulated_score": reform_result.score,
-                        }
+
+                    # Always add alignment details (eliminates duplication)
+                    orig_result.extra["query_alignment_details"] = {
+                        "best_query": "reformulated"
+                        if use_reformulated
+                        else "original",
+                        "original_score": original_score,  # Preserved original value
+                        "reformulated_score": reform_result.score,
+                    }
 
             assessed_results.extend(batch_results)
 
