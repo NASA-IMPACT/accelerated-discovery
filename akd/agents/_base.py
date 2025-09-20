@@ -23,9 +23,9 @@ class BaseAgentConfig(BaseConfig):
     model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
     temperature: float = 0.0
     system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
-    track_history: bool = Field(
-        default=False,
-        description="Whether to track conversation history",
+    stateless: bool = Field(
+        default=True,
+        description="Whether to maintain conversation history/state",
     )
 
 
@@ -317,7 +317,7 @@ class InstructorBaseAgent[
         """
 
         # start fresh if no tracking required
-        messages = [] if not self.track_history else self.memory
+        messages = [] if self.stateless else self.memory
 
         # if empty, add system message
         if not messages:
@@ -344,7 +344,8 @@ class InstructorBaseAgent[
             ),
         )
 
-        if self.track_history:
+        # update memory only if stateful
+        if not self.stateless:
             self._memory = messages
 
         return response
