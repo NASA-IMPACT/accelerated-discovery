@@ -148,7 +148,7 @@ class SearchPipeline(SearchTool):
 
         if debug:
             logger.debug("Initialized SearchPipeline with:")
-            logger.debug(f"  - Search tool: {search_tool.__class__.__name__}")
+            logger.debug(f"  - Search tool: {self.search_tool.__class__.__name__}")
             logger.debug(f"  - Resolver: {self.resolver.__class__.__name__}")
             logger.debug(f"  - Scraper: {self.scraper.__class__.__name__}")
             logger.debug(
