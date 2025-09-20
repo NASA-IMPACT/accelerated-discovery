@@ -275,6 +275,8 @@ class LinkRelevancyAssessor(BaseTool):
                     domain_context=domain_context,
                 )
 
+                # make sure it's stateless
+                self.relevancy_agent.reset_memory()
                 assessment = await self.relevancy_agent.arun(assessment_input)
 
                 # Cache the assessment
