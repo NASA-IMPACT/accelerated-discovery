@@ -23,6 +23,10 @@ class BaseAgentConfig(BaseConfig):
     model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
     temperature: float = 0.0
     system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
+    track_history: bool = Field(
+        default=False,
+        description="Whether to track conversation history",
+    )
 
 
 class BaseAgent[
@@ -228,6 +232,18 @@ class InstructorBaseAgent[
         """
         self.memory.clear()
 
+    def _default_system_message(self) -> dict[str, str]:
+        """
+        Returns the default system message.
+
+        Returns:
+            dict[str, str]: System message dictionary with role and content.
+        """
+        return {
+            "role": "system",
+            "content": self.system_prompt,
+        }
+
     def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
         """Create a model that's compatible with instructor but avoids IOSchema validation."""
         from pydantic import create_model
@@ -252,12 +268,16 @@ class InstructorBaseAgent[
 
     async def get_response_async(
         self,
+        messages: list[dict[str, str]],
         response_model: type[OutputSchema] | None = None,
     ) -> OutSchema:
         """
         Obtains a response from the language model asynchronously.
 
         Args:
+            messages (list[dict[str, str]], optional):
+                The messages to send to the model. If not provided,
+                builds from system prompt and memory.
             response_model (Type[BaseModel], optional):
                 The schema for the response data. If not set,
                 self.output_schema is used.
@@ -267,13 +287,6 @@ class InstructorBaseAgent[
         """
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
-
-        messages = [
-            {
-                "role": "system",
-                "content": self.system_prompt,
-            },
-        ] + self.memory
 
         response = await self.client.chat.completions.create(
             messages=messages,
@@ -303,8 +316,16 @@ class InstructorBaseAgent[
             OutputSchema: The response from the chat agent.
         """
 
+        # start fresh if no tracking required
+        messages = [] if not self.track_history else self.memory
+
+        # if empty, add system message
+        if not messages:
+            messages.append(self._default_system_message())
+
+        # add user message
         if params:
-            self.memory.append(
+            messages.append(
                 dict(
                     role="user",
                     content=params.model_dump_json(exclude={"type"}),
@@ -312,15 +333,19 @@ class InstructorBaseAgent[
             )
 
         response = await self.get_response_async(
+            messages=messages,
             response_model=self.output_schema,
         )
 
-        self.memory.append(
+        messages.append(
             dict(
                 role="assistant",
                 content=response.model_dump_json(exclude={"type"}),
             ),
         )
+
+        if self.track_history:
+            self._memory = messages
 
         return response
 
