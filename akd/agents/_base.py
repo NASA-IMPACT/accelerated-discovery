@@ -461,6 +461,7 @@ class LiteLLMInstructorBaseAgent[
             model=self.model_name,
             temperature=self.temperature,
             response_model=instructor_model,
+            api_base=str(self.base_url).rstrip("/") if self.base_url else None,
         )
 
         response_data = response.model_dump()
