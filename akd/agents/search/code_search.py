@@ -20,8 +20,6 @@ from akd.agents.relevancy import MultiRubricRelevancyAgent
 from akd.agents.search import (
     ControlledSearchAgent,
     ControlledSearchAgentConfig,
-    LitSearchAgentInputSchema,
-    LitSearchAgentOutputSchema,
 )
 from akd.configs.code_prompts import CODE_QUERY_PROMPT, CODE_RELEVANCY_PROMPT
 
@@ -73,7 +71,7 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     )
 
 
-class CodeSearchAgent:
+class CodeSearchAgent(ControlledSearchAgent):
     """
     Wrapper for code repository search using ControlledSearchAgent.
     """
@@ -92,11 +90,7 @@ class CodeSearchAgent:
         self.config = config or CodeSearchAgentConfig()
         self.config.debug = debug
 
-        # Setup search tool, prefer to use the provided search tool
-        if search_tool is not None:
-            self.search_tool = search_tool
-        else:
-            self.search_tool = self._setup_search_tool()
+        search_tool = search_tool or self._setup_search_tool()
 
         # Setup agents
         self.query_agent = query_agent or self._setup_query_agent()
@@ -106,12 +100,12 @@ class CodeSearchAgent:
         self.relevancy_agent = relevancy_agent or self._setup_relevancy_agent()
 
         # Create the underlying ControlledSearchAgent
-        self._controlled_agent = ControlledSearchAgent(
+        super().__init__(
             config=self.config,
-            search_tool=self.search_tool,
-            query_agent=self.query_agent,
-            followup_query_agent=self.followup_query_agent,
-            relevancy_agent=self.relevancy_agent,
+            search_tool=search_tool,
+            query_agent=query_agent,
+            followup_query_agent=followup_query_agent,
+            relevancy_agent=relevancy_agent,
             debug=self.config.debug,
         )
 
@@ -231,18 +225,3 @@ class CodeSearchAgent:
             model_name=self.config.subagent_model, system_prompt=CODE_RELEVANCY_PROMPT
         )
         return MultiRubricRelevancyAgent(config=config)
-
-    async def arun(
-        self, input_schema: LitSearchAgentInputSchema
-    ) -> LitSearchAgentOutputSchema:
-        """
-        Perform code repository search.
-
-        Args:
-            input_schema: Input schema containing query and search parameters
-
-        Returns:
-            Search results from ControlledSearchAgent
-        """
-
-        return await self._controlled_agent.arun(input_schema)
