@@ -332,8 +332,9 @@ class TestInstructorBaseAgentFunctionality:
 
                 agent = TestInstructorBaseAgent()
 
-                # Test response generation
-                result = await agent.get_response_async()
+                # Test response generation with messages parameter
+                test_messages = [{"role": "user", "content": "test message"}]
+                result = await agent.get_response_async(messages=test_messages)
 
                 # Verify instructor call
                 mock_chat_completions.assert_called_once()
@@ -366,7 +367,9 @@ class TestBaseAgentSharedFunctionality:
             mock_structured_client.ainvoke.return_value = expected_response
             mock_chat_openai.return_value = mock_client
 
-            agent = TestLangBaseAgent()
+            # Create agent with stateless=False to test memory management
+            config = BaseAgentConfig(stateless=False)
+            agent = TestLangBaseAgent(config=config)
             test_input = AgentTestInputSchema(query="test query")
 
             # Execute arun - this will call base _arun which manages memory
@@ -377,7 +380,7 @@ class TestBaseAgentSharedFunctionality:
             assert result.response == "Test response"
             assert result.metadata == {"test": True}
 
-            # Verify memory was updated by base _arun
+            # Verify memory was updated by base _arun (only in stateful mode)
             assert len(agent.memory.messages) == 2  # user + assistant messages
 
     @pytest.mark.asyncio
@@ -397,7 +400,9 @@ class TestBaseAgentSharedFunctionality:
                 mock_chat_completions.return_value = mock_response
                 mock_instructor.return_value = mock_client
 
-                agent = TestInstructorBaseAgent()
+                # Create agent with stateless=False to test memory management
+                config = BaseAgentConfig(stateless=False)
+                agent = TestInstructorBaseAgent(config=config)
                 test_input = AgentTestInputSchema(query="test query")
 
                 # Execute arun - this will call base _arun which manages memory
@@ -408,8 +413,60 @@ class TestBaseAgentSharedFunctionality:
                 assert result.response == "Test instructor response"
                 assert result.metadata == {"test": True}
 
-                # Verify memory was updated by base _arun
-                assert len(agent.memory) == 2  # user + assistant messages
+                # Verify memory was updated by base _arun (only in stateful mode)
+                assert len(agent.memory) == 3  # system + user + assistant messages
+
+    @pytest.mark.asyncio
+    async def test_stateless_behavior_default(self):
+        """Test that agents are stateless by default and don't store memory."""
+        with patch("akd.agents._base.ChatOpenAI") as mock_chat_openai:
+            with patch("akd.agents._base.instructor.from_openai") as mock_instructor:
+                with patch("akd.agents._base.openai.AsyncOpenAI"):
+                    mock_client = MagicMock()
+                    mock_structured_client = AsyncMock()
+                    mock_chat_completions = AsyncMock()
+
+                    # Setup mocks for LangBaseAgent
+                    expected_response = AgentTestOutputSchema(response="Test response")
+                    mock_client.with_structured_output.return_value = (
+                        mock_structured_client
+                    )
+                    mock_structured_client.ainvoke.return_value = expected_response
+                    mock_chat_openai.return_value = mock_client
+
+                    # Setup mocks for InstructorBaseAgent
+                    mock_instructor_client = MagicMock()
+                    mock_instructor_response = MagicMock()
+                    mock_instructor_response.model_dump.return_value = {
+                        "response": "Instructor response",
+                        "metadata": {},
+                    }
+                    mock_instructor_client.chat.completions.create = (
+                        mock_chat_completions
+                    )
+                    mock_chat_completions.return_value = mock_instructor_response
+                    mock_instructor.return_value = mock_instructor_client
+
+                    # Test LangBaseAgent (default stateless)
+                    lang_agent = TestLangBaseAgent()
+                    assert lang_agent.stateless is True
+
+                    test_input = AgentTestInputSchema(query="test query")
+                    result = await lang_agent.arun(test_input)
+
+                    # Memory should remain empty in stateless mode
+                    assert len(lang_agent.memory.messages) == 0
+                    assert isinstance(result, AgentTestOutputSchema)
+
+                    # Test InstructorBaseAgent (default stateless)
+                    instructor_agent = TestInstructorBaseAgent()
+                    assert instructor_agent.stateless is True
+
+                    result = await instructor_agent.arun(test_input)
+
+                    # Memory should remain empty in stateless mode
+                    assert len(instructor_agent.memory) == 0
+                    assert isinstance(result, AgentTestOutputSchema)
 
     def test_schema_validation_integration(self):
         """Test that agents properly validate input/output schemas."""
@@ -465,7 +522,7 @@ class TestBaseAgentSharedFunctionality:
         # This test verifies agents can handle initialization gracefully
         # Even with potential configuration issues
         with patch("akd.agents._base.ChatOpenAI") as mock_chat_openai:
-            with patch("akd.agents._base.instructor.from_openai") as mock_instructor:
+            with patch("akd.agents._base.instructor.from_openai"):
                 with patch("akd.agents._base.openai.AsyncOpenAI"):
                     # Test that agents initialize even with mock failures
                     mock_chat_openai.side_effect = Exception(
