@@ -69,7 +69,7 @@ class ScraperToolConfig(BaseToolConfig):
         description="Format to export the scraped content.",
     )
     debug: bool = Field(
-        default=True,
+        default=False,
         description="Boolean flag for debug mode",
     )
 

@@ -44,8 +44,8 @@ class SearchToolInputSchema(InputSchema):
         "science",
         description="Category of the search queries.",
     )
-    max_results: int = Field(
-        10,
+    max_results: Optional[int] = Field(  
+        None,
         description="Maximum number of search results to return.",
     )
 

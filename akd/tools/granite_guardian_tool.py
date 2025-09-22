@@ -103,7 +103,7 @@ class GraniteGuardianToolConfig(BaseToolConfig):
         description="Granite Guardian model to use.",
     )
     ollama_type: OllamaType = Field(
-        default=OllamaType.CHAT,
+        default=OllamaType.SERVER,
         description="Ollama type to use (chat/server).",
     )
     default_risk_type: RiskDefinition = Field(
