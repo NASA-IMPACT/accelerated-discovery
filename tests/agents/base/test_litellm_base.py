@@ -2,64 +2,23 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-from pydantic import Field
+from akd.agents._base import InstructorBaseAgent
 
-from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
-
-
-# Test schemas
-class LiteLLMTestInputSchema(InputSchema):
-    """Test input schema for LiteLLM agent."""
-
-    query: str = Field(..., description="Test query input")
-    context: str = Field(default="", description="Optional context")
-
-
-class LiteLLMTestOutputSchema(OutputSchema):
-    """Test output schema for LiteLLM agent."""
-
-    response: str = Field(..., description="Test response output")
-    confidence: float = Field(default=0.8, description="Response confidence")
-
-
-# Test agent implementation
-class TestLiteLLMAgent(
-    LiteLLMInstructorBaseAgent[LiteLLMTestInputSchema, LiteLLMTestOutputSchema],
-):
-    """Test implementation of LiteLLMInstructorBaseAgent."""
-
-    input_schema = LiteLLMTestInputSchema
-    output_schema = LiteLLMTestOutputSchema
+from .conftest import (
+    LiteLLMTestInputSchema,
+    LiteLLMTestOutputSchema,
+    TestLiteLLMAgent,
+    create_config_with_overrides,
+)
 
 
 class TestLiteLLMInstructorBaseAgent:
     """Test suite for LiteLLMInstructorBaseAgent."""
 
-    @pytest.fixture
-    def default_config(self) -> BaseAgentConfig:
-        """Create a default configuration for testing."""
-        return BaseAgentConfig(
-            model_name="gpt-3.5-turbo",
-            temperature=0.1,
-            max_tokens=50000,
-            trim_ratio=0.75,
-            enable_trimming=True,
-            stateless=True,
-        )
-
-    @pytest.fixture
-    def agent(self, default_config: BaseAgentConfig) -> TestLiteLLMAgent:
-        """Create a test agent instance."""
-        return TestLiteLLMAgent(config=default_config, debug=True)
-
-    def test_initialization(
-        self,
-        agent: TestLiteLLMAgent,
-        default_config: BaseAgentConfig,
-    ):
+    def test_initialization(self, litellm_config):
         """Test that the agent initializes correctly."""
+        agent = TestLiteLLMAgent(config=litellm_config, debug=True)
+
         assert agent.model_name == "gpt-3.5-turbo"
         assert agent.temperature == 0.1
         assert agent.max_tokens == 50000
@@ -74,8 +33,10 @@ class TestLiteLLMInstructorBaseAgent:
         assert isinstance(agent.memory, list)
         assert len(agent.memory) == 0
 
-    def test_config_access(self, agent: TestLiteLLMAgent):
+    def test_config_access(self, litellm_config):
         """Test that config fields are accessible via self.attribute."""
+        agent = TestLiteLLMAgent(config=litellm_config)
+
         # These should work because they're dynamically set from config
         assert hasattr(agent, "max_tokens")
         assert hasattr(agent, "trim_ratio")
@@ -91,9 +52,11 @@ class TestLiteLLMInstructorBaseAgent:
         self,
         mock_instructor: MagicMock,
         mock_trim_messages: MagicMock,
-        agent: TestLiteLLMAgent,
+        litellm_config,
     ):
         """Test that message trimming is called when enabled."""
+        agent = TestLiteLLMAgent(config=litellm_config)
+
         # Setup mocks
         mock_client = AsyncMock()
         mock_instructor.return_value = mock_client
@@ -131,13 +94,11 @@ class TestLiteLLMInstructorBaseAgent:
     async def test_message_trimming_disabled(
         self,
         mock_instructor: MagicMock,
-        default_config: BaseAgentConfig,
+        litellm_config,
     ):
         """Test that message trimming is skipped when disabled."""
         # Create config with trimming disabled
-        config_dict = default_config.model_dump()
-        config_dict["enable_trimming"] = False
-        config = BaseAgentConfig(**config_dict)
+        config = create_config_with_overrides(litellm_config, enable_trimming=False)
         agent = TestLiteLLMAgent(config=config)
 
         # Setup mocks
@@ -169,9 +130,11 @@ class TestLiteLLMInstructorBaseAgent:
     async def test_full_arun_workflow(
         self,
         mock_instructor: MagicMock,
-        agent: TestLiteLLMAgent,
+        litellm_config,
     ):
         """Test the complete _arun workflow with message trimming."""
+        agent = TestLiteLLMAgent(config=litellm_config)
+
         # Setup mocks
         mock_client = AsyncMock()
         mock_instructor.return_value = mock_client
@@ -208,12 +171,8 @@ class TestLiteLLMInstructorBaseAgent:
             # Verify trim_messages was called
             mock_trim_messages.assert_called()
 
-    def test_backward_compatibility_with_instructor_base_agent(
-        self,
-        default_config: BaseAgentConfig,
-    ):
+    def test_backward_compatibility_with_instructor_base_agent(self, litellm_config):
         """Test that LiteLLMInstructorBaseAgent maintains compatibility with InstructorBaseAgent."""
-        from akd.agents._base import InstructorBaseAgent
 
         # Create both agents
         class TestInstructorAgent(
@@ -222,8 +181,8 @@ class TestLiteLLMInstructorBaseAgent:
             input_schema = LiteLLMTestInputSchema
             output_schema = LiteLLMTestOutputSchema
 
-        litellm_agent = TestLiteLLMAgent(config=default_config)
-        instructor_agent = TestInstructorAgent(config=default_config)
+        litellm_agent = TestLiteLLMAgent(config=litellm_config)
+        instructor_agent = TestInstructorAgent(config=litellm_config)
 
         # Verify they have the same interface
         assert hasattr(litellm_agent, "arun")
@@ -237,17 +196,14 @@ class TestLiteLLMInstructorBaseAgent:
             assert hasattr(instructor_agent, attr)
             assert getattr(litellm_agent, attr) == getattr(instructor_agent, attr)
 
-    def test_custom_token_limits(self, default_config: BaseAgentConfig):
+    def test_custom_token_limits(self, litellm_config):
         """Test that custom token limits are properly configured."""
-        config_dict = default_config.model_dump()
-        config_dict.update(
-            {
-                "max_tokens": 25000,
-                "trim_ratio": 0.6,
-                "enable_trimming": False,
-            },
+        custom_config = create_config_with_overrides(
+            litellm_config,
+            max_tokens=25000,
+            trim_ratio=0.6,
+            enable_trimming=False,
         )
-        custom_config = BaseAgentConfig(**config_dict)
 
         agent = TestLiteLLMAgent(config=custom_config)
 
@@ -259,9 +215,11 @@ class TestLiteLLMInstructorBaseAgent:
     async def test_large_context_handling(
         self,
         mock_instructor: MagicMock,
-        agent: TestLiteLLMAgent,
+        litellm_config,
     ):
         """Test that large contexts are properly handled with trimming."""
+        agent = TestLiteLLMAgent(config=litellm_config)
+
         # Setup mocks
         mock_client = AsyncMock()
         mock_instructor.return_value = mock_client
@@ -314,11 +272,9 @@ class TestLiteLLMInstructorBaseAgent:
 
             assert result.response == "Handled large context"
 
-    def test_memory_management_stateful(self, default_config: BaseAgentConfig):
+    def test_memory_management_stateful(self, litellm_config):
         """Test memory management in stateful mode."""
-        config_dict = default_config.model_dump()
-        config_dict["stateless"] = False
-        config = BaseAgentConfig(**config_dict)
+        config = create_config_with_overrides(litellm_config, stateless=False)
         agent = TestLiteLLMAgent(config=config)
 
         # Initially empty
@@ -327,10 +283,42 @@ class TestLiteLLMInstructorBaseAgent:
         # Should maintain memory when stateless=False
         assert agent.stateless is False
 
-    def test_memory_management_stateless(self, agent: TestLiteLLMAgent):
+    def test_memory_management_stateless(self, litellm_config):
         """Test memory management in stateless mode."""
+        agent = TestLiteLLMAgent(config=litellm_config)
+
         # Should be stateless by default
         assert agent.stateless is True
 
         # Memory should be empty
         assert len(agent.memory) == 0
+
+    def test_litellm_client_initialization(self, litellm_config):
+        """Test that LiteLLM client is properly initialized."""
+        with patch("instructor.from_litellm") as mock_from_litellm:
+            with patch("akd.agents._base.acompletion") as mock_acompletion:
+                mock_client = MagicMock()
+                mock_from_litellm.return_value = mock_client
+
+                agent = TestLiteLLMAgent(config=litellm_config)
+
+                # Verify LiteLLM instructor client was created
+                mock_from_litellm.assert_called_once_with(mock_acompletion)
+                assert agent.client == mock_client
+
+    def test_token_management_configuration(self, litellm_config):
+        """Test token management specific configuration."""
+        # Test various token configurations
+        test_configs = [
+            {"max_tokens": 10000, "trim_ratio": 0.5, "enable_trimming": True},
+            {"max_tokens": 100000, "trim_ratio": 0.9, "enable_trimming": False},
+            {"max_tokens": 1000, "trim_ratio": 0.1, "enable_trimming": True},
+        ]
+
+        for config_overrides in test_configs:
+            config = create_config_with_overrides(litellm_config, **config_overrides)
+            agent = TestLiteLLMAgent(config=config)
+
+            assert agent.max_tokens == config_overrides["max_tokens"]
+            assert agent.trim_ratio == config_overrides["trim_ratio"]
+            assert agent.enable_trimming == config_overrides["enable_trimming"]
