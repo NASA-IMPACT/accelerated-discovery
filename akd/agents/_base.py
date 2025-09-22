@@ -8,6 +8,8 @@ import openai
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
+from litellm import acompletion
+from litellm.utils import trim_messages
 from pydantic import AnyUrl, BaseModel, Field
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
@@ -26,6 +28,20 @@ class BaseAgentConfig(BaseConfig):
     stateless: bool = Field(
         default=True,
         description="Whether to maintain conversation history/state",
+    )
+
+    # Token management
+    max_tokens: int = Field(
+        default=100000,
+        description="Maximum tokens for message context",
+    )
+    trim_ratio: float = Field(
+        default=0.75,
+        description="Target ratio after trimming (0.75 = use 75% of max)",
+    )
+    enable_trimming: bool = Field(
+        default=True,
+        description="Enable automatic message trimming",
     )
 
 
@@ -385,3 +401,68 @@ class InstructorBaseAgent[
                 setattr(result, k, __import__("copy").deepcopy(v, memo))
 
         return result
+
+
+class LiteLLMInstructorBaseAgent[
+    InSchema: InputSchema,
+    OutSchema: OutputSchema,
+](InstructorBaseAgent):
+    """InstructorBaseAgent with LiteLLM integration and automatic message trimming.
+
+    This agent extends InstructorBaseAgent to use LiteLLM with automatic message trimming
+    to prevent token limit errors. It maintains full compatibility with the base class
+    while adding intelligent context management.
+    """
+
+    def __init__(
+        self,
+        config: BaseAgentConfig | None = None,
+        debug: bool = False,
+    ) -> None:
+        # Initialize base class but we'll replace the client
+        super().__init__(config=config, debug=debug)
+
+        # Replace instructor client with LiteLLM version
+        self.client = instructor.from_litellm(acompletion)
+
+    async def get_response_async(
+        self,
+        messages: list[dict[str, str]],
+        response_model: type[OutputSchema] | None = None,
+    ) -> OutSchema:
+        """
+        Obtains a response from the language model asynchronously with automatic message trimming.
+
+        Args:
+            messages (list[dict[str, str]], optional):
+                The messages to send to the model. If not provided,
+                builds from system prompt and memory.
+            response_model (Type[BaseModel], optional):
+                The schema for the response data. If not set,
+                self.output_schema is used.
+
+        Returns:
+            Type[BaseModel]: The response from the language model.
+        """
+        # Trim messages if enabled to prevent token limit errors
+        if self.enable_trimming:
+            messages = trim_messages(
+                messages,
+                model=self.model_name,
+                max_tokens=self.max_tokens,
+                trim_ratio=self.trim_ratio,
+            )
+
+        response_model = response_model or self.output_schema
+        instructor_model = self._create_instructor_compatible_model(response_model)
+
+        response = await self.client.chat.completions.create(
+            messages=messages,
+            model=self.model_name,
+            temperature=self.temperature,
+            response_model=instructor_model,
+        )
+
+        response_data = response.model_dump()
+        response = response_model(**response_data)
+        return cast(OutSchema, response)
