@@ -137,6 +137,7 @@ class LangBaseAgent[
 
     async def get_response_async(
         self,
+        messages: list | None = None,
         response_model: type[OutputSchema] | None = None,
     ) -> OutSchema:
         """
@@ -150,6 +151,7 @@ class LangBaseAgent[
         Returns:
             Type[BaseModel]: The response from the language model.
         """
+        messages = messages or self.memory.messages
         response_model = response_model or self.output_schema
         structured_client = self.client.with_structured_output(
             response_model,
@@ -158,7 +160,7 @@ class LangBaseAgent[
 
         # Format messages using the prompt template
         formatted_messages = self.prompt_template.format_messages(
-            memory=self.memory.messages,
+            memory=messages,
         )
 
         response = await structured_client.ainvoke(formatted_messages)
@@ -182,14 +184,21 @@ class LangBaseAgent[
             OutputSchema: The response from the chat agent.
         """
 
+        # reference new empty memory if stateless
+        _memory = ChatMessageHistory() if self.stateless else self.memory
+
         if params:
-            self.memory.add_user_message(params.model_dump_json(exclude={"type"}))
+            _memory.add_user_message(params.model_dump_json(exclude={"type"}))
 
         response = await self.get_response_async(
+            messages=_memory.messages,
             response_model=self.output_schema,
         )
 
-        self.memory.add_ai_message(response.model_dump_json(exclude={"type"}))
+        # Update memory only not stateless
+        if not self.stateless and params:
+            _memory.add_ai_message(response.model_dump_json(exclude={"type"}))
+            self._memory = _memory
 
         return response
 
