@@ -1,3 +1,4 @@
+# noqa: F841
 """Test cases for InstructorBaseAgent."""
 
 from unittest.mock import MagicMock

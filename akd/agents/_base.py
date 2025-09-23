@@ -8,9 +8,10 @@ import openai
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_openai import ChatOpenAI
-from litellm import acompletion
+from litellm import acompletion, get_model_info
 from litellm.utils import trim_messages
-from pydantic import AnyUrl, BaseModel, Field
+from loguru import logger
+from pydantic import AnyUrl, BaseModel, Field, model_validator
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
@@ -23,7 +24,12 @@ class BaseAgentConfig(BaseConfig):
     base_url: AnyUrl | None = Field(default=CONFIG.model_config_settings.base_url)
     api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
     model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
-    temperature: float = 0.0
+    temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature",
+    )
     system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
     stateless: bool = Field(
         default=True,
@@ -32,8 +38,10 @@ class BaseAgentConfig(BaseConfig):
 
     # Token management
     max_tokens: int = Field(
-        default=100000,
-        description="Maximum tokens for message context",
+        default=100_000,
+        ge=5,
+        le=1_000_000,  # hard max to 1M tokens
+        description="Maximum tokens for input message context",
     )
     trim_ratio: float = Field(
         default=0.75,
@@ -45,6 +53,26 @@ class BaseAgentConfig(BaseConfig):
         default=True,
         description="Enable automatic message trimming",
     )
+
+    @model_validator(mode="after")
+    def validate_max_tokens_against_model(self):
+        """Validate that max_tokens doesn't exceed the model's actual capacity."""
+        if not (self.model_name and self.max_tokens):
+            return self
+        try:
+            model_info = get_model_info(self.model_name)
+        except Exception as e:
+            logger.error(f"Could not retrieve model info for '{self.model_name}': {e}")
+            return self
+
+        model_limit = model_info.get("max_input_tokens")
+
+        if model_limit and self.max_tokens > model_limit:
+            raise ValueError(
+                f"max_tokens ({self.max_tokens}) exceeds model '{self.model_name}' "
+                f"capacity ({model_limit} tokens)",
+            )
+        return self
 
 
 class BaseAgent[

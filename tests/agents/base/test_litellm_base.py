@@ -19,7 +19,7 @@ class TestLiteLLMInstructorBaseAgent:
         """Test that the agent initializes correctly."""
         agent = TestLiteLLMAgent(config=litellm_config, debug=True)
 
-        assert agent.model_name == "gpt-3.5-turbo"
+        assert agent.model_name == "gpt-4o-mini"
         assert agent.temperature == 0.1
         assert agent.max_tokens == 50000
         assert agent.trim_ratio == 0.75

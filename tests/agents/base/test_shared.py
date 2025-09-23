@@ -1,3 +1,4 @@
+# noqa: F841
 """Shared integration tests for base agents."""
 
 from unittest.mock import AsyncMock
@@ -153,7 +154,7 @@ class TestBaseAgentSharedFunctionality:
     def test_configuration_attribute_mapping_across_agents(self):
         """Test that configuration attributes are properly mapped across all agent types."""
         custom_config = BaseAgentConfig(
-            model_name="gpt-4",
+            model_name="gpt-4o-mini",
             temperature=0.8,
             api_key="custom_key",
             stateless=False,
@@ -170,7 +171,7 @@ class TestBaseAgentSharedFunctionality:
                         instructor_agent = TestInstructorBaseAgent(config=custom_config)
                         litellm_agent = TestLiteLLMAgent(
                             config=BaseAgentConfig(
-                                model_name="gpt-4",
+                                model_name="gpt-4o-mini",
                                 temperature=0.8,
                                 api_key="custom_key",
                                 stateless=False,
@@ -182,7 +183,7 @@ class TestBaseAgentSharedFunctionality:
 
                         # Verify attributes were mapped from config for all agents
                         for agent in [lang_agent, instructor_agent, litellm_agent]:
-                            assert agent.model_name == "gpt-4"
+                            assert agent.model_name == "gpt-4o-mini"
                             assert agent.temperature == 0.8
                             assert agent.api_key == "custom_key"
                             assert agent.stateless is False

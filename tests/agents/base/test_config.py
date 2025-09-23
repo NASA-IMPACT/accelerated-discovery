@@ -25,13 +25,13 @@ class TestBaseAgentConfigMethods:
     def test_custom_config_initialization(self):
         """Test custom configuration initialization."""
         custom_config = AgentTestCustomConfig(
-            model_name="gpt-3.5-turbo",
+            model_name="gpt-4o-mini",  # Use high-capacity model for testing large max_tokens
             temperature=0.7,
             custom_field="test_value",
             custom_temperature=0.8,
         )
 
-        assert custom_config.model_name == "gpt-3.5-turbo"
+        assert custom_config.model_name == "gpt-4o-mini"
         assert custom_config.temperature == 0.7
         assert custom_config.custom_field == "test_value"
         assert custom_config.custom_temperature == 0.8
@@ -49,6 +49,7 @@ class TestBaseAgentConfigMethods:
     def test_token_management_fields(self):
         """Test token management configuration fields."""
         config = BaseAgentConfig(
+            model_name="gpt-4o-mini",
             max_tokens=25000,
             trim_ratio=0.6,
             enable_trimming=False,
@@ -98,7 +99,7 @@ class TestBaseAgentConfigMethods:
     def test_config_serialization(self):
         """Test config serialization and deserialization."""
         original_config = BaseAgentConfig(
-            model_name="gpt-4",
+            model_name="gpt-4o-mini",
             temperature=0.5,
             max_tokens=30000,
             trim_ratio=0.8,
@@ -109,7 +110,7 @@ class TestBaseAgentConfigMethods:
         # Test model_dump
         config_dict = original_config.model_dump()
         assert isinstance(config_dict, dict)
-        assert config_dict["model_name"] == "gpt-4"
+        assert config_dict["model_name"] == "gpt-4o-mini"
         assert config_dict["temperature"] == 0.5
 
         # Test reconstruction from dict

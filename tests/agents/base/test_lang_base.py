@@ -1,3 +1,4 @@
+# noqa: F841
 """Test cases for LangBaseAgent."""
 
 import pytest
@@ -29,7 +30,7 @@ class TestLangBaseAgentFunctionality:
         agent = TestLangBaseAgent(config=custom_config)
 
         # Verify configuration was applied
-        assert agent.model_name == "gpt-4"
+        assert agent.model_name == "gpt-4o-mini"
         assert agent.temperature == 0.7
         assert agent.api_key == "test_key"
         assert str(agent.base_url) == "https://custom.api.com/v1"
@@ -104,7 +105,7 @@ class TestLangBaseAgentFunctionality:
 
             # Verify client was configured correctly
             call_kwargs = mock_chat_openai.call_args.kwargs
-            assert call_kwargs["model"] == "gpt-4"
+            assert call_kwargs["model"] == "gpt-4o-mini"
             assert call_kwargs["temperature"] == 0.7
             assert call_kwargs["api_key"] == "test_key"
             assert call_kwargs["base_url"] == "https://custom.api.com/v1"
@@ -179,7 +180,7 @@ class TestLangBaseAgentFunctionality:
     def test_configuration_attribute_mapping(self, mock_chatopenai_client):
         """Test that configuration attributes are properly mapped to agent."""
         custom_config = BaseAgentConfig(
-            model_name="gpt-4",
+            model_name="gpt-4o-mini",
             temperature=0.8,
             api_key="custom_key",
         )
@@ -187,7 +188,7 @@ class TestLangBaseAgentFunctionality:
         agent = TestLangBaseAgent(config=custom_config)
 
         # Verify attributes were mapped from config
-        assert agent.model_name == "gpt-4"
+        assert agent.model_name == "gpt-4o-mini"
         assert agent.temperature == 0.8
         assert agent.api_key == "custom_key"
 

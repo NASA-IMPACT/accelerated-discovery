@@ -108,7 +108,7 @@ TestLiteLLMAgent.__test__ = False
 def default_config() -> BaseAgentConfig:
     """Create a default configuration for testing."""
     return BaseAgentConfig(
-        model_name="gpt-3.5-turbo",
+        model_name="gpt-4o-mini",
         temperature=0.1,
         max_tokens=50000,
         trim_ratio=0.75,
@@ -121,7 +121,7 @@ def default_config() -> BaseAgentConfig:
 def custom_config() -> BaseAgentConfig:
     """Create a custom configuration for testing."""
     return BaseAgentConfig(
-        model_name="gpt-4",
+        model_name="gpt-4o-mini",
         temperature=0.7,
         api_key="test_key",
         base_url="https://custom.api.com/v1",
@@ -136,7 +136,7 @@ def custom_config() -> BaseAgentConfig:
 def litellm_config() -> BaseAgentConfig:
     """Create a LiteLLM-specific configuration for testing."""
     return BaseAgentConfig(
-        model_name="gpt-3.5-turbo",
+        model_name="gpt-4o-mini",
         temperature=0.1,
         max_tokens=50000,
         trim_ratio=0.75,
