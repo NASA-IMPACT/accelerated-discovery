@@ -50,6 +50,7 @@ dependencies = [
     "undetected-chromedriver>=3.5.5",
     "jsonpath-ng>=1.6.1",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
+    "litellm>=1.74.2",
 ]
 
 [project.urls]
@@ -111,3 +112,6 @@ ml = [
     "docling>=2.37.0",
     "deepeval>=3.4.0",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["F841"]
