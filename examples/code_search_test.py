@@ -123,9 +123,9 @@ async def code_search_agent_test():
 
     print("\n--- Search Results ---")
     for result in output.results:
-        print(result["url"])
-        print(result["title"])
-        print(result["content"][:100])
+        print(result.url)
+        print(result.title)
+        print(result.content[:100])
         print("-" * 100)
 
 

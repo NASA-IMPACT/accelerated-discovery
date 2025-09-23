@@ -903,6 +903,7 @@ class ControlledSearchAgent(LitBaseAgent):
                     "title": result.title,
                     "content": result.content,
                     "category": result.category,
+                    "query": params.query,
                 },
             )
 

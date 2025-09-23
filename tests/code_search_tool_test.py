@@ -42,18 +42,6 @@ def validate_output_structure(output):
         assert result.content and result.content.strip()
 
 
-def validate_agent_output_structure(output):
-    assert hasattr(output, "results")
-    assert isinstance(output.results, list)
-    assert len(output.results) > 0
-
-    for result in output.results:
-        assert isinstance(result, dict)
-        assert "url" in result
-        assert "content" in result
-        assert result["content"] and result["content"].strip()
-
-
 """Initialize the tools"""
 
 
@@ -227,4 +215,4 @@ async def test_sde_code_search(sde_tool):
 async def test_code_search_agent(code_search_agent):
     input_params = LitSearchAgentInputSchema(query="weather prediction", max_results=5)
     output = await code_search_agent.arun(input_params)
-    validate_agent_output_structure(output)
+    validate_output_structure(output)
