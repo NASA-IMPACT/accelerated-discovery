@@ -37,6 +37,8 @@ class BaseAgentConfig(BaseConfig):
     )
     trim_ratio: float = Field(
         default=0.75,
+        gt=0.0,
+        le=1.0,
         description="Target ratio after trimming (0.75 = use 75% of max)",
     )
     enable_trimming: bool = Field(
