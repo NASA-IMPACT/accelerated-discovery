@@ -3,7 +3,7 @@ from __future__ import annotations
 from loguru import logger
 from pydantic import Field
 from typing import Literal
-import requests
+
 import os
 
 from akd.tools.code_search import (
@@ -22,6 +22,7 @@ from akd.agents.search import (
     ControlledSearchAgentConfig,
 )
 from akd.configs.code_prompts import CODE_QUERY_PROMPT, CODE_RELEVANCY_PROMPT
+from akd.utils import is_server_available
 
 from ._base import BaseAgentConfig
 
@@ -153,28 +154,7 @@ class CodeSearchAgent(ControlledSearchAgent):
         if self.config.use_sde_search:
             try:
                 url = self.config.sde_base_url
-                # Sanity check on URL
-                if not (url.startswith("http://") or url.startswith("https://")):
-                    if self.config.debug:
-                        logger.warning(
-                            f"[CodeSearchAgent] sde_base_url '{url}' is not a valid URL."
-                        )
-
-                reachable = True
-                try:
-                    # Check if the URL is reachable
-                    requests.head(url, timeout=5, allow_redirects=True)
-                    if self.config.debug:
-                        logger.info(
-                            f"[CodeSearchAgent] Verified reachability of SDE URL: {url}"
-                        )
-                except requests.RequestException as e:
-                    reachable = False
-                    if self.config.debug:
-                        logger.warning(
-                            f"[CodeSearchAgent] Could not reach SDE URL '{url}'. Skipping SDE tool. Reason: {e}"
-                        )
-
+                reachable = is_server_available(url)
                 if reachable:
                     sde_config = SDECodeSearchToolConfig(
                         base_url=url,
