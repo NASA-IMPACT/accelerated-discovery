@@ -6,7 +6,12 @@ import pytest
 from akd.agents.search.aspect_search.structures import Editor, Perspectives
 from akd.agents.storm import StormAgent, StormInputSchema, StormOutputSchema
 from akd.agents.storm.prompts import DRAFT_OUTLINE_PROMPT, REFINE_OUTLINE_PROMPT
-from akd.agents.storm.structures import Outline, OutlineSection, ResearchState
+from akd.agents.storm.structures import (
+    ArticleSection,
+    Outline,
+    OutlineSection,
+    ResearchState,
+)
 from akd.agents.storm.tools import get_draft_outline, get_refined_outline, retrieve
 from akd.configs.project import get_project_settings
 from akd.tools.search import SearchResultItem
@@ -63,6 +68,10 @@ def dummy_state(dummy_topic, dummy_outline, dummy_perspectives):
                 query=dummy_topic,
                 content="content_2",
             ),
+        ],
+        sections=[
+            ArticleSection(section_title="dummy", content="dummy"),
+            ArticleSection(section_title="dummy", content="dummy"),
         ],
     )
 
@@ -170,17 +179,18 @@ async def test_retrieve_formats_docs_correctly(dummy_topic):
         MagicMock(metadata={"source": "source1"}, page_content="content"),
         MagicMock(metadata={"source": "source2"}, page_content="content"),
     ]
-
-    mock_retriever = AsyncMock()
-    mock_retriever.ainvoke.return_value = dummy_docs
-    result = await retrieve(dummy_inputs, mock_retriever)
+    expected_refs = {"source1": "content", "source2": "content"}
     expected_docs = (
         '<Document href="source1"/>\ncontent\n</Document>\n'
         '<Document href="source2"/>\ncontent\n</Document>'
     )
+    mock_retriever = AsyncMock()
+    mock_retriever.ainvoke.return_value = dummy_docs
+    result = await retrieve(dummy_inputs, mock_retriever)
     mock_retriever.ainvoke.assert_awaited_once_with(f"{dummy_topic}: test section")
     assert result["docs"] == expected_docs
     assert result["topic"] == dummy_topic
+    assert result["references"] == expected_refs
 
 
 # =============================================================================
@@ -202,11 +212,13 @@ async def test_get_response_async(agent, dummy_topic, dummy_state):
     assert isinstance(result.references, Dict)
     assert isinstance(result.search_results, List)
     assert isinstance(result.outline, Outline)
+    assert isinstance(result.sections, List)
 
     assert len(result.article) != 0
     assert len(result.perspectives.editors) != 0
     assert len(result.references) != 0
     assert len(result.search_results) != 0
+    assert len(result.sections) != 0
 
 
 @pytest.mark.asyncio
@@ -237,11 +249,13 @@ async def test_get_response_async_debug(agent, dummy_state, dummy_topic):
     assert isinstance(result.references, Dict)
     assert isinstance(result.search_results, List)
     assert isinstance(result.outline, Outline)
+    assert isinstance(result.sections, List)
 
     assert len(result.article) != 0
     assert len(result.perspectives.editors) != 0
     assert len(result.references) != 0
     assert len(result.search_results) != 0
+    assert len(result.sections) != 0
 
     dummy_storm.get_state.assert_called_once_with(config=input_params.config)
 
@@ -257,6 +271,7 @@ async def test_arun(agent, dummy_topic, dummy_state):
             perspectives=dummy_state["perspectives"],
             search_results=dummy_state["search_results"],
             outline=dummy_state["outline"],
+            sections=dummy_state["sections"],
         ),
     )
     result = await agent.arun(params)

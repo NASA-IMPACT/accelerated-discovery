@@ -121,10 +121,10 @@ async def retrieve(inputs: Dict, retriever: VectorStoreRetriever) -> Dict:
     references = {}
     formatted_docs = ""
     for doc in docs:
-        formatted_docs += f'<Document href="{doc.metadata["source"]}"/>\n{doc.page_content}\n</Document>'
+        formatted_docs += f'<Document href="{doc.metadata["source"]}"/>\n{doc.page_content}\n</Document>\n'
         references.update({doc.metadata["source"]: doc.page_content})
 
-    return {"docs": formatted_docs, "references": references, **inputs}
+    return {"docs": formatted_docs.strip(), "references": references, **inputs}
 
 
 async def section_writer(
