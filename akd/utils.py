@@ -3,7 +3,8 @@ import time
 from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional
-
+from pydantic import HttpUrl
+import requests
 import gdown
 from loguru import logger
 
@@ -194,3 +195,28 @@ def google_drive_downloader(
     except Exception as e:
         logger.error(f"Failed to download from Google Drive: {e}")
         raise
+
+
+def is_server_available(url: str | HttpUrl) -> bool:
+    """
+    Check if a url is available.
+
+    Args:
+        url: The URL to test
+
+    Returns:
+        bool: True if server is reachable, False otherwise
+    """
+    # Sanity check on URL
+    if not (url.startswith("http://") or url.startswith("https://")):
+        logger.warning(f"URL {url} is not a valid URL.")
+        return False
+
+    try:
+        # Check if the URL is reachable
+        requests.head(url, timeout=5, allow_redirects=True)
+        logger.info(f"URL {url} is reachable.")
+        return True
+    except requests.RequestException:
+        logger.warning(f"URL {url} is not reachable.")
+        return False

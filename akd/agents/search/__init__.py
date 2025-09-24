@@ -17,6 +17,7 @@ from ._base import (
 )
 from .controlled import ControlledSearchAgent, ControlledSearchAgentConfig
 from .deep_search import DeepLitSearchAgent, DeepLitSearchAgentConfig
+from .code_search import CodeSearchAgent, CodeSearchAgentConfig
 
 __all__ = [
     # Base classes
@@ -33,4 +34,6 @@ __all__ = [
     "ControlledSearchAgentConfig",
     "DeepLitSearchAgent",
     "DeepLitSearchAgentConfig",
+    "CodeSearchAgent",
+    "CodeSearchAgentConfig",
 ]
