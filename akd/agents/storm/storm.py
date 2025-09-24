@@ -67,6 +67,10 @@ class StormOutputSchema(OutputSchema):
         ...,
         description="Outline of the article",
     )
+    sections: list = Field(
+        ...,
+        description="List of sections of the article",
+    )
 
 
 class StormAgentConfig(BaseAgentConfig):
@@ -232,6 +236,7 @@ class StormAgent(BaseAgent):
             references=article_state["references"],
             search_results=article_state["search_results"],
             outline=article_state["outline"],
+            sections=article_state["sections"],
         )
 
     async def _arun(self, params: StormInputSchema, **kwargs) -> StormOutputSchema:
