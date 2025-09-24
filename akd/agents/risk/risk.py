@@ -14,7 +14,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import LiteLLMInstructorBaseAgent
 from akd.agents._base import BaseAgentConfig
 from akd.configs.prompts import RISK_SYSTEM_PROMPT
 from akd.utils import get_akd_root
@@ -151,7 +151,9 @@ class RiskAgentConfig(BaseAgentConfig):
     )
 
 
-class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]):
+class RiskAgent(
+    LiteLLMInstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema],
+):
     """
     Agent that generates tailored risk evaluation criteria and a DAGMetric
     based on a predefined risk atlas and specific model inputs and outputs.
