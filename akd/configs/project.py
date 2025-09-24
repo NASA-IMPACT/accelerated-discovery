@@ -36,7 +36,7 @@ class ModelConfigSettings(BaseSettings):
     provider: ModelProvider = ModelProvider.OPENAI
     model_name: str = "gpt-4o-mini"
     temperature: float = 0.0
-    max_tokens: int = 120_000_000
+    max_tokens: int = 120_000
     api_keys: ApiKeys = ApiKeys()
     base_url: AnyUrl | None = Field(
         default=AnyUrl(os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")),
