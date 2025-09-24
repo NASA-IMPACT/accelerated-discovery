@@ -146,13 +146,14 @@ async def write_sections(
         Dict: Updated research state.
     """
     outline = state["outline"]
-    sections = await section_writer(
+    sections, references = await section_writer(
         outline=outline,
         sections=outline.sections,
         topic=state["topic"],
         long_context_llm=long_context_llm,
         retriever=retriever,
     )
+    state["references"] = references
     return {
         **state,
         "sections": sections,

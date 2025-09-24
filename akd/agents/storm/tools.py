@@ -1,7 +1,7 @@
-from functools import partial
 from typing import Dict, List
 
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import chain as as_runnable
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_openai import ChatOpenAI
 
@@ -118,13 +118,13 @@ async def retrieve(inputs: Dict, retriever: VectorStoreRetriever) -> Dict:
         Dict: Original input dictionary augmented with a formatted string of retrieved documents.
     """
     docs = await retriever.ainvoke(inputs["topic"] + ": " + inputs["section"])
-    formatted = "\n".join(
-        [
-            f'<Document href="{doc.metadata["source"]}"/>\n{doc.page_content}\n</Document>'
-            for doc in docs
-        ],
-    )
-    return {"docs": formatted, **inputs}
+    references = {}
+    formatted_docs = ""
+    for doc in docs:
+        formatted_docs += f'<Document href="{doc.metadata["source"]}"/>\n{doc.page_content}\n</Document>'
+        references.update({doc.metadata["source"]: doc.page_content})
+
+    return {"docs": formatted_docs, "references": references, **inputs}
 
 
 async def section_writer(
@@ -147,12 +147,17 @@ async def section_writer(
     Returns:
         List[ArticleSection]: A list of generated article sections.
     """
-    section_writer = (
-        partial(retrieve, retriever=retriever)
-        | SECTION_WRITER_PROMPT
-        | long_context_llm.with_structured_output(ArticleSection)
-    )
-    sections = await section_writer.abatch(
+
+    @as_runnable
+    async def section_writer(inputs: Dict) -> Dict:
+        retrieved_data = await retrieve(inputs, retriever)
+        section = await (
+            SECTION_WRITER_PROMPT
+            | long_context_llm.with_structured_output(ArticleSection)
+        ).ainvoke({**retrieved_data})
+        return {"section": section, "references": retrieved_data["references"]}
+
+    output = await section_writer.abatch(
         [
             {
                 "outline": outline.as_str,
@@ -162,7 +167,13 @@ async def section_writer(
             for section in sections
         ],
     )
-    return sections
+
+    sections, references = [], {}
+    for out in output:
+        sections.append(out["section"])
+        references.update(out["references"])
+
+    return sections, references
 
 
 async def writer(topic: str, draft: str, long_context_llm: ChatOpenAI) -> str:
