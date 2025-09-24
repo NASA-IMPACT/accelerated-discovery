@@ -92,6 +92,9 @@ async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI) -> 
         convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
         return f"Conversation with {interview_state['editor'].name}\n\n" + convo
 
+    if state["outline_sketch"] is not None:
+        return {**state}
+
     conversations = "\n\n".join(
         [
             format_conversation(interview_state)
