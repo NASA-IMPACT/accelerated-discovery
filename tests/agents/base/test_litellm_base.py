@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from akd.agents._base import InstructorBaseAgent
 
 from .conftest import (
@@ -322,3 +324,47 @@ class TestLiteLLMInstructorBaseAgent:
             assert agent.max_tokens == config_overrides["max_tokens"]
             assert agent.trim_ratio == config_overrides["trim_ratio"]
             assert agent.enable_trimming == config_overrides["enable_trimming"]
+
+    async def test_large_input_exception_when_trimming_disabled(self, litellm_config):
+        """Test that large input throws exception when trimming is disabled."""
+        # Create config with trimming disabled and very low token limit
+        config = create_config_with_overrides(
+            litellm_config,
+            enable_trimming=False,
+            max_tokens=100,
+        )
+        agent = TestLiteLLMAgent(config=config)
+
+        # Create very large input that will exceed token limits
+        large_input = LiteLLMTestInputSchema(
+            query="love " * 1000000,
+            context="test context",
+        )
+
+        # Should throw exception due to token limit exceeded
+        with pytest.raises(Exception):
+            await agent.arun(large_input)
+
+    async def test_large_input_success_when_trimming_enabled(self, litellm_config):
+        """Test that large input succeeds when trimming is enabled."""
+        # Create config with trimming enabled and same low token limit
+        config = create_config_with_overrides(
+            litellm_config,
+            enable_trimming=True,
+            max_tokens=100,
+        )
+        agent = TestLiteLLMAgent(config=config)
+
+        # Create same very large input
+        large_input = LiteLLMTestInputSchema(
+            query="love " * 1000000,
+            context="test context",
+        )
+
+        # Should succeed without throwing exception due to automatic trimming
+        result = await agent.arun(large_input)
+
+        # Verify we get a valid response
+        assert isinstance(result, LiteLLMTestOutputSchema)
+        assert hasattr(result, "response")
+        assert hasattr(result, "confidence")
