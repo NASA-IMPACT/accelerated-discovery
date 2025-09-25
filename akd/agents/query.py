@@ -3,7 +3,7 @@ from typing import List, Literal, Optional
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import LiteLLMInstructorBaseAgent
 
 
 class QueryAgentInputSchema(InputSchema):
@@ -36,7 +36,9 @@ class QueryAgentOutputSchema(OutputSchema):
     )
 
 
-class QueryAgent(InstructorBaseAgent[QueryAgentInputSchema, QueryAgentOutputSchema]):
+class QueryAgent(
+    LiteLLMInstructorBaseAgent[QueryAgentInputSchema, QueryAgentOutputSchema],
+):
     """
     Agent that generates search engine queries based on a given query.
     """
@@ -107,7 +109,10 @@ class FollowUpQueryAgentOutputSchema(OutputSchema):
 
 
 class FollowUpQueryAgent(
-    InstructorBaseAgent[FollowUpQueryAgentInputSchema, FollowUpQueryAgentOutputSchema],
+    LiteLLMInstructorBaseAgent[
+        FollowUpQueryAgentInputSchema,
+        FollowUpQueryAgentOutputSchema,
+    ],
 ):
     """
     Agent that generates follow-up search engine queries based on original queries and content.

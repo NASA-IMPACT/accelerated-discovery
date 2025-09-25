@@ -38,7 +38,7 @@ class BaseAgentConfig(BaseConfig):
 
     # Token management
     max_tokens: int = Field(
-        default=100_000,
+        default=CONFIG.model_config_settings.max_tokens,
         ge=5,
         le=1_000_000,  # hard max to 1M tokens
         description="Maximum tokens for input message context",
@@ -492,6 +492,7 @@ class LiteLLMInstructorBaseAgent[
             temperature=self.temperature,
             response_model=instructor_model,
             api_base=str(self.base_url).rstrip("/") if self.base_url else None,
+            api_key=self.api_key,
         )
 
         response_data = response.model_dump()
