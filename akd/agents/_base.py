@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from litellm import acompletion, get_model_info
 from litellm.utils import trim_messages
 from loguru import logger
-from pydantic import AnyUrl, BaseModel, Field, model_validator
+from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
@@ -34,6 +34,10 @@ class BaseAgentConfig(BaseConfig):
     stateless: bool = Field(
         default=True,
         description="Whether to maintain conversation history/state",
+    )
+    input_hints: bool = Field(
+        default=False,
+        description="Whether to include input schema field information in system prompt",
     )
 
     # Token management
@@ -287,6 +291,27 @@ class InstructorBaseAgent[
         """
         self.memory.clear()
 
+    @property
+    def _input_schema_info(self) -> str:
+        """
+        Extract field names and descriptions from input schema.
+
+        Returns:
+            str: Formatted string with field information, empty if no input schema.
+        """
+        if not hasattr(self, "input_schema") or not self.input_schema:
+            return ""
+
+        field_info = []
+        for field_name, field_info_obj in self.input_schema.model_fields.items():
+            description = field_info_obj.description or "No description provided"
+            field_info.append(f"- **{field_name}**: {description}")
+
+        if not field_info:
+            return ""
+
+        return "\n".join(field_info)
+
     def _default_system_message(self) -> dict[str, str]:
         """
         Returns the default system message.
@@ -294,14 +319,21 @@ class InstructorBaseAgent[
         Returns:
             dict[str, str]: System message dictionary with role and content.
         """
+        content = self.system_prompt
+
+        # Add input schema hints if enabled
+        if self.input_hints:
+            input_info = self._input_schema_info
+            if input_info:
+                content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
+
         return {
             "role": "system",
-            "content": self.system_prompt,
+            "content": content,
         }
 
     def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
         """Create a model that's compatible with instructor but avoids IOSchema validation."""
-        from pydantic import create_model
 
         # Get the fields from the original model
         fields = {}

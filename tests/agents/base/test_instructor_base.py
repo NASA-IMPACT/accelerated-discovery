@@ -287,3 +287,75 @@ class TestInstructorBaseAgentFunctionality:
         assert isinstance(result, AgentTestOutputSchema)
         assert result.response == "custom model response"
         assert result.metadata == {"custom": True}
+
+    def test_input_hints_disabled_by_default(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test that input hints are disabled by default."""
+        agent = TestInstructorBaseAgent()
+
+        system_message = agent._default_system_message()
+
+        # Verify no input hints are present by default
+        assert "INPUT FIELD DESCRIPTIONS:" not in system_message["content"]
+        assert system_message["content"] == agent.system_prompt
+
+    def test_input_hints_enabled(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test input hints functionality when enabled."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestInstructorBaseAgent(config=config)
+
+        system_message = agent._default_system_message()
+
+        # Verify input hints are present
+        assert "INPUT FIELD DESCRIPTIONS:" in system_message["content"]
+        assert "**query**:" in system_message["content"]
+        assert "**optional_param**:" in system_message["content"]
+        assert "Test query input" in system_message["content"]
+        assert "Optional parameter" in system_message["content"]
+
+        # Verify original system prompt is still there
+        assert agent.system_prompt in system_message["content"]
+
+    def test_input_schema_info_property(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test _input_schema_info property."""
+        agent = TestInstructorBaseAgent()
+
+        schema_info = agent._input_schema_info
+
+        # Verify schema info extraction
+        assert "**query**:" in schema_info
+        assert "**optional_param**:" in schema_info
+        assert "Test query input" in schema_info
+        assert "Optional parameter" in schema_info
+        assert schema_info.startswith("- **query**:")
+
+    def test_input_schema_info_no_schema(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test _input_schema_info property when no input schema."""
+        agent = TestInstructorBaseAgent()
+
+        # Temporarily remove input schema
+        original_schema = agent.input_schema
+        agent.input_schema = None
+
+        schema_info = agent._input_schema_info
+
+        # Verify empty string returned
+        assert schema_info == ""
+
+        # Restore original schema
+        agent.input_schema = original_schema
