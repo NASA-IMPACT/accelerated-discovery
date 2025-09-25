@@ -3,10 +3,11 @@ import time
 from abc import abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional
-from pydantic import HttpUrl
-import requests
+
 import gdown
+import requests
 from loguru import logger
+from pydantic import BaseModel, HttpUrl
 
 try:
     from langchain_core.tools.structured import StructuredTool
@@ -220,3 +221,41 @@ def is_server_available(url: str | HttpUrl) -> bool:
     except requests.RequestException:
         logger.warning(f"URL {url} is not reachable.")
         return False
+
+
+def get_model_fields(
+    model_class: type[BaseModel],
+    skip_no_description: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Extract field information from a Pydantic model using the most Pydantic-native approach.
+    Uses Pydantic's built-in model_json_schema() method.
+
+    Args:
+        model_class: Pydantic model class to extract fields from
+        skip_no_description: If True, skip fields without descriptions
+
+    Returns:
+        List of dictionaries containing field information with all schema properties
+        plus 'name' and 'is_required' keys
+    """
+    if not model_class or not hasattr(model_class, "model_json_schema"):
+        return []
+
+    schema = model_class.model_json_schema()
+    properties = schema.get("properties", {})
+    required_fields = set(schema.get("required", []))
+
+    fields_info = []
+    for field_name, field_schema in properties.items():
+        if skip_no_description and not field_schema.get("description"):
+            continue
+
+        field_data = {
+            "name": field_name,
+            "is_required": field_name in required_fields,
+            **field_schema,  # Include all schema properties
+        }
+        fields_info.append(field_data)
+
+    return fields_info

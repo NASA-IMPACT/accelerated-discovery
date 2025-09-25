@@ -209,3 +209,43 @@ class TestLangBaseAgentFunctionality:
             except Exception as e:
                 # Expected if client creation fails
                 assert "Mock initialization error" in str(e)
+
+    def test_input_hints_disabled_by_default(self, mock_chatopenai_client):
+        """Test that input hints are disabled by default for LangBaseAgent."""
+        agent = TestLangBaseAgent()
+
+        system_prompt = agent._system_prompt
+
+        # Verify no input hints are present by default
+        assert "INPUT FIELD DESCRIPTIONS:" not in system_prompt
+        assert system_prompt == agent.system_prompt
+
+    def test_input_hints_enabled(self, mock_chatopenai_client):
+        """Test input hints functionality when enabled for LangBaseAgent."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        system_prompt = agent._system_prompt
+
+        # Verify input hints are present
+        assert "INPUT FIELD DESCRIPTIONS:" in system_prompt
+        assert "**query**:" in system_prompt
+        assert "**optional_param**:" in system_prompt
+        assert "Test query input" in system_prompt
+        assert "Optional parameter" in system_prompt
+
+        # Verify original system prompt is still there
+        assert agent.system_prompt in system_prompt
+
+    def test_prompt_template_uses_system_prompt_property(self, mock_chatopenai_client):
+        """Test that LangBaseAgent prompt template uses _system_prompt property."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # Get the system message from the prompt template
+        formatted_messages = agent.prompt_template.format_messages(memory=[])
+        system_message = formatted_messages[0]
+
+        # Verify the prompt template uses the enhanced system prompt
+        assert "INPUT FIELD DESCRIPTIONS:" in system_message.content
+        assert "**query**:" in system_message.content

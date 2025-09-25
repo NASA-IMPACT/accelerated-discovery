@@ -16,6 +16,7 @@ from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+from akd.utils import get_model_fields
 
 
 class BaseAgentConfig(BaseConfig):
@@ -89,6 +90,11 @@ class BaseAgent[
     This class provides the basic structure for an agent that can handle
     asynchronous operations, manage memory, and utilize a language model
     for generating responses based on user input.
+
+    Notes:
+    - We internally use `_system_prompt` to access actual system prompt that the model sees.
+    - The `_system_prompt` has enhanced prompt based on `input_hints` flag.
+    - We also have `_default_system_message` in InstructorBaseAgent that creates a dict
     """
 
     config_schema = BaseAgentConfig
@@ -111,6 +117,43 @@ class BaseAgent[
 
     def reset_memory(self) -> None:
         pass
+
+    @property
+    def _input_schema_info(self) -> str:
+        """
+        Extract field names and descriptions from input schema.
+
+        Returns:
+            str: Formatted string with field information, empty if no input schema.
+        """
+        if not hasattr(self, "input_schema") or not self.input_schema:
+            return ""
+
+        fields = get_model_fields(self.input_schema, skip_no_description=True)
+        if not fields:
+            return ""
+
+        return "\n".join(
+            [f"- **{field['name']}**: {field['description']}" for field in fields],
+        )
+
+    @property
+    def _system_prompt(self) -> str:
+        """
+        Enhanced system prompt with optional input hints.
+
+        Returns:
+            str: System prompt with input schema information if enabled.
+        """
+        content = self.system_prompt
+
+        # Add input schema hints if enabled
+        if self.input_hints:
+            input_info = self._input_schema_info
+            if input_info:
+                content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
+
+        return content
 
     @abstractmethod
     async def get_response_async(
@@ -168,7 +211,7 @@ class LangBaseAgent[
             [
                 {
                     "role": "system",
-                    "content": self.system_prompt,
+                    "content": self._system_prompt,
                 },
                 MessagesPlaceholder(variable_name="memory"),
             ],
@@ -291,27 +334,6 @@ class InstructorBaseAgent[
         """
         self.memory.clear()
 
-    @property
-    def _input_schema_info(self) -> str:
-        """
-        Extract field names and descriptions from input schema.
-
-        Returns:
-            str: Formatted string with field information, empty if no input schema.
-        """
-        if not hasattr(self, "input_schema") or not self.input_schema:
-            return ""
-
-        field_info = []
-        for field_name, field_info_obj in self.input_schema.model_fields.items():
-            description = field_info_obj.description or "No description provided"
-            field_info.append(f"- **{field_name}**: {description}")
-
-        if not field_info:
-            return ""
-
-        return "\n".join(field_info)
-
     def _default_system_message(self) -> dict[str, str]:
         """
         Returns the default system message.
@@ -319,17 +341,9 @@ class InstructorBaseAgent[
         Returns:
             dict[str, str]: System message dictionary with role and content.
         """
-        content = self.system_prompt
-
-        # Add input schema hints if enabled
-        if self.input_hints:
-            input_info = self._input_schema_info
-            if input_info:
-                content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
-
         return {
             "role": "system",
-            "content": content,
+            "content": self._system_prompt,
         }
 
     def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
