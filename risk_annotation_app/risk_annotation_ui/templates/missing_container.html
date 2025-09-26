@@ -1,0 +1,23 @@
+<div id="missing-{{ risk_id }}">
+  <form hx-post="/update/missing/{{ sme }}/{{ idx }}/{{ risk_id }}"
+        hx-trigger="submit"
+        hx-target="#missing-{{ risk_id }}"
+        hx-swap="outerHTML">
+    <textarea name="new_criterion" placeholder="Add new criterion"></textarea><br>
+    <button type="submit">Add</button>
+  </form>
+  {% if risk.missing_criteria %}
+    <ul>
+    {% for mc in risk.missing_criteria %}
+      <li>
+        {{ mc }}
+        <button hx-post="/delete/missing/{{ sme }}/{{ idx }}/{{ risk_id }}/{{ loop.index0 }}"
+                hx-target="#missing-{{ risk_id }}"
+                hx-swap="outerHTML">Delete</button>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p><em>No missing criteria yet.</em></p>
+  {% endif %}
+</div>

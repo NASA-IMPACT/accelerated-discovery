@@ -1,0 +1,10 @@
+services:
+  risk-annotator:
+    build: .
+    container_name: risk-annotator
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the whole repo so annotations.json is editable & saved on the host
+      - .:/app
+    restart: unless-stopped

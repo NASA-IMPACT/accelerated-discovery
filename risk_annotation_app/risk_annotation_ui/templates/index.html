@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Risk Annotation</title>
+  <script src="https://unpkg.com/htmx.org@1.9.9"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    .judgement-true { color: green; font-weight: bold; }
+    .judgement-false { color: red; font-weight: bold; }
+    textarea { width: 100%; height: 60px; }
+    select { margin: 0.2rem 0; }
+    .nav { margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Example {{ idx + 1 }} of {{ total }}</h1>
+
+  <h2>Conversation</h2>
+  {% for line in example.conversation %}
+    <p>{{ line }}</p>
+  {% endfor %}
+
+  {% for risk_id, risk in example.risks.items() %}
+    <h2>Risk: {{ risk_id }}</h2>
+
+    <h3>Criteria</h3>
+    <ul>
+      {% for c in risk.criteria %}
+      <li>
+        <p>{{ c.description }}</p>
+        <form hx-post="/update/criterion/{{ sme }}/{{ idx }}/{{ risk_id }}/{{ loop.index0 }}" hx-trigger="change from:form" hx-swap="none">
+          <select name="is_valid">
+            <option value="" {% if not c.is_criterion_valid %}selected{% endif %}>--</option>
+            <option value="valid" {% if c.is_criterion_valid=="valid" %}selected{% endif %}>valid</option>
+            <option value="partially valid" {% if c.is_criterion_valid=="partially valid" %}selected{% endif %}>partially valid</option>
+            <option value="invalid" {% if c.is_criterion_valid=="invalid" %}selected{% endif %}>invalid</option>
+          </select><br>
+          <textarea name="comment" placeholder="Comment" onblur="this.form.dispatchEvent(new Event('change'))">{{ c.comment or '' }}</textarea>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+
+    <h3>Judgements</h3>
+    <ul>
+      {% for j in risk.judgements %}
+      <li>
+        <p>{{ j.criterion_instruction }}</p>
+        <span class="judgement-{{ j.llm_judgement|lower }}">{{ j.llm_judgement }}</span>
+        <form hx-post="/update/judgement/{{ sme }}/{{ idx }}/{{ risk_id }}/{{ loop.index0 }}" hx-trigger="change from:form" hx-swap="none">
+          <select name="correctness">
+            <option value="" {% if not j.is_llm_judgement_correct %}selected{% endif %}>--</option>
+            <option value="correct" {% if j.is_llm_judgement_correct=="correct" %}selected{% endif %}>correct</option>
+            <option value="partially correct" {% if j.is_llm_judgement_correct=="partially correct" %}selected{% endif %}>partially correct</option>
+            <option value="incorrect" {% if j.is_llm_judgement_correct=="incorrect" %}selected{% endif %}>incorrect</option>
+          </select><br>
+          <textarea name="comment" placeholder="Comment" onblur="this.form.dispatchEvent(new Event('change'))">{{ j.comment or '' }}</textarea>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+
+    <h3>Missing Criteria</h3>
+    {% include "missing_container.html" %}
+
+  {% endfor %}
+
+  <div class="nav">
+    {% if idx > 0 %}
+      <a href="/annotate/{{ sme }}?idx={{ idx - 1 }}">← Previous</a>
+    {% endif %}
+    {% if idx < total - 1 %}
+      <a href="/annotate/{{ sme }}?idx={{ idx + 1 }}">Next →</a>
+    {% endif %}
+  </div>
+
+  <div style="margin-top: 1rem;">
+    <a href="/download">
+      <button>Save as JSON</button>
+    </a>
+  </div>
+
+</body>
+</html>

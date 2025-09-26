@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Select Annotator</title>
+</head>
+<body>
+  <h1>Select Your Name</h1>
+  <form action="/annotate/" method="get" onsubmit="this.action='/annotate/'+document.getElementById('sme').value;">
+    <label for="sme">Annotator:</label>
+    <select id="sme" name="sme">
+      {% for name in sme_names %}
+      <option value="{{ name }}">{{ name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Start</button>
+  </form>
+</body>
+</html>
