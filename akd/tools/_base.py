@@ -12,7 +12,6 @@ class BaseToolConfig(BaseConfig):
     """
 
     title: Optional[str] = None
-    description: Optional[str] = None
 
 
 class BaseTool[
