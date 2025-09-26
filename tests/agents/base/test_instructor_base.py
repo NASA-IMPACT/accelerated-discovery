@@ -359,3 +359,79 @@ class TestInstructorBaseAgentFunctionality:
 
         # Restore original schema
         agent.input_schema = original_schema
+
+    def test_agent_description_disabled_by_default(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test that agent description is not included when input hints are disabled."""
+        agent = TestInstructorBaseAgent()
+
+        system_message = agent._default_system_message()
+
+        # Should not include description when input_hints=False (default)
+        assert "AGENT DESCRIPTION:" not in system_message["content"]
+        assert system_message["content"] == agent.system_prompt
+
+    def test_agent_description_with_input_hints_enabled_no_description(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test behavior when input hints enabled but no agent description available."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestInstructorBaseAgent(config=config)
+
+        # Clear the description to simulate no description
+        agent.description = ""
+
+        system_message = agent._default_system_message()
+
+        # Should not include agent description section when description is empty
+        assert "AGENT DESCRIPTION:" not in system_message["content"]
+        # But should still include input hints
+        assert "INPUT FIELD DESCRIPTIONS:" in system_message["content"]
+
+    def test_agent_description_with_input_hints_enabled_with_description(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test agent description inclusion when input hints enabled and description available."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestInstructorBaseAgent(config=config)
+
+        # Set a test description
+        test_description = "This is a test instructor agent for testing purposes"
+        agent.description = test_description
+
+        system_message = agent._default_system_message()
+
+        # Should include both agent description and input hints
+        assert "AGENT DESCRIPTION:" in system_message["content"]
+        assert test_description in system_message["content"]
+        assert "INPUT FIELD DESCRIPTIONS:" in system_message["content"]
+        assert "**query**:" in system_message["content"]
+
+        # Verify order: original prompt, then description, then input hints
+        desc_pos = system_message["content"].find("AGENT DESCRIPTION:")
+        input_pos = system_message["content"].find("INPUT FIELD DESCRIPTIONS:")
+        assert desc_pos < input_pos
+
+    def test_agent_description_from_config(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test that agent description can be set via config."""
+        test_description = "Instructor agent description from config"
+        config = BaseAgentConfig(input_hints=True, description=test_description)
+        agent = TestInstructorBaseAgent(config=config)
+
+        system_message = agent._default_system_message()
+
+        # Should include the description from config
+        assert "AGENT DESCRIPTION:" in system_message["content"]
+        assert test_description in system_message["content"]
+        assert agent.description == test_description

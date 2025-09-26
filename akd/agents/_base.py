@@ -147,11 +147,18 @@ class BaseAgent[
         """
         content = self.system_prompt
 
-        # Add input schema hints if enabled
-        if self.input_hints:
-            input_info = self._input_schema_info
-            if input_info:
-                content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
+        # Early return if input hints disabled
+        if not self.input_hints:
+            return content
+
+        # Add agent description if available
+        if self.description:
+            content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
+
+        # Add input schema hints if available
+        input_info = self._input_schema_info
+        if input_info:
+            content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
 
         return content
 
