@@ -26,7 +26,7 @@ class BaseAgentConfig(BaseConfig):
     api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
     model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
     temperature: float = Field(
-        default=0.0,
+        default=CONFIG.model_config_settings.temperature,
         ge=0.0,
         le=2.0,
         description="Sampling temperature",
