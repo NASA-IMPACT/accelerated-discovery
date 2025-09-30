@@ -1,4 +1,5 @@
 import re
+from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -207,8 +208,15 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
     Attributes:
         use_docker: Enable Docker browser connection via CDP (default: False)
         playwright_cdp_url: WebSocket URL for CDP connection (default: "ws://localhost:9222")
+        fallback_to_local: Auto-fallback to local Playwright if Docker fails (default: True)
         browser_type: Browser engine - "chromium", "firefox", or "webkit" (default: "chromium")
         headless: Run browser without GUI (default: True)
+
+    Fallback Behavior:
+        By default, if Docker mode is enabled but fails, the scraper will automatically
+        fallback to local Playwright (fallback_to_local=True). This ensures backward
+        compatibility and reliability. Set fallback_to_local=False to strictly require
+        Docker mode and fail if unavailable.
 
     See Also:
         - Docker setup guide: docs/docker-playwright-setup.md
@@ -224,7 +232,11 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
         default="ws://localhost:9222",
         description="CDP endpoint URL for Docker Playwright connection.",
     )
-    browser_type: str = Field(
+    fallback_to_local: bool = Field(
+        default=True,
+        description="If Docker connection fails, automatically fallback to local Playwright.",
+    )
+    browser_type: Literal["chromium", "firefox", "webkit"] = Field(
         default="chromium",
         description="Browser type: chromium, firefox, or webkit.",
     )
@@ -349,25 +361,49 @@ class Crawl4AIWebScraper(WebScraper):
             return base_url
 
     async def fetch(self, url: str):
-        # Build BrowserConfig based on settings
+        # Try Docker mode first if configured
+        if self.use_docker:
+            try:
+                return await self._fetch_with_docker(url)
+            except Exception as e:
+                if self.fallback_to_local:
+                    logger.warning(
+                        f"Docker CDP connection failed: {e}. "
+                        f"Falling back to local Playwright.",
+                    )
+                    return await self._fetch_with_local(url)
+                else:
+                    raise
+
+        # Use local mode
+        return await self._fetch_with_local(url)
+
+    async def _fetch_with_docker(self, url: str):
+        """Fetch URL using Docker-based browser."""
+        # Discover the full CDP endpoint URL
+        cdp_url = await self._get_cdp_endpoint(self.playwright_cdp_url)
+
+        browser_config_params = {
+            "browser_type": self.browser_type,
+            "headless": self.headless,
+            "verbose": self.debug,
+            "browser_mode": "docker",
+            "cdp_url": cdp_url,
+            "use_managed_browser": True,
+        }
+
+        browser_config = BrowserConfig(**browser_config_params)
+
+        async with AsyncWebCrawler(config=browser_config) as crawler:
+            return await crawler.arun(url=url)
+
+    async def _fetch_with_local(self, url: str):
+        """Fetch URL using local Playwright."""
         browser_config_params = {
             "browser_type": self.browser_type,
             "headless": self.headless,
             "verbose": self.debug,
         }
-
-        # Add Docker CDP connection if configured
-        if self.use_docker:
-            # Discover the full CDP endpoint URL
-            cdp_url = await self._get_cdp_endpoint(self.playwright_cdp_url)
-
-            browser_config_params.update(
-                {
-                    "browser_mode": "docker",
-                    "cdp_url": cdp_url,
-                    "use_managed_browser": True,
-                },
-            )
 
         browser_config = BrowserConfig(**browser_config_params)
 
