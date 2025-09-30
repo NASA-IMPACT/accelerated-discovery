@@ -734,6 +734,7 @@ class SDECodeSearchTool(CodeSearchTool):
                 for page in range(self.max_pages):
                     try:
                         results = self.sde_search(page=page, query=query)
+                        results = results[: params.top_k]
                         if results:
                             for result in results:
                                 result["query"] = query
