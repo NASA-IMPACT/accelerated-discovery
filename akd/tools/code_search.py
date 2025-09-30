@@ -725,6 +725,7 @@ class SDECodeSearchTool(CodeSearchTool):
 
         all_results_data = []
         for query in params.queries:
+            query_results = []
             if self.debug:
                 logger.debug(
                     f"Searching for query: '{query}' with top_k={params.max_results}"
@@ -734,11 +735,10 @@ class SDECodeSearchTool(CodeSearchTool):
                 for page in range(self.max_pages):
                     try:
                         results = self.sde_search(page=page, query=query)
-                        results = results[: params.top_k]
                         if results:
                             for result in results:
                                 result["query"] = query
-                            all_results_data.extend(results)
+                            query_results.extend(results)
                         else:
                             break
                     except Exception as e:
@@ -746,6 +746,7 @@ class SDECodeSearchTool(CodeSearchTool):
                             f"Error during search for query '{query}' on page {page}: {e}"
                         )
                         continue  # continue to the next page
+                all_results_data.extend(query_results[: params.top_k])
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
 
