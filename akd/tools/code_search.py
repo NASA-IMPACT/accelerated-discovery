@@ -745,7 +745,6 @@ class SDECodeSearchTool(CodeSearchTool):
                             f"Error during search for query '{query}' on page {page}: {e}"
                         )
                         continue  # continue to the next page
-                all_results_data = all_results_data[: params.max_results]
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
 
