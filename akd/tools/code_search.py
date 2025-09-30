@@ -511,6 +511,8 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                     remove_embedding_column=self.config.remove_embedding_column,
                 )
                 if results:
+                    for result in results:
+                        result["query"] = query
                     all_results_data.extend(results)
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
@@ -520,7 +522,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 title=str(result.pop("name", "")),
                 url=HttpUrlAdapter.validate_python(result.pop("URL", "")),
                 content=result.pop("text", ""),
-                query=query,
+                query=result.pop("query", ""),
                 extra=result,
             )
             for result in all_results_data
@@ -733,6 +735,8 @@ class SDECodeSearchTool(CodeSearchTool):
                     try:
                         results = self.sde_search(page=page, query=query)
                         if results:
+                            for result in results:
+                                result["query"] = query
                             all_results_data.extend(results)
                         else:
                             break
@@ -750,7 +754,7 @@ class SDECodeSearchTool(CodeSearchTool):
                 title=str(result.get("url", "")).split("/")[-1],
                 url=HttpUrlAdapter.validate_python(result.pop("url", "")),
                 content=result.pop("full_text", ""),
-                query=query,
+                query=result.pop("query", ""),
                 extra=result,
             )
             for result in all_results_data
