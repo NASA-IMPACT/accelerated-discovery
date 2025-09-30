@@ -35,6 +35,10 @@ class CMRCollectionSearchInputSchema(DataSearchToolInputSchema):
         None,
         description="Instrument name (e.g., MODIS, VIIRS)",
     )
+    processing_level: Optional[str] = Field(
+        None,
+        description="Data processing level (e.g., Level 1B, Level 2)",
+    )
 
 
 class CMRCollectionSearchOutputSchema(DataSearchToolOutputSchema):
@@ -90,6 +94,8 @@ class CMRCollectionSearchTool(
             arguments["platform"] = params.platform
         if params.instrument:
             arguments["instrument"] = params.instrument
+        if params.processing_level:
+            arguments["processing_level"] = params.processing_level
 
         # Add temporal constraint
         if params.temporal:

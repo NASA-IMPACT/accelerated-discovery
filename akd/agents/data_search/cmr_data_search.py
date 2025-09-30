@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 # Temporary compatibility class for legacy methods
 from pydantic import BaseModel, Field, HttpUrl
 
+from akd.agents._base import BaseAgentConfig
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
 from akd.utils.logging import ContextualLogger, log_component_action, log_search_event
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
@@ -69,6 +70,20 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
         description="Page size for granule searches",
     )
 
+    # New ranking pipeline configuration
+    collections_per_query: int = Field(
+        default=5,
+        description="Top N results to take from each CMR query",
+    )
+    max_collections_per_approach: int = Field(
+        default=5,
+        description="Maximum collections to select per query approach",
+    )
+    final_collection_count: int = Field(
+        default=25,
+        description="Maximum collections in final ranked output",
+    )
+
     # Quality control
     min_collection_relevance_score: float = Field(
         default=0.3,
@@ -105,6 +120,14 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
     cmr_query_model: str = Field(
         default="gpt-4o-mini",
         description="Model to use for CMR query generation",
+    )
+    approach_filtering_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for per-approach collection filtering",
+    )
+    final_ranking_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for final cross-approach ranking",
     )
 
     # Legacy compatibility
@@ -174,8 +197,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         )
 
         # Initialize LLM-driven components with model-specific configurations
-        from akd.agents._base import BaseAgentConfig
-
         # Create configs for each component with specific models
         topic_config = BaseAgentConfig(model_name=self.config.topic_splitting_model)
         router_config = BaseAgentConfig(model_name=self.config.repository_routing_model)
@@ -315,47 +336,82 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 f"Identified {len(topics_output.topics)} functional topics",
             )
 
-            # Step 2: Repository Router (process each topic individually)
+            # Step 2: Repository Router (process topics in parallel)
             log_component_action(
                 "RepositoryRouter",
                 "STARTED",
                 {"topics_count": len(topics_output.topics)},
             )
-            search_logger.info("Step 2: Routing topics to data sources")
+            search_logger.info("Step 2: Routing topics to data sources in parallel")
 
+            # Create routing tasks for parallel execution
+            routing_tasks = [
+                self.repository_router_component.process(original_query, topic)
+                for topic in topics_output.topics
+            ]
+
+            # Execute routing in parallel
+            search_logger.info(f"Routing {len(routing_tasks)} topics in parallel...")
+            routing_results = await asyncio.gather(
+                *routing_tasks,
+                return_exceptions=True,
+            )
+
+            # Handle routing results and extract routes
             routes = []
-            for topic in topics_output.topics:
-                routing_output = await self.repository_router_component.process(
-                    original_query,
-                    topic,
-                )
-                routes.append(routing_output.route)
+            for i, result in enumerate(routing_results):
+                if isinstance(result, Exception):
+                    search_logger.error(f"Routing failed for topic {i + 1}: {result}")
+                    # Create a default route that skips CMR processing
+                    routes.append(
+                        type(
+                            "Route",
+                            (),
+                            {
+                                "repositories": [],
+                                "rationales": [f"Routing error: {str(result)}"],
+                            },
+                        )(),
+                    )
+                else:
+                    routes.append(result.route)
 
-            # Step 3: Process each topic based on its own route
-            topic_results = []
+            # Step 3: Process topics in parallel based on their routes
+            search_logger.info("Step 3: Processing topics in parallel")
+
+            # Separate CMR topics from non-CMR topics
+            cmr_topic_tasks = []
+            non_cmr_topics = []
+
             for i, (topic, route) in enumerate(
                 zip(topics_output.topics, routes),
                 start=1,
             ):
-                repos = [r.strip() for r in route.repositories]
+                repos = (
+                    [r.strip() for r in route.repositories]
+                    if hasattr(route, "repositories")
+                    else []
+                )
                 search_logger.info(f"Routing for topic {i}: {topic.title} → {repos}")
 
                 # Check if CMR is in the repositories
-                has_cmr = NASARepositoryEnum.CMR in route.repositories
+                has_cmr = (
+                    NASARepositoryEnum.CMR in route.repositories
+                    if hasattr(route, "repositories")
+                    else False
+                )
                 if has_cmr:
-                    search_logger.info(f"Processing topic {i} via CMR")
-                    topic_result = await self._process_single_topic(
-                        topic,
-                        original_query,
-                        params,
-                    )
-                    topic_results.append(topic_result)
+                    search_logger.info(f"Queuing topic {i} for parallel CMR processing")
+                    task = self._process_single_topic(topic, original_query, params)
+                    cmr_topic_tasks.append((topic, route, task))
                 else:
                     default_repo = repos[0] if repos else "Unknown"
                     note_text = (
-                        "; ".join(route.rationales) if route.rationales else None
+                        "; ".join(route.rationales)
+                        if hasattr(route, "rationales") and route.rationales
+                        else None
                     )
-                    topic_results.append(
+                    non_cmr_topics.append(
                         TopicResult(
                             topic=safe_model_dump(topic),
                             data_source=default_repo,
@@ -364,6 +420,40 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                             or f"Routed to {default_repo}; CMR not selected",
                         ),
                     )
+
+            # Execute all CMR topics in parallel
+            if cmr_topic_tasks:
+                search_logger.info(
+                    f"Processing {len(cmr_topic_tasks)} CMR topics in parallel...",
+                )
+                cmr_results = await asyncio.gather(
+                    *[task for _, _, task in cmr_topic_tasks],
+                    return_exceptions=True,
+                )
+
+                # Handle results from parallel execution
+                topic_results = []
+                for (topic, route, _), result in zip(cmr_topic_tasks, cmr_results):
+                    if isinstance(result, Exception):
+                        search_logger.error(
+                            f"Topic processing failed for '{topic.title}': {result}",
+                        )
+                        # Create an error result instead of failing the entire workflow
+                        error_result = TopicResult(
+                            topic=safe_model_dump(topic),
+                            data_source="CMR",
+                            decomposition_results=[],
+                            note=f"Processing error: {str(result)}",
+                        )
+                        topic_results.append(error_result)
+                    else:
+                        topic_results.append(result)
+
+                # Add non-CMR topics to results
+                topic_results.extend(non_cmr_topics)
+            else:
+                # No CMR topics, only non-CMR results
+                topic_results = non_cmr_topics
 
             # Calculate totals
             total_granules = sum(
@@ -458,19 +548,50 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             f"Generated {len(decomp_output.decompositions)} decompositions for topic '{topic.title}'",
         )
 
-        # Process each decomposition
-        decomp_results = []
+        # Process each decomposition in parallel
+        search_logger.info(
+            f"Processing {len(decomp_output.decompositions)} decompositions in parallel",
+        )
+
+        # Create tasks for parallel execution
+        decomp_tasks = []
         for i, decomp in enumerate(decomp_output.decompositions):
             search_logger.info(
-                f"Processing decomposition {i + 1}/{len(decomp_output.decompositions)}: {decomp.title}",
+                f"Queuing decomposition {i + 1}/{len(decomp_output.decompositions)}: {decomp.title}",
             )
-            decomp_result = await self._process_single_decomposition(
+            task = self._process_single_decomposition(
                 topic,
                 decomp,
                 original_query,
                 params,
             )
-            decomp_results.append(decomp_result)
+            decomp_tasks.append(task)
+
+        # Execute all decompositions in parallel
+        search_logger.info("Executing decomposition tasks in parallel...")
+        decomp_results = await asyncio.gather(*decomp_tasks, return_exceptions=True)
+
+        # Handle any exceptions from parallel execution
+        final_results = []
+        for i, result in enumerate(decomp_results):
+            if isinstance(result, Exception):
+                search_logger.error(f"Decomposition {i + 1} failed: {result}")
+                # Create an error result instead of failing the entire workflow
+                error_result = DecompositionResult(
+                    decomposition=safe_model_dump(decomp_output.decompositions[i]),
+                    query_approaches=[],
+                    searchable_queries=[],
+                    collections=[],
+                    granules=[],
+                    total_collections_found=0,
+                    total_granules_found=0,
+                    error=str(result),
+                )
+                final_results.append(error_result)
+            else:
+                final_results.append(result)
+
+        decomp_results = final_results
 
         return TopicResult(
             topic=safe_model_dump(topic),
@@ -537,23 +658,30 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             "STARTED",
             {"queries": len(searchable_output.searchable_queries)},
         )
-        collections = await self._execute_searchable_queries(
+        approach_collections = await self._execute_searchable_queries(
             searchable_output.searchable_queries,
             params,
         )
-        search_logger.info(f"Found {len(collections)} collections from queries")
+        total_collections = sum(len(c) for c in approach_collections.values())
+        search_logger.info(
+            f"Found {total_collections} collections across {len(approach_collections)} approaches",
+        )
 
         # Collection Ranking & Filtering
         log_component_action(
             "CollectionRanking",
             "STARTED",
-            {"collections": len(collections)},
+            {
+                "approaches": len(approach_collections),
+                "total_collections": total_collections,
+            },
         )
         ranked_collections = await self._rank_collections(
-            collections,
+            approach_collections,
             original_query,
             topic,
             decomp,
+            known_params_output.query_approaches,
         )
         search_logger.info(f"Ranked to {len(ranked_collections)} top collections")
 
@@ -577,7 +705,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
             ),
             collections=ranked_collections,
             granules=granules,
-            total_collections_found=len(collections),
+            total_collections_found=total_collections,
             total_granules_found=len(granules),
         )
 
@@ -585,87 +713,330 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         self,
         searchable_queries: List[SearchableQuery],
         params: DataSearchAgentInputSchema,
-    ) -> List[Dict[str, Any]]:
-        """Execute searchable queries and return collections."""
-        all_collections = []
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Execute searchable queries and return collections grouped by approach.
 
+        Args:
+            searchable_queries: Queries to execute (each tagged with approach_index)
+            params: Search parameters
+
+        Returns:
+            Dictionary mapping approach_index to list of collections
+        """
+        # Group queries by their source approach
+        approach_queries = {}  # approach_index -> [queries]
         for query in searchable_queries:
-            # Convert SearchableQuery to tool parameters
-            search_params = {}
+            approach_idx = query.approach_index
+            if approach_idx not in approach_queries:
+                approach_queries[approach_idx] = []
+            approach_queries[approach_idx].append(query)
 
-            # Add known parameters
-            if query.instrument:
-                search_params["instrument"] = query.instrument
-            if query.platform:
-                search_params["platform"] = query.platform
-            if query.temporal:
-                search_params["temporal"] = query.temporal
-            if query.bounding_box:
-                search_params["bounding_box"] = query.bounding_box
+        # Execute and collect results per approach
+        approach_collections = {}  # approach_index -> [collections]
 
-            # Add searchable parameters
-            if query.combined_keyword_string:
-                search_params["keyword"] = query.combined_keyword_string
+        for approach_idx, queries in approach_queries.items():
+            all_collections = []
 
-            # Override with explicit input parameters
-            if params.temporal_range:
-                search_params["temporal"] = params.temporal_range
-            if params.spatial_bounds:
-                search_params["bounding_box"] = params.spatial_bounds
+            for query in queries:
+                # Get CMR-compatible parameters using helper method
+                search_params = query.get_mcp_parameters()
 
-            # Add pagination
-            search_params["page_size"] = self.config.collection_search_page_size
+                # Override with explicit input parameters
+                if params.temporal_range:
+                    search_params["temporal"] = params.temporal_range
+                if params.spatial_bounds:
+                    search_params["bounding_box"] = params.spatial_bounds
 
-            try:
-                # Execute search
-                tool_input = self.collection_search_tool.input_schema(**search_params)
-                result = await self.collection_search_tool.arun(tool_input)
+                # Add pagination
+                search_params["page_size"] = self.config.collection_search_page_size
 
-                # Extract collections
-                if hasattr(result, "collections") and result.collections:
-                    all_collections.extend(result.collections)
+                try:
+                    # Execute search
+                    tool_input = self.collection_search_tool.input_schema(
+                        **search_params,
+                    )
+                    result = await self.collection_search_tool.arun(tool_input)
 
-            except Exception as e:
-                search_logger = ContextualLogger("query_execution")
-                search_logger.warning(f"Query execution failed: {e}")
+                    # Extract and limit collections per query
+                    if hasattr(result, "collections") and result.collections:
+                        limited = result.collections[
+                            : self.config.collections_per_query
+                        ]
+                        all_collections.extend(limited)
 
-        return all_collections
+                except Exception as e:
+                    search_logger = ContextualLogger("query_execution")
+                    search_logger.warning(f"Query execution failed: {e}")
 
-    async def _rank_collections(
+            approach_collections[approach_idx] = all_collections
+
+        return approach_collections
+
+    def _deduplicate_approach_collections(
         self,
-        collections: List[Dict[str, Any]],
+        approach_collections: Dict[int, List[Dict[str, Any]]],
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Deduplicate collections within each approach, preserving first occurrence.
+        If a collection appears in multiple approaches, keep it only in the first.
+
+        Args:
+            approach_collections: Collections grouped by approach index
+
+        Returns:
+            Deduplicated collections per approach
+        """
+        search_logger = ContextualLogger("deduplication")
+        global_seen_ids = set()  # Track across all approaches
+        deduplicated_by_approach = {}
+
+        # Process approaches in order (0, 1, 2, ...)
+        for approach_idx in sorted(approach_collections.keys()):
+            collections = approach_collections[approach_idx]
+            deduplicated = []
+
+            for collection in collections:
+                concept_id = collection.get("concept_id")
+                if concept_id and concept_id not in global_seen_ids:
+                    global_seen_ids.add(concept_id)
+                    deduplicated.append(collection)
+
+            deduplicated_by_approach[approach_idx] = deduplicated
+
+            search_logger.debug(
+                f"Approach {approach_idx}: {len(collections)} → "
+                f"{len(deduplicated)} after deduplication",
+            )
+
+        return deduplicated_by_approach
+
+    async def _filter_and_rank_by_approach(
+        self,
+        approach_collections: Dict[int, List[Dict[str, Any]]],
         original_query: str,
         topic: Topic,
         decomp: ScientificDecomposition,
+        query_approaches: List[Any],
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        """
+        Filter and rank collections within each approach in parallel.
+
+        Args:
+            approach_collections: Collections grouped by approach index
+            original_query: Research question
+            topic: Topic context
+            decomp: Scientific decomposition
+            query_approaches: List of QueryApproach objects for context
+
+        Returns:
+            Dictionary mapping approach_index to top N ranked collections
+        """
+        from .components.approach_collection_filtering import (
+            ApproachCollectionFilteringComponent,
+            ApproachCollectionFilteringInputSchema,
+        )
+
+        search_logger = ContextualLogger("approach_filtering")
+
+        if not approach_collections:
+            return {}
+
+        # Create filtering tasks for each approach
+        filtering_tasks = []
+
+        for approach_idx in sorted(approach_collections.keys()):
+            collections = approach_collections[approach_idx]
+
+            if not collections:
+                continue
+
+            # Get the corresponding QueryApproach
+            if approach_idx >= len(query_approaches):
+                search_logger.warning(f"No QueryApproach for index {approach_idx}")
+                continue
+
+            approach = query_approaches[approach_idx]
+
+            filter_input = ApproachCollectionFilteringInputSchema(
+                original_query=original_query,
+                topic_title=topic.title,
+                topic_context=topic.functional_context,
+                decomposition_title=decomp.title,
+                decomposition_justification=decomp.scientific_justification,
+                approach_instrument=approach.instrument,
+                approach_platform=approach.platform,
+                approach_processing_level=approach.processing_level,
+                approach_temporal_range=approach.temporal,
+                approach_spatial_bounds=approach.bounding_box,
+                approach_temporal_resolution=approach.temporal_resolution,
+                approach_spatial_resolution=approach.spatial_resolution,
+                approach_keywords=[],  # Keywords are in searchable queries, not approaches
+                collections=collections,
+                max_collections=self.config.max_collections_per_approach,
+            )
+
+            # Initialize component with configured model
+            component_config = BaseAgentConfig(
+                model_name=self.config.approach_filtering_model,
+            )
+            filtering_component = ApproachCollectionFilteringComponent(
+                config=component_config,
+            )
+
+            task = filtering_component.arun(filter_input)
+            filtering_tasks.append((approach_idx, collections, task))
+
+        # Execute in parallel
+        if len(filtering_tasks) > 1:
+            results = await asyncio.gather(
+                *[task for _, _, task in filtering_tasks],
+                return_exceptions=True,
+            )
+        else:
+            results = []
+            for _, _, task in filtering_tasks:
+                result = await task
+                results.append(result)
+
+        # Map results back to collections
+        filtered_by_approach = {}
+
+        for (approach_idx, collections, _), result in zip(filtering_tasks, results):
+            if isinstance(result, Exception):
+                search_logger.error(
+                    f"Approach {approach_idx} filtering failed: {result}",
+                )
+                # Skip this approach entirely
+                continue
+
+            # Extract selected collections
+            selected = [
+                collections[fc.collection_index]
+                for fc in result.selected_collections
+                if 0 <= fc.collection_index < len(collections)
+            ]
+
+            filtered_by_approach[approach_idx] = selected
+
+            search_logger.info(
+                f"Approach {approach_idx}: {len(collections)} → "
+                f"{len(selected)} collections selected",
+            )
+
+        return filtered_by_approach
+
+    async def _rank_collections(
+        self,
+        approach_collections: Dict[int, List[Dict[str, Any]]],
+        original_query: str,
+        topic: Topic,
+        decomp: ScientificDecomposition,
+        query_approaches: List[Any] = None,
     ) -> List[Dict[str, Any]]:
-        """Rank collections using the collection ranking component."""
-        if not collections:
+        """
+        Rank collections using approach-aware pipeline.
+
+        Pipeline:
+        1. Per-approach deduplication
+        2. Per-approach filtering and ranking (parallel)
+        3. Final cross-approach ranking
+
+        Args:
+            approach_collections: Collections grouped by approach index
+            original_query: Research question
+            topic: Topic context
+            decomp: Scientific decomposition
+            query_approaches: List of QueryApproach objects
+
+        Returns:
+            List of up to final_collection_count collections, ranked 1-N
+        """
+        from .components.final_collection_ranking import (
+            FinalCollectionRankingComponent,
+            FinalCollectionRankingInputSchema,
+        )
+
+        search_logger = ContextualLogger("collection_ranking")
+
+        if not approach_collections:
             return []
 
-        # Limit collections if too many
-        if len(collections) <= self.config.max_collections_to_search:
-            return collections
+        # Stage 1: Per-approach deduplication
+        deduplicated = self._deduplicate_approach_collections(approach_collections)
 
-        # Use collection ranking component
-        ranking_input = CollectionRankingInputSchema(
+        total_before = sum(len(c) for c in approach_collections.values())
+        total_after = sum(len(c) for c in deduplicated.values())
+        search_logger.info(
+            f"Deduplication across {len(deduplicated)} approaches: "
+            f"{total_before} → {total_after} collections",
+        )
+
+        # Stage 2: Per-approach filtering and ranking (parallel)
+        filtered_by_approach = await self._filter_and_rank_by_approach(
+            deduplicated,
+            original_query,
+            topic,
+            decomp,
+            query_approaches,
+        )
+
+        # Flatten all approach results into single list
+        all_filtered = []
+        for approach_idx in sorted(filtered_by_approach.keys()):
+            all_filtered.extend(filtered_by_approach[approach_idx])
+
+        search_logger.info(
+            f"After approach filtering: {len(all_filtered)} total collections "
+            f"from {len(filtered_by_approach)} approaches",
+        )
+
+        if not all_filtered:
+            search_logger.warning("No collections passed approach filtering")
+            return []
+
+        # Stage 3: Final cross-approach ranking
+        final_input = FinalCollectionRankingInputSchema(
             original_query=original_query,
-            scientific_angle=safe_model_dump(decomp),  # Use decomposition as "angle"
-            collections=collections,
-            max_collections=self.config.max_collections_to_search,
+            topic_title=topic.title,
+            topic_context=topic.functional_context,
+            decomposition_title=decomp.title,
+            decomposition_justification=decomp.scientific_justification,
+            collections=all_filtered,
+            max_collections=min(len(all_filtered), self.config.final_collection_count),
         )
 
         try:
-            ranking_result = await self.collection_ranking_component.arun(ranking_input)
-            ranked_collections = [
-                collections[rc.collection_index]
-                for rc in ranking_result.ranked_collections
-                if 0 <= rc.collection_index < len(collections)
+            # Initialize component with configured model
+            component_config = BaseAgentConfig(
+                model_name=self.config.final_ranking_model,
+            )
+            final_ranking_component = FinalCollectionRankingComponent(
+                config=component_config,
+            )
+
+            final_result = await final_ranking_component.arun(final_input)
+
+            # Map indices to full collection objects and sort by rank
+            final_ranked = [
+                all_filtered[rc.collection_index]
+                for rc in sorted(
+                    final_result.ranked_collections,
+                    key=lambda x: x.final_rank,
+                )
+                if 0 <= rc.collection_index < len(all_filtered)
             ]
-            return ranked_collections
+
+            search_logger.info(
+                f"Final ranking complete: {len(final_ranked)} collections ranked",
+            )
+
+            return final_ranked
+
         except Exception as e:
-            search_logger = ContextualLogger("collection_ranking")
-            search_logger.error(f"Collection ranking failed: {e}")
-            raise RuntimeError("Collection ranking failed") from e
+            search_logger.error(f"Final ranking failed: {e}")
+            # Fallback: return up to final_collection_count
+            return all_filtered[: self.config.final_collection_count]
 
     async def _search_granules_for_collections(
         self,

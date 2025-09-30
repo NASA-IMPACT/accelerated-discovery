@@ -22,9 +22,54 @@ class CollectionRankingInputSchema(InputSchema):
         ...,
         description="The original scientific research question",
     )
-    scientific_angle: Dict[str, Any] = Field(
+    topic_title: str = Field(
         ...,
-        description="The scientific angle these collections relate to",
+        description="Title of the functional topic being processed",
+    )
+    topic_context: str = Field(
+        ...,
+        description="Functional context explaining why this is a distinct area",
+    )
+    decomposition_title: str = Field(
+        ...,
+        description="Title of the scientific decomposition",
+    )
+    decomposition_justification: str = Field(
+        ...,
+        description="Scientific justification for the decomposition",
+    )
+    # Query approach fields (individual fields instead of summary)
+    approach_instruments: List[str] = Field(
+        default_factory=list,
+        description="List of instruments used in search queries",
+    )
+    approach_platforms: List[str] = Field(
+        default_factory=list,
+        description="List of platforms used in search queries",
+    )
+    approach_keywords: List[str] = Field(
+        default_factory=list,
+        description="List of keywords used in search queries",
+    )
+    approach_temporal_ranges: List[str] = Field(
+        default_factory=list,
+        description="List of temporal ranges used in search queries",
+    )
+    approach_spatial_bounds: List[str] = Field(
+        default_factory=list,
+        description="List of spatial bounds used in search queries",
+    )
+    approach_processing_levels: List[str] = Field(
+        default_factory=list,
+        description="List of processing levels used in search queries",
+    )
+    approach_temporal_resolutions: List[str] = Field(
+        default_factory=list,
+        description="List of temporal resolutions from query approaches",
+    )
+    approach_spatial_resolutions: List[str] = Field(
+        default_factory=list,
+        description="List of spatial resolutions from query approaches",
     )
     collections: List[Dict[str, Any]] = Field(
         ...,
@@ -127,14 +172,39 @@ class CollectionRankingComponent(
             collections_summary.append(summary)
 
         # Format user prompt
-        angle_data = params.scientific_angle
         user_prompt = self.user_prompt_template.format(
             original_query=params.original_query,
-            angle_title=angle_data.get("title", "Unknown angle"),
-            angle_justification=angle_data.get(
-                "scientific_justification",
-                "No justification provided",
-            ),
+            topic_title=params.topic_title,
+            topic_context=params.topic_context,
+            decomposition_title=params.decomposition_title,
+            decomposition_justification=params.decomposition_justification,
+            # Individual approach fields
+            approach_instruments=", ".join(params.approach_instruments)
+            if params.approach_instruments
+            else "None specified",
+            approach_platforms=", ".join(params.approach_platforms)
+            if params.approach_platforms
+            else "None specified",
+            approach_keywords=", ".join(params.approach_keywords)
+            if params.approach_keywords
+            else "None specified",
+            approach_temporal_ranges=", ".join(params.approach_temporal_ranges)
+            if params.approach_temporal_ranges
+            else "None specified",
+            approach_spatial_bounds=", ".join(params.approach_spatial_bounds)
+            if params.approach_spatial_bounds
+            else "None specified",
+            approach_processing_levels=", ".join(params.approach_processing_levels)
+            if params.approach_processing_levels
+            else "None specified",
+            approach_temporal_resolutions=", ".join(
+                params.approach_temporal_resolutions,
+            )
+            if params.approach_temporal_resolutions
+            else "None specified",
+            approach_spatial_resolutions=", ".join(params.approach_spatial_resolutions)
+            if params.approach_spatial_resolutions
+            else "None specified",
             num_collections=len(params.collections),
             collections_list="\n\n".join(collections_summary),
             max_collections=params.max_collections,

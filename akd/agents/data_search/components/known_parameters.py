@@ -51,6 +51,44 @@ class QueryApproach(BaseModel):
         description="Required spatial resolution (e.g., 250m, 1km, 30m)",
     )
 
+    def get_mcp_parameters(self) -> dict[str, str]:
+        """
+        Get parameters that can be passed directly to CMR MCP API.
+
+        Returns:
+            Dictionary with only CMR-compatible search parameters
+        """
+        mcp_params = {}
+
+        if self.instrument:
+            mcp_params["instrument"] = self.instrument
+        if self.platform:
+            mcp_params["platform"] = self.platform
+        if self.processing_level:
+            mcp_params["processing_level"] = self.processing_level
+        if self.temporal:
+            mcp_params["temporal"] = self.temporal
+        if self.bounding_box:
+            mcp_params["bounding_box"] = self.bounding_box
+
+        return mcp_params
+
+    def get_filter_parameters(self) -> dict[str, str]:
+        """
+        Get parameters that must be used for post-search filtering.
+
+        Returns:
+            Dictionary with resolution and other filter-only parameters
+        """
+        filter_params = {}
+
+        if self.temporal_resolution:
+            filter_params["temporal_resolution"] = self.temporal_resolution
+        if self.spatial_resolution:
+            filter_params["spatial_resolution"] = self.spatial_resolution
+
+        return filter_params
+
 
 class KnownParametersOutput(BaseModel):
     """Output from known parameters component."""
@@ -147,7 +185,17 @@ class KnownParametersComponent(
                         f"Generated {len(response.query_approaches)} query approaches",
                     )
                     for i, approach in enumerate(response.query_approaches, 1):
-                        logger.debug(f"  {i}. {self._summarize_approach(approach)}")
+                        parts = []
+                        if approach.instrument:
+                            parts.append(f"instrument: {approach.instrument}")
+                        if approach.platform:
+                            parts.append(f"platform: {approach.platform}")
+                        if approach.temporal:
+                            parts.append(f"temporal: {approach.temporal[:10]}...")
+                        summary = (
+                            ", ".join(parts) if parts else "no specific parameters"
+                        )
+                        logger.debug(f"  {i}. {summary}")
 
                 return response
 
@@ -186,22 +234,6 @@ class KnownParametersComponent(
             decomposition_title=decomposition.title,
             decomposition_justification=decomposition.scientific_justification,
         )
-
-    def _summarize_approach(self, approach: QueryApproach) -> str:
-        """Create a brief summary of a query approach for logging."""
-        parts = []
-        if approach.instrument:
-            parts.append(f"instrument: {approach.instrument}")
-        if approach.platform:
-            parts.append(f"platform: {approach.platform}")
-        if approach.temporal:
-            parts.append(
-                f"temporal: {approach.temporal[:10]}...",
-            )  # Truncate for readability
-        if approach.bounding_box:
-            parts.append(f"bbox: {approach.bounding_box}")
-
-        return ", ".join(parts) if parts else "no specific parameters"
 
     async def _arun(
         self,

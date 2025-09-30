@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 
 from akd.agents._base import BaseAgentConfig
 from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
-from akd.agents.data_search._base import DataSearchAgentInputSchema
 from akd.agents.data_search.components import (
     CollectionRankingComponent,
     KnownParametersComponent,
@@ -359,137 +358,294 @@ async def test_collection_ranking_only():
 
 
 async def test_individual_components():
-    """Test each component individually."""
+    """Test each component individually - single pathway for speed."""
     demo_query = (
         "Help me gather data to study the flood risk of the lower Mississippi basin"
     )
 
-    print("\n🧪 COMPONENT TESTING")
+    print("\n🧪 COMPONENT TESTING - SINGLE PATHWAY")
     print(f"Query: '{demo_query}'")
 
     # 1. Topic Splitting
     print("\n1️⃣ Topic Splitting:")
     topics_output = await agent.topic_splitting_component.process(demo_query)
-    for topic in topics_output.topics:
-        print(f"   • {topic.title}")
-        print(f"     Context: {topic.functional_context}")
+    print(f"   Found {len(topics_output.topics)} topics. Using first topic:")
+    first_topic = topics_output.topics[0]
+    print(f"   • {first_topic.title}")
+    print(f"     Context: {first_topic.functional_context}")
 
-    # 2. Repository Routing
-    print("\n2️⃣ Repository Routing:")
-    routes = []
-    for topic in topics_output.topics:
-        routing = await agent.repository_router_component.process(demo_query, topic)
-        routes.append(routing.route)
+    # 2. Repository Routing (first topic only)
+    print(f"\n2️⃣ Repository Routing for '{first_topic.title}':")
+    routing = await agent.repository_router_component.process(demo_query, first_topic)
+    print(f"   • Repositories: {routing.route.repositories}")
+    print(f"   • Rationales: {routing.route.rationales}")
 
-    print("   • Per-topic routing:")
-    for i, (topic, route) in enumerate(
-        zip(topics_output.topics, routes),
-        start=1,
-    ):
-        print(f"     - {i}. {topic.title}: {route.repositories}")
+    # 3. Scientific Decomposition (first topic only)
+    print(f"\n3️⃣ Scientific Decomposition for '{first_topic.title}':")
+    decomp_output = await agent.scientific_decomposition_component.process(
+        demo_query,
+        first_topic,
+    )
+    print(f"   Found {len(decomp_output.decompositions)} decompositions. Using first:")
+    first_decomp = decomp_output.decompositions[0]
+    print(f"   • {first_decomp.title}")
+    print(f"     Justification: {first_decomp.scientific_justification}")
 
-    # 3. Scientific Decomposition (first CMR topic)
-    # Pick first topic that includes CMR
-    first_topic = None
-    for topic, route in zip(topics_output.topics, routes):
-        if any(r.upper() == "CMR" or r == "CMR" for r in route.repositories):
-            first_topic = topic
-            break
-    if first_topic is not None:
-        print(f"\n3️⃣ Scientific Decomposition for '{first_topic.title}':")
-        decomp_output = await agent.scientific_decomposition_component.process(
-            demo_query,
-            first_topic,
-        )
-        for decomp in decomp_output.decompositions:
-            print(f"   • {decomp.title}")
-            print(f"     Justification: {decomp.scientific_justification}")
+    # 4. Known Parameters (first decomposition)
+    print(f"\n4️⃣ Known Parameters for '{first_decomp.title}':")
+    known_params = await agent.known_parameters_component.process(
+        demo_query,
+        first_topic,
+        first_decomp,
+    )
+    print(f"   Generated {len(known_params.query_approaches)} approaches:")
+    for i, approach in enumerate(known_params.query_approaches, 1):
+        print(f"   Approach {i}:")
+        approach_dict = approach.model_dump()
+        for param, value in approach_dict.items():
+            if value is not None:
+                print(f"     {param}: {value}")
 
-        # 4. Known Parameters (first decomposition)
-        if decomp_output.decompositions:
-            first_decomp = decomp_output.decompositions[0]
-            print(f"\n4️⃣ Known Parameters for '{first_decomp.title}':")
-            known_params = await agent.known_parameters_component.process(
-                demo_query,
-                first_topic,
-                first_decomp,
-            )
-            for i, approach in enumerate(known_params.query_approaches, 1):
-                print(f"   Approach {i}:")
-                approach_dict = approach.model_dump()
-                for param, value in approach_dict.items():
-                    if value is not None:
-                        print(f"     {param}: {value}")
-
-            # 5. Searchable Parameters
-            if known_params.query_approaches:
-                print("\n5️⃣ Searchable Parameters:")
-                searchable_params = await agent.searchable_parameters_component.process(
-                    demo_query,
-                    first_topic,
-                    first_decomp,
-                    known_params.query_approaches,
-                )
-                for i, query in enumerate(searchable_params.searchable_queries, 1):
-                    print(f"   Query {i}:")
-                    print(f"     Keywords: {', '.join(query.primary_keywords)}")
-                    print(f"     Combined: {query.combined_keyword_string}")
+    # 5. Searchable Parameters (all approaches from first decomposition)
+    print(
+        f"\n5️⃣ Searchable Parameters for all {len(known_params.query_approaches)} approaches:",
+    )
+    searchable_params = await agent.searchable_parameters_component.process(
+        demo_query,
+        first_topic,
+        first_decomp,
+        known_params.query_approaches,
+    )
+    print(
+        f"   Generated {len(searchable_params.searchable_queries)} searchable queries:",
+    )
+    for i, query in enumerate(searchable_params.searchable_queries, 1):
+        print(f"   Query {i}:")
+        print(f"     Keywords: {', '.join(query.primary_keywords)}")
+        print(f"     Combined: {query.combined_keyword_string}")
 
 
-async def test_new_workflow():
-    """Test the complete new workflow end-to-end."""
+async def test_new_workflow(query: str = None):
+    """Test the complete new workflow step-by-step with single path processing."""
     demo_query = (
-        "Help me gather data to study the flood risk of the lower Mississippi basin"
+        query
+        or "Help me gather data to study the flood risk of the lower Mississippi basin"
     )
 
-    print("\n🆕 TESTING NEW TOPIC-BASED WORKFLOW")
+    print("\n🆕 TESTING NEW TOPIC-BASED WORKFLOW - STEP BY STEP, SINGLE PATH")
     print(f"🔍 Query: '{demo_query}'")
 
-    # Test the full new workflow
-    input_params = DataSearchAgentInputSchema(query=demo_query)
-    result = await agent.arun(input_params)
+    # Step 1: Topic Splitting
+    print("\n1️⃣ Topic Splitting:")
+    topics_output = await agent.topic_splitting_component.process(demo_query)
+    print(f"   ✅ Identified {len(topics_output.topics)} topics:")
+    for i, topic in enumerate(topics_output.topics, 1):
+        print(f"   {i}. **{topic.title}**")
+        print(f"      Context: {topic.functional_context}")
 
-    print("\n📊 SEARCH RESULTS:")
-    print(f"   Topics Found: {len(result.topics)}")
-    print(f"   Total Data Files: {result.total_results}")
-    print(
-        f"   Search Duration: {result.search_metadata.get('duration_seconds', 0):.1f}s",
+    # Select first topic for single-path processing
+    if not topics_output.topics:
+        print("   ❌ No topics found, ending workflow")
+        return
+
+    first_topic = topics_output.topics[0]
+    print(f"\n   📌 Selected for processing: {first_topic.title}")
+
+    # Step 2: Repository Routing (for selected topic only)
+    print("\n2️⃣ Repository Routing:")
+    routing_output = await agent.repository_router_component.process(
+        demo_query,
+        first_topic,
+    )
+    print(f"   ✅ Repository routing for '{first_topic.title}':")
+    print(f"      Repositories: {routing_output.route.repositories}")
+    print(f"      Rationales: {routing_output.route.rationales}")
+
+    # Check if CMR is selected
+    from akd.agents.data_search.components.repository_router import NASARepositoryEnum
+
+    has_cmr = NASARepositoryEnum.CMR in routing_output.route.repositories
+    if not has_cmr:
+        print(
+            f"   ⚠️  CMR not selected, ending workflow (routed to: {routing_output.route.repositories})",
+        )
+        return
+
+    # Step 3: Scientific Decomposition (for selected topic only)
+    print("\n3️⃣ Scientific Decomposition:")
+    decomp_output = await agent.scientific_decomposition_component.process(
+        demo_query,
+        first_topic,
+    )
+    print(f"   ✅ Generated {len(decomp_output.decompositions)} decompositions:")
+    for i, decomp in enumerate(decomp_output.decompositions, 1):
+        print(f"   {i}. **{decomp.title}**")
+        print(f"      Scientific Justification: {decomp.scientific_justification}")
+
+    # Select first decomposition for single-path processing
+    if not decomp_output.decompositions:
+        print("   ❌ No decompositions found, ending workflow")
+        return
+
+    first_decomp = decomp_output.decompositions[0]
+    print(f"\n   📌 Selected for processing: {first_decomp.title}")
+
+    # Step 4: Known Parameters (for selected topic + decomposition)
+    print("\n4️⃣ Known Parameters:")
+    known_params_output = await agent.known_parameters_component.process(
+        demo_query,
+        first_topic,
+        first_decomp,
     )
     print(
-        f"   Workflow Version: {result.search_metadata.get('workflow_version', 'unknown')}",
+        f"   ✅ Generated {len(known_params_output.query_approaches)} query approaches:",
     )
+    print(f"   📋 Reasoning: {known_params_output.reasoning}")
 
-    # Display structured results
-    for i, topic_result in enumerate(result.topics, 1):
-        print(f"\n📌 TOPIC {i}: {topic_result.topic['title']}")
-        print(f"   Data Source: {topic_result.data_source}")
+    for i, approach in enumerate(known_params_output.query_approaches, 1):
+        print(f"\n   Approach {i}:")
+        approach_dict = approach.model_dump()
+        for param, value in approach_dict.items():
+            if value is not None:
+                print(f"     {param}: {value}")
 
-        if topic_result.note:
-            print(f"   → {topic_result.note}")
-        else:
-            print(f"   Decompositions: {len(topic_result.decomposition_results)}")
+    # Step 5: Searchable Parameters
+    print("\n5️⃣ Searchable Parameters:")
+    searchable_output = await agent.searchable_parameters_component.process(
+        demo_query,
+        first_topic,
+        first_decomp,
+        known_params_output.query_approaches,
+    )
+    print(
+        f"   ✅ Generated {len(searchable_output.searchable_queries)} searchable queries:",
+    )
+    print(f"   📋 Strategy: {searchable_output.keyword_strategy}")
 
-            for j, decomp_result in enumerate(topic_result.decomposition_results, 1):
-                print(
-                    f"\n   🔬 DECOMPOSITION {j}: {decomp_result.decomposition['title']}",
-                )
-                print(
-                    f"      Scientific Justification: {decomp_result.decomposition['scientific_justification']}",
-                )
-                print(f"      Query Approaches: {len(decomp_result.query_approaches)}")
-                print(f"      Collections Found: {len(decomp_result.collections)}")
-                print(f"      Data Files Found: {len(decomp_result.granules)}")
+    for i, query in enumerate(searchable_output.searchable_queries, 1):
+        print(f"\n   Query {i}:")
+        print(f"     Keywords: {', '.join(query.primary_keywords)}")
+        print(f"     Combined: {query.combined_keyword_string}")
+        if query.instrument:
+            print(f"     Instrument: {query.instrument}")
+        if query.temporal:
+            print(f"     Temporal: {query.temporal}")
 
-                # Show top collections
-                for k, collection in enumerate(decomp_result.collections[:3], 1):
-                    title = collection.get("title", "No title")
-                    short_name = collection.get("short_name", "N/A")
-                    print(f"         {k}. [{short_name}] {title}")
+    # Step 6: Collection Search
+    print("\n6️⃣ Collection Search:")
+    collections = []
+    for i, query in enumerate(searchable_output.searchable_queries, 1):
+        print(f"   Executing query {i}: {query.combined_keyword_string}")
+        try:
+            search_params = query.get_mcp_parameters()
+            search_params["page_size"] = agent.config.collection_search_page_size
 
-                if len(decomp_result.collections) > 3:
-                    print(
-                        f"         ... and {len(decomp_result.collections) - 3} more collections",
-                    )
+            tool_input = agent.collection_search_tool.input_schema(**search_params)
+            result = await agent.collection_search_tool.arun(tool_input)
+
+            if hasattr(result, "collections") and result.collections:
+                collections.extend(result.collections)
+                print(f"     → Found {len(result.collections)} collections")
+            else:
+                print("     → No collections found")
+        except Exception as e:
+            print(f"     → Query failed: {e}")
+
+    print(f"   ✅ Total collections found: {len(collections)}")
+
+    # Step 7: Collection Ranking (if too many collections)
+    print("\n7️⃣ Collection Ranking:")
+    if len(collections) > agent.config.max_collections_to_search:
+        print(
+            f"   Too many collections ({len(collections)}), ranking to top {agent.config.max_collections_to_search}",
+        )
+
+        from akd.agents.data_search.components.collection_ranking import (
+            CollectionRankingInputSchema,
+        )
+
+        ranking_input = CollectionRankingInputSchema(
+            original_query=demo_query,
+            topic_title=first_topic.title,
+            topic_context=first_topic.functional_context,
+            decomposition_title=first_decomp.title,
+            decomposition_justification=first_decomp.scientific_justification,
+            collections=collections,
+            max_collections=agent.config.max_collections_to_search,
+        )
+
+        ranking_result = await agent.collection_ranking_component.arun(ranking_input)
+        ranked_collections = [
+            collections[rc.collection_index]
+            for rc in ranking_result.ranked_collections
+            if 0 <= rc.collection_index < len(collections)
+        ]
+        print(f"   ✅ Ranked to {len(ranked_collections)} top collections")
+        collections = ranked_collections
+    else:
+        print(f"   Using all {len(collections)} collections (within limit)")
+
+    # Show selected collections
+    for i, collection in enumerate(collections[:3], 1):
+        title = collection.get("title", "No title")
+        short_name = collection.get("short_name", "N/A")
+        print(f"   {i}. [{short_name}] {title}")
+
+    if len(collections) > 3:
+        print(f"   ... and {len(collections) - 3} more collections")
+
+    # Step 8: Granule Search
+    print("\n8️⃣ Granule Search:")
+    all_granules = []
+
+    for i, collection in enumerate(collections, 1):
+        concept_id = collection.get("concept_id")
+        if not concept_id:
+            continue
+
+        print(
+            f"   Searching granules for collection {i}: {collection.get('short_name', 'N/A')}",
+        )
+
+        try:
+            granule_params = {
+                "collection_concept_id": concept_id,
+                "page_size": agent.config.granule_search_page_size,
+            }
+
+            granule_search_params = agent.granule_search_tool.input_schema(
+                **granule_params,
+            )
+            result = await agent.granule_search_tool.arun(granule_search_params)
+
+            if hasattr(result, "results") and result.results.get("granules"):
+                granules = result.results["granules"]
+                all_granules.extend(granules)
+                print(f"     → Found {len(granules)} granules")
+            else:
+                print("     → No granules found")
+        except Exception as e:
+            print(f"     → Granule search failed: {e}")
+
+    print(f"   ✅ Total granules found: {len(all_granules)}")
+
+    # Final Summary
+    print("\n📊 SINGLE-PATH WORKFLOW RESULTS:")
+    print(f"   Selected Topic: {first_topic.title}")
+    print(f"   Selected Decomposition: {first_decomp.title}")
+    print(f"   Query Approaches: {len(known_params_output.query_approaches)}")
+    print(f"   Searchable Queries: {len(searchable_output.searchable_queries)}")
+    print(f"   Collections Found: {len(collections)}")
+    print(f"   Data Files Found: {len(all_granules)}")
+
+    if all_granules:
+        print("\n   📁 Sample granules:")
+        for i, granule in enumerate(all_granules[:3], 1):
+            title = granule.get("title", "No title")
+            print(f"   {i}. {title}")
+
+        if len(all_granules) > 3:
+            print(f"   ... and {len(all_granules) - 3} more granules")
 
 
 # =============================================================================
@@ -564,14 +720,11 @@ Examples:
         print("ALL INDIVIDUAL COMPONENT TESTS COMPLETED!")
         print("=" * 80)
     else:
-        # Default: run full workflow (preserving original behavior)
+        # Default: run full workflow once
         print("\n🔄 Running full workflow (use --component to test individual parts)")
 
-        # Test individual components first
-        await test_individual_components()
-
         # Test complete new workflow
-        await test_new_workflow()
+        await test_new_workflow(args.query)
 
     print("\n✅ Testing completed successfully!")
     if not args.component:

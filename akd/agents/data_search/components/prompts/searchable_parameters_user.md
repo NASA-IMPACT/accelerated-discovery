@@ -1,4 +1,4 @@
-I need you to generate searchable parameters (keywords) that will help discover relevant datasets when combined with the known parameters already identified.
+I need you to generate search variations that will discover relevant datasets when combined with the known parameters already identified.
 
 ## Research Context
 
@@ -9,28 +9,46 @@ I need you to generate searchable parameters (keywords) that will help discover 
 **Decomposition Justification:** {decomposition_justification}
 
 ## Query Approach (Known Parameters)
-{query_approach_summary}
+
+The following known parameters have been identified for this scientific decomposition:
+
+**Instrument:** {approach_instrument}
+**Platform:** {approach_platform}
+**Processing Level:** {approach_processing_level}
+**Temporal Range:** {approach_temporal}
+**Spatial Bounds:** {approach_bounding_box}
+**Temporal Resolution:** {approach_temporal_resolution}
+**Spatial Resolution:** {approach_spatial_resolution}
 
 ## Task
 
-Generate searchable parameters that will help discover datasets relevant to this scientific decomposition. Consider:
+Generate 0-5 separate search variations for this query approach. Each variation should be a different keyword combination (or empty for no additional keywords).
 
-1. **Primary Keywords**: What are the main terms scientists would use to describe this type of data?
-2. **Alternative Terms**: What synonyms or related terms might be used?
-3. **Observable Focus**: What specific measurements or phenomena are being observed?
+**Remember: CMR uses AND logic** - all keywords in a search must match, so fewer keywords = more results.
 
-## Guidelines
+## Decision Framework
 
-- Focus on terms that would appear in dataset abstracts and metadata
-- Include both formal scientific terminology and common usage terms
-- Consider what additional keywords would help narrow down results from the specified instrument/platform
-- Balance specificity with breadth to avoid missing relevant datasets
-- Generate 2-4 primary keywords and 1-3 alternative terms
+1. **Assess Specificity**: Are the known parameters (instrument/platform/level) already specific enough?
+   - If YES: Include an empty search (no additional keywords)
+   - If NO: Add keyword variations to narrow the scope
 
-## Example
+2. **Generate Variations**: Create separate searches for different ways scientists might describe this data:
+   - Formal scientific terminology
+   - Common abbreviations or acronyms
+   - Alternative expressions of the same concept
 
-For land cover analysis:
-- **Primary Keywords**: "land cover", "vegetation", "surface classification"
-- **Alternative Keywords**: "landcover", "land use", "biomass"
+3. **Keep Focused**: Each search should target one specific aspect, not combine multiple unrelated terms
 
-Your keywords will be used to search CMR collection metadata in combination with the known parameters already identified.
+## Examples
+
+**High specificity case** (MODIS Terra Level 2):
+- "" (empty - let instrument/platform filter)
+- "sea surface temperature"
+- "SST"
+
+**Low specificity case** (Generic satellite, broad temporal range):
+- "land cover"
+- "vegetation classification"
+- "LULC"
+
+Generate your search variations as a list of keyword strings. Use empty string for no additional keywords.

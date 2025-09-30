@@ -10,7 +10,15 @@
 **Scientific Decomposition**: {decomposition_title}
 **Scientific Justification**: {decomposition_justification}
 
-**Query Approaches Used**: {query_approaches_summary}
+**Query Approaches Used**:
+- **Instruments**: {approach_instruments}
+- **Platforms**: {approach_platforms}
+- **Keywords**: {approach_keywords}
+- **Temporal Ranges**: {approach_temporal_ranges}
+- **Spatial Bounds**: {approach_spatial_bounds}
+- **Processing Levels**: {approach_processing_levels}
+- **Required Temporal Resolution**: {approach_temporal_resolutions}
+- **Required Spatial Resolution**: {approach_spatial_resolutions}
 
 ## Collections to Evaluate
 
