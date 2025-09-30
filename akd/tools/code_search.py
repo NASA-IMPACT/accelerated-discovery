@@ -230,6 +230,7 @@ class CombinedCodeSearchTool(CodeSearchTool):
 
             # Get similarity scores from CrossEncoder
             scores = self.reranker_model.predict(pairs)
+            scores = 1 / (1 + np.exp(-scores))
 
             # Attach scores
             for score, result in zip(scores, results):
