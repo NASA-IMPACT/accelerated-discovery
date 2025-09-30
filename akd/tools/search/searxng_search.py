@@ -377,7 +377,7 @@ class SearxNGSearchTool(SearchTool):
         results = [
             SearchResultItem(
                 url=result.pop("url", None),
-                pdf_url=result.pop("pdf_url", None),
+                pdf_url=result.pop("pdf_url", None) or None,
                 title=result.pop("title", None)
                 or "Untitled",  # Ensure title is never None
                 content=result.pop("content", None),
