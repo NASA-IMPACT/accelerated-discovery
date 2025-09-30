@@ -1,8 +1,10 @@
 import re
+from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler, BrowserConfig
+from loguru import logger
 from markdownify import markdownify
 from pydantic import Field
 from readability import Document
@@ -164,7 +166,55 @@ class SimpleWebScraper(WebScraper):
 
 
 class Crawl4AIScraperConfig(WebScraperToolConfig):
-    """Configuration for Crawl4AI scraper with optional Docker support."""
+    """
+    Configuration for Crawl4AI web scraper with Docker and local browser support.
+
+    This configuration supports both local Playwright installation and Docker-based
+    browser connections via Chrome DevTools Protocol (CDP).
+
+    Docker Mode (Recommended for Servers):
+        When use_docker=True, the scraper connects to a browser running in a
+        Docker container instead of using a local Playwright installation.
+        This is ideal for:
+        - Servers where installing Playwright system dependencies is difficult
+        - Containerized deployments
+        - Environments requiring browser isolation
+
+        To use Docker mode:
+        1. Start browserless Chrome container:
+           ```bash
+           docker run -d --name playwright-cdp -p 9222:3000 \\
+               -e "ENABLE_API_GET=true" browserless/chrome:latest
+           ```
+
+        2. Configure scraper:
+           ```python
+           config = Crawl4AIScraperConfig(
+               use_docker=True,
+               playwright_cdp_url="ws://127.0.0.1:9222",
+               headless=True,
+           )
+           scraper = Crawl4AIWebScraper(config)
+           ```
+
+    Local Mode (Default):
+        When use_docker=False (default), uses local Playwright installation.
+        Requires Playwright to be installed with system dependencies:
+        ```bash
+        playwright install chromium
+        ```
+
+    Attributes:
+        use_docker: Enable Docker browser connection via CDP (default: False)
+        playwright_cdp_url: WebSocket URL for CDP connection (default: "ws://localhost:9222")
+        browser_type: Browser engine - "chromium", "firefox", or "webkit" (default: "chromium")
+        headless: Run browser without GUI (default: True)
+
+    See Also:
+        - Docker setup guide: docs/docker-playwright-setup.md
+        - Test script: test_docker_scraper.py
+        - Usage examples: Crawl4AIWebScraper class docstring
+    """
 
     use_docker: bool = Field(
         default=False,
@@ -185,7 +235,118 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
 
 
 class Crawl4AIWebScraper(WebScraper):
+    """
+    Advanced web scraper using Crawl4AI with support for both local and Docker-based browsers.
+
+    This scraper uses Crawl4AI library to fetch and extract content from web pages,
+    with flexible browser backend options for different deployment scenarios.
+
+    Features:
+        - Clean markdown output from HTML content
+        - JavaScript rendering support (via Playwright/Chrome)
+        - Docker-based browser for containerized environments
+        - Local Playwright for development
+        - Configurable browser types (Chromium, Firefox, WebKit)
+        - Headless and headed modes
+
+    Usage:
+        Basic usage with local Playwright:
+        ```python
+        from akd.tools.scrapers import Crawl4AIWebScraper, ScraperToolInputSchema
+
+        scraper = Crawl4AIWebScraper()
+        result = await scraper.arun(ScraperToolInputSchema(url="https://example.com"))
+        print(result.content)  # Markdown content
+        ```
+
+        Docker-based browser (for servers without Playwright dependencies):
+        ```python
+        from akd.tools.scrapers import Crawl4AIWebScraper, Crawl4AIScraperConfig
+
+        config = Crawl4AIScraperConfig(
+            use_docker=True,
+            playwright_cdp_url="ws://127.0.0.1:9222",
+            headless=True,
+        )
+        scraper = Crawl4AIWebScraper(config)
+        result = await scraper.arun(ScraperToolInputSchema(url="https://example.com"))
+        ```
+
+    Docker Setup:
+        To use Docker mode, first start a browserless Chrome container:
+        ```bash
+        docker run -d --name playwright-cdp -p 9222:3000 \\
+            -e "ENABLE_API_GET=true" browserless/chrome:latest
+        ```
+
+    Attributes:
+        config_schema: Configuration schema class (Crawl4AIScraperConfig)
+        use_docker: Whether to use Docker-based browser
+        playwright_cdp_url: CDP WebSocket URL for Docker connection
+        browser_type: Browser engine type
+        headless: Run browser in headless mode
+        debug: Enable debug logging
+
+    Notes:
+        - PDF URLs are not supported and will raise RuntimeError
+        - Returns content in markdown format for better LLM processing
+        - Docker mode recommended for production servers
+        - Local mode recommended for development
+
+    See Also:
+        - Configuration: Crawl4AIScraperConfig
+        - Docker setup: docs/docker-playwright-setup.md
+        - Test script: test_docker_scraper.py
+    """
+
     config_schema = Crawl4AIScraperConfig
+
+    async def _get_cdp_endpoint(self, base_url: str) -> str:
+        """
+        Discover the full CDP WebSocket URL from the base endpoint.
+
+        Args:
+            base_url: Base CDP URL (e.g., "ws://127.0.0.1:9222")
+
+        Returns:
+            Full CDP WebSocket URL
+        """
+        # Convert ws:// to http:// for the JSON endpoint
+        http_url = base_url.replace("ws://", "http://").replace("wss://", "https://")
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{http_url}/json/version")
+                response.raise_for_status()
+                data = response.json()
+                ws_url = data.get("webSocketDebuggerUrl", "")
+
+                # Browserless and some CDP servers return the full URL directly
+                # But may use localhost instead of the actual host
+                # Replace the hostname to match what we're connecting to
+                if ws_url:
+                    base_parsed = urlparse(base_url)
+                    ws_parsed = urlparse(ws_url)
+
+                    # Replace hostname if it's localhost/127.0.0.1
+                    if ws_parsed.hostname in ("localhost", "127.0.0.1", "0.0.0.0"):
+                        ws_url = ws_url.replace(
+                            f"ws://{ws_parsed.hostname}",
+                            f"ws://{base_parsed.hostname}",
+                        )
+
+                    return ws_url
+
+                # Fallback: if no webSocketDebuggerUrl, just use the base_url
+                return base_url
+
+        except Exception as e:
+            # If discovery fails, try using the base_url directly
+            logger.warning(
+                f"Failed to discover CDP endpoint from {http_url}: {e}. "
+                f"Attempting to use base URL directly: {base_url}",
+            )
+            return base_url
 
     async def fetch(self, url: str):
         # Build BrowserConfig based on settings
@@ -197,10 +358,13 @@ class Crawl4AIWebScraper(WebScraper):
 
         # Add Docker CDP connection if configured
         if self.use_docker:
+            # Discover the full CDP endpoint URL
+            cdp_url = await self._get_cdp_endpoint(self.playwright_cdp_url)
+
             browser_config_params.update(
                 {
                     "browser_mode": "docker",
-                    "cdp_url": self.playwright_cdp_url,
+                    "cdp_url": cdp_url,
                     "use_managed_browser": True,
                 },
             )
