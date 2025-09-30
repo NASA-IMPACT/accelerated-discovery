@@ -214,8 +214,15 @@ class CombinedCodeSearchTool(CodeSearchTool):
             except Exception as e:
                 logger.error(f"Error running tool {tool.__class__.__name__}: {e}")
 
-        reranked = self._rerank_results(all_results, params.queries[0])[: params.top_k]
-        return self.output_schema(results=reranked, category="technology")
+        final_results = []
+        for query in params.queries:
+            query_results = [result for result in all_results if result.query == query]
+            reranked = self._rerank_results(query_results, query)[
+                : (params.top_k) // len(params.queries)
+            ]
+            final_results.extend(reranked)
+
+        return self.output_schema(results=final_results, category="technology")
 
     def _rerank_results(
         self, results: list[SearchResultItem], query: str
