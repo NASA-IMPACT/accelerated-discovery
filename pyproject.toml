@@ -3,7 +3,7 @@ name = "akd"
 version = "0.1.0"
 description = "Human-centric Multi-Agent System (MAS) framework for scientific discovery"
 readme = "README.md"
-license = "Apache-2.0"
+license = {text="Apache-2.0"}
 authors = [
     {name = "Nish", email = "np0069@uah.edu"},
     {name = "Kumar", email = "mr0051@uah.edu"}
