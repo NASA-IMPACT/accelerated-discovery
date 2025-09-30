@@ -2,12 +2,18 @@ import re
 
 import httpx
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler
+from crawl4ai import AsyncWebCrawler, BrowserConfig
 from markdownify import markdownify
+from pydantic import Field
 from readability import Document
 from requests import HTTPError, RequestException
 
-from ._base import ScraperToolInputSchema, ScraperToolOutputSchema, WebScraper
+from ._base import (
+    ScraperToolInputSchema,
+    ScraperToolOutputSchema,
+    WebScraper,
+    WebScraperToolConfig,
+)
 
 
 class SimpleWebScraper(WebScraper):
@@ -157,9 +163,51 @@ class SimpleWebScraper(WebScraper):
         )
 
 
+class Crawl4AIScraperConfig(WebScraperToolConfig):
+    """Configuration for Crawl4AI scraper with optional Docker support."""
+
+    use_docker: bool = Field(
+        default=False,
+        description="Use Playwright running in Docker container via CDP.",
+    )
+    playwright_cdp_url: str = Field(
+        default="ws://localhost:9222",
+        description="CDP endpoint URL for Docker Playwright connection.",
+    )
+    browser_type: str = Field(
+        default="chromium",
+        description="Browser type: chromium, firefox, or webkit.",
+    )
+    headless: bool = Field(
+        default=True,
+        description="Run browser in headless mode.",
+    )
+
+
 class Crawl4AIWebScraper(WebScraper):
+    config_schema = Crawl4AIScraperConfig
+
     async def fetch(self, url: str):
-        async with AsyncWebCrawler() as crawler:
+        # Build BrowserConfig based on settings
+        browser_config_params = {
+            "browser_type": self.browser_type,
+            "headless": self.headless,
+            "verbose": self.debug,
+        }
+
+        # Add Docker CDP connection if configured
+        if self.use_docker:
+            browser_config_params.update(
+                {
+                    "browser_mode": "docker",
+                    "cdp_url": self.playwright_cdp_url,
+                    "use_managed_browser": True,
+                },
+            )
+
+        browser_config = BrowserConfig(**browser_config_params)
+
+        async with AsyncWebCrawler(config=browser_config) as crawler:
             return await crawler.arun(url=url)
 
     async def _arun(
