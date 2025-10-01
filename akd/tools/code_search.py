@@ -5,6 +5,7 @@ from typing import Literal, Optional, Literal
 import requests
 import json
 import time
+import asyncio
 
 import numpy as np
 import pandas as pd
@@ -195,6 +196,13 @@ class CombinedCodeSearchTool(CodeSearchTool):
         ]
         self.reranker_model = CrossEncoder(config.reranker_model_name)
 
+    async def _rerank_query(
+        self, query: str, all_results: list[SearchResultItem], top_k_per_query: int
+    ) -> list[SearchResultItem]:
+        """Rerank results for a single query."""
+        query_results = [result for result in all_results if result.query == query]
+        return self._rerank_results(query_results, query)[:top_k_per_query]
+
     async def _arun(
         self,
         params: CodeSearchToolInputSchema,
@@ -214,13 +222,16 @@ class CombinedCodeSearchTool(CodeSearchTool):
             except Exception as e:
                 logger.error(f"Error running tool {tool.__class__.__name__}: {e}")
 
-        final_results = []
-        for query in params.queries:
-            query_results = [result for result in all_results if result.query == query]
-            reranked = self._rerank_results(query_results, query)[
-                : (params.top_k) // len(params.queries)
+        top_k_per_query = params.top_k // len(params.queries)
+        reranked_results = await asyncio.gather(
+            *[
+                self._rerank_query(query, all_results, top_k_per_query)
+                for query in params.queries
             ]
-            final_results.extend(reranked)
+        )
+        final_results = [
+            result for query_results in reranked_results for result in query_results
+        ]
 
         return self.output_schema(results=final_results, category="technology")
 
