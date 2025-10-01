@@ -331,6 +331,9 @@ class Crawl4AIWebScraper(WebScraper):
                 response = await client.get(f"{http_url}/json/version")
                 response.raise_for_status()
                 data = response.json()
+                if self.debug:
+                    logger.debug(f"CDP Version Data: {data}")
+
                 ws_url = data.get("webSocketDebuggerUrl", "")
 
                 # Browserless and some CDP servers return the full URL directly
