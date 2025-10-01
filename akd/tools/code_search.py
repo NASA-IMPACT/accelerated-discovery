@@ -251,19 +251,19 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     data_file: str = str(
         get_akd_root()
         / "docs"
-        / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v4.csv")
+        / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v5.csv")
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
-        "1-3eD0kJFKgsgKhREA4dOW_V2gYfosK9R",
+        "19Oi2gAE5aGyp11mIxCXsaGp1PA08_Aw3",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
     wait_time: int = 1
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
     remove_embedding_column: bool = True
-    text_column: str = "text"
-    name_column: str = "name"
+    text_column: str = "reformulated_text"
     desc_column: str = "description"
+    key_topics_column: str = "key_topics"
     embeddings_column: str = "embeddings"
     debug: bool = False
 
@@ -393,11 +393,11 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         # Get texts to embed
         texts = (
             (
-                self.repo_data[self.config.name_column].fillna("")
-                + " "
-                + self.repo_data[self.config.desc_column].fillna("")
+                self.repo_data[self.config.desc_column].fillna("")
                 + " "
                 + self.repo_data[self.config.text_column].fillna("")
+                + " "
+                + self.repo_data[self.config.key_topics_column].fillna("")
             )
             .astype(str)
             .tolist()
