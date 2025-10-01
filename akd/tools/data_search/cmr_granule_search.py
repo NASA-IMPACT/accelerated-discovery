@@ -23,6 +23,10 @@ class CMRGranuleSearchInputSchema(DataSearchToolInputSchema):
         ...,
         description="Collection concept ID (e.g., C123456-LPDAAC_ECS)",
     )
+    producer_granule_id: Optional[str] = Field(
+        None,
+        description="Producer granule ID to filter by specific granule",
+    )
     downloadable: Optional[bool] = Field(
         None,
         description="Return only downloadable granules",
