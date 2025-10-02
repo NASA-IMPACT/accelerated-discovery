@@ -80,16 +80,17 @@ class AgentRegistry:
     # Format: agent_id -> (module_path, class_name)
     # TODO: Add filesystem scanning for automatic agent discovery in future iterations
     KNOWN_AGENTS: dict[str, tuple[str, str]] = {
-        "query": ("akd.agents.query", "QueryAgent"),
-        "followup_query": ("akd.agents.query", "FollowUpQueryAgent"), 
-        "extraction": ("akd.agents.extraction", "EstimationExtractionAgent"),
-        "relevancy": ("akd.agents.relevancy", "MultiRubricRelevancyAgent"),
-        "intent": ("akd.agents.intents", "IntentAgent"),
-        "controlled_search": ("akd.agents.search.controlled", "ControlledSearchAgent"),
+        # "query": ("akd.agents.query", "QueryAgent"),
+        # "followup_query": ("akd.agents.query", "FollowUpQueryAgent"),
+        # "extraction": ("akd.agents.extraction", "EstimationExtractionAgent"),
+        # "relevancy": ("akd.agents.relevancy", "MultiRubricRelevancyAgent"),
+        # "intent": ("akd.agents.intents", "IntentAgent"),
+        # "controlled_search": ("akd.agents.search.controlled", "ControlledSearchAgent"),
         "deep_search": ("akd.agents.search.deep_search", "DeepLitSearchAgent"),
         "gap_analysis": ("akd.agents.gap_analysis.gap_analysis", "GapAgent"),
-        "storm": ("akd.agents.storm.storm", "StormAgent"),
-        "aspect_search": ("akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
+        # "storm": ("akd.agents.storm.storm", "StormAgent"),
+        # "aspect_search": ("akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
+        "code_search": ("akd.agents.search.code_search", "CodeSearchAgent"),
     }
     
     def __new__(cls, config: Optional[AgentRegistryConfig] = None):
