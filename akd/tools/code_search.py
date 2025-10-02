@@ -5,6 +5,7 @@ from typing import Literal, Optional, Literal
 import requests
 import json
 import time
+import asyncio
 
 import numpy as np
 import pandas as pd
@@ -195,6 +196,13 @@ class CombinedCodeSearchTool(CodeSearchTool):
         ]
         self.reranker_model = CrossEncoder(config.reranker_model_name)
 
+    async def _rerank_query(
+        self, query: str, all_results: list[SearchResultItem], top_k_per_query: int
+    ) -> list[SearchResultItem]:
+        """Rerank results for a single query."""
+        query_results = [result for result in all_results if result.query == query]
+        return self._rerank_results(query_results, query)[:top_k_per_query]
+
     async def _arun(
         self,
         params: CodeSearchToolInputSchema,
@@ -214,8 +222,18 @@ class CombinedCodeSearchTool(CodeSearchTool):
             except Exception as e:
                 logger.error(f"Error running tool {tool.__class__.__name__}: {e}")
 
-        reranked = self._rerank_results(all_results, params.queries[0])[: params.top_k]
-        return self.output_schema(results=reranked, category="technology")
+        top_k_per_query = params.top_k // len(params.queries)
+        reranked_results = await asyncio.gather(
+            *[
+                self._rerank_query(query, all_results, top_k_per_query)
+                for query in params.queries
+            ]
+        )
+        final_results = [
+            result for query_results in reranked_results for result in query_results
+        ]
+
+        return self.output_schema(results=final_results, category="technology")
 
     def _rerank_results(
         self, results: list[SearchResultItem], query: str
@@ -230,6 +248,7 @@ class CombinedCodeSearchTool(CodeSearchTool):
 
             # Get similarity scores from CrossEncoder
             scores = self.reranker_model.predict(pairs)
+            scores = 1 / (1 + np.exp(-scores))
 
             # Attach scores
             for score, result in zip(scores, results):
@@ -529,6 +548,8 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                     remove_embedding_column=self.config.remove_embedding_column,
                 )
                 if results:
+                    for result in results:
+                        result["query"] = query
                     all_results_data.extend(results)
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
@@ -538,7 +559,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 title=str(result.pop("name", "")),
                 url=HttpUrlAdapter.validate_python(result.pop("URL", "")),
                 content=result.pop("text", ""),
-                query=query,
+                query=result.pop("query", ""),
                 extra=result,
             )
             for result in all_results_data
@@ -741,6 +762,7 @@ class SDECodeSearchTool(CodeSearchTool):
 
         all_results_data = []
         for query in params.queries:
+            query_results = []
             if self.debug:
                 logger.debug(
                     f"Searching for query: '{query}' with top_k={params.max_results}"
@@ -751,7 +773,9 @@ class SDECodeSearchTool(CodeSearchTool):
                     try:
                         results = self.sde_search(page=page, query=query)
                         if results:
-                            all_results_data.extend(results)
+                            for result in results:
+                                result["query"] = query
+                            query_results.extend(results)
                         else:
                             break
                     except Exception as e:
@@ -759,7 +783,7 @@ class SDECodeSearchTool(CodeSearchTool):
                             f"Error during search for query '{query}' on page {page}: {e}"
                         )
                         continue  # continue to the next page
-                all_results_data = all_results_data[: params.max_results]
+                all_results_data.extend(query_results[: params.top_k])
             except Exception as e:
                 logger.error(f"Error during search for query '{query}': {e}")
 
@@ -768,7 +792,7 @@ class SDECodeSearchTool(CodeSearchTool):
                 title=str(result.get("url", "")).split("/")[-1],
                 url=HttpUrlAdapter.validate_python(result.pop("url", "")),
                 content=result.pop("full_text", ""),
-                query=query,
+                query=result.pop("query", ""),
                 extra=result,
             )
             for result in all_results_data
