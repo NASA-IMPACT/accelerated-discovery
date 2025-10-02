@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "created_at": "2025-10-01T01:31:33.911498+00:00",
-  "updated_at": "2025-10-01T01:31:33.911620+00:00",
+  "created_at": "2025-10-02T07:25:35.166590+00:00",
+  "updated_at": "2025-10-02T07:25:35.166645+00:00",
   "agents": {
     "deep_search": {
       "agent_id": "deep_search",
@@ -69,6 +69,14 @@
             "description": "Number of search iterations performed",
             "required": false,
             "default": 1,
+            "items_type": null
+          },
+          {
+            "name": "report",
+            "type": "string",
+            "description": "Synthesized research report from the literature search",
+            "required": false,
+            "default": "",
             "items_type": null
           },
           {
