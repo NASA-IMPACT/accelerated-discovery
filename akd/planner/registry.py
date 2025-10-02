@@ -73,10 +73,10 @@ class AgentRegistry:
     _instance = None
     _initialized = False
 
-    # Known agent mappings for auto-discovery (currently hand-made)
+    # Available agent mappings for auto-discovery
     # Format: agent_id -> (module_path, class_name)
     # TODO: Add filesystem scanning for automatic agent discovery in future iterations
-    KNOWN_AGENTS: dict[str, tuple[str, str]] = {
+    AVAILABLE_AGENTS: dict[str, tuple[str, str]] = {
         # "query": ("akd.agents.query", "QueryAgent"),
         # "followup_query": ("akd.agents.query", "FollowUpQueryAgent"),
         # "extraction": ("akd.agents.extraction", "EstimationExtractionAgent"),
@@ -171,15 +171,11 @@ class AgentRegistry:
         """
         discovered: dict[str, AgentEntry] = {}
 
-        for agent_id, (module_path, class_name) in self.KNOWN_AGENTS.items():
-            # Priority 1: filter_agents (from USE_AGENTS) - explicit override
+        for agent_id, (module_path, class_name) in self.AVAILABLE_AGENTS.items():
+            # Filter agents if explicit list provided
             if filter_agents is not None:
                 if agent_id not in filter_agents:
                     continue
-
-            # Priority 2: enabled_agents (deprecated, but still supported)
-            elif self.config.enabled_agents and agent_id not in self.config.enabled_agents:
-                continue
 
             try:
                 # Import the module and get the class
