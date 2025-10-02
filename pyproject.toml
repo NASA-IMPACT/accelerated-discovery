@@ -108,3 +108,12 @@ ml = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["F841"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.format]
+# Ensure LF line endings across platforms; used by Ruff formatter on save.
+line-ending = "lf"
+docstring-code-line-length = 120
