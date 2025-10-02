@@ -1,124 +1,232 @@
 {
   "version": "1.0.0",
-  "created_at": "2024-09-10T12:00:00.000Z",
-  "updated_at": "2024-09-10T12:00:00.000Z",
+  "created_at": "2025-10-01T01:31:33.911498+00:00",
+  "updated_at": "2025-10-01T01:31:33.911620+00:00",
   "agents": {
-    "query": {
-      "agent_id": "query",
-      "name": "Query Agent",
-      "description": "Agent that generates search engine queries based on a given query.",
-      "agent_class": "akd.agents.query.QueryAgent",
+    "deep_search": {
+      "agent_id": "deep_search",
+      "name": "Deep Search",
+      "description": "Advanced literature search agent implementing multi-agent deep research pattern",
+      "agent_class": "akd.agents.search.deep_search.DeepLitSearchAgent",
       "enabled": true,
       "input_schema": {
         "fields": [
           {
-            "name": "query",
+            "name": "queries",
             "type": "string",
-            "description": "A detailed query/instruction or request to generate search engine queries for.",
-            "required": true
+            "description": "List of additional queries to refine search",
+            "required": false,
+            "default": null,
+            "items_type": null
           },
           {
-            "name": "num_queries", 
-            "type": "integer",
-            "description": "The number of search queries to generate.",
+            "name": "category",
+            "type": "string",
+            "description": "Search category",
             "required": false,
-            "default": 3
+            "default": "science",
+            "items_type": null
+          },
+          {
+            "name": "max_results",
+            "type": "integer",
+            "description": "Maximum number of results to return",
+            "required": false,
+            "default": 20,
+            "items_type": null
+          },
+          {
+            "name": "query",
+            "type": "string",
+            "description": "Research query to search for",
+            "required": true,
+            "default": null,
+            "items_type": null
           }
         ]
       },
       "output_schema": {
         "fields": [
           {
-            "name": "queries",
+            "name": "results",
             "type": "array",
-            "description": "List of search queries.",
+            "description": "List of search results",
             "required": true,
+            "default": null,
             "items_type": "string"
           },
           {
             "name": "category",
             "type": "string",
-            "description": "Category of the search queries.",
+            "description": "Search category",
+            "required": true,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "iterations_performed",
+            "type": "integer",
+            "description": "Number of search iterations performed",
             "required": false,
-            "default": "science"
+            "default": 1,
+            "items_type": null
+          },
+          {
+            "name": "extra",
+            "type": "object",
+            "description": "Extra metadata and synthesis information",
+            "required": false,
+            "default": null,
+            "items_type": null
           }
         ]
       },
-      "tags": ["query"],
-      "use_cases": ["Agent that generates search engine queries based on a given query."],
+      "tags": [
+        "deep"
+      ],
+      "use_cases": [
+        "Advanced literature search agent implementing multi-agent deep research pattern"
+      ],
       "dependencies": []
     },
-    "extraction": {
-      "agent_id": "extraction",
-      "name": "Extraction Agent", 
-      "description": "Agent for extracting structured information from text.",
-      "agent_class": "akd.agents.extraction.EstimationExtractionAgent",
+    "gap_analysis": {
+      "agent_id": "gap_analysis",
+      "name": "Gap Analysis",
+      "description": "Agent for gap analysis",
+      "agent_class": "akd.agents.gap_analysis.gap_analysis.GapAgent",
       "enabled": true,
       "input_schema": {
         "fields": [
           {
-            "name": "text",
+            "name": "search_results",
+            "type": "array",
+            "description": "List of SearchResultItems.",
+            "required": true,
+            "default": null,
+            "items_type": "string"
+          },
+          {
+            "name": "gap",
             "type": "string",
-            "description": "Text to extract information from.",
-            "required": true
+            "description": "Type of gap to investigate.",
+            "required": true,
+            "default": null,
+            "items_type": null
           }
         ]
       },
       "output_schema": {
         "fields": [
           {
-            "name": "extractions",
-            "type": "array",
-            "description": "Extracted structured information.",
+            "name": "output",
+            "type": "string",
+            "description": "Final output generated by the agent.",
             "required": true,
-            "items_type": "object"
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "attributed_source_answers",
+            "type": "object",
+            "description": "Answers for each node selected from the graph.",
+            "required": true,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "graph",
+            "type": "object",
+            "description": "Graph created from the ingested papers.",
+            "required": true,
+            "default": null,
+            "items_type": null
           }
         ]
       },
-      "tags": ["extraction"],
-      "use_cases": ["Agent for extracting structured information from text."],
+      "tags": [
+        "gap"
+      ],
+      "use_cases": [
+        "Agent for gap analysis"
+      ],
       "dependencies": []
     },
-    "relevancy": {
-      "agent_id": "relevancy",
-      "name": "Relevancy Agent",
-      "description": "Agent for assessing content relevancy using multiple rubrics.",
-      "agent_class": "akd.agents.relevancy.MultiRubricRelevancyAgent", 
+    "code_search": {
+      "agent_id": "code_search",
+      "name": "Code Search",
+      "description": "Wrapper for code repository search using ControlledSearchAgent.",
+      "agent_class": "akd.agents.search.code_search.CodeSearchAgent",
       "enabled": true,
       "input_schema": {
         "fields": [
+          {
+            "name": "queries",
+            "type": "string",
+            "description": "List of additional queries to refine search",
+            "required": false,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "category",
+            "type": "string",
+            "description": "Search category",
+            "required": false,
+            "default": "science",
+            "items_type": null
+          },
+          {
+            "name": "max_results",
+            "type": "integer",
+            "description": "Maximum number of results to return",
+            "required": false,
+            "default": 20,
+            "items_type": null
+          },
           {
             "name": "query",
             "type": "string",
-            "description": "Query to assess relevancy against.",
-            "required": true
-          },
-          {
-            "name": "content",
-            "type": "string", 
-            "description": "Content to assess for relevancy.",
-            "required": true
+            "description": "Research query to search for",
+            "required": true,
+            "default": null,
+            "items_type": null
           }
         ]
       },
       "output_schema": {
         "fields": [
           {
-            "name": "relevancy_score",
-            "type": "number",
-            "description": "Relevancy score between 0 and 1.",
-            "required": true
+            "name": "results",
+            "type": "array",
+            "description": "List of search results",
+            "required": true,
+            "default": null,
+            "items_type": "string"
           },
           {
-            "name": "reasoning",
+            "name": "category",
             "type": "string",
-            "description": "Reasoning for the relevancy assessment.",
-            "required": true
+            "description": "Search category",
+            "required": true,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "iterations_performed",
+            "type": "integer",
+            "description": "Number of search iterations performed",
+            "required": false,
+            "default": 1,
+            "items_type": null
           }
         ]
       },
-      "tags": ["relevancy"],
-      "use_cases": ["Agent for assessing content relevancy using multiple rubrics."],
+      "tags": [
+        "code"
+      ],
+      "use_cases": [
+        "Wrapper for code repository search using ControlledSearchAgent."
+      ],
       "dependencies": []
     }
   }
