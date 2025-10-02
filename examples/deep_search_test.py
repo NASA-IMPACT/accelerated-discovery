@@ -66,7 +66,7 @@ async def test_deep_lit_search_agent():
         # Show synthesis summary if available
         if result.extra.get("research_report"):
             print("\n📊 Research synthesis preview:")
-            print(f"   - Report length: {len(result.extra['research_report'])} characters")
+            print(f"   - Report length: {len(result.get('report'))} characters")
             if result.extra.get("key_findings"):
                 print(f"   - Key findings count: {len(result.extra['key_findings'])}")
             print(f"   - Evidence quality score: {result.extra.get('evidence_quality_score', 'N/A')}")
