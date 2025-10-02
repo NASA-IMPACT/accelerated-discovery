@@ -108,8 +108,21 @@ class AgentRegistry:
             AgentRegistry._initialized = True
     
     def _load_or_discover(self) -> None:
-        """Load registry from file, or auto-discover if missing/empty."""
+        """
+        Load registry with priority order:
+        1. USE_AGENTS (explicit override) - highest priority
+        2. JSON cache (if exists and auto_discover=False)
+        3. Auto-discovery (if auto_discover=True)
+        """
         try:
+            # Priority 1: USE_AGENTS explicit override
+            if self.config.use_agents is not None:
+                logger.info(f"Using explicit agent list: {self.config.use_agents}")
+                self._discover_agents(filter_agents=self.config.use_agents)
+                # Don't save to file when using explicit override
+                return
+
+            # Priority 2 & 3: Normal flow
             if self._should_auto_discover():
                 logger.info("Auto-discovering agents...")
                 self._discover_agents()
@@ -151,14 +164,24 @@ class AgentRegistry:
         except Exception as e:
             logger.error(f"Failed to load registry from {self.config.registry_path}: {e}")
             raise
-    
-    def _discover_agents(self) -> None:
-        """Auto-discover agents by scanning known agent classes."""
+
+    def _discover_agents(self, filter_agents: list[str] | None = None) -> None:
+        """
+        Auto-discover agents by scanning known agent classes.
+
+        Args:
+            filter_agents: Optional list of agent IDs to discover. If provided, only these agents are discovered.
+        """
         discovered: dict[str, AgentEntry] = {}
         
         for agent_id, (module_path, class_name) in self.KNOWN_AGENTS.items():
-            # Skip if we have specific enabled agents and this isn't one of them
-            if self.config.enabled_agents and agent_id not in self.config.enabled_agents:
+            # Priority 1: filter_agents (from USE_AGENTS) - explicit override
+            if filter_agents is not None:
+                if agent_id not in filter_agents:
+                    continue
+
+            # Priority 2: enabled_agents (deprecated, but still supported)
+            elif self.config.enabled_agents and agent_id not in self.config.enabled_agents:
                 continue
             
             try:
