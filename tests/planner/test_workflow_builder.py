@@ -5,13 +5,13 @@ Tests workflow generation, validation, and JSON serialization.
 """
 
 import json
-import pytest
-from pathlib import Path
 
-from akd.planner.structures import WorkflowPlan, AgentSuggestion
-from akd.planner.registry import get_agent_registry, AgentRegistry
-from akd.planner.workflow_builder import WorkflowBuilder
+import pytest
+
 from akd.planner.format_builder import WorkflowFormat
+from akd.planner.registry import AgentRegistry, get_agent_registry
+from akd.planner.structures import AgentSuggestion, WorkflowPlan
+from akd.planner.workflow_builder import WorkflowBuilder
 
 
 @pytest.fixture
@@ -44,21 +44,21 @@ def simple_workflow_plan():
                 agent_id="deep_search",
                 agent_name="Deep Search",
                 reason="Search literature for papers",
-                confidence=0.95
+                confidence=0.95,
             ),
             AgentSuggestion(
                 agent_id="gap_analysis",
                 agent_name="Gap Analysis",
                 reason="Analyze papers to find research gaps",
-                confidence=0.90
-            )
+                confidence=0.90,
+            ),
         ],
         workflow_steps=[
             "Search literature for papers",
-            "Analyze papers to identify gaps"
+            "Analyze papers to identify gaps",
         ],
         estimated_complexity="medium",
-        potential_issues=[]
+        potential_issues=[],
     )
 
 
@@ -72,9 +72,9 @@ class TestWorkflowBuilderCore:
         assert builder.registry is agent_registry
         assert builder.mapping_registry is not None
 
-    def test_check_agents_exist(self, workflow_builder, simple_workflow_plan):
+    def test_check_missing_agents(self, workflow_builder, simple_workflow_plan):
         """Test agent existence validation."""
-        missing = workflow_builder.check_agents_exist(simple_workflow_plan)
+        missing = workflow_builder.check_missing_agents(simple_workflow_plan)
 
         assert isinstance(missing, list)
         assert len(missing) == 0  # All agents should exist
@@ -89,13 +89,13 @@ class TestWorkflowBuilderCore:
                     agent_id="nonexistent_agent",
                     agent_name="Nonexistent",
                     reason="Testing",
-                    confidence=1.0
-                )
+                    confidence=1.0,
+                ),
             ],
-            estimated_complexity="low"
+            estimated_complexity="low",
         )
 
-        missing = workflow_builder.check_agents_exist(plan)
+        missing = workflow_builder.check_missing_agents(plan)
 
         assert len(missing) == 1
         assert "nonexistent_agent" in missing
@@ -109,11 +109,11 @@ class TestWorkflowGeneration:
         filled_inputs = {
             "deep_search": {
                 "query": "AlphaFold protein structure prediction",
-                "max_results": 20
+                "max_results": 20,
             },
             "gap_analysis": {
                 # Will be filled by io_map at runtime
-            }
+            },
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -126,7 +126,7 @@ class TestWorkflowGeneration:
         """Test that workflow contains correct agent nodes."""
         filled_inputs = {
             "deep_search": {"query": "test"},
-            "gap_analysis": {}
+            "gap_analysis": {},
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -140,7 +140,7 @@ class TestWorkflowGeneration:
         """Test that workflow generates io_map for data routing."""
         filled_inputs = {
             "deep_search": {"query": "test"},
-            "gap_analysis": {}
+            "gap_analysis": {},
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -156,7 +156,7 @@ class TestWorkflowGeneration:
         """Test that workflow generates correct edges."""
         filled_inputs = {
             "deep_search": {"query": "test"},
-            "gap_analysis": {}
+            "gap_analysis": {},
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -178,7 +178,7 @@ class TestWorkflowSerialization:
         """Test that workflow can be serialized to JSON."""
         filled_inputs = {
             "deep_search": {"query": "test"},
-            "gap_analysis": {}
+            "gap_analysis": {},
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -197,7 +197,7 @@ class TestWorkflowSerialization:
         """Test that workflow can be dumped to dict."""
         filled_inputs = {
             "deep_search": {"query": "test"},
-            "gap_analysis": {}
+            "gap_analysis": {},
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -212,7 +212,7 @@ class TestWorkflowSerialization:
         """Test saving workflow to file."""
         filled_inputs = {
             "deep_search": {"query": "test"},
-            "gap_analysis": {}
+            "gap_analysis": {},
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -246,7 +246,7 @@ class TestWorkflowInputHandling:
     def test_partial_inputs(self, workflow_builder, simple_workflow_plan):
         """Test building workflow with partial inputs."""
         filled_inputs = {
-            "deep_search": {"query": "test"}
+            "deep_search": {"query": "test"},
             # gap_analysis inputs omitted
         }
 
@@ -265,8 +265,8 @@ class TestWorkflowInputHandling:
         filled_inputs = {
             "deep_search": {
                 "query": "AlphaFold protein structure",
-                "max_results": 20
-            }
+                "max_results": 20,
+            },
         }
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
@@ -295,7 +295,7 @@ class TestWorkflowValidation:
             workflow_description="Empty",
             research_goal="Empty",
             suggested_agents=[],
-            estimated_complexity="low"
+            estimated_complexity="low",
         )
 
         workflow = workflow_builder.build(plan, {})
@@ -313,10 +313,10 @@ class TestWorkflowValidation:
                     agent_id="deep_search",
                     agent_name="Deep Search",
                     reason="Testing",
-                    confidence=1.0
-                )
+                    confidence=1.0,
+                ),
             ],
-            estimated_complexity="low"
+            estimated_complexity="low",
         )
 
         filled_inputs = {"deep_search": {"query": "test"}}

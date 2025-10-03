@@ -179,7 +179,7 @@ class WorkflowBuilder:
             output=nodes[-1].output if nodes else None,
         )
 
-    def check_agents_exist(self, plan: AbstractWorkflowPlan) -> list[str]:
+    def check_missing_agents(self, plan: AbstractWorkflowPlan) -> list[str]:
         """
         Simple validation: check if all agents exist in registry.
 
