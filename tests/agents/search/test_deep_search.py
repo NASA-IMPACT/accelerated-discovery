@@ -759,7 +759,7 @@ class TestDeepLitSearchAgentIntegration:
         assert len(result.results) >= 1
 
         # Check that the research synthesis fields are populated
-        assert result.extra["research_report"] == "Comprehensive research report on AI applications"
+        assert result.report == "Comprehensive research report on AI applications"
         assert result.extra["key_findings"] == ["Finding 1", "Finding 2"]
         assert result.extra["evidence_quality_score"] == 0.85
         assert result.extra["citations"] == ["Citation 1", "Citation 2"]
@@ -860,7 +860,7 @@ class TestDeepLitSearchAgentIntegration:
         assert "What specific healthcare domain?" in agent.clarification_history
 
         # Verify enhanced research report in synthesis fields
-        assert result["report"] == "Enhanced research report with clarifications"
+        assert result.report == "Enhanced research report with clarifications"
 
         # Verify all components were called
         mock_triage_component.process.assert_called()
