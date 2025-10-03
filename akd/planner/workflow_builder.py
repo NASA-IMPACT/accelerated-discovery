@@ -8,13 +8,13 @@ Uses three-tier field mapping strategy:
 3. LLM-generated mappings (intelligent fallback)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from loguru import logger
 
-from .format_builder import WorkflowFormat, WorkflowNode, WorkflowEdge, WorkflowNodeIO
-from .registry import AgentRegistry
 from .field_mapping_registry import FieldMappingRegistry
+from .format_builder import WorkflowEdge, WorkflowFormat, WorkflowNode, WorkflowNodeIO
+from .registry import AgentRegistry
 from .structures import AbstractWorkflowPlan
 
 
@@ -23,8 +23,9 @@ class WorkflowBuilder:
 
     def __init__(
         self,
-        registry: AgentRegistry,
-        mapping_registry: Optional[FieldMappingRegistry] = None
+        registry: AgentRegistry | None = None,
+        mapping_registry: FieldMappingRegistry | None = None,
+        debug: bool = False,
     ):
         """
         Initialize workflow builder.
@@ -33,8 +34,9 @@ class WorkflowBuilder:
             registry: Agent registry for schema access
             mapping_registry: Field mapping registry (creates default if None)
         """
-        self.registry = registry
+        self.registry = registry or AgentRegistry()
         self.mapping_registry = mapping_registry or FieldMappingRegistry()
+        self.debug = debug
 
     def build(self, plan: AbstractWorkflowPlan, filled_inputs: Dict[str, Dict[str, Any]]) -> WorkflowFormat:
         """
@@ -57,7 +59,7 @@ class WorkflowBuilder:
                 workflow_type="AKDResearchWorkflow",
                 version="1.0.0",
                 nodes=[],
-                edges=[]
+                edges=[],
             )
 
         # Build nodes with io_map for sequential data flow
@@ -87,7 +89,7 @@ class WorkflowBuilder:
                             # Get field mapping from registry
                             mapping = self.mapping_registry.get_mapping(
                                 prev_agent_id,
-                                agent_id
+                                agent_id,
                             )
 
                             if mapping and field.name in mapping:
@@ -95,8 +97,7 @@ class WorkflowBuilder:
                                 source_field = mapping[field.name]
                                 io_map[field.name] = f"$.{prev_agent_id}.outputs.{source_field}"
                                 logger.debug(
-                                    f"Mapped {agent_id}.{field.name} <- "
-                                    f"{prev_agent_id}.{source_field} (from registry)"
+                                    f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry)",
                                 )
                             else:
                                 # Priority 3: Exact name match fallback
@@ -104,15 +105,14 @@ class WorkflowBuilder:
                                 if field.name in source_fields:
                                     io_map[field.name] = f"$.{prev_agent_id}.outputs.{field.name}"
                                     logger.debug(
-                                        f"Mapped {agent_id}.{field.name} <- "
-                                        f"{prev_agent_id}.{field.name} (exact match)"
+                                        f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match)",
                                     )
                                 else:
                                     # No mapping available - will need LLM generation
                                     logger.warning(
                                         f"No mapping found for {agent_id}.{field.name} from "
                                         f"{prev_agent_id}. Field will be missing unless LLM mapping "
-                                        f"is generated."
+                                        f"is generated.",
                                     )
 
             # Create node
@@ -120,7 +120,7 @@ class WorkflowBuilder:
                 type=agent_id,
                 input=WorkflowNodeIO(fields=[{k: v} for k, v in inputs.items()]),
                 output=WorkflowNodeIO(fields=[]),  # Runtime fills this
-                io_map=io_map if io_map else None
+                io_map=io_map if io_map else None,
             )
             nodes.append(node)
 
@@ -136,7 +136,7 @@ class WorkflowBuilder:
             version="1.0.0",
             nodes=nodes,
             edges=edges,
-            output=nodes[-1].output if nodes else None
+            output=nodes[-1].output if nodes else None,
         )
 
     def check_agents_exist(self, plan: AbstractWorkflowPlan) -> List[str]:
@@ -155,7 +155,7 @@ class WorkflowBuilder:
     def identify_unmapped_fields(
         self,
         plan: AbstractWorkflowPlan,
-        filled_inputs: Dict[str, Dict[str, Any]]
+        filled_inputs: Dict[str, Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
         Identify fields that need LLM-based mapping.
@@ -191,19 +191,18 @@ class WorkflowBuilder:
             for field in agent.input_schema.fields:
                 if field.required and field.name not in inputs:
                     # Check if mapping exists
-                    has_mapping = (
-                        (mapping and field.name in mapping) or
-                        (field.name in source_fields)
-                    )
+                    has_mapping = (mapping and field.name in mapping) or (field.name in source_fields)
 
                     if not has_mapping:
                         fields_needing_mapping.append(field.name)
 
             if fields_needing_mapping:
-                unmapped.append({
-                    "source_agent_id": prev_agent_id,
-                    "target_agent_id": agent_id,
-                    "unmapped_fields": fields_needing_mapping
-                })
+                unmapped.append(
+                    {
+                        "source_agent_id": prev_agent_id,
+                        "target_agent_id": agent_id,
+                        "unmapped_fields": fields_needing_mapping,
+                    },
+                )
 
         return unmapped

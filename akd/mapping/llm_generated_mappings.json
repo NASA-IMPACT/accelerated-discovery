@@ -1,0 +1,39 @@
+{
+  "version": "1.0.0",
+  "description": "LLM-generated field mappings with approval history",
+  "mappings": {
+    "test_source->test_target": {
+      "mapping": {
+        "output_field": "input_field"
+      },
+      "generated_at": "2025-10-03T16:51:58.796088Z",
+      "confidence": 0.95,
+      "user_approved": true,
+      "reasoning": {
+        "output_field": "Semantic match based on descriptions"
+      }
+    },
+    "low_conf_source->low_conf_target": {
+      "mapping": {
+        "field1": "field2"
+      },
+      "generated_at": "2025-10-03T16:52:12.532069Z",
+      "confidence": 0.6,
+      "user_approved": false,
+      "reasoning": {
+        "field1": "Low confidence"
+      }
+    },
+    "high_conf_source->high_conf_target": {
+      "mapping": {
+        "field1": "field2"
+      },
+      "generated_at": "2025-10-03T16:52:12.534852Z",
+      "confidence": 0.95,
+      "user_approved": true,
+      "reasoning": {
+        "field1": "High confidence"
+      }
+    }
+  }
+}
