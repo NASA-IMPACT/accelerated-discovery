@@ -6,7 +6,7 @@ that can be executed by the AKD framework.
 """
 
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict
 
 from pydantic import BaseModel, Field
 
@@ -14,8 +14,8 @@ from pydantic import BaseModel, Field
 class WorkflowField(BaseModel):
     """Individual field in a workflow node's input or output."""
 
-    name: Optional[str] = None
-    value: Any = None
+    name: str | None = None
+    value: Any | None = None
     # Support for various field structures in the sample format
 
     def model_dump(self, **kwargs) -> Dict[str, Any]:
@@ -33,7 +33,7 @@ class WorkflowField(BaseModel):
 class WorkflowNodeIO(BaseModel):
     """Input or output specification for a workflow node."""
 
-    fields: List[Union[Dict[str, Any], WorkflowField]] = Field(default_factory=list)
+    fields: list[dict[str, Any] | WorkflowField] = Field(default_factory=list)
 
     def model_dump(self, **kwargs) -> Dict[str, Any]:
         """Custom serialization to match the sample format."""
@@ -51,9 +51,10 @@ class WorkflowNode(BaseModel):
 
     type: str = Field(..., description="Node type corresponding to agent type")
     input: WorkflowNodeIO = Field(default_factory=WorkflowNodeIO)
-    output: Optional[WorkflowNodeIO] = Field(default=None)
-    io_map: Optional[Dict[str, str]] = Field(
-        default=None, description="JSONPath mappings for cross-node data access (target_field: jsonpath_expr)"
+    output: WorkflowNodeIO | None = Field(default=None)
+    io_map: dict[str, str] | None = Field(
+        default=None,
+        description="JSONPath mappings for cross-node data access (target_field: jsonpath_expr)",
     )
 
 
@@ -63,8 +64,9 @@ class WorkflowEdge(BaseModel):
     from_node: str = Field(..., alias="from", description="Source node ID")
     to_node: str = Field(..., alias="to", description="Target node ID")
 
-    class Config:
-        populate_by_name = True
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 class WorkflowFormat(BaseModel):
@@ -72,9 +74,9 @@ class WorkflowFormat(BaseModel):
 
     workflow_type: str = Field(default="AKDResearchWorkflow")
     version: str = Field(default="1.0.0")
-    nodes: List[WorkflowNode] = Field(default_factory=list)
-    output: Optional[WorkflowNodeIO] = Field(default=None)
-    edges: List[WorkflowEdge] = Field(default_factory=list)
+    nodes: list[WorkflowNode] = Field(default_factory=list)
+    output: WorkflowNodeIO | None = Field(default=None)
+    edges: list[WorkflowEdge] = Field(default_factory=list)
 
     def to_json(self, **kwargs) -> str:
         """Export workflow to JSON string."""
