@@ -12,6 +12,10 @@ from typing import Any, Dict
 
 from pydantic import BaseModel, Field
 
+# Workflow format metadata
+WORKFLOW_TYPE = "AKDResearchWorkflow"
+WORKFLOW_FORMAT_VERSION = "1.0.0"
+
 
 class WorkflowField(BaseModel):
     """Individual field in a workflow node's input or output."""
@@ -74,8 +78,8 @@ class WorkflowEdge(BaseModel):
 class WorkflowFormat(BaseModel):
     """Complete workflow definition in AKD format."""
 
-    workflow_type: str = Field(default="AKDResearchWorkflow")
-    version: str = Field(default="1.0.0")
+    workflow_type: str = Field(default=WORKFLOW_TYPE)
+    version: str = Field(default=WORKFLOW_FORMAT_VERSION)
     nodes: list[WorkflowNode] = Field(default_factory=list)
     output: WorkflowNodeIO | None = Field(default=None)
     edges: list[WorkflowEdge] = Field(default_factory=list)

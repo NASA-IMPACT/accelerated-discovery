@@ -13,7 +13,14 @@ from typing import Any
 from loguru import logger
 
 from .field_mapping_registry import FieldMappingRegistry
-from .format_builder import WorkflowEdge, WorkflowFormat, WorkflowNode, WorkflowNodeIO
+from .format_builder import (
+    WORKFLOW_FORMAT_VERSION,
+    WORKFLOW_TYPE,
+    WorkflowEdge,
+    WorkflowFormat,
+    WorkflowNode,
+    WorkflowNodeIO,
+)
 from .registry import AgentRegistry
 from .structures import AbstractWorkflowPlan
 
@@ -120,8 +127,8 @@ class WorkflowBuilder:
         if not agents:
             logger.warning("No agents in workflow plan")
             return WorkflowFormat(
-                workflow_type="AKDResearchWorkflow",
-                version="1.0.0",
+                workflow_type=WORKFLOW_TYPE,
+                version=WORKFLOW_FORMAT_VERSION,
                 nodes=[],
                 edges=[],
             )
@@ -172,8 +179,8 @@ class WorkflowBuilder:
             edges.append(WorkflowEdge(from_node=nodes[-1].type, to_node="END"))
 
         return WorkflowFormat(
-            workflow_type="AKDResearchWorkflow",
-            version="1.0.0",
+            workflow_type=WORKFLOW_TYPE,
+            version=WORKFLOW_FORMAT_VERSION,
             nodes=nodes,
             edges=edges,
             output=nodes[-1].output if nodes else None,
