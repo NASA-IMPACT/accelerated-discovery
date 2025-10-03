@@ -6,7 +6,7 @@
       "mapping": {
         "output_field": "input_field"
       },
-      "generated_at": "2025-10-03T16:51:58.796088Z",
+      "generated_at": "2025-10-03T17:10:47.822396Z",
       "confidence": 0.95,
       "user_approved": true,
       "reasoning": {
@@ -17,7 +17,7 @@
       "mapping": {
         "field1": "field2"
       },
-      "generated_at": "2025-10-03T16:52:12.532069Z",
+      "generated_at": "2025-10-03T17:11:02.653834Z",
       "confidence": 0.6,
       "user_approved": false,
       "reasoning": {
@@ -28,7 +28,7 @@
       "mapping": {
         "field1": "field2"
       },
-      "generated_at": "2025-10-03T16:52:12.534852Z",
+      "generated_at": "2025-10-03T17:11:02.656090Z",
       "confidence": 0.95,
       "user_approved": true,
       "reasoning": {

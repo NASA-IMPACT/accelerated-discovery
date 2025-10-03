@@ -8,7 +8,7 @@ Uses three-tier field mapping strategy:
 3. LLM-generated mappings (intelligent fallback)
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from loguru import logger
 
@@ -38,7 +38,71 @@ class WorkflowBuilder:
         self.mapping_registry = mapping_registry or FieldMappingRegistry()
         self.debug = debug
 
-    def build(self, plan: AbstractWorkflowPlan, filled_inputs: Dict[str, Dict[str, Any]]) -> WorkflowFormat:
+    def _build_field_mappings(
+        self,
+        agent: Any,
+        prev_agent: Any,
+        filled_inputs: dict[str, Any],
+        agent_id: str,
+        prev_agent_id: str,
+    ) -> dict[str, str]:
+        """
+        Build io_map for runtime data flow from previous agent to current agent.
+
+        Uses three-tier field mapping strategy:
+        1. Explicit/LLM-approved mapping from registry (Priority 1 & 2)
+        2. Exact name match fallback (Priority 3)
+        3. No mapping - logs warning
+
+        Args:
+            agent: Current agent instance
+            prev_agent: Previous agent instance
+            filled_inputs: Pre-filled inputs for all agents
+            agent_id: Current agent ID
+            prev_agent_id: Previous agent ID
+
+        Returns:
+            Dictionary mapping current agent field names to JSONPath expressions
+            (e.g., {"field_name": "$.prev_agent_id.outputs.source_field"})
+        """
+        io_map = {}
+        inputs = filled_inputs.get(agent_id, {})
+
+        # Map each required input using three-tier strategy
+        for field in agent.input_schema.fields:
+            if field.required and field.name not in inputs:
+                # Get field mapping from registry
+                mapping = self.mapping_registry.get_mapping(
+                    prev_agent_id,
+                    agent_id,
+                )
+
+                if mapping and field.name in mapping:
+                    # Priority 1 or 2: Use explicit or LLM-approved mapping
+                    source_field = mapping[field.name]
+                    io_map[field.name] = f"$.{prev_agent_id}.outputs.{source_field}"
+                    logger.debug(
+                        f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry)",
+                    )
+                else:
+                    # Priority 3: Exact name match fallback
+                    source_fields = {f.name for f in prev_agent.output_schema.fields}
+                    if field.name in source_fields:
+                        io_map[field.name] = f"$.{prev_agent_id}.outputs.{field.name}"
+                        logger.debug(
+                            f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match)",
+                        )
+                    else:
+                        # No mapping available - will need LLM generation
+                        logger.warning(
+                            f"No mapping found for {agent_id}.{field.name} from "
+                            f"{prev_agent_id}. Field will be missing unless LLM mapping "
+                            f"is generated.",
+                        )
+
+        return io_map
+
+    def build(self, plan: AbstractWorkflowPlan, filled_inputs: dict[str, dict[str, Any]]) -> WorkflowFormat:
         """
         Build WorkflowFormat from plan with io_map for runtime data flow.
 
@@ -83,37 +147,13 @@ class WorkflowBuilder:
                 if not prev_agent:
                     logger.warning(f"Previous agent {prev_agent_id} not in registry")
                 else:
-                    # Map each required input using three-tier strategy
-                    for field in agent.input_schema.fields:
-                        if field.required and field.name not in inputs:
-                            # Get field mapping from registry
-                            mapping = self.mapping_registry.get_mapping(
-                                prev_agent_id,
-                                agent_id,
-                            )
-
-                            if mapping and field.name in mapping:
-                                # Priority 1 or 2: Use explicit or LLM-approved mapping
-                                source_field = mapping[field.name]
-                                io_map[field.name] = f"$.{prev_agent_id}.outputs.{source_field}"
-                                logger.debug(
-                                    f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry)",
-                                )
-                            else:
-                                # Priority 3: Exact name match fallback
-                                source_fields = {f.name for f in prev_agent.output_schema.fields}
-                                if field.name in source_fields:
-                                    io_map[field.name] = f"$.{prev_agent_id}.outputs.{field.name}"
-                                    logger.debug(
-                                        f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match)",
-                                    )
-                                else:
-                                    # No mapping available - will need LLM generation
-                                    logger.warning(
-                                        f"No mapping found for {agent_id}.{field.name} from "
-                                        f"{prev_agent_id}. Field will be missing unless LLM mapping "
-                                        f"is generated.",
-                                    )
+                    io_map = self._build_field_mappings(
+                        agent,
+                        prev_agent,
+                        filled_inputs,
+                        agent_id,
+                        prev_agent_id,
+                    )
 
             # Create node
             node = WorkflowNode(
@@ -139,7 +179,7 @@ class WorkflowBuilder:
             output=nodes[-1].output if nodes else None,
         )
 
-    def check_agents_exist(self, plan: AbstractWorkflowPlan) -> List[str]:
+    def check_agents_exist(self, plan: AbstractWorkflowPlan) -> list[str]:
         """
         Simple validation: check if all agents exist in registry.
 
@@ -155,8 +195,8 @@ class WorkflowBuilder:
     def identify_unmapped_fields(
         self,
         plan: AbstractWorkflowPlan,
-        filled_inputs: Dict[str, Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        filled_inputs: dict[str, dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """
         Identify fields that need LLM-based mapping.
 
