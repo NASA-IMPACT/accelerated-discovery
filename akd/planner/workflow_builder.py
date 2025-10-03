@@ -8,16 +8,14 @@ Uses three-tier field mapping strategy:
 3. LLM-generated mappings (intelligent fallback)
 """
 
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
 from .format_builder import WorkflowFormat, WorkflowNode, WorkflowEdge, WorkflowNodeIO
 from .registry import AgentRegistry
 from .field_mapping_registry import FieldMappingRegistry
-
-if TYPE_CHECKING:
-    from .llm_planner import WorkflowPlan
+from .structures import AbstractWorkflowPlan
 
 
 class WorkflowBuilder:
@@ -38,7 +36,7 @@ class WorkflowBuilder:
         self.registry = registry
         self.mapping_registry = mapping_registry or FieldMappingRegistry()
 
-    def build(self, plan: "WorkflowPlan", filled_inputs: Dict[str, Dict[str, Any]]) -> WorkflowFormat:
+    def build(self, plan: AbstractWorkflowPlan, filled_inputs: Dict[str, Dict[str, Any]]) -> WorkflowFormat:
         """
         Build WorkflowFormat from plan with io_map for runtime data flow.
 
@@ -141,7 +139,7 @@ class WorkflowBuilder:
             output=nodes[-1].output if nodes else None
         )
 
-    def check_agents_exist(self, plan: "WorkflowPlan") -> List[str]:
+    def check_agents_exist(self, plan: AbstractWorkflowPlan) -> List[str]:
         """
         Simple validation: check if all agents exist in registry.
 
@@ -156,7 +154,7 @@ class WorkflowBuilder:
 
     def identify_unmapped_fields(
         self,
-        plan: "WorkflowPlan",
+        plan: AbstractWorkflowPlan,
         filled_inputs: Dict[str, Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
