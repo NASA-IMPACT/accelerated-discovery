@@ -1,0 +1,330 @@
+# noqa: F841
+"""Test cases for LangBaseAgent."""
+
+import pytest
+from langchain_community.chat_message_histories import ChatMessageHistory
+
+from akd.agents._base import BaseAgentConfig
+
+from .conftest import (
+    AgentTestOutputSchema,
+    TestLangBaseAgent,
+    setup_async_mock_response,
+)
+
+
+class TestLangBaseAgentFunctionality:
+    """Test LangBaseAgent specific functionality."""
+
+    def test_initialization_default_config(self, mock_chatopenai_client):
+        """Test LangBaseAgent initialization with default config."""
+        agent = TestLangBaseAgent()
+
+        # Verify agent properties
+        assert agent.client == mock_chatopenai_client
+        assert isinstance(agent.memory, ChatMessageHistory)
+        assert agent.prompt_template is not None
+
+    def test_initialization_custom_config(self, mock_chatopenai_client, custom_config):
+        """Test LangBaseAgent initialization with custom config."""
+        agent = TestLangBaseAgent(config=custom_config)
+
+        # Verify configuration was applied
+        assert agent.model_name == "gpt-4o-mini"
+        assert agent.temperature == 0.7
+        assert agent.api_key == "test_key"
+        assert str(agent.base_url) == "https://custom.api.com/v1"
+
+    def test_memory_management(self, mock_chatopenai_client):
+        """Test memory initialization and reset functionality."""
+        agent = TestLangBaseAgent()
+
+        # Test initial memory state
+        assert isinstance(agent.memory, ChatMessageHistory)
+        assert len(agent.memory.messages) == 0
+
+        # Add test messages
+        agent.memory.add_user_message("test user message")
+        agent.memory.add_ai_message("test ai message")
+        assert len(agent.memory.messages) == 2
+
+        # Test memory reset
+        agent.reset_memory()
+        assert len(agent.memory.messages) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_response_async_mock(
+        self,
+        mock_chatopenai_client,
+        expected_output,
+    ):
+        """Test async response generation with mocked client."""
+        # Setup mock structured output
+        mock_structured_client = await setup_async_mock_response(
+            mock_chatopenai_client,
+            expected_output,
+            "chatopenai",
+        )
+
+        agent = TestLangBaseAgent()
+
+        # Test response generation
+        result = await agent.get_response_async()
+
+        # Verify structured output setup
+        mock_chatopenai_client.with_structured_output.assert_called_once_with(
+            AgentTestOutputSchema,
+            method="function_calling",
+        )
+
+        # Verify response
+        mock_structured_client.ainvoke.assert_called_once()
+        assert isinstance(result, AgentTestOutputSchema)
+        assert result.response == "Test response"
+
+    def test_prompt_template_setup(self, mock_chatopenai_client):
+        """Test prompt template initialization."""
+        agent = TestLangBaseAgent()
+
+        # Verify prompt template exists and has correct structure
+        assert agent.prompt_template is not None
+
+        # Test template formatting
+        formatted = agent.prompt_template.format_messages(memory=[])
+        assert len(formatted) >= 1  # Should have at least system message
+        assert formatted[0].content == agent.system_prompt
+
+    def test_client_configuration(self, mock_chatopenai_client, custom_config):
+        """Test that ChatOpenAI client is configured correctly."""
+        from unittest.mock import patch
+
+        with patch("akd.agents._base.ChatOpenAI") as mock_chat_openai:
+            mock_chat_openai.return_value = mock_chatopenai_client
+
+            agent = TestLangBaseAgent(config=custom_config)
+
+            # Verify client was configured correctly
+            call_kwargs = mock_chat_openai.call_args.kwargs
+            assert call_kwargs["model"] == "gpt-4o-mini"
+            assert call_kwargs["temperature"] == 0.7
+            assert call_kwargs["api_key"] == "test_key"
+            assert call_kwargs["base_url"] == "https://custom.api.com/v1"
+
+    @pytest.mark.asyncio
+    async def test_arun_stateless_behavior(
+        self,
+        mock_chatopenai_client,
+        test_input,
+        expected_output,
+    ):
+        """Test _arun with stateless behavior (default)."""
+        # Setup mock response
+        mock_structured_client = await setup_async_mock_response(
+            mock_chatopenai_client,
+            expected_output,
+            "chatopenai",
+        )
+
+        agent = TestLangBaseAgent()  # Default is stateless=True
+
+        # Execute arun
+        result = await agent.arun(test_input)
+
+        # Verify result
+        assert isinstance(result, AgentTestOutputSchema)
+        assert result.response == "Test response"
+
+        # Memory should remain empty in stateless mode
+        assert len(agent.memory.messages) == 0
+
+    @pytest.mark.asyncio
+    async def test_arun_stateful_behavior(
+        self,
+        mock_chatopenai_client,
+        test_input,
+        expected_output,
+    ):
+        """Test _arun with stateful behavior."""
+        # Setup mock response
+        mock_structured_client = await setup_async_mock_response(
+            mock_chatopenai_client,
+            expected_output,
+            "chatopenai",
+        )
+
+        # Create stateful agent
+        config = BaseAgentConfig(stateless=False)
+        agent = TestLangBaseAgent(config=config)
+
+        # Execute arun
+        result = await agent.arun(test_input)
+
+        # Verify result
+        assert isinstance(result, AgentTestOutputSchema)
+        assert result.response == "Test response"
+
+        # Memory should be updated in stateful mode
+        assert len(agent.memory.messages) == 2  # user + assistant messages
+
+    def test_debug_mode_functionality(self, mock_chatopenai_client):
+        """Test debug mode initialization and usage."""
+        # Test debug mode from config
+        debug_config = BaseAgentConfig(debug=True)
+        agent = TestLangBaseAgent(config=debug_config, debug=False)
+        assert agent.debug is True  # config debug should take precedence
+
+        # Test debug mode from parameter
+        agent2 = TestLangBaseAgent(debug=True)
+        assert agent2.debug is True
+
+    def test_configuration_attribute_mapping(self, mock_chatopenai_client):
+        """Test that configuration attributes are properly mapped to agent."""
+        custom_config = BaseAgentConfig(
+            model_name="gpt-4o-mini",
+            temperature=0.8,
+            api_key="custom_key",
+        )
+
+        agent = TestLangBaseAgent(config=custom_config)
+
+        # Verify attributes were mapped from config
+        assert agent.model_name == "gpt-4o-mini"
+        assert agent.temperature == 0.8
+        assert agent.api_key == "custom_key"
+
+    def test_error_handling_initialization(self):
+        """Test error handling during agent initialization."""
+        from unittest.mock import patch
+
+        # Test that agents handle initialization gracefully
+        with patch("akd.agents._base.ChatOpenAI") as mock_chat_openai:
+            # Test that agents initialize even with mock failures
+            mock_chat_openai.side_effect = Exception("Mock initialization error")
+
+            # This should still create the agent object, but client creation might fail
+            try:
+                agent = TestLangBaseAgent()
+                # If we get here, the agent was created despite the client error
+                assert agent is not None
+            except Exception as e:
+                # Expected if client creation fails
+                assert "Mock initialization error" in str(e)
+
+    def test_input_hints_disabled_by_default(self, mock_chatopenai_client):
+        """Test that input hints are disabled by default for LangBaseAgent."""
+        agent = TestLangBaseAgent()
+
+        system_prompt = agent._system_prompt
+
+        # Verify no input hints are present by default
+        assert "INPUT FIELD DESCRIPTIONS:" not in system_prompt
+        assert system_prompt == agent.system_prompt
+
+    def test_input_hints_enabled(self, mock_chatopenai_client):
+        """Test input hints functionality when enabled for LangBaseAgent."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        system_prompt = agent._system_prompt
+
+        # Verify input hints are present
+        assert "INPUT FIELD DESCRIPTIONS:" in system_prompt
+        assert "**query**:" in system_prompt
+        assert "**optional_param**:" in system_prompt
+        assert "Test query input" in system_prompt
+        assert "Optional parameter" in system_prompt
+
+        # Verify original system prompt is still there
+        assert agent.system_prompt in system_prompt
+
+    def test_prompt_template_uses_system_prompt_property(self, mock_chatopenai_client):
+        """Test that LangBaseAgent prompt template uses _system_prompt property."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # Get the system message from the prompt template
+        formatted_messages = agent.prompt_template.format_messages(memory=[])
+        system_message = formatted_messages[0]
+
+        # Verify the prompt template uses the enhanced system prompt
+        assert "INPUT FIELD DESCRIPTIONS:" in system_message.content
+        assert "**query**:" in system_message.content
+
+    def test_agent_description_disabled_by_default(self, mock_chatopenai_client):
+        """Test that agent description is not included when input hints are disabled."""
+        # Create agent with description via docstring
+        agent = TestLangBaseAgent()
+
+        system_prompt = agent._system_prompt
+
+        # Should not include description when input_hints=False (default)
+        assert "AGENT DESCRIPTION:" not in system_prompt
+        assert system_prompt == agent.system_prompt
+
+    def test_agent_description_with_input_hints_enabled_no_description(
+        self,
+        mock_chatopenai_client,
+    ):
+        """Test behavior when input hints enabled but no agent description available."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # Clear the description to simulate no description
+        agent.description = ""
+
+        system_prompt = agent._system_prompt
+
+        # Should not include agent description section when description is empty
+        assert "AGENT DESCRIPTION:" not in system_prompt
+        # But should still include input hints
+        assert "INPUT FIELD DESCRIPTIONS:" in system_prompt
+
+    def test_agent_description_with_input_hints_enabled_with_description(
+        self,
+        mock_chatopenai_client,
+    ):
+        """Test agent description inclusion when input hints enabled and description available."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # Set a test description
+        test_description = "This is a test agent for testing purposes"
+        agent.description = test_description
+
+        system_prompt = agent._system_prompt
+
+        # Should include both agent description and input hints
+        assert "AGENT DESCRIPTION:" in system_prompt
+        assert test_description in system_prompt
+        assert "INPUT FIELD DESCRIPTIONS:" in system_prompt
+        assert "**query**:" in system_prompt
+
+        # Verify order: original prompt, then description, then input hints
+        desc_pos = system_prompt.find("AGENT DESCRIPTION:")
+        input_pos = system_prompt.find("INPUT FIELD DESCRIPTIONS:")
+        assert desc_pos < input_pos
+
+    def test_agent_description_from_class_docstring(self, mock_chatopenai_client):
+        """Test that agent description is extracted from class docstring."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # The TestLangBaseAgent should have a docstring
+        system_prompt = agent._system_prompt
+
+        if agent.description:  # Only test if description exists
+            assert "AGENT DESCRIPTION:" in system_prompt
+            assert agent.description in system_prompt
+
+    def test_agent_description_from_config(self, mock_chatopenai_client):
+        """Test that agent description can be set via config."""
+        test_description = "Agent description from config"
+        config = BaseAgentConfig(input_hints=True, description=test_description)
+        agent = TestLangBaseAgent(config=config)
+
+        system_prompt = agent._system_prompt
+
+        # Should include the description from config
+        assert "AGENT DESCRIPTION:" in system_prompt
+        assert test_description in system_prompt
+        assert agent.description == test_description

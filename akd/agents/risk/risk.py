@@ -14,7 +14,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import LiteLLMInstructorBaseAgent
 from akd.agents._base import BaseAgentConfig
 from akd.configs.prompts import RISK_SYSTEM_PROMPT
 from akd.utils import get_akd_root
@@ -151,7 +151,9 @@ class RiskAgentConfig(BaseAgentConfig):
     )
 
 
-class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]):
+class RiskAgent(
+    LiteLLMInstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema],
+):
     """
     Agent that generates tailored risk evaluation criteria and a DAGMetric
     based on a predefined risk atlas and specific model inputs and outputs.
@@ -441,7 +443,13 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
 
         for risk_id in params.risk_ids:
             logger.info(f"Processing risk: {risk_id}")
-            self.memory.clear()
+
+            # start fresh if no tracking required
+            messages = [] if self.stateless else self.memory
+
+            # if empty, add system message
+            if not messages:
+                messages.append(self._default_system_message())
 
             # Combine risk definition and conversation into one user message
             risk_description = self._risk_map[risk_id]
@@ -451,15 +459,14 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
                 for i, (inp, outp) in enumerate(zip(params.inputs, params.outputs))
             )
 
-            user_prompt = f"""\
-            Risk ID: {risk_id}
-            Risk Description: {risk_description}
+            user_prompt = f"""
+Risk ID: {risk_id}
+Risk Description: {risk_description}\n
+Conversation:
+{conversation_text}
+"""
 
-            Conversation:
-            {conversation_text}
-            """
-
-            self.memory.append(
+            messages.append(
                 {
                     "role": "user",
                     "content": user_prompt,
@@ -469,7 +476,20 @@ class RiskAgent(InstructorBaseAgent[RiskAgentInputSchema, RiskAgentOutputSchema]
             # Use the per-risk schema here instead of the full Output Schema for the Risk Agent
             response = await self.get_response_async(
                 response_model=RiskCriteriaOutputSchema,
+                messages=messages,
             )
+
+            messages.append(
+                dict(
+                    role="assistant",
+                    content=response.model_dump_json(exclude={"type"}),
+                ),
+            )
+
+            # update memory only if stateful
+            if not self.stateless:
+                self._memory = messages
+
             logger.info(f"Judge criteria obtained for risk: {risk_id}")
             criteria_by_risk[risk_id] = response.criteria
 

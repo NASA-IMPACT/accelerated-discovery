@@ -3,7 +3,7 @@ from enum import Enum
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import LiteLLMInstructorBaseAgent
 
 
 class Intent(str, Enum):
@@ -24,7 +24,7 @@ class IntentOutputSchema(OutputSchema):
     intent: Intent = Field(..., description="The user's intent")
 
 
-class IntentAgent(InstructorBaseAgent[IntentInputSchema, IntentOutputSchema]):
+class IntentAgent(LiteLLMInstructorBaseAgent[IntentInputSchema, IntentOutputSchema]):
     """Intent Detector Agent"""
 
     input_schema = IntentInputSchema
