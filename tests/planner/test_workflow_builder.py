@@ -8,7 +8,7 @@ import json
 import pytest
 from pathlib import Path
 
-from akd.planner.llm_planner import WorkflowPlan, AgentSuggestion
+from akd.planner.structures import WorkflowPlan, AgentSuggestion
 from akd.planner.registry import get_agent_registry, AgentRegistry
 from akd.planner.workflow_builder import WorkflowBuilder
 from akd.planner.format_builder import WorkflowFormat
