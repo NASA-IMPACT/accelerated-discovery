@@ -5,6 +5,8 @@ This module provides classes for building workflow definitions
 that can be executed by the AKD framework.
 """
 
+from __future__ import annotations
+
 import json
 from typing import Any, Dict
 
@@ -78,25 +80,26 @@ class WorkflowFormat(BaseModel):
     output: WorkflowNodeIO | None = Field(default=None)
     edges: list[WorkflowEdge] = Field(default_factory=list)
 
-    def to_json(self, **kwargs) -> str:
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> WorkflowFormat:
+        """Create a WorkflowFormat instance from a dictionary."""
+        return cls(**data)
+
+    @classmethod
+    def from_file(cls, file_path: str) -> WorkflowFormat:
+        """Load a workflow from a JSON file."""
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+    def to_json(self, indent: int = 2, exclude_none: bool = True, **kwargs) -> str:
         """Export workflow to JSON string."""
         # Use exclude_none=True by default for cleaner output (omit null fields)
-        kwargs.setdefault("exclude_none", True)
-        return json.dumps(self.model_dump(**kwargs), indent=2)
+        kwargs.pop("exclude_none", None)
+        kwargs.pop("indent", None)
+        return self.model_dump_json(**kwargs, exclude_none=exclude_none, indent=indent)
 
     def save_to_file(self, file_path: str, **kwargs) -> None:
         """Save workflow to JSON file."""
         with open(file_path, "w") as f:
             f.write(self.to_json(**kwargs))
-
-
-def create_workflow_from_dict(data: Dict[str, Any]) -> WorkflowFormat:
-    """Create a WorkflowFormat instance from a dictionary."""
-    return WorkflowFormat(**data)
-
-
-def load_workflow_from_file(file_path: str) -> WorkflowFormat:
-    """Load a workflow from a JSON file."""
-    with open(file_path, "r") as f:
-        data = json.load(f)
-    return create_workflow_from_dict(data)
