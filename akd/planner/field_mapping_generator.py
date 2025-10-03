@@ -5,43 +5,16 @@ Generates semantic field mappings when explicit mappings don't exist,
 with confidence scoring and detailed reasoning.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Dict, List, Optional
 
 from loguru import logger
 
 from akd.agents._base import LiteLLMInstructorBaseAgent, BaseAgentConfig
-from akd._base import InputSchema, OutputSchema
+from akd._base import InputSchema
 from akd.configs.project import CONFIG
 from akd.planner.registry import AgentEntry
-
-
-class FieldMappingEntry(BaseModel):
-    """Single field mapping with confidence and reasoning."""
-
-    target_field: str = Field(..., description="Target agent input field name")
-    source_field: str = Field(..., description="Source agent output field name")
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score (0-1)")
-    reasoning: str = Field(..., description="Explanation for this mapping")
-
-
-class FieldMappingResult(OutputSchema):
-    """Complete field mapping result from LLM."""
-
-    mappings: List[FieldMappingEntry] = Field(
-        ...,
-        description="List of field mappings with confidence scores"
-    )
-    overall_confidence: float = Field(
-        ...,
-        ge=0.0,
-        le=1.0,
-        description="Overall confidence in the entire mapping set"
-    )
-    notes: Optional[str] = Field(
-        None,
-        description="Additional notes or warnings about the mapping"
-    )
+from akd.planner.structures import FieldMappingEntry, FieldMappingResult
 
 
 class FieldMappingInput(InputSchema):
