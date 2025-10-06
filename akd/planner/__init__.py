@@ -2,16 +2,10 @@
 AKD Planner Module
 
 This module provides workflow planning capabilities for the AKD framework.
-It includes agent registry management, workflow format building, and abstract
-interfaces for workflow planners (concrete implementations in future PRs).
+It includes agent registry management, workflow format building, and LLM-based
+workflow planning.
 """
 
-from .base_planner import (
-    AbstractInteractivePlanner,
-    AbstractPlannerSession,
-    AbstractWorkflowPlanner,
-    PlannerContext,
-)
 from .config import AgentRegistryConfig
 from .field_mapping_generator import FieldMappingGenerator
 from .field_mapping_registry import FieldMappingRegistry
@@ -52,9 +46,4 @@ __all__ = [
     "WorkflowPlan",
     "AgentSuggestion",
     "PlannerConfig",
-    # Abstract Planner Interfaces (for PR #3 implementations)
-    "AbstractWorkflowPlanner",
-    "AbstractInteractivePlanner",
-    "AbstractPlannerSession",
-    "PlannerContext",
 ]
