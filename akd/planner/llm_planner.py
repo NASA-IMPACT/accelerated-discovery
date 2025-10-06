@@ -5,21 +5,25 @@ This module provides an intelligent planner that can converse with users to unde
 their research requirements and generate validated workflow definitions in the AKD format.
 """
 
-from typing import Any, Dict, List, Optional, Union
 from enum import Enum
+from typing import Any, Optional
 
 from loguru import logger
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import InstructorBaseAgent, BaseAgentConfig
+from akd.agents._base import LiteLLMInstructorBaseAgent, BaseAgentConfig
+from akd.configs.planner_prompts import (
+    WORKFLOW_PLANNER_SYSTEM_PROMPT_TEMPLATE,
+    WORKFLOW_INPUT_EXTRACTION_PROMPT_TEMPLATE,
+)
 
 from .registry import AgentRegistry, get_agent_registry
 from .format_builder import WorkflowFormat
 from .workflow_builder import WorkflowBuilder
 from .field_mapping_registry import FieldMappingRegistry
 from .field_mapping_generator import FieldMappingGenerator
-from .structures import AgentSuggestion, WorkflowPlan
+from .structures import AgentSuggestion, PlannerConfig, WorkflowPlan
 
 
 class ConversationPhase(str, Enum):
@@ -48,7 +52,7 @@ class PlannerQuestion(OutputSchema):
 
     question: str = Field(..., description="The question to ask the user")
     question_type: PlannerQuestionType = Field(..., description="Type of question")
-    options: Optional[List[str]] = Field(
+    options: Optional[list[str]] = Field(
         default=None, description="Options for multiple choice questions"
     )
     context: str = Field(
@@ -82,19 +86,19 @@ class PlannerInput(InputSchema):
     """Input to the planner agent."""
 
     user_message: str = Field(..., description="User's message or response")
-    conversation_history: List[Dict[str, str]] = Field(
+    conversation_history: list[dict[str, str]] = Field(
         default_factory=list, description="Previous conversation"
     )
     current_phase: ConversationPhase = Field(
         default=ConversationPhase.INITIAL_REQUIREMENTS
     )
-    available_agents: List[Dict[str, Any]] = Field(
+    available_agents: list[dict[str, Any]] = Field(
         default_factory=list, description="Available agents from registry"
     )
 
 
-class LLMWorkflowPlanner(InstructorBaseAgent[PlannerInput, PlannerResponse]):
-    """LLM-based workflow planner with conversational interface."""
+class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerResponse]):
+    """LLM-based workflow planner with conversational interface using LiteLLM."""
 
     input_schema = PlannerInput
     output_schema = PlannerResponse
@@ -102,126 +106,64 @@ class LLMWorkflowPlanner(InstructorBaseAgent[PlannerInput, PlannerResponse]):
     def __init__(
         self,
         config: Optional[BaseAgentConfig] = None,
+        planner_config: Optional[PlannerConfig] = None,
         registry: Optional[AgentRegistry] = None,
         mapping_registry: Optional[FieldMappingRegistry] = None,
         mapping_generator: Optional[FieldMappingGenerator] = None,
         debug: bool = False,
     ):
-        """Initialize the planner."""
+        """
+        Initialize the planner.
+
+        Args:
+            config: Agent-level configuration (model, API keys, etc.)
+            planner_config: Planner-specific configuration (thresholds, temperatures, etc.)
+            registry: Agent registry
+            mapping_registry: Field mapping registry
+            mapping_generator: Field mapping generator
+            debug: Enable debug mode
+        """
         self.registry = registry or get_agent_registry()
         self.mapping_registry = mapping_registry or FieldMappingRegistry()
         self.mapping_generator = mapping_generator or FieldMappingGenerator()
-        self.builder = WorkflowBuilder(self.registry, self.mapping_registry)
-        self.conversation_state: Dict[str, Any] = {}
+        self.builder = WorkflowBuilder(self.registry, self.mapping_registry, debug=debug)
+        self.conversation_state: dict[str, Any] = {}
+        self.planner_config = planner_config or PlannerConfig()
+        self.debug = debug
 
         # Set up system prompt for workflow planning (uses self.registry)
-        planner_config = config or BaseAgentConfig()
-        planner_config.system_prompt = self._get_planner_system_prompt()
-        # Lower temperature for more deterministic, decisive workflow generation
-        if not planner_config.temperature:
-            planner_config.temperature = 0.3
+        agent_config = config or BaseAgentConfig()
+        agent_config.system_prompt = self._get_planner_system_prompt()
+        # Use planner config temperature
+        if not agent_config.temperature:
+            agent_config.temperature = self.planner_config.temperature
 
-        super().__init__(config=planner_config, debug=debug)
+        super().__init__(config=agent_config, debug=debug)
 
     def _get_planner_system_prompt(self) -> str:
-        """Get the system prompt for the planner."""
+        """Get the system prompt for the planner using optimized template from config."""
         # Build available agents section dynamically from registry
         agents_info = []
         for agent in self.registry.get_enabled_agents():
-            agent_desc = f"- **{agent.agent_id}**: {agent.description}"
+            agent_desc = f"- {agent.agent_id}: {agent.description}"
 
             # Add input/output info
             inputs = [f.name for f in agent.input_schema.fields if f.required]
             outputs = [f.name for f in agent.output_schema.fields]
 
             if inputs:
-                agent_desc += f"\n  - Required inputs: {', '.join(inputs)}"
+                agent_desc += f"\n  Required inputs: {', '.join(inputs)}"
             if outputs:
-                agent_desc += f"\n  - Outputs: {', '.join(outputs)}"
+                agent_desc += f"\n  Outputs: {', '.join(outputs)}"
 
             agents_info.append(agent_desc)
 
         available_agents_text = "\n".join(agents_info) if agents_info else "No agents available"
 
-        return f"""You are an intelligent workflow planner for the AKD (Accelerated Knowledge Discovery) research framework.
-
-Your goal is to design scientifically sound, executable workflows with correct data flow between agents.
-
-**WORKFLOW GENERATION STRATEGY:**
-
-1. **Analyze the Request**: Understand what the user wants to accomplish
-2. **Generate Workflow Immediately**: For clear requests with obvious agent sequences, provide workflow_plan in first response
-3. **Use Reasonable Defaults**: Time ranges (recent/last 5 years), databases (standard academic), formats (structured output)
-4. **Ask Questions ONLY if**: Request is genuinely ambiguous OR multiple valid workflows with significantly different outcomes exist
-
-**IMPERATIVE: If user request mentions specific workflow steps (e.g., "search papers and extract findings"), generate the workflow_plan immediately. DO NOT ask clarifying questions about minor details.**
-
-**CRITICAL: Data Flow Requirements**
-When suggesting agents, MUST verify:
-- Each agent's **required** input fields can be satisfied by previous agents' outputs
-- Field types are compatible (e.g., array of strings can flow to list field)
-- Field semantics match (e.g., "queries" → "query", "results" → "content")
-- Data transformations are logical (query → search → extraction)
-
-**Agent Selection Process:**
-1. Review available agents' input_schema and output_schema
-2. Match agent capabilities to user's research goal
-3. Chain agents so outputs satisfy next agent's required inputs
-4. Verify data flow: agent A outputs must include agent B's required inputs
-
-**When to Ask Questions:**
-✓ ASK if user goal is genuinely ambiguous (e.g., "analyze data" - what kind?)
-✓ ASK if multiple valid workflows exist and choice impacts results significantly
-✗ DON'T ASK about minor details (time ranges, database preferences, output formats)
-✗ DON'T ASK about standard assumptions (recent papers, peer-reviewed sources)
-
-**When to Generate Workflow:**
-- Request clearly specifies: search → process → extract pattern
-- Agent sequence is obvious from research goal
-- Data flow between agents is valid
-- After 1-2 clarifying exchanges if needed
-
-**CRITICAL: Field Input Handling Strategy**
-
-For FIRST agent in workflow:
-- **Required fields**: Extract from user query; ASK user if genuinely missing from request
-- **Optional fields**: Provide sensible defaults/hints based on context
-  - Examples: max_results=20-30, category inferred from topic keywords, time_range="recent"
-  - Make context-aware suggestions (e.g., "protein" → category="computational-biology")
-
-For SUBSEQUENT agents in workflow:
-- **Auto-mappable fields**: If field can be satisfied by previous agent's output via io_map → DO NOT fill it manually
-  - Let io_map handle runtime data routing (e.g., search_results ← previous_agent.results)
-  - Check field mappings: explicit mappings, exact name matches, or semantic mappings
-- **User-specified fields**: Only fill fields that CANNOT be auto-mapped from previous agent
-  - Required fields with no mapping → ASK user (if critical) or use reasonable inference
-  - Optional fields → Provide context-aware defaults
-- **Example**:
-  - gap_analysis.search_results ← deep_search.results (AUTO-MAPPED via io_map, don't fill)
-  - gap_analysis.gap ← user must specify type (e.g., "methodology", "dataset") - extract from query or ask
-
-**Key Principle**: Minimize user burden by auto-mapping when possible, only ask for genuinely missing critical information.
-
-**Workflow Plan Requirements:**
-When providing workflow_plan, include:
-- workflow_description: Clear summary of what it does
-- research_goal: What user wants to accomplish
-- suggested_agents: Agents with **EXACT agent_id from available_agents list**, required_inputs, expected_outputs, depends_on
-- workflow_steps: High-level steps showing data flow
-- Set ready_to_generate=True
-
-**CRITICAL: Use EXACT agent IDs from the available_agents list below. Do NOT invent agent names or add suffixes like "_agent".**
-
-**Available Agents:**
-{available_agents_text}
-
-**Response Guidelines:**
-- Be concise and actionable
-- Explain data flow logic clearly
-- Only ask questions that materially impact workflow correctness
-- Generate workflows decisively when request is clear
-- Focus on technical soundness and correct IO matching
-- ONLY use agent IDs from the list above"""
+        # Use optimized template from config
+        return WORKFLOW_PLANNER_SYSTEM_PROMPT_TEMPLATE.format(
+            available_agents=available_agents_text
+        )
 
     def reset_conversation(self) -> None:
         """Reset the conversation state."""
@@ -306,7 +248,7 @@ class InteractivePlannerSession:
         """Initialize planning session."""
         self.planner = planner
         self.initial_request = initial_request
-        self.conversation_history: List[Dict[str, str]] = []
+        self.conversation_history: list[dict[str, str]] = []
         self.current_phase = ConversationPhase.INITIAL_REQUIREMENTS
         self.workflow_plan: Optional[WorkflowPlan] = None
         self.final_workflow: Optional[WorkflowFormat] = None
@@ -388,16 +330,18 @@ class InteractivePlannerSession:
 
     async def _handle_unmapped_fields(
         self,
-        unmapped: List[Dict[str, Any]],
-        confidence_threshold: float = 0.8
+        unmapped: list[dict[str, Any]],
+        confidence_threshold: Optional[float] = None
     ) -> None:
         """
         Generate LLM mappings for unmapped fields and handle user approval.
 
         Args:
             unmapped: List of unmapped field info from identify_unmapped_fields()
-            confidence_threshold: Threshold for auto-approval
+            confidence_threshold: Threshold for auto-approval (uses planner config if None)
         """
+        if confidence_threshold is None:
+            confidence_threshold = self.planner.planner_config.field_mapping_confidence_threshold
         for item in unmapped:
             source_agent_id = item["source_agent_id"]
             target_agent_id = item["target_agent_id"]
@@ -479,8 +423,13 @@ class InteractivePlannerSession:
                     f"{source_agent_id} -> {target_agent_id}: {e}"
                 )
 
-    async def _fill_all_agent_inputs(self, plan: WorkflowPlan) -> Dict[str, Dict[str, Any]]:
-        """Fill inputs for all agents in the plan."""
+    async def _fill_all_agent_inputs(self, plan: WorkflowPlan) -> dict[str, dict[str, Any]]:
+        """
+        Fill inputs for all agents in the plan using full conversation context.
+
+        Uses conversation history, workflow plan, and agent selection reasoning
+        to extract context-aware input values.
+        """
         filled_inputs = {}
 
         for agent_suggestion in plan.suggested_agents:
@@ -492,7 +441,12 @@ class InteractivePlannerSession:
                 continue
 
             try:
-                inputs = await self._fill_inputs_with_llm(agent, agent_id)
+                inputs = await self._fill_inputs_with_llm(
+                    agent,
+                    agent_id,
+                    agent_suggestion,  # Pass agent suggestion for context
+                    plan  # Pass full workflow plan for research goal
+                )
                 filled_inputs[agent_id] = inputs
             except Exception as e:
                 logger.warning(f"Failed to fill inputs for {agent_id}: {e}")
@@ -502,11 +456,24 @@ class InteractivePlannerSession:
 
         return filled_inputs
 
-    async def _fill_inputs_with_llm(self, agent: Any, agent_id: str) -> Dict[str, Any]:
-        """Use Instructor LLM to extract structured input values from user context."""
+    async def _fill_inputs_with_llm(
+        self,
+        agent: Any,
+        agent_id: str,
+        agent_suggestion: AgentSuggestion,
+        workflow_plan: Optional[WorkflowPlan] = None
+    ) -> dict[str, Any]:
+        """
+        Use Instructor LLM to extract structured input values from full conversation context.
+
+        Uses:
+        - Initial user request
+        - Full conversation history
+        - Research goal and workflow description
+        - Agent selection reasoning
+        - Agent field schemas
+        """
         from pydantic import create_model, Field as PydanticField
-        from typing import get_type_hints
-        import instructor
 
         # Build a dynamic Pydantic model from the agent's input schema
         field_definitions = {}
@@ -556,33 +523,68 @@ class InteractivePlannerSession:
         try:
             client = self.planner.client
 
-            prompt = f"""Extract the input parameters for the '{agent_id}' agent from this user request.
+            # Build conversation context (last 10 messages for context window management)
+            conversation_history_text = ""
+            if self.conversation_history:
+                recent_messages = self.conversation_history[-10:]
+                conversation_history_text = "\n".join([
+                    f"{msg['role'].title()}: {msg['content']}"
+                    for msg in recent_messages
+                ])
 
-User Request: {self.initial_request}
+            # Build research context from workflow plan
+            research_context_text = ""
+            if workflow_plan:
+                research_context_text = f"Research Goal: {workflow_plan.research_goal}\nWorkflow Description: {workflow_plan.workflow_description}"
 
-Agent: {agent_id}
-Agent Description: {agent.description if hasattr(agent, 'description') else 'N/A'}
+            # Build workflow position context
+            agent_names = [a.agent_id for a in workflow_plan.suggested_agents] if workflow_plan else []
+            current_idx = agent_names.index(agent_id) if agent_id in agent_names else -1
+            workflow_position = f"Position {current_idx + 1} of {len(agent_names)}" if current_idx >= 0 else "Unknown"
+            downstream_agents = ", ".join(agent_names[current_idx + 1:]) if current_idx >= 0 and current_idx < len(agent_names) - 1 else "Final agent"
 
-Input Fields Needed:
-{chr(10).join(f"- {name}: {desc}" for name, desc in field_descriptions.items())}
+            # Combine all context sections
+            context_sections = f"""Conversation History:
+{conversation_history_text if conversation_history_text else 'No conversation history available'}
 
-Instructions:
-- Extract values directly from the user request where mentioned
-- For 'query' fields: use the user's research question
-- For 'category' fields: infer from topic keywords
-- For 'max_results' or 'limit': use reasonable defaults (20-50)
-- For other fields: use context-appropriate values or reasonable defaults
-- Be specific and relevant to the user's actual request
-"""
+Research Context:
+{research_context_text if research_context_text else 'No workflow plan available'}"""
+
+            # Separate required and optional inputs
+            required_inputs_text = "\n".join([
+                f"- {name}: {desc}"
+                for name, desc in field_descriptions.items()
+                if any(f.name == name and f.required for f in agent.input_schema.fields)
+            ])
+            optional_inputs_text = "\n".join([
+                f"- {name}: {desc}"
+                for name, desc in field_descriptions.items()
+                if any(f.name == name and not f.required for f in agent.input_schema.fields)
+            ])
+
+            # Use optimized template from config
+            prompt = WORKFLOW_INPUT_EXTRACTION_PROMPT_TEMPLATE.format(
+                context_sections=context_sections,
+                agent_id=agent_id,
+                agent_description=agent.description if hasattr(agent, 'description') else 'N/A',
+                selection_reason=agent_suggestion.reason,
+                confidence=agent_suggestion.confidence,
+                workflow_position=workflow_position,
+                downstream_agents=downstream_agents,
+                required_inputs=required_inputs_text if required_inputs_text else "None",
+                optional_inputs=optional_inputs_text if optional_inputs_text else "None",
+                dependencies=", ".join(agent_suggestion.depends_on) if agent_suggestion.depends_on else "None",
+                expected_outputs=", ".join(agent_suggestion.expected_outputs) if agent_suggestion.expected_outputs else "Not specified"
+            )
 
             response = await client.chat.completions.create(
                 model=self.planner.config.model_name,
                 response_model=InputModel,
                 messages=[
-                    {"role": "system", "content": "You are an expert at extracting structured parameters from research requests."},
+                    {"role": "system", "content": "You are an expert at extracting structured input parameters for research agents. Extract values from the provided context and return them in the exact schema format required."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.1,
+                temperature=self.planner.planner_config.input_extraction_temperature,
             )
 
             # Convert to dict
@@ -593,44 +595,46 @@ Instructions:
             # Fall back to simpler extraction
             return self._fallback_input_extraction(agent, agent_id)
 
-    def _fallback_input_extraction(self, agent: Any, agent_id: str) -> Dict[str, Any]:
-        """Fallback simple rule-based extraction when LLM fails."""
+    def _fallback_input_extraction(self, agent: Any, agent_id: str) -> dict[str, Any]:
+        """
+        Fallback extraction using only schema defaults and generic field name patterns.
+
+        No hardcoded domain knowledge - uses only:
+        1. Schema-defined defaults
+        2. Generic pattern: fields named 'query'/'queries' get user request
+        3. Type-based defaults
+        """
         user_query = self.initial_request
         result = {}
 
         for field in agent.input_schema.fields:
             value = None
 
-            # Rule-based extraction
-            if field.name == "query":
-                value = user_query
-            elif field.name == "queries":
-                value = [user_query]
-            elif field.name == "category":
-                query_lower = user_query.lower()
-                if any(term in query_lower for term in ["protein", "alphafold", "structure"]):
-                    value = "computational-biology"
-                elif any(term in query_lower for term in ["machine learning", "deep learning", "neural"]):
-                    value = "machine-learning"
-                elif any(term in query_lower for term in ["drug", "medicine", "therapeutic"]):
-                    value = "drug-discovery"
-                else:
-                    value = "research"
-            elif field.name in ["max_results", "limit"]:
-                value = 20
-            elif field.name == "gap":
-                if "gap" in user_query.lower():
-                    value = "research gaps"
-                else:
-                    value = "methodological gaps"
-
-            # Use default if nothing extracted
-            if value is None:
-                value = self._get_default_value(field.type, field.name, field)
+            # Use schema default if available
+            if field.default is not None:
+                value = field.default
+            # Generic pattern: any field named 'query' or 'queries' gets user request
+            elif field.name in ["query", "queries"]:
+                value = [user_query] if field.type == "array" else user_query
+            # Type-based defaults for required fields
+            else:
+                value = self._get_type_default(field.type)
 
             result[field.name] = value
 
         return result
+
+    def _get_type_default(self, field_type: str) -> Any:
+        """Get default value based on field type."""
+        type_defaults = {
+            "string": "",
+            "integer": 0,
+            "number": 0.0,
+            "boolean": False,
+            "array": [],
+            "object": {}
+        }
+        return type_defaults.get(field_type, None)
 
 
     def get_conversation_summary(self) -> str:
