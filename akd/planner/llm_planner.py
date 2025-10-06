@@ -12,18 +12,18 @@ from loguru import logger
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import LiteLLMInstructorBaseAgent, BaseAgentConfig
+from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd.configs.planner_prompts import (
-    WORKFLOW_PLANNER_SYSTEM_PROMPT_TEMPLATE,
     WORKFLOW_INPUT_EXTRACTION_PROMPT_TEMPLATE,
+    WORKFLOW_PLANNER_SYSTEM_PROMPT_TEMPLATE,
 )
 
-from .registry import AgentRegistry, get_agent_registry
-from .format_builder import WorkflowFormat
-from .workflow_builder import WorkflowBuilder
-from .field_mapping_registry import FieldMappingRegistry
 from .field_mapping_generator import FieldMappingGenerator
+from .field_mapping_registry import FieldMappingRegistry
+from .format_builder import WorkflowFormat
+from .registry import AgentRegistry, get_agent_registry
 from .structures import AgentSuggestion, PlannerConfig, WorkflowPlan
+from .workflow_builder import WorkflowBuilder
 
 
 class ConversationPhase(str, Enum):
@@ -52,15 +52,9 @@ class PlannerQuestion(OutputSchema):
 
     question: str = Field(..., description="The question to ask the user")
     question_type: PlannerQuestionType = Field(..., description="Type of question")
-    options: Optional[list[str]] = Field(
-        default=None, description="Options for multiple choice questions"
-    )
-    context: str = Field(
-        ..., description="Context explaining why this question is important"
-    )
-    suggested_answer: Optional[str] = Field(
-        default=None, description="Suggested answer if applicable"
-    )
+    options: Optional[list[str]] = Field(default=None, description="Options for multiple choice questions")
+    context: str = Field(..., description="Context explaining why this question is important")
+    suggested_answer: Optional[str] = Field(default=None, description="Suggested answer if applicable")
 
 
 # AgentSuggestion and WorkflowPlan are now imported from structures.py
@@ -71,30 +65,18 @@ class PlannerResponse(OutputSchema):
 
     message: str = Field(..., description="Response message to the user")
     phase: ConversationPhase = Field(..., description="Current conversation phase")
-    question: Optional[PlannerQuestion] = Field(
-        default=None, description="Follow-up question if needed"
-    )
-    workflow_plan: Optional[WorkflowPlan] = Field(
-        default=None, description="Generated workflow plan"
-    )
-    ready_to_generate: bool = Field(
-        default=False, description="Whether ready to generate final workflow"
-    )
+    question: Optional[PlannerQuestion] = Field(default=None, description="Follow-up question if needed")
+    workflow_plan: Optional[WorkflowPlan] = Field(default=None, description="Generated workflow plan")
+    ready_to_generate: bool = Field(default=False, description="Whether ready to generate final workflow")
 
 
 class PlannerInput(InputSchema):
     """Input to the planner agent."""
 
     user_message: str = Field(..., description="User's message or response")
-    conversation_history: list[dict[str, str]] = Field(
-        default_factory=list, description="Previous conversation"
-    )
-    current_phase: ConversationPhase = Field(
-        default=ConversationPhase.INITIAL_REQUIREMENTS
-    )
-    available_agents: list[dict[str, Any]] = Field(
-        default_factory=list, description="Available agents from registry"
-    )
+    conversation_history: list[dict[str, str]] = Field(default_factory=list, description="Previous conversation")
+    current_phase: ConversationPhase = Field(default=ConversationPhase.INITIAL_REQUIREMENTS)
+    available_agents: list[dict[str, Any]] = Field(default_factory=list, description="Available agents from registry")
 
 
 class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerResponse]):
@@ -110,7 +92,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         registry: Optional[AgentRegistry] = None,
         mapping_registry: Optional[FieldMappingRegistry] = None,
         mapping_generator: Optional[FieldMappingGenerator] = None,
-        debug: bool = False,
+        debug: bool = True,
     ):
         """
         Initialize the planner.
@@ -161,9 +143,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         available_agents_text = "\n".join(agents_info) if agents_info else "No agents available"
 
         # Use optimized template from config
-        return WORKFLOW_PLANNER_SYSTEM_PROMPT_TEMPLATE.format(
-            available_agents=available_agents_text
-        )
+        return WORKFLOW_PLANNER_SYSTEM_PROMPT_TEMPLATE.format(available_agents=available_agents_text)
 
     def reset_conversation(self) -> None:
         """Reset the conversation state."""
@@ -279,14 +259,10 @@ class InteractivePlannerSession:
         self._update_session_state(user_message, response)
         return response
 
-    def _update_session_state(
-        self, user_message: str, response: PlannerResponse
-    ) -> None:
+    def _update_session_state(self, user_message: str, response: PlannerResponse) -> None:
         """Update session state with new messages."""
         self.conversation_history.append({"role": "user", "content": user_message})
-        self.conversation_history.append(
-            {"role": "assistant", "content": response.message}
-        )
+        self.conversation_history.append({"role": "assistant", "content": response.message})
 
         self.current_phase = response.phase
 
@@ -296,9 +272,7 @@ class InteractivePlannerSession:
     async def generate_workflow(self) -> WorkflowFormat:
         """Generate the final workflow from the conversation."""
         if not self.workflow_plan:
-            raise ValueError(
-                "No workflow plan available. Continue the conversation first."
-            )
+            raise ValueError("No workflow plan available. Continue the conversation first.")
 
         # Simple validation: check agents exist
         missing_agents = self.planner.builder.check_missing_agents(self.workflow_plan)
@@ -309,10 +283,7 @@ class InteractivePlannerSession:
         filled_inputs = await self._fill_all_agent_inputs(self.workflow_plan)
 
         # Check for unmapped fields that need LLM generation
-        unmapped = self.planner.builder.identify_unmapped_fields(
-            self.workflow_plan,
-            filled_inputs
-        )
+        unmapped = self.planner.builder.identify_unmapped_fields(self.workflow_plan, filled_inputs)
 
         # Generate and approve field mappings if needed
         if unmapped:
@@ -329,9 +300,7 @@ class InteractivePlannerSession:
         return workflow
 
     async def _handle_unmapped_fields(
-        self,
-        unmapped: list[dict[str, Any]],
-        confidence_threshold: Optional[float] = None
+        self, unmapped: list[dict[str, Any]], confidence_threshold: Optional[float] = None
     ) -> None:
         """
         Generate LLM mappings for unmapped fields and handle user approval.
@@ -351,36 +320,24 @@ class InteractivePlannerSession:
             target_agent = self.planner.registry.get_agent(target_agent_id)
 
             if not source_agent or not target_agent:
-                logger.error(
-                    f"Cannot generate mapping: agent not found "
-                    f"({source_agent_id} or {target_agent_id})"
-                )
+                logger.error(f"Cannot generate mapping: agent not found ({source_agent_id} or {target_agent_id})")
                 continue
 
-            logger.info(
-                f"Generating LLM mapping for {source_agent_id} -> {target_agent_id}"
-            )
+            logger.info(f"Generating LLM mapping for {source_agent_id} -> {target_agent_id}")
 
             # Generate mapping using LLM
             try:
                 result = await self.planner.mapping_generator.generate_mapping(
-                    source_agent,
-                    target_agent,
-                    unmapped_fields
+                    source_agent, target_agent, unmapped_fields
                 )
 
                 # Check if approval needed
-                needs_approval = self.planner.mapping_generator.should_request_approval(
-                    result,
-                    confidence_threshold
-                )
+                needs_approval = self.planner.mapping_generator.should_request_approval(result, confidence_threshold)
 
                 if needs_approval:
                     # Format approval message
                     approval_msg = self.planner.mapping_generator.format_approval_message(
-                        source_agent,
-                        target_agent,
-                        result
+                        source_agent, target_agent, result
                     )
 
                     # Log approval request (in interactive mode, this would prompt user)
@@ -395,9 +352,7 @@ class InteractivePlannerSession:
                     user_approved = True
                 else:
                     user_approved = True
-                    logger.info(
-                        f"Auto-approved mapping with confidence {result.overall_confidence:.2f}"
-                    )
+                    logger.info(f"Auto-approved mapping with confidence {result.overall_confidence:.2f}")
 
                 # Save mapping to registry
                 mapping_dict = self.planner.mapping_generator.convert_to_mapping_dict(result)
@@ -409,19 +364,13 @@ class InteractivePlannerSession:
                     mapping_dict,
                     result.overall_confidence,
                     user_approved,
-                    reasoning_dict
+                    reasoning_dict,
                 )
 
-                logger.info(
-                    f"Saved LLM mapping: {source_agent_id} -> {target_agent_id} "
-                    f"(approved={user_approved})"
-                )
+                logger.info(f"Saved LLM mapping: {source_agent_id} -> {target_agent_id} (approved={user_approved})")
 
             except Exception as e:
-                logger.error(
-                    f"Failed to generate LLM mapping for "
-                    f"{source_agent_id} -> {target_agent_id}: {e}"
-                )
+                logger.error(f"Failed to generate LLM mapping for {source_agent_id} -> {target_agent_id}: {e}")
 
     async def _fill_all_agent_inputs(self, plan: WorkflowPlan) -> dict[str, dict[str, Any]]:
         """
@@ -445,7 +394,7 @@ class InteractivePlannerSession:
                     agent,
                     agent_id,
                     agent_suggestion,  # Pass agent suggestion for context
-                    plan  # Pass full workflow plan for research goal
+                    plan,  # Pass full workflow plan for research goal
                 )
                 filled_inputs[agent_id] = inputs
             except Exception as e:
@@ -457,11 +406,7 @@ class InteractivePlannerSession:
         return filled_inputs
 
     async def _fill_inputs_with_llm(
-        self,
-        agent: Any,
-        agent_id: str,
-        agent_suggestion: AgentSuggestion,
-        workflow_plan: Optional[WorkflowPlan] = None
+        self, agent: Any, agent_id: str, agent_suggestion: AgentSuggestion, workflow_plan: Optional[WorkflowPlan] = None
     ) -> dict[str, Any]:
         """
         Use Instructor LLM to extract structured input values from full conversation context.
@@ -473,7 +418,8 @@ class InteractivePlannerSession:
         - Agent selection reasoning
         - Agent field schemas
         """
-        from pydantic import create_model, Field as PydanticField
+        from pydantic import Field as PydanticField
+        from pydantic import create_model
 
         # Build a dynamic Pydantic model from the agent's input schema
         field_definitions = {}
@@ -503,16 +449,10 @@ class InteractivePlannerSession:
             field_descriptions[field.name] = description
 
             # All fields have default=None so LLM can omit auto-mapped fields
-            field_definitions[field.name] = (
-                python_type,
-                PydanticField(default=None, description=description)
-            )
+            field_definitions[field.name] = (python_type, PydanticField(default=None, description=description))
 
         # Create dynamic model
-        InputModel = create_model(
-            f"{agent_id.title()}Input",
-            **field_definitions
-        )
+        InputModel = create_model(f"{agent_id.title()}Input", **field_definitions)
 
         # Use Instructor to extract structured data
         try:
@@ -522,10 +462,9 @@ class InteractivePlannerSession:
             conversation_history_text = ""
             if self.conversation_history:
                 recent_messages = self.conversation_history[-10:]
-                conversation_history_text = "\n".join([
-                    f"{msg['role'].title()}: {msg['content']}"
-                    for msg in recent_messages
-                ])
+                conversation_history_text = "\n".join(
+                    [f"{msg['role'].title()}: {msg['content']}" for msg in recent_messages]
+                )
 
             # Build research context from workflow plan
             research_context_text = ""
@@ -536,7 +475,11 @@ class InteractivePlannerSession:
             agent_names = [a.agent_id for a in workflow_plan.suggested_agents] if workflow_plan else []
             current_idx = agent_names.index(agent_id) if agent_id in agent_names else -1
             workflow_position = f"Position {current_idx + 1} of {len(agent_names)}" if current_idx >= 0 else "Unknown"
-            downstream_agents = ", ".join(agent_names[current_idx + 1:]) if current_idx >= 0 and current_idx < len(agent_names) - 1 else "Final agent"
+            downstream_agents = (
+                ", ".join(agent_names[current_idx + 1 :])
+                if current_idx >= 0 and current_idx < len(agent_names) - 1
+                else "Final agent"
+            )
 
             # Check for available field mappings from previous agent
             auto_mapped_fields = []
@@ -558,32 +501,36 @@ class InteractivePlannerSession:
 
             # Combine all context sections
             context_sections = f"""Conversation History:
-{conversation_history_text if conversation_history_text else 'No conversation history available'}
+{conversation_history_text if conversation_history_text else "No conversation history available"}
 
 Research Context:
-{research_context_text if research_context_text else 'No workflow plan available'}
+{research_context_text if research_context_text else "No workflow plan available"}
 
 Auto-Mapped Fields (DO NOT EXTRACT):
 The following fields will be automatically populated from previous agent outputs at runtime: {auto_mapped_text}
 These fields should be OMITTED from your output entirely."""
 
             # Separate required and optional inputs
-            required_inputs_text = "\n".join([
-                f"- {name}: {desc}"
-                for name, desc in field_descriptions.items()
-                if any(f.name == name and f.required for f in agent.input_schema.fields)
-            ])
-            optional_inputs_text = "\n".join([
-                f"- {name}: {desc}"
-                for name, desc in field_descriptions.items()
-                if any(f.name == name and not f.required for f in agent.input_schema.fields)
-            ])
+            required_inputs_text = "\n".join(
+                [
+                    f"- {name}: {desc}"
+                    for name, desc in field_descriptions.items()
+                    if any(f.name == name and f.required for f in agent.input_schema.fields)
+                ]
+            )
+            optional_inputs_text = "\n".join(
+                [
+                    f"- {name}: {desc}"
+                    for name, desc in field_descriptions.items()
+                    if any(f.name == name and not f.required for f in agent.input_schema.fields)
+                ]
+            )
 
             # Use optimized template from config
             prompt = WORKFLOW_INPUT_EXTRACTION_PROMPT_TEMPLATE.format(
                 context_sections=context_sections,
                 agent_id=agent_id,
-                agent_description=agent.description if hasattr(agent, 'description') else 'N/A',
+                agent_description=agent.description if hasattr(agent, "description") else "N/A",
                 selection_reason=agent_suggestion.reason,
                 confidence=agent_suggestion.confidence,
                 workflow_position=workflow_position,
@@ -591,15 +538,20 @@ These fields should be OMITTED from your output entirely."""
                 required_inputs=required_inputs_text if required_inputs_text else "None",
                 optional_inputs=optional_inputs_text if optional_inputs_text else "None",
                 dependencies=", ".join(agent_suggestion.depends_on) if agent_suggestion.depends_on else "None",
-                expected_outputs=", ".join(agent_suggestion.expected_outputs) if agent_suggestion.expected_outputs else "Not specified"
+                expected_outputs=", ".join(agent_suggestion.expected_outputs)
+                if agent_suggestion.expected_outputs
+                else "Not specified",
             )
 
             response = await client.chat.completions.create(
                 model=self.planner.config.model_name,
                 response_model=InputModel,
                 messages=[
-                    {"role": "system", "content": "You are an expert at extracting structured input parameters for research agents. Extract values from the provided context and return them in the exact schema format required."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are an expert at extracting structured input parameters for research agents. Extract values from the provided context and return them in the exact schema format required.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=self.planner.planner_config.input_extraction_temperature,
             )
@@ -645,16 +597,8 @@ These fields should be OMITTED from your output entirely."""
 
     def _get_type_default(self, field_type: str) -> Any:
         """Get default value based on field type."""
-        type_defaults = {
-            "string": "",
-            "integer": 0,
-            "number": 0.0,
-            "boolean": False,
-            "array": [],
-            "object": {}
-        }
+        type_defaults = {"string": "", "integer": 0, "number": 0.0, "boolean": False, "array": [], "object": {}}
         return type_defaults.get(field_type, None)
-
 
     def get_conversation_summary(self) -> str:
         """Get a summary of the conversation."""
@@ -677,9 +621,7 @@ async def create_planner(
     return LLMWorkflowPlanner(config=config, registry=registry)
 
 
-async def quick_plan(
-    research_goal: str, config: Optional[BaseAgentConfig] = None
-) -> InteractivePlannerSession:
+async def quick_plan(research_goal: str, config: Optional[BaseAgentConfig] = None) -> InteractivePlannerSession:
     """Create a quick planning session for a research goal."""
     planner = await create_planner(config=config)
     return await planner.plan_workflow(research_goal)
