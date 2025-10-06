@@ -28,7 +28,7 @@ from .registry import (
     FieldDefinition,
     get_agent_registry,
 )
-from .structures import AgentSuggestion, ComplexityLevel, PlannerConfig, WorkflowPlan
+from .structures import AgentSuggestion, PlannerConfig, WorkflowPlan
 from .workflow_builder import WorkflowBuilder
 
 __all__ = [
@@ -52,7 +52,6 @@ __all__ = [
     "WorkflowPlan",
     "AgentSuggestion",
     "PlannerConfig",
-    "ComplexityLevel",
     # Abstract Planner Interfaces (for PR #3 implementations)
     "AbstractWorkflowPlanner",
     "AbstractInteractivePlanner",
