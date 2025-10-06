@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Union
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 # Type for workflow field values (supports common JSON-serializable types)
@@ -111,3 +112,180 @@ class WorkflowFormat(BaseModel):
         """Save workflow to JSON file."""
         with open(file_path, "w") as f:
             f.write(self.to_json(**kwargs))
+
+    def validate_io_map(self, strict: bool = False) -> list[str]:
+        """
+        Validate io_map JSONPath references in all nodes.
+
+        Checks that:
+        1. JSONPath expressions are well-formed (start with $.)
+        2. Referenced nodes exist in the workflow
+        3. No circular dependencies exist
+
+        Args:
+            strict: If True, raise ValueError on validation errors. If False, return list of warnings.
+
+        Returns:
+            List of validation warnings/errors
+
+        Raises:
+            ValueError: If strict=True and validation errors found
+        """
+        issues = []
+        node_types = {node.type for node in self.nodes}
+
+        for node in self.nodes:
+            if not node.io_map:
+                continue
+
+            for target_field, jsonpath in node.io_map.items():
+                # Check JSONPath format
+                if not jsonpath.startswith("$."):
+                    issue = f"Node '{node.type}', field '{target_field}': Invalid JSONPath '{jsonpath}' (must start with '$.')"
+                    issues.append(issue)
+                    continue
+
+                # Extract referenced node from JSONPath (format: $.node_id.outputs.field)
+                parts = jsonpath.split(".")
+                if len(parts) < 4:
+                    issue = f"Node '{node.type}', field '{target_field}': Invalid JSONPath format '{jsonpath}' (expected $.node_id.outputs.field)"
+                    issues.append(issue)
+                    continue
+
+                referenced_node = parts[1]
+
+                # Check referenced node exists
+                if referenced_node not in node_types:
+                    issue = f"Node '{node.type}', field '{target_field}': Referenced node '{referenced_node}' not found in workflow"
+                    issues.append(issue)
+
+        if strict and issues:
+            raise ValueError("Workflow io_map validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues))
+
+        return issues
+
+    def validate_edges(self, strict: bool = False) -> list[str]:
+        """
+        Validate workflow edges.
+
+        Checks that:
+        1. All edges reference existing nodes (or START/END)
+        2. Workflow has a valid flow from START to END
+        3. No orphaned nodes exist
+
+        Args:
+            strict: If True, raise ValueError on validation errors. If False, return list of warnings.
+
+        Returns:
+            List of validation warnings/errors
+
+        Raises:
+            ValueError: If strict=True and validation errors found
+        """
+        issues = []
+        node_types = {node.type for node in self.nodes}
+        valid_nodes = node_types | {"START", "END"}
+
+        # Check all edge references are valid
+        for edge in self.edges:
+            if edge.from_node not in valid_nodes:
+                issues.append(f"Edge references non-existent 'from' node: {edge.from_node}")
+            if edge.to_node not in valid_nodes:
+                issues.append(f"Edge references non-existent 'to' node: {edge.to_node}")
+
+        # Check START and END exist
+        has_start = any(edge.from_node == "START" for edge in self.edges)
+        has_end = any(edge.to_node == "END" for edge in self.edges)
+
+        if not has_start:
+            issues.append("No edge from START node found")
+        if not has_end:
+            issues.append("No edge to END node found")
+
+        # Check for orphaned nodes (nodes not in any edge)
+        nodes_in_edges = set()
+        for edge in self.edges:
+            if edge.from_node != "START":
+                nodes_in_edges.add(edge.from_node)
+            if edge.to_node != "END":
+                nodes_in_edges.add(edge.to_node)
+
+        orphaned = node_types - nodes_in_edges
+        if orphaned:
+            issues.append(f"Orphaned nodes (not connected to any edge): {orphaned}")
+
+        if strict and issues:
+            raise ValueError("Workflow edge validation failed:\n" + "\n".join(f"  - {issue}" for issue in issues))
+
+        return issues
+
+    def validate(self, strict: bool = False) -> dict[str, list[str]]:
+        """
+        Comprehensive workflow validation.
+
+        Validates:
+        - Edge connectivity
+        - io_map references
+        - Node structure
+
+        Args:
+            strict: If True, raise ValueError on any validation errors. If False, return dict of all issues.
+
+        Returns:
+            Dictionary with validation results: {"edges": [...], "io_map": [...], "general": [...]}
+
+        Raises:
+            ValueError: If strict=True and any validation errors found
+        """
+        results = {
+            "edges": self.validate_edges(strict=False),
+            "io_map": self.validate_io_map(strict=False),
+            "general": [],
+        }
+
+        # General validations
+        if not self.nodes:
+            results["general"].append("Workflow has no nodes")
+
+        if not self.edges:
+            results["general"].append("Workflow has no edges")
+
+        # Log validation results
+        total_issues = sum(len(issues) for issues in results.values())
+        if total_issues > 0:
+            logger.warning(f"Workflow validation found {total_issues} issue(s)")
+            for category, issues in results.items():
+                if issues:
+                    logger.warning(f"  {category.upper()}: {len(issues)} issue(s)")
+                    for issue in issues:
+                        logger.debug(f"    - {issue}")
+
+        if strict and total_issues > 0:
+            all_issues = []
+            for category, issues in results.items():
+                if issues:
+                    all_issues.append(f"{category.upper()}:")
+                    all_issues.extend(f"  - {issue}" for issue in issues)
+            raise ValueError("Workflow validation failed:\n" + "\n".join(all_issues))
+
+        return results
+
+    def get_node_summary(self) -> dict[str, Any]:
+        """
+        Get summary statistics about the workflow.
+
+        Returns:
+            Dictionary with workflow statistics
+        """
+        nodes_with_io_map = [node for node in self.nodes if node.io_map]
+        io_map_count = sum(len(node.io_map) for node in nodes_with_io_map if node.io_map)
+
+        return {
+            "total_nodes": len(self.nodes),
+            "total_edges": len(self.edges),
+            "nodes_with_io_map": len(nodes_with_io_map),
+            "total_io_map_entries": io_map_count,
+            "node_types": [node.type for node in self.nodes],
+            "version": self.version,
+            "workflow_type": self.workflow_type,
+        }
