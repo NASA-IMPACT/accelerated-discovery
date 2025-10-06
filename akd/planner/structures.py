@@ -66,3 +66,16 @@ class FieldMappingResult(OutputSchema):
     mappings: List[FieldMappingEntry] = Field(..., description="List of field mappings with confidence scores")
     overall_confidence: float = Field(..., ge=0.0, le=1.0, description="Overall confidence in the entire mapping set")
     notes: Optional[str] = Field(None, description="Additional notes or warnings about the mapping")
+
+
+class PlannerConfig(BaseModel):
+    """Configuration for workflow planners."""
+
+    model_name: str = Field(default="gpt-4", description="LLM model to use for planning")
+    temperature: float = Field(default=0.7, description="Temperature for LLM generation")
+    max_conversation_turns: int = Field(
+        default=10, description="Maximum conversation turns before forcing completion"
+    )
+    auto_approve_high_confidence: bool = Field(
+        default=False, description="Auto-approve plans with confidence > 0.9"
+    )
