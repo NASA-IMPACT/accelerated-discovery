@@ -5,20 +5,20 @@ Generates semantic field mappings when explicit mappings don't exist,
 with confidence scoring and detailed reasoning.
 """
 
-from pydantic import Field
-from typing import Dict, List, Optional
+from typing import Optional
 
 from loguru import logger
 
-from akd.agents._base import LiteLLMInstructorBaseAgent, BaseAgentConfig
 from akd._base import InputSchema
+from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd.configs.project import CONFIG
 from akd.planner.registry import AgentEntry
-from akd.planner.structures import FieldMappingEntry, FieldMappingResult
+from akd.planner.structures import FieldMappingResult
 
 
 class FieldMappingInput(InputSchema):
     """Input schema for field mapping agent (not used, but required by agent framework)."""
+
     pass
 
 
@@ -33,20 +33,11 @@ class FieldMappingGenerator:
     """
     LLM-based generator for semantic field mappings.
 
-    Uses LiteLLMInstructorBaseAgent to generate intelligent mappings when
+    Uses LiteLLMInstructorBaseAgent to generate mappings when
     field names don't match exactly between agents.
     """
 
-    CONFIDENCE_EXACT = 0.95  # Exact semantic match
-    CONFIDENCE_STRONG = 0.80  # Strong semantic similarity
-    CONFIDENCE_WEAK = 0.60   # Uncertain mapping
-
-    def __init__(
-        self,
-        model: Optional[str] = None,
-        temperature: float = 0.0,
-        api_key: Optional[str] = None
-    ):
+    def __init__(self, model: Optional[str] = None, temperature: float = 0.0, api_key: Optional[str] = None):
         """
         Initialize field mapping generator.
 
@@ -72,10 +63,7 @@ class FieldMappingGenerator:
         # Initialize agent
         self.agent = _FieldMappingAgent(config=agent_config, debug=False)
 
-        logger.info(
-            f"Initialized FieldMappingGenerator with model={self.model}, "
-            f"temperature={self.temperature}"
-        )
+        logger.info(f"Initialized FieldMappingGenerator with model={self.model}, temperature={self.temperature}")
 
     def _build_system_prompt(self) -> str:
         """Build system prompt for field mapping task."""
@@ -101,24 +89,22 @@ Provide detailed reasoning for each mapping explaining:
 - Whether transformation is needed"""
 
     def _build_user_prompt(
-        self,
-        source_agent: AgentEntry,
-        target_agent: AgentEntry,
-        required_target_fields: List[str]
+        self, source_agent: AgentEntry, target_agent: AgentEntry, required_target_fields: list[str]
     ) -> str:
         """Build user prompt with agent schemas and required fields."""
         # Format source outputs
-        source_outputs = "\n".join([
-            f"  - {field.name} ({field.type}): {field.description}"
-            for field in source_agent.output_schema.fields
-        ])
+        source_outputs = "\n".join(
+            [f"  - {field.name} ({field.type}): {field.description}" for field in source_agent.output_schema.fields]
+        )
 
         # Format target inputs
-        target_inputs = "\n".join([
-            f"  - {field.name} ({field.type}): {field.description}"
-            for field in target_agent.input_schema.fields
-            if field.name in required_target_fields
-        ])
+        target_inputs = "\n".join(
+            [
+                f"  - {field.name} ({field.type}): {field.description}"
+                for field in target_agent.input_schema.fields
+                if field.name in required_target_fields
+            ]
+        )
 
         return f"""Map fields from source agent to target agent.
 
@@ -134,10 +120,7 @@ For each required target field, identify the best matching source output field.
 Provide confidence scores and detailed reasoning."""
 
     async def generate_mapping(
-        self,
-        source_agent: AgentEntry,
-        target_agent: AgentEntry,
-        required_target_fields: List[str]
+        self, source_agent: AgentEntry, target_agent: AgentEntry, required_target_fields: list[str]
     ) -> FieldMappingResult:
         """
         Generate semantic field mapping using LLM.
@@ -150,36 +133,22 @@ Provide confidence scores and detailed reasoning."""
         Returns:
             FieldMappingResult with mappings, confidence, and reasoning
         """
-        logger.info(
-            f"Generating field mapping: {source_agent.agent_id} -> {target_agent.agent_id}"
-        )
+        logger.info(f"Generating field mapping: {source_agent.agent_id} -> {target_agent.agent_id}")
         logger.debug(f"Required target fields: {required_target_fields}")
 
-        user_prompt = self._build_user_prompt(
-            source_agent,
-            target_agent,
-            required_target_fields
-        )
+        user_prompt = self._build_user_prompt(source_agent, target_agent, required_target_fields)
 
         try:
             # Use the agent's get_response_async method
             result = await self.agent.get_response_async(
-                messages=[
-                    {"role": "user", "content": user_prompt}
-                ],
-                response_model=FieldMappingResult
+                messages=[{"role": "user", "content": user_prompt}], response_model=FieldMappingResult
             )
 
-            logger.info(
-                f"Generated mapping with overall confidence: {result.overall_confidence:.2f}"
-            )
+            logger.info(f"Generated mapping with overall confidence: {result.overall_confidence:.2f}")
 
             # Log individual mappings
             for entry in result.mappings:
-                logger.debug(
-                    f"  {entry.target_field} <- {entry.source_field} "
-                    f"(confidence: {entry.confidence:.2f})"
-                )
+                logger.debug(f"  {entry.target_field} <- {entry.source_field} (confidence: {entry.confidence:.2f})")
 
             return result
 
@@ -187,10 +156,7 @@ Provide confidence scores and detailed reasoning."""
             logger.error(f"Error generating field mapping: {e}")
             raise
 
-    def convert_to_mapping_dict(
-        self,
-        result: FieldMappingResult
-    ) -> Dict[str, str]:
+    def convert_to_mapping_dict(self, result: FieldMappingResult) -> dict[str, str]:
         """
         Convert FieldMappingResult to simple mapping dict.
 
@@ -200,15 +166,9 @@ Provide confidence scores and detailed reasoning."""
         Returns:
             Dict mapping target_field -> source_field
         """
-        return {
-            entry.target_field: entry.source_field
-            for entry in result.mappings
-        }
+        return {entry.target_field: entry.source_field for entry in result.mappings}
 
-    def extract_reasoning(
-        self,
-        result: FieldMappingResult
-    ) -> Dict[str, str]:
+    def extract_reasoning(self, result: FieldMappingResult) -> dict[str, str]:
         """
         Extract per-field reasoning from result.
 
@@ -218,16 +178,9 @@ Provide confidence scores and detailed reasoning."""
         Returns:
             Dict mapping target_field -> reasoning
         """
-        return {
-            entry.target_field: entry.reasoning
-            for entry in result.mappings
-        }
+        return {entry.target_field: entry.reasoning for entry in result.mappings}
 
-    def should_request_approval(
-        self,
-        result: FieldMappingResult,
-        threshold: float = 0.8
-    ) -> bool:
+    def should_request_approval(self, result: FieldMappingResult, threshold: float = 0.8) -> bool:
         """
         Check if mapping requires user approval.
 
@@ -240,39 +193,23 @@ Provide confidence scores and detailed reasoning."""
         """
         # Check overall confidence
         if result.overall_confidence < threshold:
-            logger.info(
-                f"Mapping requires approval: overall confidence "
-                f"{result.overall_confidence:.2f} < {threshold}"
-            )
+            logger.info(f"Mapping requires approval: overall confidence {result.overall_confidence:.2f} < {threshold}")
             return True
 
         # Check individual field confidences
-        low_confidence = [
-            entry for entry in result.mappings
-            if entry.confidence < threshold
-        ]
+        low_confidence = [entry for entry in result.mappings if entry.confidence < threshold]
 
         if low_confidence:
-            logger.info(
-                f"Mapping requires approval: {len(low_confidence)} fields "
-                f"below threshold {threshold}"
-            )
+            logger.info(f"Mapping requires approval: {len(low_confidence)} fields below threshold {threshold}")
             for entry in low_confidence:
-                logger.debug(
-                    f"  {entry.target_field}: confidence {entry.confidence:.2f}"
-                )
+                logger.debug(f"  {entry.target_field}: confidence {entry.confidence:.2f}")
             return True
 
-        logger.info(
-            f"Mapping auto-approved: all confidences >= {threshold}"
-        )
+        logger.info(f"Mapping auto-approved: all confidences >= {threshold}")
         return False
 
     def format_approval_message(
-        self,
-        source_agent: AgentEntry,
-        target_agent: AgentEntry,
-        result: FieldMappingResult
+        self, source_agent: AgentEntry, target_agent: AgentEntry, result: FieldMappingResult
     ) -> str:
         """
         Format human-readable approval message.
@@ -293,23 +230,22 @@ Provide confidence scores and detailed reasoning."""
             f"**Overall Confidence**: {result.overall_confidence:.1%}",
             "",
             "**Proposed Mappings**:",
-            ""
+            "",
         ]
 
         for entry in result.mappings:
             confidence_emoji = "✅" if entry.confidence >= 0.8 else "⚠️"
-            lines.extend([
-                f"{confidence_emoji} **{entry.target_field}** ← {entry.source_field}",
-                f"   Confidence: {entry.confidence:.1%}",
-                f"   Reasoning: {entry.reasoning}",
-                ""
-            ])
+            lines.extend(
+                [
+                    f"{confidence_emoji} **{entry.target_field}** ← {entry.source_field}",
+                    f"   Confidence: {entry.confidence:.1%}",
+                    f"   Reasoning: {entry.reasoning}",
+                    "",
+                ]
+            )
 
         if result.notes:
-            lines.extend([
-                f"**Notes**: {result.notes}",
-                ""
-            ])
+            lines.extend([f"**Notes**: {result.notes}", ""])
 
         lines.append("Do you approve this mapping?")
 
