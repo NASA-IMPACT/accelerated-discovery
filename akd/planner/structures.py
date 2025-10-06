@@ -58,8 +58,7 @@ class WorkflowPlan(OutputSchema):
             # Add both agent_id and agent_name (normalized)
             agent_identifiers.add(agent.agent_id.lower())
             agent_identifiers.add(agent.agent_name.lower())
-            # Add normalized versions (e.g., "deep_search" -> "deep search")
-            agent_identifiers.add(agent.agent_id.replace("_", " ").lower())
+            # Add normalized versions (e.g., "deep_search" -> "deep search") I was able to visualize rough changes to            agent_identifiers.add(agent.agent_id.replace("_", " ").lower())
 
         # Check each step mentions at least one agent (soft validation)
         # Plain language steps without explicit agent names are valid UX choice
