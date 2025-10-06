@@ -15,7 +15,12 @@ from .base_planner import (
 from .config import AgentRegistryConfig
 from .field_mapping_generator import FieldMappingGenerator
 from .field_mapping_registry import FieldMappingRegistry
-from .format_builder import WORKFLOW_FORMAT_VERSION, WORKFLOW_TYPE, WorkflowFormat
+from .format_builder import (
+    WORKFLOW_FORMAT_VERSION,
+    WORKFLOW_TYPE,
+    FieldValue,
+    WorkflowFormat,
+)
 from .registry import (
     AgentEntry,
     AgentRegistry,
@@ -38,6 +43,7 @@ __all__ = [
     "WORKFLOW_TYPE",
     "WORKFLOW_FORMAT_VERSION",
     "WorkflowFormat",
+    "FieldValue",
     # Workflow Building
     "WorkflowBuilder",
     "FieldMappingRegistry",

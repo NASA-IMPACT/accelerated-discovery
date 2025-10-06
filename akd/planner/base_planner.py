@@ -12,9 +12,17 @@ from .structures import WorkflowPlan
 
 
 class PlannerContext(TypedDict, total=False):
-    """Context dictionary for planner operations."""
+    """Context dictionary for planner operations.
 
-    previous_results: dict[str, object]
+    Attributes:
+        previous_results: Results from previous workflow executions (agent_id -> JSON-serialized output data).
+            Use akd.serializers for serialization/deserialization.
+        constraints: List of constraints to apply to planning (e.g., "max 3 agents", "fast execution")
+        user_preferences: User-specific preferences (e.g., {"max_results": 20, "include_code": true})
+        session_id: Optional session identifier for tracking multi-turn conversations
+    """
+
+    previous_results: dict[str, str]
     constraints: list[str]
     user_preferences: dict[str, str | int | float | bool]
     session_id: Optional[str]

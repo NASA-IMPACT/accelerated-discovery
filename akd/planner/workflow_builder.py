@@ -16,6 +16,7 @@ from .field_mapping_registry import FieldMappingRegistry
 from .format_builder import (
     WORKFLOW_FORMAT_VERSION,
     WORKFLOW_TYPE,
+    FieldValue,
     WorkflowEdge,
     WorkflowFormat,
     WorkflowNode,
@@ -31,6 +32,10 @@ class UnmappedFieldInfo(TypedDict):
     source_agent_id: str
     target_agent_id: str
     unmapped_fields: list[str]
+
+
+# Type alias for agent inputs
+AgentInputs = dict[str, FieldValue]
 
 
 class WorkflowBuilder:
@@ -57,7 +62,7 @@ class WorkflowBuilder:
         self,
         agent: AgentEntry,
         prev_agent: AgentEntry,
-        filled_inputs: dict[str, object],
+        filled_inputs: dict[str, AgentInputs],
         agent_id: str,
         prev_agent_id: str,
     ) -> dict[str, str]:
@@ -117,7 +122,7 @@ class WorkflowBuilder:
 
         return io_map
 
-    def build(self, plan: WorkflowPlan, filled_inputs: dict[str, dict[str, object]]) -> WorkflowFormat:
+    def build(self, plan: WorkflowPlan, filled_inputs: dict[str, AgentInputs]) -> WorkflowFormat:
         """
         Build WorkflowFormat from plan with io_map for runtime data flow.
 
@@ -210,7 +215,7 @@ class WorkflowBuilder:
     def identify_unmapped_fields(
         self,
         plan: WorkflowPlan,
-        filled_inputs: dict[str, dict[str, object]],
+        filled_inputs: dict[str, AgentInputs],
     ) -> list[UnmappedFieldInfo]:
         """
         Identify fields that need LLM-based mapping.

@@ -8,12 +8,13 @@ that can be executed by the AKD framework.
 from __future__ import annotations
 
 import json
-from typing import Union
+from typing import Any, Union
 
 from pydantic import BaseModel, Field
 
 # Type for workflow field values (supports common JSON-serializable types)
-FieldValue = Union[str, int, float, bool, list, dict, None]
+# Note: list and dict items are not recursively typed to avoid complexity
+FieldValue = Union[str, int, float, bool, list[Any], dict[str, Any], None]
 
 # Workflow format metadata
 WORKFLOW_TYPE = "AKDResearchWorkflow"
@@ -88,8 +89,8 @@ class WorkflowFormat(BaseModel):
     edges: list[WorkflowEdge] = Field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> WorkflowFormat:
-        """Create a WorkflowFormat instance from a dictionary."""
+    def from_dict(cls, data: dict[str, Any]) -> WorkflowFormat:
+        """Create a WorkflowFormat instance from a dictionary (typically from JSON)."""
         return cls(**data)
 
     @classmethod
