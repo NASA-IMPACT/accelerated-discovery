@@ -193,7 +193,6 @@ class TestWorkflowBuilderMapping:
                     expected_outputs=["gaps"]
                 )
             ],
-            estimated_complexity="medium"
         )
 
         filled_inputs = {
@@ -237,7 +236,6 @@ class TestWorkflowBuilderMapping:
                     expected_outputs=["output"]
                 )
             ],
-            estimated_complexity="low"
         )
 
         # Only deep_search query filled
@@ -270,7 +268,6 @@ class TestWorkflowBuilderMapping:
                     expected_outputs=["output"]
                 )
             ],
-            estimated_complexity="medium"
         )
 
         # Partial inputs: query filled, gap filled, search_results should use io_map
@@ -355,7 +352,6 @@ class TestSpecificAgentWorkflows:
                     expected_outputs=["results"]
                 )
             ],
-            estimated_complexity="medium"
         )
 
         filled_inputs = {
@@ -397,7 +393,6 @@ class TestSpecificAgentWorkflows:
                     expected_outputs=["gaps"]
                 )
             ],
-            estimated_complexity="medium"
         )
 
         filled_inputs = {

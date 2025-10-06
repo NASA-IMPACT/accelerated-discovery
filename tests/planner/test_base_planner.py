@@ -110,7 +110,6 @@ class TestConcreteImplementationExample:
                     workflow_description="Test workflow",
                     research_goal="Test goal",
                     suggested_agents=[],
-                    estimated_complexity="low",
                 )
 
             async def refine_plan(self, plan, feedback):
@@ -140,7 +139,6 @@ class TestConcreteImplementationExample:
                     workflow_description="Test",
                     research_goal="Test",
                     suggested_agents=[],
-                    estimated_complexity="low",
                 )
 
             async def reject_plan(self, reason):
@@ -157,7 +155,6 @@ class TestConcreteImplementationExample:
                     workflow_description="Test",
                     research_goal="Test",
                     suggested_agents=[],
-                    estimated_complexity="low",
                 )
 
             async def refine_plan(self, plan, feedback):

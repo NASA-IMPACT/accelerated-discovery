@@ -208,7 +208,6 @@ When providing workflow_plan, include:
 - research_goal: What user wants to accomplish
 - suggested_agents: Agents with **EXACT agent_id from available_agents list**, required_inputs, expected_outputs, depends_on
 - workflow_steps: High-level steps showing data flow
-- estimated_complexity: low/medium/high
 - Set ready_to_generate=True
 
 **CRITICAL: Use EXACT agent IDs from the available_agents list below. Do NOT invent agent names or add suffixes like "_agent".**
@@ -643,9 +642,6 @@ Instructions:
         if self.workflow_plan:
             summary += f"Research Goal: {self.workflow_plan.research_goal}\n"
             summary += f"Suggested Agents: {[a.agent_name for a in self.workflow_plan.suggested_agents]}\n"
-            summary += (
-                f"Estimated Complexity: {self.workflow_plan.estimated_complexity}\n"
-            )
 
         return summary
 

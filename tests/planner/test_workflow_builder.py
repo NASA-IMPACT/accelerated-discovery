@@ -57,7 +57,6 @@ def simple_workflow_plan():
             "Search literature for papers",
             "Analyze papers to identify gaps",
         ],
-        estimated_complexity="medium",
         potential_issues=[],
     )
 
@@ -92,7 +91,6 @@ class TestWorkflowBuilderCore:
                     confidence=1.0,
                 ),
             ],
-            estimated_complexity="low",
         )
 
         missing = workflow_builder.check_missing_agents(plan)
@@ -295,7 +293,6 @@ class TestWorkflowValidation:
             workflow_description="Empty",
             research_goal="Empty",
             suggested_agents=[],
-            estimated_complexity="low",
         )
 
         workflow = workflow_builder.build(plan, {})
@@ -316,7 +313,6 @@ class TestWorkflowValidation:
                     confidence=1.0,
                 ),
             ],
-            estimated_complexity="low",
         )
 
         filled_inputs = {"deep_search": {"query": "test"}}

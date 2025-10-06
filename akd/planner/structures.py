@@ -4,9 +4,9 @@ Data structures for AKD planner.
 This module contains workflow planning data models.
 """
 
-from typing import Literal, Optional
+from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from akd._base import OutputSchema
 
@@ -30,7 +30,6 @@ class WorkflowPlan(OutputSchema):
     research_goal: str = Field(..., description="The research goal this workflow addresses")
     suggested_agents: list[AgentSuggestion] = Field(default_factory=list, description="Agents to include")
     workflow_steps: list[str] = Field(default_factory=list, description="High-level workflow steps")
-    estimated_complexity: Literal["low", "medium", "high"] = Field(..., description="Estimated complexity")
     potential_issues: list[str] = Field(default_factory=list, description="Potential issues or limitations")
 
 
