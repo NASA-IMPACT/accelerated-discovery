@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from loguru import logger
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
@@ -56,6 +56,14 @@ class PlannerQuestion(OutputSchema):
     context: str = Field(..., description="Context explaining why this question is important")
     suggested_answer: Optional[str] = Field(default=None, description="Suggested answer if applicable")
 
+    @field_validator("question_type", mode="before")
+    @classmethod
+    def normalize_question_type(cls, v: Any) -> str:
+        """Normalize question_type value to lowercase for case-insensitive validation."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
+
 
 # AgentSuggestion and WorkflowPlan are now imported from structures.py
 
@@ -68,6 +76,56 @@ class PlannerResponse(OutputSchema):
     question: Optional[PlannerQuestion] = Field(default=None, description="Follow-up question if needed")
     workflow_plan: Optional[WorkflowPlan] = Field(default=None, description="Generated workflow plan")
     ready_to_generate: bool = Field(default=False, description="Whether ready to generate final workflow")
+
+    @field_validator("phase", mode="before")
+    @classmethod
+    def normalize_phase(cls, v: Any) -> str:
+        """Normalize phase value to lowercase for case-insensitive validation."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
+
+    @field_validator("ready_to_generate", mode="after")
+    @classmethod
+    def auto_set_ready_when_plan_exists(cls, v: bool, info) -> bool:
+        """
+        Automatically set ready_to_generate=True if workflow_plan exists AND no question is asked.
+
+        This prevents infinite loops when the LLM says "workflow is ready" but forgets
+        to set the flag, while still allowing the LLM to present a plan and ask for
+        confirmation or clarification.
+
+        Auto-correction only happens when:
+        - workflow_plan exists (plan is complete)
+        - question is None (not asking for user input)
+        - ready_to_generate is False (contradiction)
+
+        This allows legitimate scenarios like:
+        - "Here's the plan. Does this look good?" [ready_to_generate=False, question set]
+        - "I need clarification: X or Y?" [ready_to_generate=False, question set]
+        """
+        workflow_plan = info.data.get("workflow_plan")
+        question = info.data.get("question")
+        message = info.data.get("message", "")
+
+        # Only auto-correct if:
+        # 1. Plan exists
+        # 2. No question being asked
+        # 3. Message indicates finality (ready/generate keywords)
+        # 4. But flag is False
+        if workflow_plan is not None and not v and question is None:
+            # Check if message indicates the workflow is actually ready
+            ready_keywords = ["ready", "will be generated", "workflow is complete", "finalized"]
+            message_lower = message.lower()
+
+            if any(keyword in message_lower for keyword in ready_keywords):
+                logger.warning(
+                    "LLM says workflow is ready (message contains ready/finalized keywords) "
+                    "but set ready_to_generate=False. Auto-correcting to True."
+                )
+                return True
+
+        return v
 
 
 class PlannerInput(InputSchema):
@@ -92,7 +150,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         registry: Optional[AgentRegistry] = None,
         mapping_registry: Optional[FieldMappingRegistry] = None,
         mapping_generator: Optional[FieldMappingGenerator] = None,
-        debug: bool = True,
+        debug: bool = False,
     ):
         """
         Initialize the planner.
@@ -150,7 +208,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         self.conversation_state = {}
         self.reset_memory()
 
-    async def plan_workflow(self, initial_request: str) -> "InteractivePlannerSession":
+    async def init_planner_session(self, initial_request: str) -> "InteractivePlannerSession":
         """Start an interactive planning session."""
         return InteractivePlannerSession(self, initial_request)
 
@@ -295,6 +353,27 @@ class InteractivePlannerSession:
 
         if self.planner.debug:
             logger.debug(f"Generated workflow with {len(workflow.nodes)} nodes")
+
+        # Validate workflow structure
+        validation_results = workflow.validate(strict=False)
+        total_issues = sum(len(issues) for issues in validation_results.values())
+
+        if total_issues > 0:
+            logger.warning(f"Workflow validation found {total_issues} issue(s)")
+            for category, issues in validation_results.items():
+                if issues:
+                    for issue in issues:
+                        logger.warning(f"  [{category}] {issue}")
+        else:
+            logger.info("Workflow validation passed")
+
+        # Log workflow summary
+        summary = workflow.get_node_summary()
+        logger.info(
+            f"Workflow summary: {summary['total_nodes']} nodes, "
+            f"{summary['total_edges']} edges, "
+            f"{summary['nodes_with_io_map']} nodes with io_map"
+        )
 
         self.final_workflow = workflow
         return workflow
@@ -624,4 +703,4 @@ async def create_planner(
 async def quick_plan(research_goal: str, config: Optional[BaseAgentConfig] = None) -> InteractivePlannerSession:
     """Create a quick planning session for a research goal."""
     planner = await create_planner(config=config)
-    return await planner.plan_workflow(research_goal)
+    return await planner.init_planner_session(research_goal)
