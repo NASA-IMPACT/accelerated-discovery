@@ -15,17 +15,14 @@ import typer
 from loguru import logger
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Confirm, Prompt
 from rich.syntax import Syntax
 from rich.table import Table
 
 # Add the project root to the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from akd.planner.llm_planner import (
-    create_planner,
-    quick_plan,
-)
+from akd.planner.llm_planner import create_planner, quick_plan
 from akd.planner.registry import get_agent_registry
 
 app = typer.Typer(help="Demo CLI for the AKD LLM Workflow Planner")
@@ -37,11 +34,12 @@ NON_INTERACTIVE = False
 
 def print_header():
     """Print the application header."""
-    console.print(Panel.fit(
-        "[bold blue]AKD LLM Workflow Planner[/bold blue]\n"
-        "Interactive research workflow planning system",
-        border_style="blue"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold blue]AKD LLM Workflow Planner[/bold blue]\nInteractive research workflow planning system",
+            border_style="blue",
+        )
+    )
 
 
 def print_agent_registry():
@@ -69,7 +67,7 @@ def print_agent_registry():
                 agent.name,
                 agent.description[:60] + "..." if len(agent.description) > 60 else agent.description,
                 str(input_count),
-                str(output_count)
+                str(output_count),
             )
 
         console.print(table)
@@ -90,14 +88,14 @@ async def interactive_planning_session():
     console.print("\n[bold]Let's start planning your research workflow![/bold]")
     initial_request = Prompt.ask(
         "\n[green]What is your research goal or question?[/green]",
-        default="I want to analyze the current state of the art in drug discovery"
+        default="I want to analyze the current state of the art in drug discovery",
     )
 
     try:
         # Create planner and start session
         console.print("\n[blue]Starting planning session...[/blue]")
         planner = await create_planner()
-        session = await planner.plan_workflow(initial_request)
+        session = await planner.init_planner_session(initial_request)
 
         # Start the conversation
         response = await session.start()
@@ -120,7 +118,7 @@ async def interactive_planning_session():
             else:
                 user_input = Prompt.ask("\n[green]Continue the conversation[/green]")
 
-            if user_input.lower() in ['quit', 'exit', 'done']:
+            if user_input.lower() in ["quit", "exit", "done"]:
                 break
 
             response = await session.respond(user_input)
@@ -133,7 +131,7 @@ async def interactive_planning_session():
             if response.workflow_plan:
                 console.print("\n[bold]Research Goal:[/bold]")
                 console.print(f"  {response.workflow_plan.research_goal}")
-                console.print(f"\n[bold]Workflow Steps:[/bold]")
+                console.print("\n[bold]Workflow Steps:[/bold]")
                 for i, step in enumerate(response.workflow_plan.workflow_steps, 1):
                     console.print(f"  {i}. {step}")
 
@@ -176,7 +174,7 @@ async def interactive_planning_session():
                 filename = Prompt.ask("\n[yellow]Save workflow as[/yellow]", default="generated_workflow.json")
                 workflow.save_to_file(filename)
                 console.print(f"\n[green]✓ Workflow saved to: {filename}[/green]")
-                console.print(f"[dim]You can now execute this workflow using the AKD execution engine.[/dim]")
+                console.print("[dim]You can now execute this workflow using the AKD execution engine.[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error in planning session: {e}[/red]")
@@ -188,7 +186,7 @@ async def automated_planning_session(
     hardcoded_responses: Optional[list[str]] = None,
     output_file: Optional[str] = None,
     max_turns: int = 10,
-    verbose: bool = True
+    verbose: bool = True,
 ):
     """
     Run an automated planning session with hardcoded responses.
@@ -208,7 +206,7 @@ async def automated_planning_session(
 
     if verbose:
         print_header()
-        console.print(f"\n[bold blue]Automated Planning Session[/bold blue]")
+        console.print("\n[bold blue]Automated Planning Session[/bold blue]")
         console.print(f"Initial Request: [green]{initial_request}[/green]")
         console.print(f"Hardcoded Responses: [dim]{hardcoded_responses}[/dim]")
         console.print(f"Max Turns: {max_turns}\n")
@@ -219,7 +217,7 @@ async def automated_planning_session(
             console.print("[blue]Starting planning session...[/blue]")
 
         planner = await create_planner()
-        session = await planner.plan_workflow(initial_request)
+        session = await planner.init_planner_session(initial_request)
 
         # Start the conversation
         response = await session.start()
@@ -274,7 +272,7 @@ async def automated_planning_session(
                 if verbose:
                     console.print("\n[bold]Research Goal:[/bold]")
                     console.print(f"  {response.workflow_plan.research_goal}")
-                    console.print(f"\n[bold]Workflow Steps:[/bold]")
+                    console.print("\n[bold]Workflow Steps:[/bold]")
                     for i, step in enumerate(response.workflow_plan.workflow_steps, 1):
                         console.print(f"  {i}. {step}")
 
@@ -390,10 +388,12 @@ def interactive():
 @app.command()
 def automated(
     goal: str = typer.Argument(..., help="Research goal or question"),
-    responses: Optional[str] = typer.Option(None, "-r", "--responses", help="Comma-separated list of hardcoded responses"),
+    responses: Optional[str] = typer.Option(
+        None, "-r", "--responses", help="Comma-separated list of hardcoded responses"
+    ),
     output: Optional[str] = typer.Option(None, "-o", "--output", help="Output file for generated workflow"),
     max_turns: int = typer.Option(10, "--max-turns", help="Maximum conversation turns"),
-    quiet: bool = typer.Option(False, "-q", "--quiet", help="Minimal output (non-verbose)")
+    quiet: bool = typer.Option(False, "-q", "--quiet", help="Minimal output (non-verbose)"),
 ):
     """
     Run an automated planning session with hardcoded responses.
@@ -415,7 +415,7 @@ def automated(
             hardcoded_responses=response_list,
             output_file=output,
             max_turns=max_turns,
-            verbose=not quiet
+            verbose=not quiet,
         )
 
         if workflow:
@@ -449,7 +449,9 @@ def agents():
 def quick(
     goal: str = typer.Argument(..., help="Research goal or question"),
     output: Optional[str] = typer.Option(None, "-o", "--output", help="Output file for generated workflow"),
-    non_interactive: bool = typer.Option(False, "--non-interactive", "-n", help="Run without prompts (auto-save if output specified)")
+    non_interactive: bool = typer.Option(
+        False, "--non-interactive", "-n", help="Run without prompts (auto-save if output specified)"
+    ),
 ):
     """Quick workflow generation for a research goal."""
 
@@ -466,9 +468,11 @@ def quick(
 
             if response.workflow_plan:
                 if not non_interactive:
-                    console.print(f"\n[bold]Quick Plan Generated:[/bold]")
+                    console.print("\n[bold]Quick Plan Generated:[/bold]")
                     console.print(f"Research Goal: {response.workflow_plan.research_goal}")
-                    console.print(f"Suggested Agents: {[a.agent_name for a in response.workflow_plan.suggested_agents]}")
+                    console.print(
+                        f"Suggested Agents: {[a.agent_name for a in response.workflow_plan.suggested_agents]}"
+                    )
 
                 # Try to generate workflow automatically
                 try:
@@ -490,7 +494,9 @@ def quick(
                         # Show io_map summary
                         nodes_with_io_map = [node for node in workflow.nodes if node.io_map]
                         if nodes_with_io_map:
-                            console.print(f"\n[green]✓ Generated {len(nodes_with_io_map)} node(s) with runtime data flow (io_map)[/green]")
+                            console.print(
+                                f"\n[green]✓ Generated {len(nodes_with_io_map)} node(s) with runtime data flow (io_map)[/green]"
+                            )
 
                 except Exception as e:
                     if non_interactive:
