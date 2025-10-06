@@ -6,7 +6,8 @@ This module contains workflow planning data models.
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from loguru import logger
+from pydantic import BaseModel, Field, field_validator
 
 from akd._base import OutputSchema
 
@@ -32,6 +33,46 @@ class WorkflowPlan(OutputSchema):
     workflow_steps: list[str] = Field(default_factory=list, description="High-level workflow steps")
     potential_issues: list[str] = Field(default_factory=list, description="Potential issues or limitations")
 
+    @field_validator('workflow_steps')
+    @classmethod
+    def validate_steps_reference_agents(cls, steps: list[str], info) -> list[str]:
+        """
+        Validate that workflow steps reference actual agents.
+
+        Checks that each step mentions at least one agent from suggested_agents.
+        Note: Workflow steps are meant to be user-friendly descriptions that may use
+        plain language without explicitly mentioning agent IDs. This validation logs
+        at DEBUG level to avoid cluttering output for valid UX-optimized descriptions.
+        """
+        if not steps:
+            return steps  # Empty list is okay
+
+        # Get agent info from suggested_agents field
+        suggested_agents = info.data.get('suggested_agents', [])
+        if not suggested_agents:
+            return steps  # Can't validate if no agents yet
+
+        # Build set of agent identifiers to check against
+        agent_identifiers = set()
+        for agent in suggested_agents:
+            # Add both agent_id and agent_name (normalized)
+            agent_identifiers.add(agent.agent_id.lower())
+            agent_identifiers.add(agent.agent_name.lower())
+            # Add normalized versions (e.g., "deep_search" -> "deep search")
+            agent_identifiers.add(agent.agent_id.replace('_', ' ').lower())
+
+        # Check each step mentions at least one agent (soft validation)
+        # Plain language steps without explicit agent names are valid UX choice
+        for i, step in enumerate(steps, 1):
+            step_lower = step.lower()
+            if not any(agent_id in step_lower for agent_id in agent_identifiers):
+                logger.debug(
+                    f"Workflow step {i} ('{step[:50]}...') uses plain language description. "
+                    f"Agents in workflow: {[a.agent_id for a in suggested_agents]}"
+                )
+
+        return steps
+
 
 class FieldMappingEntry(BaseModel):
     """Single field mapping with confidence and reasoning."""
@@ -54,10 +95,13 @@ class PlannerConfig(BaseModel):
     """Configuration for workflow planners."""
 
     model_name: str = Field(default="gpt-4", description="LLM model to use for planning")
-    temperature: float = Field(default=0.7, description="Temperature for LLM generation")
+    temperature: float = Field(default=0.3, description="Temperature for LLM generation (deterministic planning)")
     max_conversation_turns: int = Field(
         default=10, description="Maximum conversation turns before forcing completion"
     )
-    auto_approve_high_confidence: bool = Field(
-        default=False, description="Auto-approve plans with confidence > 0.9"
+    field_mapping_confidence_threshold: float = Field(
+        default=0.8, ge=0.0, le=1.0, description="Confidence threshold for auto-approving field mappings"
+    )
+    input_extraction_temperature: float = Field(
+        default=0.1, description="Temperature for input extraction LLM calls (very deterministic)"
     )
