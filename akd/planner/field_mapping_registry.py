@@ -10,7 +10,7 @@ Provides three-tier mapping strategy:
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -19,11 +19,11 @@ from pydantic import BaseModel, Field
 class LLMMappingEntry(BaseModel):
     """Single LLM-generated mapping entry with metadata."""
 
-    mapping: Dict[str, str] = Field(..., description="Field mappings: target -> source")
+    mapping: dict[str, str] = Field(..., description="Field mappings: target -> source")
     generated_at: str = Field(..., description="ISO timestamp of generation")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score")
     user_approved: bool = Field(..., description="Whether user approved this mapping")
-    reasoning: Dict[str, str] = Field(
+    reasoning: dict[str, str] = Field(
         default_factory=dict,
         description="Per-field reasoning for mappings"
     )
@@ -54,8 +54,8 @@ class FieldMappingRegistry:
         self.explicit_path = explicit_path or "akd/mapping/field_mappings.json"
         self.llm_path = llm_path or "akd/mapping/llm_generated_mappings.json"
 
-        self.explicit_mappings: Dict[str, Dict[str, str]] = {}
-        self.llm_mappings: Dict[str, LLMMappingEntry] = {}
+        self.explicit_mappings: dict[str, dict[str, str]] = {}
+        self.llm_mappings: dict[str, LLMMappingEntry] = {}
 
         self._load_mappings()
 
@@ -118,7 +118,7 @@ class FieldMappingRegistry:
         self,
         source_agent_id: str,
         target_agent_id: str
-    ) -> Optional[Dict[str, str]]:
+    ) -> Optional[dict[str, str]]:
         """
         Get field mapping for source->target agent pair.
 
@@ -160,10 +160,10 @@ class FieldMappingRegistry:
         self,
         source_agent_id: str,
         target_agent_id: str,
-        mapping: Dict[str, str],
+        mapping: dict[str, str],
         confidence: float,
         user_approved: bool,
-        reasoning: Dict[str, str]
+        reasoning: dict[str, str]
     ):
         """
         Save LLM-generated mapping to persistent storage.
@@ -274,7 +274,7 @@ class FieldMappingRegistry:
     def get_all_mappings_for_target(
         self,
         target_agent_id: str
-    ) -> Dict[str, Dict[str, str]]:
+    ) -> dict[str, dict[str, str]]:
         """
         Get all mappings that target a specific agent.
 
@@ -304,7 +304,7 @@ class FieldMappingRegistry:
         self,
         source_agent_id: str,
         target_agent_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Get detailed information about a mapping including metadata.
 
