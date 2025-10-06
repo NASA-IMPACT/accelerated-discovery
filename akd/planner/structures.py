@@ -33,7 +33,7 @@ class WorkflowPlan(OutputSchema):
     workflow_steps: list[str] = Field(default_factory=list, description="High-level workflow steps")
     potential_issues: list[str] = Field(default_factory=list, description="Potential issues or limitations")
 
-    @field_validator('workflow_steps')
+    @field_validator("workflow_steps")
     @classmethod
     def validate_steps_reference_agents(cls, steps: list[str], info) -> list[str]:
         """
@@ -48,7 +48,7 @@ class WorkflowPlan(OutputSchema):
             return steps  # Empty list is okay
 
         # Get agent info from suggested_agents field
-        suggested_agents = info.data.get('suggested_agents', [])
+        suggested_agents = info.data.get("suggested_agents", [])
         if not suggested_agents:
             return steps  # Can't validate if no agents yet
 
@@ -59,7 +59,7 @@ class WorkflowPlan(OutputSchema):
             agent_identifiers.add(agent.agent_id.lower())
             agent_identifiers.add(agent.agent_name.lower())
             # Add normalized versions (e.g., "deep_search" -> "deep search")
-            agent_identifiers.add(agent.agent_id.replace('_', ' ').lower())
+            agent_identifiers.add(agent.agent_id.replace("_", " ").lower())
 
         # Check each step mentions at least one agent (soft validation)
         # Plain language steps without explicit agent names are valid UX choice
@@ -96,9 +96,7 @@ class PlannerConfig(BaseModel):
 
     model_name: str = Field(default="gpt-4", description="LLM model to use for planning")
     temperature: float = Field(default=0.3, description="Temperature for LLM generation (deterministic planning)")
-    max_conversation_turns: int = Field(
-        default=10, description="Maximum conversation turns before forcing completion"
-    )
+    max_conversation_turns: int = Field(default=25, description="Maximum conversation turns before forcing completion")
     field_mapping_confidence_threshold: float = Field(
         default=0.8, ge=0.0, le=1.0, description="Confidence threshold for auto-approving field mappings"
     )
