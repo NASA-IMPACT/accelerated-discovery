@@ -8,7 +8,7 @@ Uses three-tier field mapping strategy:
 3. LLM-generated mappings (intelligent fallback)
 """
 
-from typing import Any
+from typing import TypedDict
 
 from loguru import logger
 
@@ -21,8 +21,16 @@ from .format_builder import (
     WorkflowNode,
     WorkflowNodeIO,
 )
-from .registry import AgentRegistry
-from .structures import AbstractWorkflowPlan
+from .registry import AgentEntry, AgentRegistry
+from .structures import WorkflowPlan
+
+
+class UnmappedFieldInfo(TypedDict):
+    """Information about unmapped fields between agents."""
+
+    source_agent_id: str
+    target_agent_id: str
+    unmapped_fields: list[str]
 
 
 class WorkflowBuilder:
@@ -47,9 +55,9 @@ class WorkflowBuilder:
 
     def _build_field_mappings(
         self,
-        agent: Any,
-        prev_agent: Any,
-        filled_inputs: dict[str, Any],
+        agent: AgentEntry,
+        prev_agent: AgentEntry,
+        filled_inputs: dict[str, object],
         agent_id: str,
         prev_agent_id: str,
     ) -> dict[str, str]:
@@ -109,7 +117,7 @@ class WorkflowBuilder:
 
         return io_map
 
-    def build(self, plan: AbstractWorkflowPlan, filled_inputs: dict[str, dict[str, Any]]) -> WorkflowFormat:
+    def build(self, plan: WorkflowPlan, filled_inputs: dict[str, dict[str, object]]) -> WorkflowFormat:
         """
         Build WorkflowFormat from plan with io_map for runtime data flow.
 
@@ -186,7 +194,7 @@ class WorkflowBuilder:
             output=nodes[-1].output if nodes else None,
         )
 
-    def check_missing_agents(self, plan: AbstractWorkflowPlan) -> list[str]:
+    def check_missing_agents(self, plan: WorkflowPlan) -> list[str]:
         """
         Simple validation: check if all agents exist in registry.
 
@@ -201,9 +209,9 @@ class WorkflowBuilder:
 
     def identify_unmapped_fields(
         self,
-        plan: AbstractWorkflowPlan,
-        filled_inputs: dict[str, dict[str, Any]],
-    ) -> list[dict[str, Any]]:
+        plan: WorkflowPlan,
+        filled_inputs: dict[str, dict[str, object]],
+    ) -> list[UnmappedFieldInfo]:
         """
         Identify fields that need LLM-based mapping.
 

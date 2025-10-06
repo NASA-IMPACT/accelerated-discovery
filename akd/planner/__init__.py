@@ -10,6 +10,7 @@ from .base_planner import (
     AbstractInteractivePlanner,
     AbstractPlannerSession,
     AbstractWorkflowPlanner,
+    PlannerContext,
 )
 from .config import AgentRegistryConfig
 from .field_mapping_generator import FieldMappingGenerator
@@ -22,7 +23,7 @@ from .registry import (
     FieldDefinition,
     get_agent_registry,
 )
-from .structures import AgentSuggestion, PlannerConfig, WorkflowPlan
+from .structures import AgentSuggestion, ComplexityLevel, PlannerConfig, WorkflowPlan
 from .workflow_builder import WorkflowBuilder
 
 __all__ = [
@@ -45,8 +46,10 @@ __all__ = [
     "WorkflowPlan",
     "AgentSuggestion",
     "PlannerConfig",
+    "ComplexityLevel",
     # Abstract Planner Interfaces (for PR #3 implementations)
     "AbstractWorkflowPlanner",
     "AbstractInteractivePlanner",
     "AbstractPlannerSession",
+    "PlannerContext",
 ]

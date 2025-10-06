@@ -8,9 +8,12 @@ that can be executed by the AKD framework.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict
+from typing import Union
 
 from pydantic import BaseModel, Field
+
+# Type for workflow field values (supports common JSON-serializable types)
+FieldValue = Union[str, int, float, bool, list, dict, None]
 
 # Workflow format metadata
 WORKFLOW_TYPE = "AKDResearchWorkflow"
@@ -21,10 +24,10 @@ class WorkflowField(BaseModel):
     """Individual field in a workflow node's input or output."""
 
     name: str | None = None
-    value: Any | None = None
+    value: FieldValue = None
     # Support for various field structures in the sample format
 
-    def model_dump(self, **kwargs) -> Dict[str, Any]:
+    def model_dump(self, **kwargs) -> dict[str, FieldValue]:
         """Custom serialization to handle flexible field format."""
         # If both name and value are set, return as dict
         if self.name is not None and self.value is not None:
@@ -39,9 +42,9 @@ class WorkflowField(BaseModel):
 class WorkflowNodeIO(BaseModel):
     """Input or output specification for a workflow node."""
 
-    fields: list[dict[str, Any] | WorkflowField] = Field(default_factory=list)
+    fields: list[dict[str, FieldValue] | WorkflowField] = Field(default_factory=list)
 
-    def model_dump(self, **kwargs) -> Dict[str, Any]:
+    def model_dump(self, **kwargs) -> dict[str, list]:
         """Custom serialization to match the sample format."""
         result = {"fields": []}
         for field in self.fields:
@@ -85,7 +88,7 @@ class WorkflowFormat(BaseModel):
     edges: list[WorkflowEdge] = Field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> WorkflowFormat:
+    def from_dict(cls, data: dict[str, object]) -> WorkflowFormat:
         """Create a WorkflowFormat instance from a dictionary."""
         return cls(**data)
 

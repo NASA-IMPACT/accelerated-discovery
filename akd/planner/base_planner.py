@@ -6,9 +6,18 @@ Concrete implementations (like LLMWorkflowPlanner) will be provided in future PR
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Optional, TypedDict
 
 from .structures import WorkflowPlan
+
+
+class PlannerContext(TypedDict, total=False):
+    """Context dictionary for planner operations."""
+
+    previous_results: dict[str, object]
+    constraints: list[str]
+    user_preferences: dict[str, str | int | float | bool]
+    session_id: Optional[str]
 
 
 class AbstractWorkflowPlanner(ABC):
@@ -27,7 +36,7 @@ class AbstractWorkflowPlanner(ABC):
 
     @abstractmethod
     async def plan_workflow(
-        self, user_query: str, context: Optional[Dict[str, Any]] = None
+        self, user_query: str, context: Optional[PlannerContext] = None
     ) -> WorkflowPlan:
         """
         Generate a WorkflowPlan from a user query.
