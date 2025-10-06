@@ -11,11 +11,10 @@ from akd.planner.llm_planner import (
     InteractivePlannerSession,
     ConversationPhase,
     PlannerResponse,
-    WorkflowPlan,
-    AgentSuggestion,
     create_planner,
     quick_plan,
 )
+from akd.planner.structures import WorkflowPlan, AgentSuggestion
 from akd.planner.registry import AgentRegistry
 
 
