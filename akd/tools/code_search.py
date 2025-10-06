@@ -314,6 +314,18 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
             logger.info("Loading data and embedding model...")
             self.repo_data = pd.read_csv(self.config.data_file)
+
+            missing = [
+                c
+                for c in self.config.context_columns
+                if c not in self.repo_data.columns
+            ]
+            if missing:
+                raise ValueError(
+                    f"Missing columns in {self.config.data_file}: {missing}. "
+                    f"Available columns: {list(self.repo_data.columns)}"
+                )
+
             if self.config.embedder_type == "sentence-transformers":
                 self.embedder = Embedder(self.config.embedding_model_name)
             elif self.config.embedder_type == "openai":
@@ -383,10 +395,6 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         """
         Concatenate the given columns row-wise and return a list of embedding texts
         """
-        # Defensive: check columns exist
-        missing = [c for c in columns if c not in self.repo_data.columns]
-        if missing:
-            raise KeyError(f"Missing columns in repo_data: {missing}")
 
         # Convert selected columns to strings with empty strings for NaN
         df_str = (
