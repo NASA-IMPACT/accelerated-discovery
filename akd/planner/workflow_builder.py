@@ -88,6 +88,9 @@ class WorkflowBuilder:
         io_map = {}
         inputs = filled_inputs.get(agent_id, {})
 
+        # Get available source fields for validation
+        source_field_names = {f.name for f in prev_agent.output_schema.fields}
+
         # Map each required input using three-tier strategy
         for field in agent.input_schema.fields:
             if field.required and field.name not in inputs:
@@ -100,17 +103,34 @@ class WorkflowBuilder:
                 if mapping and field.name in mapping:
                     # Priority 1 or 2: Use explicit or LLM-approved mapping
                     source_field = mapping[field.name]
+
+                    # VALIDATION: Check source field exists in prev_agent outputs
+                    if source_field not in source_field_names:
+                        logger.error(
+                            f"Invalid mapping: {agent_id}.{field.name} <- "
+                            f"{prev_agent_id}.{source_field} "
+                            f"(source field '{source_field}' does not exist in {prev_agent_id} output schema)"
+                        )
+                        if self.debug:
+                            raise ValueError(
+                                f"Mapping references non-existent output field: '{source_field}' "
+                                f"not in {prev_agent_id}.outputs. "
+                                f"Available fields: {source_field_names}"
+                            )
+                        # Skip invalid mapping in production mode
+                        logger.warning(f"Skipping invalid mapping for {agent_id}.{field.name}")
+                        continue
+
                     io_map[field.name] = f"$.{prev_agent_id}.outputs.{source_field}"
                     logger.debug(
-                        f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry)",
+                        f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry, validated)",
                     )
                 else:
                     # Priority 3: Exact name match fallback
-                    source_fields = {f.name for f in prev_agent.output_schema.fields}
-                    if field.name in source_fields:
+                    if field.name in source_field_names:
                         io_map[field.name] = f"$.{prev_agent_id}.outputs.{field.name}"
                         logger.debug(
-                            f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match)",
+                            f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match, validated)",
                         )
                     else:
                         # No mapping available - will need LLM generation
