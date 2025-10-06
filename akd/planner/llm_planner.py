@@ -493,25 +493,20 @@ class InteractivePlannerSession:
             elif "list" in field.type.lower() or "array" in field.type.lower():
                 python_type = list[str]  # Default to list of strings
 
-            # Make optional if not required
-            if not field.required:
-                python_type = Optional[python_type]
+            # Make ALL fields Optional to allow LLM to omit auto-mapped fields
+            # We filter out None values later - this allows LLM to skip fields that
+            # will be populated by previous agent outputs via io_map
+            python_type = Optional[python_type]
 
             # Store description
             description = field.description or f"{field.name} for {agent_id}"
             field_descriptions[field.name] = description
 
-            # Create field with default if not required
-            if field.required:
-                field_definitions[field.name] = (
-                    python_type,
-                    PydanticField(description=description)
-                )
-            else:
-                field_definitions[field.name] = (
-                    python_type,
-                    PydanticField(default=None, description=description)
-                )
+            # All fields have default=None so LLM can omit auto-mapped fields
+            field_definitions[field.name] = (
+                python_type,
+                PydanticField(default=None, description=description)
+            )
 
         # Create dynamic model
         InputModel = create_model(
@@ -543,12 +538,34 @@ class InteractivePlannerSession:
             workflow_position = f"Position {current_idx + 1} of {len(agent_names)}" if current_idx >= 0 else "Unknown"
             downstream_agents = ", ".join(agent_names[current_idx + 1:]) if current_idx >= 0 and current_idx < len(agent_names) - 1 else "Final agent"
 
+            # Check for available field mappings from previous agent
+            auto_mapped_fields = []
+            if current_idx > 0 and workflow_plan:
+                prev_agent_id = agent_names[current_idx - 1]
+                # Get mapping from registry (via planner object)
+                mapping = self.planner.mapping_registry.get_mapping(prev_agent_id, agent_id)
+                if mapping:
+                    auto_mapped_fields = list(mapping.keys())
+                else:
+                    # Check for exact name matches with previous agent outputs
+                    prev_agent = self.planner.registry.get_agent(prev_agent_id)
+                    if prev_agent:
+                        prev_output_names = {f.name for f in prev_agent.output_schema.fields}
+                        current_input_names = {f.name for f in agent.input_schema.fields}
+                        auto_mapped_fields = list(prev_output_names & current_input_names)
+
+            auto_mapped_text = ", ".join(auto_mapped_fields) if auto_mapped_fields else "None"
+
             # Combine all context sections
             context_sections = f"""Conversation History:
 {conversation_history_text if conversation_history_text else 'No conversation history available'}
 
 Research Context:
-{research_context_text if research_context_text else 'No workflow plan available'}"""
+{research_context_text if research_context_text else 'No workflow plan available'}
+
+Auto-Mapped Fields (DO NOT EXTRACT):
+The following fields will be automatically populated from previous agent outputs at runtime: {auto_mapped_text}
+These fields should be OMITTED from your output entirely."""
 
             # Separate required and optional inputs
             required_inputs_text = "\n".join([
@@ -587,8 +604,10 @@ Research Context:
                 temperature=self.planner.planner_config.input_extraction_temperature,
             )
 
-            # Convert to dict
-            return response.model_dump()
+            # Convert to dict and filter out None values (auto-mapped fields)
+            result = response.model_dump()
+            # Remove None values - these are fields LLM correctly omitted (will be auto-mapped)
+            return {k: v for k, v in result.items() if v is not None}
 
         except Exception as e:
             logger.warning(f"LLM-based input filling failed for {agent_id}: {e}")
