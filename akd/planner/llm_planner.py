@@ -121,7 +121,7 @@ class PlannerResponse(OutputSchema):
             if any(keyword in message_lower for keyword in ready_keywords):
                 logger.warning(
                     "LLM says workflow is ready (message contains ready/finalized keywords) "
-                    "but set ready_to_generate=False. Auto-correcting to True."
+                    "but set ready_to_generate=False. Auto-correcting to True.",
                 )
                 return True
 
@@ -259,7 +259,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
                 {
                     "role": "user",
                     "content": f"Current phase: {params.current_phase}\nUser message: {params.user_message}",
-                }
+                },
             )
 
             # Get response from LLM
@@ -282,11 +282,16 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
 class InteractivePlannerSession:
     """Interactive session for workflow planning."""
 
-    def __init__(self, planner: LLMWorkflowPlanner, initial_request: str):
+    def __init__(
+        self,
+        planner: LLMWorkflowPlanner,
+        initial_request: str,
+        conversation_history: list[dict[str, str]] | None = None,
+    ):
         """Initialize planning session."""
         self.planner = planner
         self.initial_request = initial_request
-        self.conversation_history: list[dict[str, str]] = []
+        self.conversation_history = conversation_history or []
         self.current_phase = ConversationPhase.INITIAL_REQUIREMENTS
         self.workflow_plan: Optional[WorkflowPlan] = None
         self.final_workflow: Optional[WorkflowFormat] = None
@@ -298,7 +303,7 @@ class InteractivePlannerSession:
                 user_message=self.initial_request,
                 conversation_history=self.conversation_history,
                 current_phase=self.current_phase,
-            )
+            ),
         )
 
         self._update_session_state(self.initial_request, response)
@@ -311,7 +316,7 @@ class InteractivePlannerSession:
                 user_message=user_message,
                 conversation_history=self.conversation_history,
                 current_phase=self.current_phase,
-            )
+            ),
         )
 
         self._update_session_state(user_message, response)
@@ -372,14 +377,16 @@ class InteractivePlannerSession:
         logger.info(
             f"Workflow summary: {summary['total_nodes']} nodes, "
             f"{summary['total_edges']} edges, "
-            f"{summary['nodes_with_io_map']} nodes with io_map"
+            f"{summary['nodes_with_io_map']} nodes with io_map",
         )
 
         self.final_workflow = workflow
         return workflow
 
     async def _handle_unmapped_fields(
-        self, unmapped: list[dict[str, Any]], confidence_threshold: Optional[float] = None
+        self,
+        unmapped: list[dict[str, Any]],
+        confidence_threshold: Optional[float] = None,
     ) -> None:
         """
         Generate LLM mappings for unmapped fields and handle user approval.
@@ -407,7 +414,9 @@ class InteractivePlannerSession:
             # Generate mapping using LLM
             try:
                 result = await self.planner.mapping_generator.generate_mapping(
-                    source_agent, target_agent, unmapped_fields
+                    source_agent,
+                    target_agent,
+                    unmapped_fields,
                 )
 
                 # Check if approval needed
@@ -416,14 +425,16 @@ class InteractivePlannerSession:
                 if needs_approval:
                     # Format approval message
                     approval_msg = self.planner.mapping_generator.format_approval_message(
-                        source_agent, target_agent, result
+                        source_agent,
+                        target_agent,
+                        result,
                     )
 
                     # Log approval request (in interactive mode, this would prompt user)
                     logger.info(f"\n{approval_msg}")
                     logger.warning(
                         "Low confidence mapping detected. Approval required. "
-                        "Auto-approving for now (interactive mode not implemented)."
+                        "Auto-approving for now (interactive mode not implemented).",
                     )
 
                     # TODO: In full interactive mode, wait for user approval here
@@ -485,7 +496,11 @@ class InteractivePlannerSession:
         return filled_inputs
 
     async def _fill_inputs_with_llm(
-        self, agent: Any, agent_id: str, agent_suggestion: AgentSuggestion, workflow_plan: Optional[WorkflowPlan] = None
+        self,
+        agent: Any,
+        agent_id: str,
+        agent_suggestion: AgentSuggestion,
+        workflow_plan: Optional[WorkflowPlan] = None,
     ) -> dict[str, Any]:
         """
         Use Instructor LLM to extract structured input values from full conversation context.
@@ -542,7 +557,7 @@ class InteractivePlannerSession:
             if self.conversation_history:
                 recent_messages = self.conversation_history[-10:]
                 conversation_history_text = "\n".join(
-                    [f"{msg['role'].title()}: {msg['content']}" for msg in recent_messages]
+                    [f"{msg['role'].title()}: {msg['content']}" for msg in recent_messages],
                 )
 
             # Build research context from workflow plan
@@ -595,14 +610,14 @@ These fields should be OMITTED from your output entirely."""
                     f"- {name}: {desc}"
                     for name, desc in field_descriptions.items()
                     if any(f.name == name and f.required for f in agent.input_schema.fields)
-                ]
+                ],
             )
             optional_inputs_text = "\n".join(
                 [
                     f"- {name}: {desc}"
                     for name, desc in field_descriptions.items()
                     if any(f.name == name and not f.required for f in agent.input_schema.fields)
-                ]
+                ],
             )
 
             # Use optimized template from config
@@ -694,7 +709,8 @@ These fields should be OMITTED from your output entirely."""
 
 # Convenience functions
 async def create_planner(
-    config: Optional[BaseAgentConfig] = None, registry: Optional[AgentRegistry] = None
+    config: Optional[BaseAgentConfig] = None,
+    registry: Optional[AgentRegistry] = None,
 ) -> LLMWorkflowPlanner:
     """Create a new workflow planner instance."""
     return LLMWorkflowPlanner(config=config, registry=registry)
