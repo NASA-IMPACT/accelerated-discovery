@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig
 from loguru import logger
 from markdownify import markdownify
-from pydantic import Field
+from pydantic import ConfigDict, Field, computed_field
 from readability import Document
 from requests import HTTPError, RequestException
 
@@ -224,6 +224,8 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
         - Usage examples: Crawl4AIWebScraper class docstring
     """
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     use_docker: bool = Field(
         default=False,
         description="Use Playwright running in Docker container via CDP.",
@@ -245,10 +247,17 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
         description="Run browser in headless mode.",
     )
 
+    # filter header and footer by default
+    filter_header_footer: bool = Field(
+        default=True,
+        description="Filter out header and footer elements from content.",
+    )
+
     excluded_tags : list = Field(
         default=[
             "nav", "header", "footer", "aside", "script", "style", "noscript"
         ],
+        description="HTML tags to exclude from content extraction.",
     )
     excluded_selector: str = Field(
         default=".header, .footer, .nav, .navigation, .navbar, .sidebar, "
@@ -257,7 +266,17 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
                 ".related, .recommended, "
                 "#header, #footer, #nav, #navigation, #sidebar, #menu, "
                 "#ads, #advertisement, #comments, #social",
+        description="CSS selectors to exclude from content extraction.",
     )
+
+    @computed_field
+    def _run_config(self) -> CrawlerRunConfig:
+        return CrawlerRunConfig(
+            excluded_tags=self.excluded_tags if self.filter_header_footer else [],
+            excluded_selector=self.excluded_selector if self.filter_header_footer else "",
+        )
+    
+
 
 
 class Crawl4AIWebScraper(WebScraper):
@@ -378,29 +397,26 @@ class Crawl4AIWebScraper(WebScraper):
             return base_url
 
     async def fetch(self, url: str):
-        run_config = CrawlerRunConfig(
-            excluded_tags=self.excluded_tags,
-            excluded_selector=self.excluded_selector,
-        )
-        
+
+       
         # Try Docker mode first if configured
         if self.use_docker:
             try:
-                return await self._fetch_with_docker(url, run_config)
+                return await self._fetch_with_docker(url)
             except Exception as e:
                 if self.fallback_to_local:
                     logger.warning(
                         f"Docker CDP connection failed: {e}. "
                         f"Falling back to local Playwright.",
                     )
-                    return await self._fetch_with_local(url, run_config)
+                    return await self._fetch_with_local(url)
                 else:
                     raise
 
         # Use local mode
-        return await self._fetch_with_local(url, run_config)
+        return await self._fetch_with_local(url)
 
-    async def _fetch_with_docker(self, url: str, run_config: CrawlerRunConfig):
+    async def _fetch_with_docker(self, url: str):
         """Fetch URL using Docker-based browser."""
         # Discover the full CDP endpoint URL
         cdp_url = await self._get_cdp_endpoint(self.playwright_cdp_url)
@@ -417,9 +433,9 @@ class Crawl4AIWebScraper(WebScraper):
         browser_config = BrowserConfig(**browser_config_params)
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
-            return await crawler.arun(url=url, config=run_config)
+            return await crawler.arun(url=url, config=self._run_config)
 
-    async def _fetch_with_local(self, url: str, run_config: CrawlerRunConfig):
+    async def _fetch_with_local(self, url: str):
         """Fetch URL using local Playwright."""
         browser_config_params = {
             "browser_type": self.browser_type,
@@ -430,7 +446,7 @@ class Crawl4AIWebScraper(WebScraper):
         browser_config = BrowserConfig(**browser_config_params)
 
         async with AsyncWebCrawler(config=browser_config) as crawler:
-            return await crawler.arun(url=url, config=run_config)
+            return await crawler.arun(url=url, config=self._run_config)
 
 
     async def _arun(self, params: ScraperToolInputSchema, **kwargs) -> ScraperToolOutputSchema:
