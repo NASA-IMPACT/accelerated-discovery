@@ -15,6 +15,8 @@ from typing import Any, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from akd.utils import get_akd_root
+
 
 class LLMMappingEntry(BaseModel):
     """Single LLM-generated mapping entry with metadata."""
@@ -25,7 +27,7 @@ class LLMMappingEntry(BaseModel):
     user_approved: bool = Field(..., description="Whether user approved this mapping")
     reasoning: dict[str, str] = Field(
         default_factory=dict,
-        description="Per-field reasoning for mappings"
+        description="Per-field reasoning for mappings",
     )
 
 
@@ -42,7 +44,7 @@ class FieldMappingRegistry:
     def __init__(
         self,
         explicit_path: Optional[str] = None,
-        llm_path: Optional[str] = None
+        llm_path: Optional[str] = None,
     ):
         """
         Initialize field mapping registry.
@@ -51,8 +53,12 @@ class FieldMappingRegistry:
             explicit_path: Path to explicit mappings JSON file
             llm_path: Path to LLM-generated mappings JSON file
         """
-        self.explicit_path = explicit_path or "akd/mapping/field_mappings.json"
-        self.llm_path = llm_path or "akd/mapping/llm_generated_mappings.json"
+        self.explicit_path = explicit_path or str(
+            get_akd_root() / "akd" / "mapping" / "field_mappings.json",
+        )
+        self.llm_path = llm_path or str(
+            get_akd_root() / "akd" / "mapping" / "llm_generated_mappings.json",
+        )
 
         self.explicit_mappings: dict[str, dict[str, str]] = {}
         self.llm_mappings: dict[str, LLMMappingEntry] = {}
@@ -69,12 +75,11 @@ class FieldMappingRegistry:
         try:
             path = Path(self.explicit_path)
             if path.exists():
-                with open(path, 'r') as f:
+                with open(path, "r") as f:
                     data = json.load(f)
                     self.explicit_mappings = data.get("mappings", {})
                     logger.info(
-                        f"Loaded {len(self.explicit_mappings)} explicit mappings "
-                        f"from {self.explicit_path}"
+                        f"Loaded {len(self.explicit_mappings)} explicit mappings from {self.explicit_path}",
                     )
             else:
                 logger.info(f"No explicit mappings file found at {self.explicit_path}")
@@ -88,24 +93,18 @@ class FieldMappingRegistry:
         try:
             path = Path(self.llm_path)
             if path.exists():
-                with open(path, 'r') as f:
+                with open(path, "r") as f:
                     data = json.load(f)
                     raw_mappings = data.get("mappings", {})
 
                     # Convert to LLMMappingEntry objects
-                    self.llm_mappings = {
-                        key: LLMMappingEntry(**value)
-                        for key, value in raw_mappings.items()
-                    }
+                    self.llm_mappings = {key: LLMMappingEntry(**value) for key, value in raw_mappings.items()}
 
-                    approved_count = sum(
-                        1 for entry in self.llm_mappings.values()
-                        if entry.user_approved
-                    )
+                    approved_count = sum(1 for entry in self.llm_mappings.values() if entry.user_approved)
 
                     logger.info(
                         f"Loaded {len(self.llm_mappings)} LLM mappings "
-                        f"({approved_count} approved) from {self.llm_path}"
+                        f"({approved_count} approved) from {self.llm_path}",
                     )
             else:
                 logger.info(f"No LLM mappings file found at {self.llm_path}")
@@ -117,7 +116,7 @@ class FieldMappingRegistry:
     def get_mapping(
         self,
         source_agent_id: str,
-        target_agent_id: str
+        target_agent_id: str,
     ) -> Optional[dict[str, str]]:
         """
         Get field mapping for source->target agent pair.
@@ -145,13 +144,12 @@ class FieldMappingRegistry:
             entry = self.llm_mappings[key]
             if entry.user_approved:
                 logger.debug(
-                    f"Using LLM-generated mapping for {key} "
-                    f"(confidence: {entry.confidence:.2f})"
+                    f"Using LLM-generated mapping for {key} (confidence: {entry.confidence:.2f})",
                 )
                 return entry.mapping
             else:
                 logger.debug(
-                    f"LLM mapping exists for {key} but not user-approved, skipping"
+                    f"LLM mapping exists for {key} but not user-approved, skipping",
                 )
 
         return None
@@ -163,7 +161,7 @@ class FieldMappingRegistry:
         mapping: dict[str, str],
         confidence: float,
         user_approved: bool,
-        reasoning: dict[str, str]
+        reasoning: dict[str, str],
     ):
         """
         Save LLM-generated mapping to persistent storage.
@@ -183,7 +181,7 @@ class FieldMappingRegistry:
             generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             confidence=confidence,
             user_approved=user_approved,
-            reasoning=reasoning
+            reasoning=reasoning,
         )
 
         self.llm_mappings[key] = entry
@@ -191,8 +189,7 @@ class FieldMappingRegistry:
 
         approval_status = "approved" if user_approved else "pending approval"
         logger.info(
-            f"Saved LLM mapping for {key} "
-            f"(confidence: {confidence:.2f}, {approval_status})"
+            f"Saved LLM mapping for {key} (confidence: {confidence:.2f}, {approval_status})",
         )
 
     def _save_llm_file(self):
@@ -206,13 +203,10 @@ class FieldMappingRegistry:
             data = {
                 "version": "1.0.0",
                 "description": "LLM-generated field mappings with approval history",
-                "mappings": {
-                    key: entry.model_dump()
-                    for key, entry in self.llm_mappings.items()
-                }
+                "mappings": {key: entry.model_dump() for key, entry in self.llm_mappings.items()},
             }
 
-            with open(path, 'w') as f:
+            with open(path, "w") as f:
                 json.dump(data, f, indent=2)
 
             logger.debug(f"Saved LLM mappings to {self.llm_path}")
@@ -223,7 +217,7 @@ class FieldMappingRegistry:
         self,
         source_agent_id: str,
         target_agent_id: str,
-        approved: bool
+        approved: bool,
     ) -> bool:
         """
         Update approval status of an existing LLM mapping.
@@ -249,14 +243,14 @@ class FieldMappingRegistry:
         self._save_llm_file()
 
         logger.info(
-            f"Updated approval status for {key}: {old_status} -> {approved}"
+            f"Updated approval status for {key}: {old_status} -> {approved}",
         )
         return True
 
     def has_mapping(
         self,
         source_agent_id: str,
-        target_agent_id: str
+        target_agent_id: str,
     ) -> bool:
         """
         Check if any mapping exists for source->target pair.
@@ -273,7 +267,7 @@ class FieldMappingRegistry:
 
     def get_all_mappings_for_target(
         self,
-        target_agent_id: str
+        target_agent_id: str,
     ) -> dict[str, dict[str, str]]:
         """
         Get all mappings that target a specific agent.
@@ -303,7 +297,7 @@ class FieldMappingRegistry:
     def get_mapping_info(
         self,
         source_agent_id: str,
-        target_agent_id: str
+        target_agent_id: str,
     ) -> Optional[dict[str, Any]]:
         """
         Get detailed information about a mapping including metadata.
@@ -322,7 +316,7 @@ class FieldMappingRegistry:
             return {
                 "type": "explicit",
                 "mapping": self.explicit_mappings[key],
-                "source": "human-defined"
+                "source": "human-defined",
             }
 
         # Check LLM
@@ -334,7 +328,7 @@ class FieldMappingRegistry:
                 "confidence": entry.confidence,
                 "user_approved": entry.user_approved,
                 "generated_at": entry.generated_at,
-                "reasoning": entry.reasoning
+                "reasoning": entry.reasoning,
             }
 
         return None
