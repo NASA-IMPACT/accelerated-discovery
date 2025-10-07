@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import gdown
+import requests
 from loguru import logger
+from pydantic import BaseModel, HttpUrl
 
 try:
     from langchain_core.tools.structured import StructuredTool
@@ -194,3 +196,66 @@ def google_drive_downloader(
     except Exception as e:
         logger.error(f"Failed to download from Google Drive: {e}")
         raise
+
+
+def is_server_available(url: str | HttpUrl) -> bool:
+    """
+    Check if a url is available.
+
+    Args:
+        url: The URL to test
+
+    Returns:
+        bool: True if server is reachable, False otherwise
+    """
+    # Sanity check on URL
+    if not (url.startswith("http://") or url.startswith("https://")):
+        logger.warning(f"URL {url} is not a valid URL.")
+        return False
+
+    try:
+        # Check if the URL is reachable
+        requests.head(url, timeout=5, allow_redirects=True)
+        logger.info(f"URL {url} is reachable.")
+        return True
+    except requests.RequestException:
+        logger.warning(f"URL {url} is not reachable.")
+        return False
+
+
+def get_model_fields(
+    model_class: type[BaseModel],
+    skip_no_description: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Extract field information from a Pydantic model using the most Pydantic-native approach.
+    Uses Pydantic's built-in model_json_schema() method.
+
+    Args:
+        model_class: Pydantic model class to extract fields from
+        skip_no_description: If True, skip fields without descriptions
+
+    Returns:
+        List of dictionaries containing field information with all schema properties
+        plus 'name' and 'is_required' keys
+    """
+    if not model_class or not hasattr(model_class, "model_json_schema"):
+        return []
+
+    schema = model_class.model_json_schema()
+    properties = schema.get("properties", {})
+    required_fields = set(schema.get("required", []))
+
+    fields_info = []
+    for field_name, field_schema in properties.items():
+        if skip_no_description and not field_schema.get("description"):
+            continue
+
+        field_data = {
+            "name": field_name,
+            "is_required": field_name in required_fields,
+            **field_schema,  # Include all schema properties
+        }
+        fields_info.append(field_data)
+
+    return fields_info

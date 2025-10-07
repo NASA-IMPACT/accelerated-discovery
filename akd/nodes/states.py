@@ -1,13 +1,6 @@
-from typing import TYPE_CHECKING, Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List
 
 from pydantic import BaseModel, Field
-
-from akd.utils import LANGCHAIN_CORE_INSTALLED
-
-if TYPE_CHECKING or LANGCHAIN_CORE_INSTALLED:
-    from langchain_core.messages import BaseMessage
-else:
-    BaseMessage = BaseModel
 
 
 class NodeState(BaseModel):

@@ -4,7 +4,7 @@ from typing import List, Optional
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import LiteLLMInstructorBaseAgent
 
 
 class RelevancyLabel(str, Enum):
@@ -43,7 +43,7 @@ class RelevancyAgentOutputSchema(OutputSchema):
 
 
 class RelevancyAgent(
-    InstructorBaseAgent[RelevancyAgentInputSchema, RelevancyAgentOutputSchema],
+    LiteLLMInstructorBaseAgent[RelevancyAgentInputSchema, RelevancyAgentOutputSchema],
 ):
     input_schema = RelevancyAgentInputSchema
     output_schema = RelevancyAgentOutputSchema
@@ -148,7 +148,7 @@ class MultiRubricRelevancyOutputSchema(OutputSchema):
 
 
 class MultiRubricRelevancyAgent(
-    InstructorBaseAgent[
+    LiteLLMInstructorBaseAgent[
         MultiRubricRelevancyInputSchema,
         MultiRubricRelevancyOutputSchema,
     ],

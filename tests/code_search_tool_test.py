@@ -19,6 +19,11 @@ from akd.tools.code_search import (
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
 )
+from akd.agents.search import (
+    CodeSearchAgent,
+    CodeSearchAgentConfig,
+    LitSearchAgentInputSchema,
+)
 from akd.tools.misc import Embedder
 from akd.tools.search import SearxNGSearchToolConfig
 from akd.utils import google_drive_downloader
@@ -56,6 +61,18 @@ def github_tool():
 def sde_tool():
     config = SDECodeSearchToolConfig(debug=True)
     return SDECodeSearchTool(config=config)
+
+
+@pytest.fixture
+def embedder():
+    model = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
+    return Embedder(model_name=model)
+
+
+@pytest.fixture
+def code_search_agent():
+    config = CodeSearchAgentConfig(debug=True)
+    return CodeSearchAgent(config=config)
 
 
 """Test1: Google Drive Link"""
@@ -97,7 +114,7 @@ def test_data_file_validation(temp_data_file):
 """Test3: Vector Embedding"""
 
 
-def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
+def test_vector_embedding(embedder):
     texts = ["flood prediction", "earthquake classification"]
     embeddings = embedder.embed_texts(texts)
 
@@ -188,4 +205,14 @@ async def test_sde_code_search(sde_tool):
 
     # Output structure validation
     output = await sde_tool._arun(input_params)
+    validate_output_structure(output)
+
+
+"""Test9: Code Search Agent"""
+
+
+@pytest.mark.asyncio
+async def test_code_search_agent(code_search_agent):
+    input_params = LitSearchAgentInputSchema(query="weather prediction", max_results=5)
+    output = await code_search_agent.arun(input_params)
     validate_output_structure(output)

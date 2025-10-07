@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import aiohttp
 from loguru import logger
@@ -43,7 +43,7 @@ class SearxNGSearchToolConfig(SearchToolConfig):
     engines: List[str] = Field(
         default_factory=lambda: os.getenv(
             "SEARXNG_ENGINES",
-            "google,arxiv,google_scholar",
+            "arxiv,google_scholar",
         ).split(","),
     )
     max_pages: int = Field(
@@ -64,6 +64,11 @@ class SearxNGSearchToolConfig(SearchToolConfig):
     strict: bool = Field(
         default=False,
         description="Whether to enforce strict search for filtering engines.",
+    )
+
+    safe_search: Literal[0, 1, 2] = Field(
+        default=2,
+        description="Safe search level: 0 (off), 1 (moderate), 2 (strict).",
     )
     debug: bool = Field(default=False, description="Whether to enable debug mode.")
 
@@ -159,7 +164,7 @@ class SearxNGSearchTool(SearchTool):
         """
         query_params = {
             "q": query,
-            "safesearch": "0",
+            "safesearch": str(self.safe_search),
             "format": "json",
             "language": "en",
             "engines": ",".join(self.engines),
@@ -168,6 +173,11 @@ class SearxNGSearchTool(SearchTool):
 
         if category:
             query_params["categories"] = category
+
+        if self.debug:
+            logger.debug(
+                f"Fetching SearxNG results for query '{query}'. Request params: {query_params}",
+            )
 
         try:
             async with session.get(
@@ -367,7 +377,7 @@ class SearxNGSearchTool(SearchTool):
         results = [
             SearchResultItem(
                 url=result.pop("url", None),
-                pdf_url=result.pop("pdf_url", None),
+                pdf_url=result.pop("pdf_url", None) or None,
                 title=result.pop("title", None)
                 or "Untitled",  # Ensure title is never None
                 content=result.pop("content", None),

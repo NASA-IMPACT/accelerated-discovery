@@ -65,58 +65,90 @@ jobs:
             echo "Last 10 lines of test output:"
             tail -10 test_output.log
             echo ""
-            echo "Lines containing 'failed', 'passed', or 'warnings':"
-            grep -E "(failed|passed|warnings)" test_output.log | tail -5 || echo "No matching lines found"
+            echo "Lines containing 'failed', 'passed', 'skipped', or 'warnings':"
+            grep -E "(failed|passed|skipped|warnings)" test_output.log | tail -5 || echo "No matching lines found"
             echo "Lines containing '====' (pytest separators):"
             grep -E "=+" test_output.log | tail -3 || echo "No separator lines found"
             echo "=============================================="
 
             # Strategy A: Look for pytest summary line
-            # Format: ============ 6 failed, 98 passed, 87 warnings in 200.97s =============
-            summary_line=$(grep -E "^=+ [0-9]+ [a-z]+, [0-9]+ [a-z]+" test_output.log | tail -1)
+            # Format: ================ 282 passed, 141 warnings in 466.97s =================
+            # or:     ================ 6 failed, 98 passed, 87 warnings in 200.97s =================
+            # or:     ================ 14 passed, 2 skipped, 22 warnings in 10.20s =================
+            summary_line=$(grep -E "^=+.*[0-9]+.*(failed|passed|skipped|warnings).*=+$" test_output.log | tail -1)
 
             # Debug: Show what Strategy A found
             echo "Strategy A debug:"
-            echo "  Looking for pattern: '^=+ [0-9]+ [a-z]+, [0-9]+ [a-z]+'"
+            echo "  Looking for pattern: '^=+.*[0-9]+.*(failed|passed|skipped|warnings).*=+$'"
             if [ -n "$summary_line" ]; then
               echo "  Found summary line: '$summary_line'"
             else
               echo "  No summary line found"
-              # Alternative pattern matching
-              summary_line=$(grep -E "=.*[0-9]+ failed.*[0-9]+ passed" test_output.log | tail -1)
+              # Alternative pattern matching - try broader patterns
+              summary_line=$(grep -E "=.*[0-9]+.*(failed|passed|skipped|warnings).*=" test_output.log | tail -1)
               if [ -n "$summary_line" ]; then
                 echo "  Found with alternative pattern: '$summary_line'"
+              else
+                # Try even simpler pattern - any line with equals and test counts
+                summary_line=$(grep -E "=.*[0-9]+.*(failed|passed)" test_output.log | tail -1)
+                if [ -n "$summary_line" ]; then
+                  echo "  Found with simple pattern: '$summary_line'"
+                fi
               fi
             fi
 
             if [ -n "$summary_line" ]; then
               echo "Strategy A: Found summary line: $summary_line"
-              # Extract from summary line
-              failed_count=$(echo "$summary_line" | grep -oE "[0-9]+ failed" | grep -oE "[0-9]+" || echo "0")
-              passed_count=$(echo "$summary_line" | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" || echo "0")
-              warnings_count=$(echo "$summary_line" | grep -oE "[0-9]+ warnings" | grep -oE "[0-9]+" || echo "0")
+              # Extract from summary line - handle cases where failed/passed/skipped/warnings may not exist
+              failed_temp=$(echo "$summary_line" | grep -oE "[0-9]+ failed" | grep -oE "[0-9]+" | head -1)
+              passed_temp=$(echo "$summary_line" | grep -oE "[0-9]+ passed" | grep -oE "[0-9]+" | head -1)
+              skipped_temp=$(echo "$summary_line" | grep -oE "[0-9]+ skipped" | grep -oE "[0-9]+" | head -1)
+              warnings_temp=$(echo "$summary_line" | grep -oE "[0-9]+ warnings" | grep -oE "[0-9]+" | head -1)
+
+              failed_count=${failed_temp:-0}
+              passed_count=${passed_temp:-0}
+              skipped_count=${skipped_temp:-0}
+              warnings_count=${warnings_temp:-0}
               parsing_strategy="summary_line"
+
+              echo "  Extracted: failed=$failed_count, passed=$passed_count, skipped=$skipped_count, warnings=$warnings_count"
             else
-              echo "Strategy B: No summary line found, counting individual test results..."
-              # Count individual FAILED/PASSED lines (without space requirement)
+              echo "Strategy B: No summary line found, trying alternative parsing methods..."
+
+              # Strategy B1: Look for verbose test output lines
               failed_count=$(grep -c "^FAILED" test_output.log || echo "0")
               passed_count=$(grep -c "^PASSED" test_output.log || echo "0")
+              skipped_count=$(grep -c "^SKIPPED" test_output.log || echo "0")
               warnings_count=$(grep -c "warnings summary" test_output.log || echo "0")
-              parsing_strategy="individual_counts"
 
-              echo "Strategy B debug:"
+              echo "Strategy B1 debug (verbose test lines):"
               echo "  FAILED pattern '^FAILED' matches: $failed_count"
               echo "  PASSED pattern '^PASSED' matches: $passed_count"
+              echo "  SKIPPED pattern '^SKIPPED' matches: $skipped_count"
 
-              # Strategy C: Try short test summary info section
+              # Strategy B2: Try extracting from any summary-like line with numbers
               if [ "$failed_count" = "0" ] && [ "$passed_count" = "0" ]; then
-                echo "Strategy C: Trying short test summary info section..."
+                echo "Strategy B2: Looking for any line with test counts..."
+                # Look for patterns like "282 passed" anywhere in the output
+                passed_count=$(grep -oE "[0-9]+ passed" test_output.log | tail -1 | grep -oE "[0-9]+" || echo "0")
+                failed_count=$(grep -oE "[0-9]+ failed" test_output.log | tail -1 | grep -oE "[0-9]+" || echo "0")
+                skipped_count=$(grep -oE "[0-9]+ skipped" test_output.log | tail -1 | grep -oE "[0-9]+" || echo "0")
+                warnings_count=$(grep -oE "[0-9]+ warnings" test_output.log | tail -1 | grep -oE "[0-9]+" || echo "0")
+                parsing_strategy="pattern_extraction"
+                echo "  Strategy B2 found: failed=$failed_count, passed=$passed_count, skipped=$skipped_count, warnings=$warnings_count"
+              else
+                parsing_strategy="individual_counts"
+              fi
+
+              # Strategy B3: Try short test summary info section
+              if [ "$failed_count" = "0" ] && [ "$passed_count" = "0" ]; then
+                echo "Strategy B3: Trying short test summary info section..."
                 summary_info=$(grep -A 10 "short test summary info" test_output.log || echo "")
                 if [ -n "$summary_info" ]; then
                   failed_count=$(echo "$summary_info" | grep -c "FAILED" || echo "0")
                   passed_count=$(echo "$summary_info" | grep -c "PASSED" || echo "0")
                   parsing_strategy="summary_info_section"
-                  echo "  Strategy C found: $failed_count failed, $passed_count passed"
+                  echo "  Strategy B3 found: $failed_count failed, $passed_count passed"
                 fi
               fi
             fi
@@ -127,12 +159,14 @@ jobs:
             echo "Extracted metrics (using $parsing_strategy):"
             echo "- Passed tests: $passed_count"
             echo "- Failed tests: $failed_count"
+            echo "- Skipped tests: $skipped_count"
             echo "- Warnings: $warnings_count"
             echo "- Coverage: $coverage_percent%"
 
             # Validate variables before setting outputs
             [ -z "$passed_count" ] && passed_count="0"
             [ -z "$failed_count" ] && failed_count="0"
+            [ -z "$skipped_count" ] && skipped_count="0"
             [ -z "$warnings_count" ] && warnings_count="0"
             [ -z "$coverage_percent" ] && coverage_percent="0"
             [ -z "$parsing_strategy" ] && parsing_strategy="unknown"
@@ -140,6 +174,7 @@ jobs:
             # Set outputs for GitHub Actions
             echo "passed_tests=$passed_count" >> $GITHUB_OUTPUT
             echo "failed_tests=$failed_count" >> $GITHUB_OUTPUT
+            echo "skipped_tests=$skipped_count" >> $GITHUB_OUTPUT
             echo "warnings_count=$warnings_count" >> $GITHUB_OUTPUT
             echo "coverage_percent=$coverage_percent" >> $GITHUB_OUTPUT
             echo "parsing_strategy=$parsing_strategy" >> $GITHUB_OUTPUT
@@ -183,6 +218,7 @@ jobs:
             const exitCode = '${{ steps.test.outputs.test_exit_code }}';
             const passedTests = '${{ steps.test.outputs.passed_tests }}' || '0';
             const failedTests = '${{ steps.test.outputs.failed_tests }}' || '0';
+            const skippedTests = '${{ steps.test.outputs.skipped_tests }}' || '0';
             const warningsCount = '${{ steps.test.outputs.warnings_count }}' || '0';
             const coveragePercent = '${{ steps.test.outputs.coverage_percent }}' || '0';
             const parsingStrategy = '${{ steps.test.outputs.parsing_strategy }}' || 'unknown';
@@ -190,7 +226,7 @@ jobs:
             const outcome = testResult === 'success' ? '✅ Tests passed' : `❌ Tests failed (exit code: ${exitCode})`;
 
             // Always show test results section
-            let testSummary = `\n\n## 📊 Test Results\n- **Passed**: ${passedTests}\n- **Failed**: ${failedTests}\n- **Warnings**: ${warningsCount}\n- **Coverage**: ${coveragePercent}%`;
+            let testSummary = `\n\n## 📊 Test Results\n- **Passed**: ${passedTests}\n- **Failed**: ${failedTests}\n- **Skipped**: ${skippedTests}\n- **Warnings**: ${warningsCount}\n- **Coverage**: ${coveragePercent}%`;
 
             // Add parsing context if results are all zeros
             if (passedTests === '0' && failedTests === '0') {
@@ -207,40 +243,40 @@ jobs:
               body: `${outcome}${testSummary}\n\nBranch: \`${{ github.head_ref }}\`\nPR: #${{ github.event.pull_request.number }}\nCommit: ${{ github.sha }}\n\n📋 Full coverage report and logs are available in the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
             })
 
-  sync-integration:
-    name: Sync Integration Branch
-    needs: [test-pr-branch]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout integration branch
-        uses: actions/checkout@v4
-        with:
-          ref: integration
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+  # sync-integration:
+  #   name: Sync Integration Branch
+  #   needs: [test-pr-branch]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout integration branch
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: integration
+  #         token: ${{ secrets.GITHUB_TOKEN }}
+  #         fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+  #     - name: Configure Git
+  #       run: |
+  #         git config user.name "github-actions[bot]"
+  #         git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge PR branch into integration
-        run: |
-          git fetch origin ${{ github.head_ref }}
-          git merge origin/${{ github.head_ref }} --no-ff -m "Auto-merge PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration for testing"
+  #     - name: Merge PR branch into integration
+  #       run: |
+  #         git fetch origin ${{ github.head_ref }}
+  #         git merge origin/${{ github.head_ref }} --no-ff -m "Auto-merge PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration for testing"
 
-      - name: Push integration branch
-        run: git push origin integration
+  #     - name: Push integration branch
+  #       run: git push origin integration
 
-      - name: Create issue on merge conflict
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'Integration branch merge conflict',
-              body: `Automatic merge of PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration failed.\n\nPlease resolve conflicts manually:\n\`\`\`bash\ngit checkout integration\ngit merge origin/${{ github.head_ref }}\n# resolve conflicts\ngit push origin integration\n\`\`\``,
-              labels: ['integration', 'conflict']
-            })
+  #     - name: Create issue on merge conflict
+  #       if: failure()
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           github.rest.issues.create({
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             title: 'Integration branch merge conflict',
+  #             body: `Automatic merge of PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration failed.\n\nPlease resolve conflicts manually:\n\`\`\`bash\ngit checkout integration\ngit merge origin/${{ github.head_ref }}\n# resolve conflicts\ngit push origin integration\n\`\`\``,
+  #             labels: ['integration', 'conflict']
+  #           })

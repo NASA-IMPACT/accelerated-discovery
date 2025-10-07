@@ -21,6 +21,7 @@ class BaseConfig(BaseModel):
         "extra": "forbid",  # Disallow extra fields
     }
 
+    description: str | None = None
     debug: bool = False  # Debug mode flag
 
 
@@ -72,6 +73,7 @@ class AbstractBaseMeta(ABCMeta):
             "BaseAgent",
             "LangBaseAgent",
             "InstructorBaseAgent",
+            "LiteLLMInstructorBaseAgent",
             "BaseTool",
         ]:
             return cls
@@ -151,7 +153,7 @@ class AbstractBase[
         self.config = config
         self._kwargs = kwargs
         self._post_init()
-        self.debug = getattr(config, "debug", False) or debug
+        self.debug = debug or getattr(config, "debug", False)
 
     def _post_init(self) -> None:
         """
@@ -162,6 +164,10 @@ class AbstractBase[
         self.__set_attrs_from_config()
         for key, value in self._kwargs.items():
             setattr(self, key, value)
+
+        self.description = (
+            getattr(self, "description", None) or self.__class__.__doc__ or ""
+        ).strip()
 
     def __set_attrs_from_config(self):
         if self.config is None:
