@@ -322,5 +322,146 @@ class TestWorkflowValidation:
         assert workflow.nodes[0].type == "deep_search"
 
 
+class TestJSONPathValidation:
+    """Test JSONPath expression validation in WorkflowBuilder."""
+
+    def test_validate_jsonpath_with_valid_identifiers(self, workflow_builder):
+        """Test that valid identifiers (alphanumeric + underscore) pass validation."""
+        # Test with simple alphanumeric
+        result = workflow_builder._build_and_validate_jsonpath("agent_a", "field1")
+        assert result == "$.agent_a.outputs.field1"
+
+        # Test with underscores
+        result = workflow_builder._build_and_validate_jsonpath("deep_search_agent", "research_results")
+        assert result == "$.deep_search_agent.outputs.research_results"
+
+        # Test with numbers
+        result = workflow_builder._build_and_validate_jsonpath("agent123", "field456")
+        assert result == "$.agent123.outputs.field456"
+
+        # Test with mixed case
+        result = workflow_builder._build_and_validate_jsonpath("AgentA", "FieldB")
+        assert result == "$.AgentA.outputs.FieldB"
+
+    def test_validate_jsonpath_with_hyphenated_agent_id(self, workflow_builder):
+        """Test that agent IDs with hyphens are rejected."""
+        with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
+            workflow_builder._build_and_validate_jsonpath("test-agent", "field")
+
+    def test_validate_jsonpath_with_hyphenated_field_name(self, workflow_builder):
+        """Test that field names with hyphens are rejected."""
+        with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
+            workflow_builder._build_and_validate_jsonpath("agent", "test-field")
+
+    def test_validate_jsonpath_with_special_characters_in_agent_id(self, workflow_builder):
+        """Test that agent IDs with special characters are rejected."""
+        invalid_agent_ids = [
+            "agent@123",  # @ symbol
+            "agent.name",  # period
+            "agent$id",  # dollar sign
+            "agent[0]",  # brackets
+            "agent/path",  # forward slash
+            "agent\\path",  # backslash
+            "agent id",  # space
+            "agent\nagent",  # newline
+        ]
+
+        for agent_id in invalid_agent_ids:
+            with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
+                workflow_builder._build_and_validate_jsonpath(agent_id, "field")
+
+    def test_validate_jsonpath_with_special_characters_in_field_name(self, workflow_builder):
+        """Test that field names with special characters are rejected."""
+        invalid_field_names = [
+            "field[0]",  # brackets (array access)
+            "field.name",  # period
+            "field@name",  # @ symbol
+            "field name",  # space
+            "field/name",  # forward slash
+            "field\\name",  # backslash
+        ]
+
+        for field_name in invalid_field_names:
+            with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
+                workflow_builder._build_and_validate_jsonpath("agent", field_name)
+
+    def test_validate_jsonpath_with_empty_agent_id(self, workflow_builder):
+        """Test that empty agent IDs are rejected."""
+        with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
+            workflow_builder._build_and_validate_jsonpath("", "field")
+
+    def test_validate_jsonpath_with_empty_field_name(self, workflow_builder):
+        """Test that empty field names are rejected."""
+        with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
+            workflow_builder._build_and_validate_jsonpath("agent", "")
+
+    def test_validate_jsonpath_prevents_path_injection(self, workflow_builder):
+        """Test that path traversal attempts are blocked."""
+        malicious_inputs = [
+            "../../../etc/passwd",
+            "..\\..\\..\\windows\\system32",
+            "..",
+            ".",
+            "$/malicious/path",
+        ]
+
+        for malicious_input in malicious_inputs:
+            # Test in agent_id
+            with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
+                workflow_builder._build_and_validate_jsonpath(malicious_input, "field")
+
+            # Test in field_name
+            with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
+                workflow_builder._build_and_validate_jsonpath("agent", malicious_input)
+
+    def test_validate_jsonpath_with_very_long_identifiers(self, workflow_builder):
+        """Test that very long but valid identifiers work."""
+        long_agent_id = "a" * 100
+        long_field_name = "f" * 100
+
+        result = workflow_builder._build_and_validate_jsonpath(long_agent_id, long_field_name)
+        assert result == f"$.{long_agent_id}.outputs.{long_field_name}"
+
+    def test_validate_jsonpath_integration_with_build(self, workflow_builder, agent_registry):
+        """Test that JSONPath validation is applied during workflow building."""
+        # This test verifies that the validation is actually used in the build process
+        # by testing with valid identifiers that should work
+
+        plan = WorkflowPlan(
+            workflow_description="Test workflow",
+            research_goal="Test JSONPath validation",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="First agent",
+                    confidence=0.95,
+                ),
+                AgentSuggestion(
+                    agent_id="gap_analysis",
+                    agent_name="Gap Analysis",
+                    reason="Second agent",
+                    confidence=0.90,
+                ),
+            ],
+        )
+
+        filled_inputs = {
+            "deep_search": {"query": "test"},
+            "gap_analysis": {},
+        }
+
+        # Should build successfully with valid identifiers
+        workflow = workflow_builder.build(plan, filled_inputs)
+        assert len(workflow.nodes) == 2
+
+        # Check that io_map was built with validated JSONPath
+        gap_node = next(node for node in workflow.nodes if node.type == "gap_analysis")
+        assert gap_node.io_map is not None
+        # JSONPath should be validated and well-formed
+        for jsonpath in gap_node.io_map.values():
+            assert jsonpath.startswith("$.deep_search.outputs.")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

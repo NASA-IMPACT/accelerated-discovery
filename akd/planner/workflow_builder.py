@@ -8,8 +8,10 @@ Uses three-tier field mapping strategy:
 3. LLM-generated mappings (intelligent fallback)
 """
 
+import re
 from typing import TypedDict
 
+import jsonpath_ng
 from loguru import logger
 
 from .field_mapping_registry import FieldMappingRegistry
@@ -57,6 +59,46 @@ class WorkflowBuilder:
         self.registry = registry or AgentRegistry()
         self.mapping_registry = mapping_registry or FieldMappingRegistry()
         self.debug = debug
+
+    def _build_and_validate_jsonpath(self, agent_id: str, field_name: str) -> str:
+        """
+        Build and validate JSONPath expression for field mapping.
+
+        Args:
+            agent_id: Agent identifier to reference in JSONPath
+            field_name: Field name to reference in JSONPath
+
+        Returns:
+            Validated JSONPath expression (e.g., "$.agent_id.outputs.field_name")
+
+        Raises:
+            ValueError: If agent_id or field_name contains invalid characters
+                       or if the resulting JSONPath expression is malformed
+        """
+        # Sanitize identifiers - only allow alphanumeric and underscore
+        # This prevents JSONPath injection and ensures valid syntax
+        if not re.match(r"^[a-zA-Z0-9_]+$", agent_id):
+            raise ValueError(
+                f"Invalid agent_id for JSONPath: '{agent_id}'. "
+                f"Only alphanumeric characters and underscores are allowed.",
+            )
+
+        if not re.match(r"^[a-zA-Z0-9_]+$", field_name):
+            raise ValueError(
+                f"Invalid field_name for JSONPath: '{field_name}'. "
+                f"Only alphanumeric characters and underscores are allowed.",
+            )
+
+        # Build JSONPath expression
+        path_str = f"$.{agent_id}.outputs.{field_name}"
+
+        # Validate JSONPath syntax using jsonpath_ng
+        try:
+            jsonpath_ng.parse(path_str)
+        except Exception as e:
+            raise ValueError(f"Invalid JSONPath expression '{path_str}': {e}") from e
+
+        return path_str
 
     def _build_field_mappings(
         self,
@@ -109,26 +151,28 @@ class WorkflowBuilder:
                         logger.error(
                             f"Invalid mapping: {agent_id}.{field.name} <- "
                             f"{prev_agent_id}.{source_field} "
-                            f"(source field '{source_field}' does not exist in {prev_agent_id} output schema)"
+                            f"(source field '{source_field}' does not exist in {prev_agent_id} output schema)",
                         )
                         if self.debug:
                             raise ValueError(
                                 f"Mapping references non-existent output field: '{source_field}' "
                                 f"not in {prev_agent_id}.outputs. "
-                                f"Available fields: {source_field_names}"
+                                f"Available fields: {source_field_names}",
                             )
                         # Skip invalid mapping in production mode
                         logger.warning(f"Skipping invalid mapping for {agent_id}.{field.name}")
                         continue
 
-                    io_map[field.name] = f"$.{prev_agent_id}.outputs.{source_field}"
+                    # Build and validate JSONPath expression
+                    io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, source_field)
                     logger.debug(
                         f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry, validated)",
                     )
                 else:
                     # Priority 3: Exact name match fallback
                     if field.name in source_field_names:
-                        io_map[field.name] = f"$.{prev_agent_id}.outputs.{field.name}"
+                        # Build and validate JSONPath expression
+                        io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, field.name)
                         logger.debug(
                             f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match, validated)",
                         )
