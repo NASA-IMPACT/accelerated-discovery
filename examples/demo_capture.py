@@ -536,6 +536,304 @@ async def capture_full_workflow(query: str, output_file: str = None) -> str:
     return output_file
 
 
+async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> str:
+    """
+    Run ultra-fast single-path smoke test workflow.
+
+    This executes a minimal path through the pipeline:
+    - Takes first topic only [0]
+    - Skips repository routing (assumes CMR)
+    - Takes first decomposition only [0]
+    - Takes first approach only [0]
+    - Takes first query only [0]
+    - Takes first collection only [0]
+    - Searches first collection for granules
+
+    Uses gpt-5-nano for all components for maximum speed.
+
+    Args:
+        query: Research query to process
+        output_file: Optional custom output filename
+
+    Returns:
+        Path to the saved JSON file
+    """
+    print("\n⚡ FAST SMOKE TEST - SINGLE PATH EXECUTION")
+    print(f"🔍 Query: '{query}'")
+    print("📊 Mode: gpt-5-nano, [0] selection at all branches")
+
+    start_time = datetime.now()
+
+    # Override agent config for fast execution with gpt-5-nano
+    # Note: Using localhost as AWS endpoint is currently returning 500 errors
+    fast_config = CMRDataSearchAgentConfig(
+        debug=True,
+        mcp_endpoint="http://localhost:8080/mcp/cmr/mcp/",
+        max_collections_to_search=1,  # Only 1 collection
+        collection_search_page_size=5,  # Smaller page sizes
+        granule_search_page_size=5,
+        enable_parallel_search=False,  # Sequential for simplicity
+        collection_search_timeout=30.0,
+        granule_search_timeout=45.0,
+        min_collection_relevance_score=0.0,  # No filtering
+        # All components use gpt-5-nano
+        topic_splitting_model="gpt-5-nano",
+        scientific_decomposition_model="gpt-5-nano",
+        repository_routing_model="gpt-5-nano",
+        collection_ranking_model="gpt-5-nano",
+        cmr_query_model="gpt-5-nano",
+        approach_filtering_model="gpt-5-nano",
+        final_ranking_model="gpt-5-nano",
+        angle_generation_model="gpt-5-nano",
+    )
+
+    # Create fast agent
+    fast_agent = CMRDataSearchAgent(config=fast_config, debug=True)
+
+    # Initialize timing collector
+    timing_collector = TimingCollector(
+        search_id=f"fast_smoke_{slugify(query)}_{int(start_time.timestamp())}",
+    )
+
+    # Step 1: Topic Splitting → select [0]
+    print("\n1️⃣ Topic Splitting (selecting [0]):")
+    async with timing_collector.measure("topic_splitting") as timer:
+        topics_output = await fast_agent.topic_splitting_component.process(query)
+        timer.add_metadata(
+            topics_identified=len(topics_output.topics),
+            selected_topic_index=0,
+        )
+
+    if not topics_output.topics:
+        raise RuntimeError("No topics identified")
+
+    topic = topics_output.topics[0]  # SELECT [0]
+    print(f"   ✅ Selected topic [0]: {topic.title}")
+    print(f"   ⏭️  Skipped {len(topics_output.topics) - 1} other topics")
+
+    # Step 2: Skip Repository Routing (assume CMR)
+    print("\n2️⃣ Repository Routing: SKIPPED (assuming CMR)")
+
+    # Step 3: Scientific Decomposition → select [0]
+    print("\n3️⃣ Scientific Decomposition (selecting [0]):")
+    timing_collector.set_context(topic_idx=0)
+    async with timing_collector.measure("scientific_decomposition") as timer:
+        decomp_output = await fast_agent.scientific_decomposition_component.process(
+            query,
+            topic,
+        )
+        timer.add_metadata(
+            decompositions_generated=len(decomp_output.decompositions),
+            selected_decomp_index=0,
+        )
+
+    if not decomp_output.decompositions:
+        raise RuntimeError("No decompositions generated")
+
+    decomposition = decomp_output.decompositions[0]  # SELECT [0]
+    print(f"   ✅ Selected decomposition [0]: {decomposition.title}")
+    print(f"   ⏭️  Skipped {len(decomp_output.decompositions) - 1} other decompositions")
+
+    # Step 4: Known Parameters → select [0]
+    print("\n4️⃣ Known Parameters (selecting [0]):")
+    timing_collector.set_context(topic_idx=0, decomp_idx=0)
+    async with timing_collector.measure("known_parameters") as timer:
+        known_params_output = await fast_agent.known_parameters_component.process(
+            query,
+            topic,
+            decomposition,
+        )
+        timer.add_metadata(
+            query_approaches_generated=len(known_params_output.query_approaches),
+            selected_approach_index=0,
+        )
+
+    if not known_params_output.query_approaches:
+        raise RuntimeError("No query approaches generated")
+
+    approach = known_params_output.query_approaches[0]  # SELECT [0]
+    print("   ✅ Selected approach [0]")
+    print(
+        f"   ⏭️  Skipped {len(known_params_output.query_approaches) - 1} other approaches",
+    )
+
+    # Step 5: Searchable Parameters → select [0]
+    print("\n5️⃣ Searchable Parameters (selecting [0]):")
+    async with timing_collector.measure("searchable_parameters") as timer:
+        searchable_output = await fast_agent.searchable_parameters_component.process(
+            query,
+            topic,
+            decomposition,
+            [approach],  # Pass only the selected approach, not all of them
+        )
+        timer.add_metadata(
+            searchable_queries_generated=len(searchable_output.searchable_queries),
+            selected_query_index=0,
+        )
+
+    if not searchable_output.searchable_queries:
+        raise RuntimeError("No searchable queries generated")
+
+    search_query = searchable_output.searchable_queries[0]  # SELECT [0]
+    print("   ✅ Selected query [0]")
+    print(
+        f"   ⏭️  Skipped {len(searchable_output.searchable_queries) - 1} other queries",
+    )
+
+    # Step 6: Collection Search (single query only)
+    print("\n6️⃣ Collection Search (single query):")
+    async with timing_collector.measure("collection_search") as timer:
+        search_params = search_query.get_mcp_parameters()
+        search_params["page_size"] = fast_config.collection_search_page_size
+
+        tool_input = fast_agent.collection_search_tool.input_schema(**search_params)
+        result = await fast_agent.collection_search_tool.arun(tool_input)
+
+        collections = result.collections if hasattr(result, "collections") else []
+        timer.add_metadata(
+            queries_executed=1,
+            collections_found=len(collections),
+        )
+
+    print(f"   ✅ Found {len(collections)} collections")
+
+    if not collections:
+        print("   ⚠️ No collections found, stopping here")
+        selected_collection = None
+        granules = []
+    else:
+        # Step 7: Select first collection [0]
+        selected_collection = collections[0]  # SELECT [0]
+        print(
+            f"   ✅ Selected collection [0]: {selected_collection.get('title', 'Unknown')}",
+        )
+        print(f"   ⏭️  Skipped {len(collections) - 1} other collections")
+
+        # Step 8: Granule Search (single collection only)
+        print("\n7️⃣ Granule Search (single collection):")
+        async with timing_collector.measure("granule_search") as timer:
+            concept_id = selected_collection.get("concept_id")
+
+            try:
+                granule_params = {
+                    "collection_concept_id": concept_id,
+                    "page_size": fast_config.granule_search_page_size,
+                }
+
+                granule_search_params = fast_agent.granule_search_tool.input_schema(
+                    **granule_params,
+                )
+                result = await fast_agent.granule_search_tool.arun(
+                    granule_search_params,
+                )
+
+                granules = (
+                    result.results.get("granules", [])
+                    if hasattr(result, "results")
+                    else []
+                )
+                timer.add_metadata(
+                    collections_searched=1,
+                    granules_found=len(granules),
+                )
+            except Exception as e:
+                print(f"   ⚠️ Granule search failed: {e}")
+                granules = []
+                timer.add_metadata(
+                    collections_searched=1,
+                    granules_found=0,
+                    error=str(e),
+                )
+
+        print(f"   ✅ Found {len(granules)} granules")
+
+    duration = (datetime.now() - start_time).total_seconds()
+
+    # Finalize timing collection
+    timing_data = timing_collector.finalize()
+
+    # Build output (single path only)
+    output_data = {
+        "query": query,
+        "timestamp": start_time.isoformat(),
+        "mode": "fast_smoke_test",
+        "topics": [
+            {
+                "index": 0,
+                "topic": safe_model_dump(topic),
+                "routing": {
+                    "repositories": ["CMR"],
+                    "note": "Repository routing skipped",
+                },
+                "decompositions": [
+                    {
+                        "index": 0,
+                        "decomposition": safe_model_dump(decomposition),
+                        "known_params": {
+                            "reasoning": known_params_output.reasoning,
+                            "query_approaches": [safe_model_dump(approach)],  # Only [0]
+                        },
+                        "searchable_params": {
+                            "keyword_strategy": searchable_output.keyword_strategy,
+                            "searchable_queries": [
+                                safe_model_dump(search_query),
+                            ],  # Only [0]
+                        },
+                        "collections_raw": collections,
+                        "collections_ranked": [selected_collection]
+                        if selected_collection
+                        else [],
+                        "granules": granules,
+                    },
+                ],
+            },
+        ],
+        "timing_data": timing_data,
+        "metadata": {
+            "total_topics": len(topics_output.topics),
+            "selected_topic_idx": 0,
+            "total_decompositions": len(decomp_output.decompositions),
+            "selected_decomp_idx": 0,
+            "total_approaches": len(known_params_output.query_approaches),
+            "selected_approach_idx": 0,
+            "total_queries": len(searchable_output.searchable_queries),
+            "selected_query_idx": 0,
+            "total_collections_found": len(collections),
+            "selected_collection_idx": 0 if collections else None,
+            "total_granules": len(granules),
+            "duration_seconds": duration,
+            "agent_config": {
+                "all_models": "gpt-5-nano",
+                "single_path_mode": True,
+            },
+        },
+    }
+
+    # Save to file
+    if not output_file:
+        query_slug = slugify(query)
+        timestamp_slug = start_time.strftime("%Y%m%d_%H%M%S")
+        output_file = f"captured_data/fast_smoke_{query_slug}_{timestamp_slug}.json"
+
+    # Ensure captured_data directory exists
+    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_file, "w") as f:
+        json.dump(output_data, f, indent=2, default=str)
+
+    print("\n⚡ FAST SMOKE TEST COMPLETE!")
+    print(f"   Duration: {duration:.1f}s")
+    print("   Path: Topic[0] → Decomp[0] → Approach[0] → Query[0] → Collection[0]")
+    print(f"   Collections Found: {len(collections)}")
+    print(f"   Granules Found: {len(granules)}")
+    print(f"   💾 Saved to: {output_file}")
+
+    # Print timing summary
+    timing_collector.print_summary()
+
+    return output_file
+
+
 async def main():
     """Main function with command-line argument support."""
     parser = argparse.ArgumentParser(

@@ -18,7 +18,7 @@ from loguru import logger
 
 sys.path.append(str(Path(__file__).parent.parent))
 
-from demo_capture import capture_full_workflow
+from demo_capture import capture_fast_smoke_workflow, capture_full_workflow
 from demo_loader import WorkflowLoader
 from dotenv import load_dotenv
 
@@ -273,6 +273,119 @@ class TestRunner:
 
             return results
 
+    async def run_fast_smoke_test(
+        self,
+        test_case: TestCase,
+        run_id: Optional[str] = None,
+    ) -> TestRunResults:
+        """
+        Run a fast smoke test using single-path execution.
+
+        This uses gpt-5-nano for all components and takes [0] at each branch
+        for maximum speed. Skips repository routing.
+
+        Args:
+            test_case: Test case to execute
+            run_id: Optional run ID for organizing results
+
+        Returns:
+            TestRunResults for this fast smoke test
+        """
+        if run_id is None:
+            run_id = self._generate_run_id("fast_smoke")
+
+        logger.info(f"Running fast smoke test: {test_case.test_id}")
+        logger.info(f"Query: {test_case.query}")
+        logger.info("Mode: Single-path, gpt-5-nano, [0] selection")
+
+        start_time = datetime.now()
+
+        try:
+            # Execute the query using fast smoke workflow
+            capture_start = time.time()
+            captured_file = await capture_fast_smoke_workflow(
+                query=test_case.query,
+                output_file=str(
+                    self.capture_data_dir / f"{run_id}_{test_case.test_id}.json",
+                ),
+            )
+            execution_time = time.time() - capture_start
+
+            logger.info(f"Fast smoke workflow captured to: {captured_file}")
+
+            # Load the captured data
+            loader = WorkflowLoader(captured_file)
+
+            # Create result
+            result = ComponentTestResult(
+                component_name="fast_smoke_workflow",
+                test_case_id=test_case.test_id,
+                execution_time=execution_time,
+                execution_success=True,
+                execution_error=None,
+                actual_output=loader.data,
+                expected_output=test_case,
+            )
+
+            # Create summary
+            end_time = datetime.now()
+            summary = TestRunSummary(
+                run_id=run_id,
+                start_time=start_time,
+                end_time=end_time,
+                test_cases_count=1,
+                total_tests=1,
+                test_mode="fast_smoke",
+                total_duration=(end_time - start_time).total_seconds(),
+            )
+
+            results = TestRunResults(
+                summary=summary,
+                test_results=[result],
+                test_cases=[test_case],
+                captured_data_files=[captured_file],
+            )
+
+            logger.info(f"Fast smoke test completed: {test_case.test_id}")
+            logger.info(f"Duration: {execution_time:.1f}s")
+            return results
+
+        except Exception as e:
+            logger.error(f"Fast smoke test failed: {e}")
+
+            # Create error result
+            error_result = ComponentTestResult(
+                component_name="fast_smoke_workflow",
+                test_case_id=test_case.test_id,
+                execution_time=0.0,
+                execution_success=False,
+                execution_error=str(e),
+                actual_output=None,
+                expected_output=test_case,
+            )
+
+            # Create summary
+            end_time = datetime.now()
+            summary = TestRunSummary(
+                run_id=run_id,
+                start_time=start_time,
+                end_time=end_time,
+                test_cases_count=1,
+                total_tests=1,
+                error_tests=1,
+                test_mode="fast_smoke",
+                total_duration=(end_time - start_time).total_seconds(),
+            )
+
+            results = TestRunResults(
+                summary=summary,
+                test_results=[error_result],
+                test_cases=[test_case],
+                captured_data_files=[],
+            )
+
+            return results
+
     async def run_component_test(
         self,
         component_name: str,
@@ -399,10 +512,10 @@ class TestRunner:
 
         logger.info(f"Test run saved: {results_file}")
 
-    def _generate_run_id(self) -> str:
+    def _generate_run_id(self, prefix: str = "test_run") -> str:
         """Generate a unique run ID."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"test_run_{timestamp}"
+        return f"{prefix}_{timestamp}"
 
     def _get_expected_component_output(
         self,

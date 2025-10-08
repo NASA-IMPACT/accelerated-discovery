@@ -149,6 +149,62 @@ class TestCLI:
 
         return results
 
+    async def run_fast_smoke_test(
+        self,
+        query: Optional[str],
+        csv_path: str,
+        output_dir: str,
+        capture_dir: str,
+    ):
+        """Run a fast smoke test using single-path execution."""
+        print("⚡ Running fast smoke test...")
+        print("📊 Mode: Single-path, gpt-5-nano, [0] selection at all branches")
+
+        # Setup components
+        self._setup_components(csv_path, output_dir, capture_dir)
+
+        # If no query provided, use first test case
+        if not query:
+            print("💡 No query provided, using first test case...")
+            test_cases = self.data_manager.load_test_cases()
+            if not test_cases:
+                print("❌ No test cases found")
+                return
+            test_case = test_cases[0]
+            print(f"❓ Using query: {test_case.query[:80]}...")
+        else:
+            # Find the test case
+            test_case = self.data_manager.get_test_case_by_query(query)
+            if not test_case:
+                print(f"❌ No test case found for query: {query}")
+                print("💡 Using query without expected results...")
+                # Create a minimal test case
+                test_case = TestCase(
+                    test_id=f"adhoc_{hash(query) % 10000}",
+                    query=query,
+                    category=TestCategory.EARTH_SCIENCE,
+                    expected_topics=[],
+                    expected_decompositions=[],
+                )
+
+        # Run the fast smoke test
+        results = await self.test_runner.run_fast_smoke_test(test_case)
+
+        # Print results
+        print("\n⚡ FAST SMOKE TEST RESULTS")
+        print(f"🔍 Test ID: {test_case.test_id}")
+        print(
+            f"✅ Execution: {'SUCCESS' if results.test_results[0].execution_success else 'FAILED'}",
+        )
+        if results.test_results[0].execution_error:
+            print(f"🚨 Error: {results.test_results[0].execution_error}")
+        print(f"⏱️  Duration: {results.test_results[0].execution_time:.1f}s")
+        print(
+            f"💾 Results saved to: {results.captured_data_files[0] if results.captured_data_files else 'N/A'}",
+        )
+
+        return results
+
     async def evaluate_captured_data(
         self,
         captured_file: str,
@@ -380,6 +436,12 @@ Examples:
   # Run single test
   python test_cli.py --mode single --query "urbanization heat island"
 
+  # Run fast smoke test (uses first test case)
+  python test_cli.py --mode fast-smoke
+
+  # Run fast smoke test with custom query
+  python test_cli.py --mode fast-smoke --query "sea ice extent"
+
   # Evaluate captured data
   python test_cli.py --mode evaluate --captured-file captured_data/my_file.json --component topic_splitting
 
@@ -392,7 +454,7 @@ Examples:
     parser.add_argument(
         "--mode",
         "-m",
-        choices=["full", "single", "evaluate", "component"],
+        choices=["full", "single", "fast-smoke", "evaluate", "component"],
         help="Testing mode to run",
     )
 
@@ -495,6 +557,14 @@ Examples:
                 return
             await cli.run_single_test(
                 query=args.query,
+                csv_path=csv_path,
+                output_dir=output_dir,
+                capture_dir=capture_dir,
+            )
+
+        elif args.mode == "fast-smoke":
+            await cli.run_fast_smoke_test(
+                query=args.query,  # Optional - uses first test case if not provided
                 csv_path=csv_path,
                 output_dir=output_dir,
                 capture_dir=capture_dir,

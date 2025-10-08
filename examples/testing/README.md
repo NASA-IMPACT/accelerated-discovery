@@ -120,7 +120,49 @@ uv run python test_cli.py --mode single --query "urbanization heat island"
 - Test new queries
 - Rapid iteration during development
 
-### 3. Evaluation Mode (`--mode evaluate`)
+### 3. Fast Smoke Test (`--mode fast-smoke`)
+
+Ultra-fast single-path execution for rapid validation:
+
+```bash
+# Use first test case from CSV
+uv run python test_cli.py --mode fast-smoke
+
+# Use custom query
+uv run python test_cli.py --mode fast-smoke --query "sea ice extent"
+```
+
+**Characteristics:**
+- Uses `gpt-5-nano` for all components (fastest model)
+- Single-path execution: selects `[0]` at every branch point
+- Skips repository routing (assumes CMR)
+- Sequential execution (no parallelization)
+- Minimal collection/granule counts
+
+**Execution Path:**
+```
+Topic Splitting → topics[0]
+↓ (skip routing)
+Scientific Decomposition → decompositions[0]
+↓
+Known Parameters → approaches[0]
+↓
+Searchable Parameters → queries[0]
+↓
+Collection Search → collections[0]
+↓
+Granule Search → granules[0:5]
+```
+
+**Expected Runtime:** 20-40 seconds (vs 60-120s for normal single test)
+
+**Use cases:**
+- Quick smoke tests before deployments
+- Rapid pipeline validation during development
+- CI/CD integration for fast feedback
+- Debugging component connectivity issues
+
+### 4. Evaluation Mode (`--mode evaluate`)
 
 Evaluates captured workflow data using LLM judges:
 
@@ -217,7 +259,9 @@ The testing framework reuses and extends the existing demo infrastructure:
 
 ### Model Configuration
 
-Components use configurable LLM models (see `test_runner.py`):
+Components use configurable LLM models (see `demo_capture.py`):
+
+**Standard Testing:**
 ```python
 MODEL_CONFIG = {
     "topic_splitting": "gpt-5-mini",
@@ -227,6 +271,9 @@ MODEL_CONFIG = {
     "cmr_query": "gpt-5-mini",
 }
 ```
+
+**Fast Smoke Testing:**
+All components use `gpt-5-nano` for maximum speed. Configuration is automatically applied when using `--mode fast-smoke`.
 
 ### Evaluation Configuration
 
