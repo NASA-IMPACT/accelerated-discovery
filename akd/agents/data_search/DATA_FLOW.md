@@ -94,6 +94,12 @@ The data search system follows a two-layer architecture:
 
 **Component Pipeline** (in `components/` directory):
 
+All components inherit from **BaseDataSearchComponent** which provides:
+- Automatic prompt template loading
+- Retry logic with exponential backoff for rate limiting
+- Standardized error handling and logging
+- Memory management helpers
+
 1. **TopicSplittingComponent** (`topic_splitting.py`)
 2. **RepositoryRouterComponent** (`repository_router.py`)
 3. **ScientificDecompositionComponent** (`scientific_decomposition.py`)
@@ -103,11 +109,33 @@ The data search system follows a two-layer architecture:
 7. **FinalCollectionRankingComponent** (`final_collection_ranking.py`) - NEW
 8. **CollectionRankingComponent** (`collection_ranking.py`) - Legacy (angles workflow)
 
+### Base Component Architecture
+
+**File: `components/_base.py`**
+- **BaseDataSearchComponent**: Abstract base class for all LLM-powered components
+  - Provides automatic prompt template loading via `template_name` attribute
+  - Implements retry logic with exponential backoff (configurable per component)
+  - Standardizes initialization patterns and memory management
+  - Reduces code duplication across 8 component implementations
+  - **Key Methods**:
+    - `_execute_with_retry()`: Standard retry logic for LLM calls
+    - `_execute_with_retry_custom()`: Retry logic for custom callables (e.g., schema overriding)
+    - `_add_user_message()`: Add to conversation memory
+    - `_set_messages()`: Set messages directly (for ranking components)
+    - `_format_user_prompt_from_template()`: Format using loaded template
+  - **Configuration Attributes**:
+    - `template_name`: Prompt template prefix (e.g., "topic_splitting")
+    - `default_temperature`: LLM temperature (0.0 = deterministic, 0.1 = slight variation)
+    - `retry_enabled`: Enable/disable retry logic (False for ranking components)
+    - `max_retries`: Maximum retry attempts (default: 3)
+    - `retry_base_delay`: Base delay for exponential backoff (default: 1.0s)
+
 ### Utility Components
 
 **File: `utils/prompt_loader.py`**
 - Loads and formats prompt templates from the `components/prompts/` directory
 - Provides helper functions for prompt template management
+- Used by BaseDataSearchComponent for automatic prompt loading
 
 **File: `utils/cmr_keywords_fetcher.py`**
 - Fetches and caches CMR metadata (instruments, platforms, science keywords)
@@ -682,28 +710,35 @@ async def _make_http_request(self, tool_name: str, arguments: dict) -> dict:
 ```
 
 ### Component-Level Error Handling
-**Location**: `akd/agents/data_search/components/topic_splitting.py:98`
+**Location**: `akd/agents/data_search/components/_base.py:97-152`
 
-LLM components include rate limiting and retry logic:
+LLM components inherit standardized retry logic from BaseDataSearchComponent:
 ```python
-max_retries = 3
-base_delay = 1.0
+# All components with retry_enabled=True use this pattern
+async def _execute_with_retry(self, operation_name: str, custom_error_prefix: Optional[str] = None) -> TOutput:
+    """Execute LLM call with retry logic and exponential backoff."""
+    if not self.retry_enabled:
+        return await self.get_response_async()
 
-for attempt in range(max_retries + 1):
-    try:
-        response = await self.get_response_async()
-        return response
-    except Exception as e:
-        if attempt == max_retries:
-            raise RuntimeError(f"Failed after {max_retries + 1} attempts: {e}")
+    for attempt in range(self.max_retries + 1):
+        try:
+            response = await self.get_response_async()
+            return response
+        except Exception as e:
+            if attempt == self.max_retries:
+                raise RuntimeError(f"{error_prefix} after {self.max_retries + 1} attempts: {e}")
 
-        # Check for rate limiting
-        if "429" in str(e) or "rate" in str(e).lower():
-            delay = base_delay * (2**attempt)
-            await asyncio.sleep(delay)
-        else:
-            raise RuntimeError(f"Non-retryable error: {e}")
+            # Rate limiting detection
+            if "429" in str(e) or "rate" in str(e).lower():
+                delay = self.retry_base_delay * (2**attempt)
+                await asyncio.sleep(delay)
+            else:
+                raise RuntimeError(f"{error_prefix}: {e}")
 ```
+
+**Components with retry enabled**: TopicSplitting, RepositoryRouter, ScientificDecomposition, KnownParameters, SearchableParameters (5 of 8)
+
+**Components with retry disabled**: ApproachCollectionFiltering, FinalCollectionRanking, CollectionRanking (3 ranking components)
 
 ### Agent-Level Error Handling
 **Location**: `akd/agents/data_search/cmr_data_search.py:418`

@@ -5,16 +5,15 @@ Uses LLM to generate search terms and keywords for dataset discovery
 when combined with known parameters.
 """
 
-import asyncio
 from typing import List, Optional
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 
-from ..utils.prompt_loader import load_and_format_prompt, load_prompt_template
+from ..utils.prompt_loader import load_and_format_prompt
+from ._base import BaseDataSearchComponent
 from .known_parameters import QueryApproach, ScientificDecomposition
 from .topic_splitting import Topic
 
@@ -133,7 +132,10 @@ class SearchableParametersInputSchema(InputSchema):
 
 
 class SearchableParametersComponent(
-    InstructorBaseAgent[SearchableParametersInputSchema, SearchableParametersOutput],
+    BaseDataSearchComponent[
+        SearchableParametersInputSchema,
+        SearchableParametersOutput,
+    ],
 ):
     """
     Component for generating searchable parameters using LLM.
@@ -145,17 +147,9 @@ class SearchableParametersComponent(
     input_schema = SearchableParametersInputSchema
     output_schema = SearchableParametersOutput
 
-    def __init__(self, config: BaseAgentConfig | None = None, debug: bool = False):
-        """Initialize the searchable parameters component."""
-        # Set up specialized configuration for searchable parameters
-        if config is None:
-            config = BaseAgentConfig()
-
-        # Override system prompt for searchable parameters
-        config.system_prompt = load_prompt_template("searchable_parameters_system")
-        config.temperature = 0.1  # Low temperature for consistent keyword generation
-
-        super().__init__(config=config, debug=debug)
+    # Base class configuration
+    template_name = "searchable_parameters"
+    default_temperature = 0.1  # Low temperature for consistent keyword generation
 
     async def process(
         self,
@@ -231,10 +225,9 @@ class SearchableParametersComponent(
         approach_index: int,
     ) -> List[SearchableQuery]:
         """Generate multiple search variations for a single approach with retry logic."""
-        max_retries = 3
-        base_delay = 1.0
 
-        for attempt in range(max_retries + 1):
+        # Helper method to do the actual LLM call
+        async def _do_llm_call():
             try:
                 # Get search variation suggestions from LLM
                 from pydantic import BaseModel
@@ -287,26 +280,16 @@ class SearchableParametersComponent(
                     )
 
                 return searchable_queries
+            except Exception:
+                # Propagate exception to be handled by retry wrapper
+                raise
 
-            except Exception as e:
-                if attempt == max_retries:
-                    error_msg = f"Failed to generate search variations after {max_retries + 1} attempts: {e}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg) from e
-
-                # Check if it's a rate limit error
-                if "429" in str(e) or "rate" in str(e).lower():
-                    delay = base_delay * (2**attempt)
-                    if self.debug:
-                        logger.warning(
-                            f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})",
-                        )
-                    await asyncio.sleep(delay)
-                else:
-                    # Non-rate-limit error, don't retry
-                    error_msg = f"Failed to generate search variations: {e}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg) from e
+        # Use base class retry logic with custom operation name
+        return await self._execute_with_retry_custom(
+            _do_llm_call,
+            operation_name="generate search variations",
+            custom_error_prefix="Failed to generate search variations",
+        )
 
     def _format_user_prompt(
         self,

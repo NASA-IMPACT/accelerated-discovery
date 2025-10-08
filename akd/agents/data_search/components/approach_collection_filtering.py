@@ -10,9 +10,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
+from akd.agents._base import BaseAgentConfig
 
-from ..utils.prompt_loader import load_prompt_template
+from ._base import BaseDataSearchComponent
 
 
 class ApproachCollectionFilteringInputSchema(InputSchema):
@@ -126,7 +126,7 @@ class ApproachCollectionFilteringOutput(BaseModel):
 
 
 class ApproachCollectionFilteringComponent(
-    InstructorBaseAgent[
+    BaseDataSearchComponent[
         ApproachCollectionFilteringInputSchema,
         ApproachCollectionFilteringOutput,
     ],
@@ -142,19 +142,14 @@ class ApproachCollectionFilteringComponent(
     input_schema = ApproachCollectionFilteringInputSchema
     output_schema = ApproachCollectionFilteringOutput
 
+    # Base class configuration
+    template_name = "approach_filtering"
+    default_temperature = 0.0  # Consistent filtering
+    retry_enabled = False  # No retry for ranking components
+
     def __init__(self, config: BaseAgentConfig | None = None, debug: bool = False):
         """Initialize the approach collection filtering component."""
-        if config is None:
-            config = BaseAgentConfig()
-
-        # Load and set system prompt in config
-        config.system_prompt = load_prompt_template("approach_filtering_system")
-        self.user_prompt_template = load_prompt_template("approach_filtering_user")
-
-        config.temperature = 0.0  # Consistent filtering
-
-        super().__init__(config=config, debug=debug)
-
+        super().__init__(config=config, debug=debug, template_name=self.template_name)
         logger.info("Approach collection filtering component initialized")
 
     async def _arun(
@@ -204,7 +199,7 @@ class ApproachCollectionFilteringComponent(
             collections_summary.append("\n".join(summary_parts))
 
         # Format user prompt
-        user_prompt = self.user_prompt_template.format(
+        user_prompt = self._format_user_prompt_from_template(
             original_query=params.original_query,
             topic_title=params.topic_title,
             topic_context=params.topic_context,
@@ -228,7 +223,7 @@ class ApproachCollectionFilteringComponent(
             max_collections=params.max_collections,
         )
 
-        self.messages = [{"role": "user", "content": user_prompt}]
+        self._set_messages(user_prompt)
         result = await self.get_response_async()
 
         logger.info(

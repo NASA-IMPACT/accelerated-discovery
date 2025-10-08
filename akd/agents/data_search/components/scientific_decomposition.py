@@ -5,16 +5,15 @@ Uses LLM to decompose functional topics into specific observable phenomena
 that can be measured with Earth science datasets.
 """
 
-import asyncio
 from typing import List
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 
-from ..utils.prompt_loader import load_and_format_prompt, load_prompt_template
+from ..utils.prompt_loader import load_and_format_prompt
+from ._base import BaseDataSearchComponent
 from .topic_splitting import Topic
 
 
@@ -53,7 +52,7 @@ class ScientificDecompositionInputSchema(InputSchema):
 
 
 class ScientificDecompositionComponent(
-    InstructorBaseAgent[
+    BaseDataSearchComponent[
         ScientificDecompositionInputSchema,
         ScientificDecompositionOutput,
     ],
@@ -68,17 +67,9 @@ class ScientificDecompositionComponent(
     input_schema = ScientificDecompositionInputSchema
     output_schema = ScientificDecompositionOutput
 
-    def __init__(self, config: BaseAgentConfig | None = None, debug: bool = False):
-        """Initialize the scientific decomposition component."""
-        # Set up specialized configuration for scientific decomposition
-        if config is None:
-            config = BaseAgentConfig()
-
-        # Override system prompt for scientific decomposition
-        config.system_prompt = load_prompt_template("scientific_decomposition_system")
-        config.temperature = 0.1  # Low temperature for consistent, factual output
-
-        super().__init__(config=config, debug=debug)
+    # Base class configuration
+    template_name = "scientific_decomposition"
+    default_temperature = 0.1  # Low temperature for consistent, factual output
 
     async def process(
         self,
@@ -104,45 +95,22 @@ class ScientificDecompositionComponent(
         user_prompt = self._format_user_prompt(original_query, topic)
 
         # Add user message to memory
-        self.memory.append({"role": "user", "content": user_prompt})
+        self._add_user_message(user_prompt)
 
-        # Retry with exponential backoff for rate limiting
-        max_retries = 3
-        base_delay = 1.0
+        # Execute with retry logic
+        response = await self._execute_with_retry(
+            operation_name="generate scientific decompositions",
+            custom_error_prefix="Failed to generate scientific decompositions",
+        )
 
-        for attempt in range(max_retries + 1):
-            try:
-                # Generate decompositions using LLM
-                response = await self.get_response_async()
+        if self.debug:
+            logger.debug(
+                f"Generated {len(response.decompositions)} scientific decompositions",
+            )
+            for i, decomp in enumerate(response.decompositions, 1):
+                logger.debug(f"  {i}. {decomp.title}")
 
-                if self.debug:
-                    logger.debug(
-                        f"Generated {len(response.decompositions)} scientific decompositions",
-                    )
-                    for i, decomp in enumerate(response.decompositions, 1):
-                        logger.debug(f"  {i}. {decomp.title}")
-
-                return response
-
-            except Exception as e:
-                if attempt == max_retries:
-                    error_msg = f"Failed to generate scientific decompositions after {max_retries + 1} attempts: {e}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg) from e
-
-                # Check if it's a rate limit error
-                if "429" in str(e) or "rate" in str(e).lower():
-                    delay = base_delay * (2**attempt)
-                    if self.debug:
-                        logger.warning(
-                            f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})",
-                        )
-                    await asyncio.sleep(delay)
-                else:
-                    # Non-rate-limit error, don't retry
-                    error_msg = f"Failed to generate scientific decompositions: {e}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg) from e
+        return response
 
     def _format_user_prompt(self, original_query: str, topic: Topic) -> str:
         """Format the user prompt with research context and topic."""

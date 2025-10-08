@@ -10,9 +10,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
+from akd.agents._base import BaseAgentConfig
 
-from ..utils.prompt_loader import load_prompt_template
+from ._base import BaseDataSearchComponent
 
 
 class CollectionRankingInputSchema(InputSchema):
@@ -117,7 +117,7 @@ class CollectionRankingOutput(BaseModel):
 
 
 class CollectionRankingComponent(
-    InstructorBaseAgent[CollectionRankingInputSchema, CollectionRankingOutput],
+    BaseDataSearchComponent[CollectionRankingInputSchema, CollectionRankingOutput],
 ):
     """
     Component for ranking collections by relevance to scientific angles.
@@ -130,20 +130,14 @@ class CollectionRankingComponent(
     input_schema = CollectionRankingInputSchema
     output_schema = CollectionRankingOutput
 
+    # Base class configuration
+    template_name = "collection_ranking"
+    default_temperature = 0.0  # Low temperature for consistent ranking
+    retry_enabled = False  # No retry for ranking components (legacy)
+
     def __init__(self, config: BaseAgentConfig | None = None, debug: bool = False):
         """Initialize the collection ranking component."""
-        # Set up specialized configuration for collection ranking
-        if config is None:
-            config = BaseAgentConfig()
-
-        # Load and set system prompt in config
-        config.system_prompt = load_prompt_template("collection_ranking_system")
-        self.user_prompt_template = load_prompt_template("collection_ranking_user")
-
-        config.temperature = 0.0  # Low temperature for consistent ranking
-
-        super().__init__(config=config, debug=debug)
-
+        super().__init__(config=config, debug=debug, template_name=self.template_name)
         logger.info("Collection ranking component initialized")
 
     async def _arun(
@@ -172,7 +166,7 @@ class CollectionRankingComponent(
             collections_summary.append(summary)
 
         # Format user prompt
-        user_prompt = self.user_prompt_template.format(
+        user_prompt = self._format_user_prompt_from_template(
             original_query=params.original_query,
             topic_title=params.topic_title,
             topic_context=params.topic_context,
@@ -211,7 +205,7 @@ class CollectionRankingComponent(
         )
 
         # Set the user prompt and get LLM ranking
-        self.messages = [{"role": "user", "content": user_prompt}]
+        self._set_messages(user_prompt)
         ranking_result = await self.get_response_async()
 
         # Map collection indices back to actual collection data

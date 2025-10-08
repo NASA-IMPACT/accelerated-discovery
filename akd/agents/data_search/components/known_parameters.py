@@ -5,16 +5,15 @@ Uses LLM to extract hard filters (instruments, temporal/spatial bounds, etc.)
 that can be directly identified from scientific research context.
 """
 
-import asyncio
 from typing import List, Optional
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 
-from ..utils.prompt_loader import load_and_format_prompt, load_prompt_template
+from ..utils.prompt_loader import load_and_format_prompt
+from ._base import BaseDataSearchComponent
 from .scientific_decomposition import ScientificDecomposition
 from .topic_splitting import Topic
 
@@ -117,7 +116,7 @@ class KnownParametersInputSchema(InputSchema):
 
 
 class KnownParametersComponent(
-    InstructorBaseAgent[KnownParametersInputSchema, KnownParametersOutput],
+    BaseDataSearchComponent[KnownParametersInputSchema, KnownParametersOutput],
 ):
     """
     Component for extracting known parameters using LLM.
@@ -129,19 +128,9 @@ class KnownParametersComponent(
     input_schema = KnownParametersInputSchema
     output_schema = KnownParametersOutput
 
-    def __init__(self, config: BaseAgentConfig | None = None, debug: bool = False):
-        """Initialize the known parameters component."""
-        # Set up specialized configuration for known parameters extraction
-        if config is None:
-            config = BaseAgentConfig()
-
-        # Override system prompt for known parameters
-        config.system_prompt = load_prompt_template("known_parameters_system")
-        config.temperature = (
-            0.0  # Very low temperature for precise parameter extraction
-        )
-
-        super().__init__(config=config, debug=debug)
+    # Base class configuration
+    template_name = "known_parameters"
+    default_temperature = 0.0  # Very low temperature for precise parameter extraction
 
     async def process(
         self,
@@ -169,55 +158,30 @@ class KnownParametersComponent(
         user_prompt = self._format_user_prompt(original_query, topic, decomposition)
 
         # Add user message to memory
-        self.memory.append({"role": "user", "content": user_prompt})
+        self._add_user_message(user_prompt)
 
-        # Retry with exponential backoff for rate limiting
-        max_retries = 3
-        base_delay = 1.0
+        # Execute with retry logic
+        response = await self._execute_with_retry(
+            operation_name="extract known parameters",
+            custom_error_prefix="Failed to extract known parameters",
+        )
 
-        for attempt in range(max_retries + 1):
-            try:
-                # Generate parameters using LLM
-                response = await self.get_response_async()
+        if self.debug:
+            logger.debug(
+                f"Generated {len(response.query_approaches)} query approaches",
+            )
+            for i, approach in enumerate(response.query_approaches, 1):
+                parts = []
+                if approach.instrument:
+                    parts.append(f"instrument: {approach.instrument}")
+                if approach.platform:
+                    parts.append(f"platform: {approach.platform}")
+                if approach.temporal:
+                    parts.append(f"temporal: {approach.temporal[:10]}...")
+                summary = ", ".join(parts) if parts else "no specific parameters"
+                logger.debug(f"  {i}. {summary}")
 
-                if self.debug:
-                    logger.debug(
-                        f"Generated {len(response.query_approaches)} query approaches",
-                    )
-                    for i, approach in enumerate(response.query_approaches, 1):
-                        parts = []
-                        if approach.instrument:
-                            parts.append(f"instrument: {approach.instrument}")
-                        if approach.platform:
-                            parts.append(f"platform: {approach.platform}")
-                        if approach.temporal:
-                            parts.append(f"temporal: {approach.temporal[:10]}...")
-                        summary = (
-                            ", ".join(parts) if parts else "no specific parameters"
-                        )
-                        logger.debug(f"  {i}. {summary}")
-
-                return response
-
-            except Exception as e:
-                if attempt == max_retries:
-                    error_msg = f"Failed to extract known parameters after {max_retries + 1} attempts: {e}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg) from e
-
-                # Check if it's a rate limit error
-                if "429" in str(e) or "rate" in str(e).lower():
-                    delay = base_delay * (2**attempt)
-                    if self.debug:
-                        logger.warning(
-                            f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})",
-                        )
-                    await asyncio.sleep(delay)
-                else:
-                    # Non-rate-limit error, don't retry
-                    error_msg = f"Failed to extract known parameters: {e}"
-                    logger.error(error_msg)
-                    raise RuntimeError(error_msg) from e
+        return response
 
     def _format_user_prompt(
         self,

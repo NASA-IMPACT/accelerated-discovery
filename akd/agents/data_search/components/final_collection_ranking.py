@@ -10,9 +10,9 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
+from akd.agents._base import BaseAgentConfig
 
-from ..utils.prompt_loader import load_prompt_template
+from ._base import BaseDataSearchComponent
 
 
 class FinalCollectionRankingInputSchema(InputSchema):
@@ -94,7 +94,7 @@ class FinalCollectionRankingOutput(BaseModel):
 
 
 class FinalCollectionRankingComponent(
-    InstructorBaseAgent[
+    BaseDataSearchComponent[
         FinalCollectionRankingInputSchema,
         FinalCollectionRankingOutput,
     ],
@@ -108,19 +108,14 @@ class FinalCollectionRankingComponent(
     input_schema = FinalCollectionRankingInputSchema
     output_schema = FinalCollectionRankingOutput
 
+    # Base class configuration
+    template_name = "final_ranking"
+    default_temperature = 0.0  # Consistent ranking
+    retry_enabled = False  # No retry for ranking components
+
     def __init__(self, config: BaseAgentConfig | None = None, debug: bool = False):
         """Initialize the final collection ranking component."""
-        if config is None:
-            config = BaseAgentConfig()
-
-        # Load and set system prompt in config
-        config.system_prompt = load_prompt_template("final_ranking_system")
-        self.user_prompt_template = load_prompt_template("final_ranking_user")
-
-        config.temperature = 0.0  # Consistent ranking
-
-        super().__init__(config=config, debug=debug)
-
+        super().__init__(config=config, debug=debug, template_name=self.template_name)
         logger.info("Final collection ranking component initialized")
 
     async def _arun(
@@ -158,7 +153,7 @@ class FinalCollectionRankingComponent(
 
             collections_summary.append(summary)
 
-        user_prompt = self.user_prompt_template.format(
+        user_prompt = self._format_user_prompt_from_template(
             original_query=params.original_query,
             topic_title=params.topic_title,
             topic_context=params.topic_context,
@@ -169,7 +164,7 @@ class FinalCollectionRankingComponent(
             max_collections=params.max_collections,
         )
 
-        self.messages = [{"role": "user", "content": user_prompt}]
+        self._set_messages(user_prompt)
         result = await self.get_response_async()
 
         logger.info(
