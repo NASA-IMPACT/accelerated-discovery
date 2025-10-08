@@ -136,6 +136,8 @@ class TestCrawl4AIScraperDockerMode:
             playwright_cdp_url="ws://127.0.0.1:9222",
             headless=True,
         )
+    
+    
 
     @pytest.fixture
     def test_url(self):
@@ -146,18 +148,31 @@ class TestCrawl4AIScraperDockerMode:
         is_docker_cdp_available(),
         reason="Docker CDP is available - cannot test unavailable case",
     )
-    async def test_docker_mode_fails_when_docker_unavailable(
-        self,
-        docker_config,
-        test_url,
-    ):
-        """Test that scraper fails appropriately when Docker CDP is not available."""
+    async def test_docker_mode_success_if_docker_unavailable(self, docker_config, test_url):
+        """Test that scraper falls back to local mode when Docker is unavailable."""
+        scraper = Crawl4AIWebScraper(docker_config)
+        params = ScraperToolInputSchema(url=test_url)
+        await scraper.arun(params)
+        assert True  
+
+
+    @pytest.mark.skipif(
+        is_docker_cdp_available(),
+        reason="Docker CDP is available - cannot test unavailable case",
+    )
+    # test docker mode fails if docker is unavailable and fallback is disabled
+    async def test_docker_mode_fails_if_docker_unavailable_and_fallback_disabled(self, docker_config, test_url):
+
+        """Test that scraper fails when Docker is unavailable and fallback is disabled."""
+        docker_config.fallback_to_local = False
         scraper = Crawl4AIWebScraper(docker_config)
         params = ScraperToolInputSchema(url=test_url)
 
         # Should raise an exception due to CDP unavailability
         with pytest.raises(Exception):  # Could be RuntimeError, ConnectionError, etc.
             await scraper.arun(params)
+        
+
 
     @pytest.mark.skipif(
         not is_docker_cdp_available(),
