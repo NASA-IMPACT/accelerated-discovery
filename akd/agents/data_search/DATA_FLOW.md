@@ -105,6 +105,10 @@ The data search system follows a two-layer architecture:
 
 ### Utility Components
 
+**File: `utils/prompt_loader.py`**
+- Loads and formats prompt templates from the `components/prompts/` directory
+- Provides helper functions for prompt template management
+
 **File: `utils/cmr_keywords_fetcher.py`**
 - Fetches and caches CMR metadata (instruments, platforms, science keywords)
 - Provides standardized interface to NASA's controlled vocabularies

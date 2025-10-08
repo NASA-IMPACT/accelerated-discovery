@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from akd._base import InputSchema
 from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
 
-from .prompt_loader import load_and_format_prompt, load_prompt_template
+from ..utils.prompt_loader import load_and_format_prompt, load_prompt_template
 from .scientific_decomposition import ScientificDecomposition
 from .topic_splitting import Topic
 
