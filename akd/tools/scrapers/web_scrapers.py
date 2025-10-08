@@ -1,10 +1,10 @@
 import re
-from typing import Literal
+from typing import List, Literal
 from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 from markdownify import markdownify
 from pydantic import ConfigDict, Field, computed_field
@@ -17,7 +17,7 @@ from ._base import (
     WebScraper,
     WebScraperToolConfig,
 )
-from markdownify import markdownify as md
+
 
 class SimpleWebScraper(WebScraper):
     """
@@ -253,19 +253,25 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
         description="Filter out header and footer elements from content.",
     )
 
-    excluded_tags : list = Field(
+    excluded_tags: List[str] = Field(
         default=[
-            "nav", "header", "footer", "aside", "script", "style", "noscript"
+            "nav",
+            "header",
+            "footer",
+            "aside",
+            "script",
+            "style",
+            "noscript",
         ],
         description="HTML tags to exclude from content extraction.",
     )
     excluded_selector: str = Field(
         default=".header, .footer, .nav, .navigation, .navbar, .sidebar, "
-                ".menu, .breadcrumb, .pagination, .ads, "
-                ".advertisement, .social, .share, .comments, "
-                ".related, .recommended, "
-                "#header, #footer, #nav, #navigation, #sidebar, #menu, "
-                "#ads, #advertisement, #comments, #social",
+        ".menu, .breadcrumb, .pagination, .ads, "
+        ".advertisement, .social, .share, .comments, "
+        ".related, .recommended, "
+        "#header, #footer, #nav, #navigation, #sidebar, #menu, "
+        "#ads, #advertisement, #comments, #social",
         description="CSS selectors to exclude from content extraction.",
     )
 
@@ -275,8 +281,6 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
             excluded_tags=self.excluded_tags if self.filter_header_footer else [],
             excluded_selector=self.excluded_selector if self.filter_header_footer else "",
         )
-    
-
 
 
 class Crawl4AIWebScraper(WebScraper):
@@ -397,8 +401,6 @@ class Crawl4AIWebScraper(WebScraper):
             return base_url
 
     async def fetch(self, url: str):
-
-       
         # Try Docker mode first if configured
         if self.use_docker:
             try:
@@ -406,8 +408,7 @@ class Crawl4AIWebScraper(WebScraper):
             except Exception as e:
                 if self.fallback_to_local:
                     logger.warning(
-                        f"Docker CDP connection failed: {e}. "
-                        f"Falling back to local Playwright.",
+                        f"Docker CDP connection failed: {e}. Falling back to local Playwright.",
                     )
                     return await self._fetch_with_local(url)
                 else:
@@ -448,16 +449,15 @@ class Crawl4AIWebScraper(WebScraper):
         async with AsyncWebCrawler(config=browser_config) as crawler:
             return await crawler.arun(url=url, config=self._run_config)
 
-
     async def _arun(self, params: ScraperToolInputSchema, **kwargs) -> ScraperToolOutputSchema:
         if params.url.path.endswith((".pdf", ".PDF")):
             raise RuntimeError(f"Can't parse url with PDF :: {params.url}")
 
         crawl_result = await self.fetch(str(params.url))
-        
+
         # Use Crawl4AI's built-in markdown
         markdown = crawl_result.markdown.strip()
-        
+
         # Use original HTML for metadata extraction
         soup = BeautifulSoup(crawl_result.html, "html.parser")
         metadata = await self._extract_metadata(soup, Document(crawl_result.html), str(params.url))
