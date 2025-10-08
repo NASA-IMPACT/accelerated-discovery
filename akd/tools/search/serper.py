@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import aiohttp
 from loguru import logger
@@ -42,8 +42,12 @@ class SerperSearchToolConfig(SearchToolConfig):
         description="Serper API key for authentication",
     )
     base_url: str = Field(
-        default="https://google.serper.dev/search",
-        description="Base URL for Serper API",
+        default="https://google.serper.dev",
+        description="Base URL for Serper API (without endpoint path)",
+    )
+    category: Literal["search", "scholar", "news", "images", "places"] = Field(
+        default=os.getenv("SERPER_CATEGORY", "scholar"),
+        description="Default Serper category/endpoint: 'search' (general Google), 'scholar' (Google Scholar), 'news', 'images', 'places'",
     )
     max_results: int = Field(
         default=int(os.getenv("SERPER_MAX_RESULTS", "10")),
@@ -124,49 +128,34 @@ class SerperSearchTool(SearchTool):
                 "SERPER_API_KEY environment variable must be set or provided in config",
             )
 
-    @classmethod
-    def from_params(
-        cls,
-        api_key: Optional[str] = None,
-        max_results: int = 10,
-        num_per_page: int = 10,
-        score_cutoff: float = 0.0,
-        gl: str = "us",
-        hl: str = "en",
-        autocorrect: bool = True,
-        max_pages: int = 5,
-        debug: bool = False,
-    ) -> SerperSearchTool:
+    def _get_search_endpoint(self, input_category: Optional[str] = None) -> str:
         """
-        Create SerperSearchTool from individual parameters.
+        Determine the Serper API endpoint based on input category or default category.
+
+        Input category mapping (from SearchToolInputSchema):
+        - "science" -> scholar (Google Scholar for academic papers)
+        - "general" -> search (general Google search)
+        - "technology" -> search (general Google search)
+        - None -> uses configured default category
 
         Args:
-            api_key: Serper API key (uses SERPER_API_KEY env if not provided)
-            max_results: Maximum number of results to return
-            num_per_page: Results per API call (max 100)
-            score_cutoff: Minimum score threshold
-            gl: Country code for localized results
-            hl: Language code
-            autocorrect: Enable query autocorrection
-            max_pages: Maximum pages to fetch per query
-            debug: Enable debug mode
+            input_category: Optional category from input parameters
 
         Returns:
-            SerperSearchTool instance
+            Full endpoint URL for Serper API
         """
-        api_key = api_key or os.getenv("SERPER_API_KEY", "")
-        config = SerperSearchToolConfig(
-            api_key=SecretStr(api_key),
-            max_results=max_results,
-            num_per_page=num_per_page,
-            score_cutoff=score_cutoff,
-            gl=gl,
-            hl=hl,
-            autocorrect=autocorrect,
-            max_pages=max_pages,
-            debug=debug,
-        )
-        return cls(config, debug)
+        # Map input category to Serper endpoint if provided
+        if input_category:
+            category_map = {
+                "science": "scholar",
+                "general": "search",
+                "technology": "search",
+            }
+            serper_category = category_map.get(input_category.lower(), self.category)
+        else:
+            serper_category = self.category
+
+        return f"{self.base_url}/{serper_category}"
 
     async def _fetch_serper_results(
         self,
@@ -181,7 +170,7 @@ class SerperSearchTool(SearchTool):
         Args:
             session: The aiohttp session to use for the request
             query: The search query string
-            category: Optional category filter (mapped to Serper parameters)
+            category: Optional category filter (mapped to Serper endpoint)
             page: Page number (1-indexed)
 
         Returns:
@@ -190,6 +179,9 @@ class SerperSearchTool(SearchTool):
         Raises:
             Exception: If the API request fails
         """
+        # Get the appropriate endpoint based on category
+        endpoint = self._get_search_endpoint(category)
+
         # Build request payload
         payload = {
             "q": query,
@@ -200,13 +192,6 @@ class SerperSearchTool(SearchTool):
             "autocorrect": self.autocorrect,
         }
 
-        # Map category to Serper search type if needed
-        # Serper supports: search, news, images, videos, places, shopping
-        if category and category.lower() == "science":
-            # For scientific queries, we can add academic-focused terms
-            # or use regular search (Serper doesn't have dedicated academic search)
-            pass
-
         headers = {
             "X-API-KEY": self.api_key.get_secret_value(),
             "Content-Type": "application/json",
@@ -214,12 +199,12 @@ class SerperSearchTool(SearchTool):
 
         if self.debug:
             logger.debug(
-                f"Fetching Serper results for query '{query}'. Page: {page}, Num: {self.num_per_page}",
+                f"Fetching Serper results from {endpoint} for query '{query}'. Page: {page}, Num: {self.num_per_page}",
             )
 
         try:
             async with session.post(
-                self.base_url,
+                endpoint,
                 json=payload,
                 headers=headers,
             ) as response:
@@ -234,7 +219,13 @@ class SerperSearchTool(SearchTool):
                     )
 
                 data = await response.json()
-                results = data.get("organic", [])
+
+                # Results key varies by endpoint:
+                # - /search: "organic"
+                # - /scholar: "organic"
+                # - /news: "news"
+                # - /images: "images"
+                results = data.get("organic", data.get("news", data.get("images", [])))
 
                 # Add query and category to each result for consistency with SearxNG
                 for result in results:
@@ -440,6 +431,7 @@ class SerperSearchTool(SearchTool):
                 logger.info(f"  {i}. '{query}'")
             logger.info(f"🎯 Target results per query: {target_results_per_query}")
             logger.info(f"📂 Category: {params.category}")
+            logger.info(f"🔬 Search type: {self._get_search_endpoint(params.category)}")
 
         async with aiohttp.ClientSession() as session:
             tasks = [
