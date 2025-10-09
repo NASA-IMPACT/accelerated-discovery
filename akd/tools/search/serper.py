@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import List, Literal, Optional
+from typing import List, Literal
 from urllib.parse import urljoin
 
 import httpx
@@ -85,6 +85,11 @@ class SerperSearchToolConfig(SearchToolConfig):
         le=10,
         description="Maximum number of pages to fetch per query",
     )
+
+    pre_authenticate: bool = Field(
+        default=True,
+        description="Whether to validate serper connection on initialization, which will gulp 1 credit. Disable to save credits if needed.",
+    )
     debug: bool = Field(
         default=False,
         description="Whether to enable debug mode",
@@ -107,6 +112,12 @@ class SerperSearchTool(SearchTool):
     input_schema = SerperSearchToolInputSchema
     output_schema = SerperSearchToolOutputSchema
     config_schema = SerperSearchToolConfig
+
+    _category_map = {
+        "science": "scholar",
+        "general": "search",
+        "technology": "search",
+    }
 
     def __init__(
         self,
@@ -161,9 +172,20 @@ class SerperSearchTool(SearchTool):
     def _post_init(self) -> None:
         """Post-initialization hook to validate API connection."""
         super()._post_init()
-        self._validate_connection()
+        if self.pre_authenticate:
+            self._validate_connection()
 
-    def _get_search_endpoint(self, input_category: Optional[str] = None) -> str:
+    @property
+    def headers(self) -> dict:
+        """
+        Returns the headers to include in API requests.
+        """
+        return {
+            "X-API-KEY": self.api_key.get_secret_value(),
+            "Content-Type": "application/json",
+        }
+
+    def _get_search_endpoint(self, category: str) -> str:
         """
         Determine the Serper API endpoint based on input category or default category.
 
@@ -180,23 +202,15 @@ class SerperSearchTool(SearchTool):
             Full endpoint URL for Serper API
         """
         # Map input category to Serper endpoint if provided
-        if input_category:
-            category_map = {
-                "science": "scholar",
-                "general": "search",
-                "technology": "search",
-            }
-            serper_category = category_map.get(input_category.lower(), self.category)
-        else:
-            serper_category = self.category
-
+        category = category or self.category or ""
+        serper_category = self._category_map.get(category.lower(), self.category)
         return urljoin(str(self.base_url), serper_category)
 
     async def _fetch_serper_results(
         self,
         client: httpx.AsyncClient,
         query: str,
-        category: Optional[str] = None,
+        category: str | None = None,
         page: int = 1,
     ) -> List[dict]:
         """
@@ -227,11 +241,6 @@ class SerperSearchTool(SearchTool):
             "autocorrect": self.autocorrect,
         }
 
-        headers = {
-            "X-API-KEY": self.api_key.get_secret_value(),
-            "Content-Type": "application/json",
-        }
-
         if self.debug:
             logger.debug(
                 f"Fetching Serper results from {endpoint} for query '{query}'. Page: {page}, Num: {self.num_per_page}",
@@ -241,7 +250,7 @@ class SerperSearchTool(SearchTool):
             response = await client.post(
                 endpoint,
                 json=payload,
-                headers=headers,
+                headers=self.headers,
             )
 
             if response.status_code != 200:
@@ -317,8 +326,8 @@ class SerperSearchTool(SearchTool):
 
     async def _process_results(
         self,
-        results: List[dict],
-    ) -> List[dict]:
+        results: list[dict],
+    ) -> list[dict]:
         """
         Process and filter search results.
 
@@ -334,8 +343,7 @@ class SerperSearchTool(SearchTool):
         """
         # Add scores if not present
         for i, result in enumerate(results):
-            if "score" not in result:
-                result["score"] = self._calculate_score(result, i)
+            result["score"] = result.get("score", self._calculate_score(result, i))
 
         # Filter by score cutoff
         n_orig = len(results)
@@ -368,9 +376,9 @@ class SerperSearchTool(SearchTool):
         self,
         client: httpx.AsyncClient,
         query: str,
-        category: Optional[str],
+        category: str | None,
         target_results: int,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """
         Fetches search results across multiple pages to reach target number.
 
@@ -430,7 +438,7 @@ class SerperSearchTool(SearchTool):
     async def _arun(
         self,
         params: SerperSearchToolInputSchema,
-        max_results: Optional[int] = None,
+        max_results: int | None = None,
         **kwargs,
     ) -> SerperSearchToolOutputSchema:
         """
@@ -452,6 +460,7 @@ class SerperSearchTool(SearchTool):
             Exception: If API requests fail
         """
         max_results = max_results or params.max_results or self.max_results
+        category = params.category or self.category
 
         # Calculate target results per query (with multiplier for filtering)
         multiplier = 1.5
@@ -466,15 +475,15 @@ class SerperSearchTool(SearchTool):
             for i, query in enumerate(params.queries, 1):
                 logger.info(f"  {i}. '{query}'")
             logger.info(f"🎯 Target results per query: {target_results_per_query}")
-            logger.info(f"📂 Category: {params.category}")
-            logger.info(f"🔬 Search type: {self._get_search_endpoint(params.category)}")
+            logger.info(f"📂 Category: {category}")
+            logger.info(f"🔬 Search type: {self._get_search_endpoint(category)}")
 
         async with httpx.AsyncClient() as client:
             tasks = [
                 self._fetch_serper_results_paginated(
                     client,
                     query,
-                    params.category,
+                    category,
                     target_results_per_query,
                 )
                 for query in params.queries
@@ -492,19 +501,15 @@ class SerperSearchTool(SearchTool):
         # Transform to SearchResultItem format
         search_results = [
             SearchResultItem(
-                url=result.get("link"),
-                title=result.get("title") or "Untitled",
-                content=result.get("snippet", ""),
-                query=result.get("query") or "Unknown query",
-                category=result.get("category"),
-                published_date=result.get("date"),
+                url=result.pop("link", None),
+                title=result.pop("title", "Untitled"),
+                content=result.pop("snippet", ""),
+                query=result.pop("query", "Unknown query"),
+                category=result.pop("category", None),
+                published_date=result.pop("date", None),
                 engine="serper",
-                score=result.get("score"),
-                extra={
-                    k: v
-                    for k, v in result.items()
-                    if k not in ["link", "title", "snippet", "query", "category", "date", "score"]
-                },
+                score=result.pop("score", 0.0),
+                extra=result,  # Any remaining fields
             )
             for result in filtered_results
         ]
