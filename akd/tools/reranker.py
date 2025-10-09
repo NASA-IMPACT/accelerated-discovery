@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
@@ -18,6 +16,11 @@ class RerankerToolConfig(BaseToolConfig):
     This can be extended by specific reranker tool configurations.
     """
 
+    use_deduplication: bool = Field(default=True, description="Whether to use deduplication of results.")
+    model_name: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L12-v2", description="The name of the reranker model to use."
+    )
+
 
 class RerankerToolInputSchema(InputSchema):
     """
@@ -25,14 +28,14 @@ class RerankerToolInputSchema(InputSchema):
     """
 
     query: str = Field(..., description="Reranking query.")
-    results: List[SearchResultItem] = Field(..., description="List of search results to rerank.")
+    results: list[SearchResultItem] = Field(..., description="List of search results to rerank.")
 
 
 class RerankerToolOutputSchema(OutputSchema):
     """Schema for output of a tool for reranking search results."""
 
     query: str = Field(..., description="Reranking query.")
-    results: List[SearchResultItem] = Field(..., description="List of search results to rerank.")
+    results: list[SearchResultItem] = Field(..., description="List of search results to rerank.")
 
 
 class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
@@ -99,21 +102,11 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
             return results
 
     # abstract method to be implemented by the subclass
-    def _rerank_results(self, query: str, results: List[SearchResultItem]) -> List[SearchResultItem]:
+    def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
         raise NotImplementedError("Subclass must implement this method")
 
     def _arun(self, params: RerankerToolInputSchema) -> RerankerToolOutputSchema:
         return self._rerank_results(params.query, params.results)
-
-
-class CrossEncoderRerankerToolConfig(RerankerToolConfig):
-    """
-    Configuration for the cross-encoder reranker tool.
-    """
-
-    model_name: str = Field(
-        default="cross-encoder/ms-marco-MiniLM-L12-v2", description="The name of the cross-encoder model to use."
-    )
 
 
 class CrossEncoderRerankerTool(RerankerTool):
@@ -121,14 +114,15 @@ class CrossEncoderRerankerTool(RerankerTool):
     Tool for performing reranking of search results using a cross-encoder model.
     """
 
-    def __init__(self, config: CrossEncoderRerankerToolConfig | None = None, debug: bool = False):
+    def __init__(self, config: RerankerToolConfig | None = None, debug: bool = False):
         super().__init__(config=config, debug=debug)
-        self.reranker_model = CrossEncoder(config.model_name)
+        self.reranker_model = CrossEncoder(self.config.model_name)
         self.debug = debug
 
-    def _rerank_results(self, query: str, results: List[SearchResultItem]) -> List[SearchResultItem]:
+    def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
         # deduplicate results
-        results = self._deduplicate_results(results, key="url")
+        if self.config.use_deduplication:
+            results = self._deduplicate_results(results, key="url")
 
         pairs = [(query, result.content) for result in results]
 

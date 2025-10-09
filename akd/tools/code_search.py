@@ -14,7 +14,6 @@ from pydantic import ValidationError, computed_field, Field
 from pydantic.networks import HttpUrl
 from scipy.spatial.distance import cdist
 from tenacity import retry, stop_after_attempt
-from sentence_transformers import CrossEncoder
 
 from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
@@ -27,7 +26,7 @@ from akd.tools.search import (
     SearxNGSearchToolConfig,
 )
 from akd.utils import get_akd_root, google_drive_downloader
-from akd.tools.reranker import CrossEncoderRerankerTool, CrossEncoderRerankerToolConfig
+from akd.tools.reranker import CrossEncoderRerankerTool, RerankerToolConfig
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
@@ -198,7 +197,7 @@ class CombinedCodeSearchTool(CodeSearchTool):
         # initialize reranker tool
         if config.reranker_tool == "cross-encoder":
             self.reranker_tool = CrossEncoderRerankerTool(
-                config=CrossEncoderRerankerToolConfig(model_name=config.cross_encoder_model_name),
+                config=RerankerToolConfig(model_name=config.cross_encoder_model_name),
                 debug=debug,
             )
         else:
