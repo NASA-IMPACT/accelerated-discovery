@@ -26,9 +26,6 @@ from akd.agents.data_search.components import (
     SearchableQuery,
     Topic,
 )
-from akd.agents.data_search.components.collection_ranking import (
-    CollectionRankingInputSchema,
-)
 from akd.agents.data_search.components.known_parameters import QueryApproach
 from akd.configs.data_search_config import get_config
 
@@ -233,16 +230,6 @@ class WorkflowLoader:
             )
             return inputs
 
-        elif component_name == "collection_ranking":
-            inputs["topic"] = self.get_topic(topic_idx)
-            inputs["decomposition"] = self.get_decomposition(topic_idx, decomp_idx)
-            inputs["collections"] = self.get_component_outputs(
-                "collection_search",
-                topic_idx,
-                decomp_idx,
-            )
-            return inputs
-
         else:
             raise ValueError(f"Unknown component: {component_name}")
 
@@ -306,10 +293,6 @@ class WorkflowLoader:
         elif component_name == "collection_search":
             decomp_data = self.data["topics"][topic_idx]["decompositions"][decomp_idx]
             return decomp_data.get("collections_raw", [])
-
-        elif component_name == "collection_ranking":
-            decomp_data = self.data["topics"][topic_idx]["decompositions"][decomp_idx]
-            return decomp_data.get("collections_ranked", [])
 
         elif component_name == "granule_search":
             decomp_data = self.data["topics"][topic_idx]["decompositions"][decomp_idx]
@@ -398,35 +381,6 @@ class WorkflowLoader:
                 query_approaches,
             )
             print(f"✅ Generated {len(result.searchable_queries)} searchable queries")
-            return result
-
-        elif component_name == "collection_ranking":
-            topic = self.get_topic(topic_idx)
-            decomposition = self.get_decomposition(topic_idx, decomp_idx)
-            collections = self.get_component_outputs(
-                "collection_search",
-                topic_idx,
-                decomp_idx,
-            )
-
-            if not collections:
-                print("❌ No collections available for ranking")
-                return None
-
-            print(f"🔍 Input: {len(collections)} collections to rank")
-
-            ranking_input = CollectionRankingInputSchema(
-                original_query=self.query,
-                topic_title=topic.title,
-                topic_context=topic.functional_context,
-                decomposition_title=decomposition.title,
-                decomposition_justification=decomposition.scientific_justification,
-                collections=collections,
-                max_collections=self.agent.config.max_collections_to_search,
-            )
-
-            result = await self.agent.collection_ranking_component.arun(ranking_input)
-            print(f"✅ Ranked {len(result.ranked_collections)} collections")
             return result
 
         else:

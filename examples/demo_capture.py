@@ -28,9 +28,6 @@ from timing_collector import TimingCollector
 
 from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
 from akd.agents.data_search.components import ScientificDecomposition, Topic
-from akd.agents.data_search.components.collection_ranking import (
-    CollectionRankingInputSchema,
-)
 from akd.agents.data_search.components.repository_router import NASARepositoryEnum
 from akd.configs.data_search_config import get_config
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
@@ -47,7 +44,6 @@ MODEL_CONFIG = {
     "topic_splitting": "gpt-5-mini",
     "scientific_decomposition": "gpt-5-mini",
     "repository_routing": "gpt-5-mini",
-    "collection_ranking": "gpt-5-mini",
     "cmr_query": "gpt-5-mini",
 }
 
@@ -73,10 +69,7 @@ agent_config = CMRDataSearchAgentConfig(
     topic_splitting_model=MODEL_CONFIG["topic_splitting"],
     scientific_decomposition_model=MODEL_CONFIG["scientific_decomposition"],
     repository_routing_model=MODEL_CONFIG["repository_routing"],
-    collection_ranking_model=MODEL_CONFIG["collection_ranking"],
     cmr_query_model=MODEL_CONFIG["cmr_query"],
-    # Legacy compatibility
-    angle_generation_model=MODEL_CONFIG["topic_splitting"],
 )
 
 # Initialize the agent
@@ -204,63 +197,12 @@ async def capture_single_path(
         path_data["collections_raw"] = collections
         print(f"          ✅ Found {len(collections)} total collections")
 
-        # Collection Ranking (if needed)
-        ranked_collections = collections
+        # Limit collections to max search limit (no LLM-based ranking in demo)
+        ranked_collections = collections[: agent.config.max_collections_to_search]
         if len(collections) > agent.config.max_collections_to_search:
-            print("        🔍 Collection Ranking...")
-
-            async with timing_collector.measure("collection_ranking") as timer:
-                # Extract approach fields for ranking
-                approach_instruments = []
-                approach_platforms = []
-                approach_keywords = []
-
-                for approach in known_params_output.query_approaches:
-                    if hasattr(approach, "instrument") and approach.instrument:
-                        approach_instruments.append(approach.instrument)
-                    if hasattr(approach, "platform") and approach.platform:
-                        approach_platforms.append(approach.platform)
-
-                for query_obj in searchable_output.searchable_queries:
-                    if (
-                        hasattr(query_obj, "primary_keywords")
-                        and query_obj.primary_keywords
-                    ):
-                        approach_keywords.extend(query_obj.primary_keywords)
-
-                # Remove duplicates
-                approach_instruments = list(dict.fromkeys(approach_instruments))
-                approach_platforms = list(dict.fromkeys(approach_platforms))
-                approach_keywords = list(dict.fromkeys(approach_keywords))
-
-                ranking_input = CollectionRankingInputSchema(
-                    original_query=query,
-                    topic_title=topic.title,
-                    topic_context=topic.functional_context,
-                    decomposition_title=decomposition.title,
-                    decomposition_justification=decomposition.scientific_justification,
-                    approach_instruments=approach_instruments,
-                    approach_platforms=approach_platforms,
-                    approach_keywords=approach_keywords,
-                    collections=collections,
-                    max_collections=agent.config.max_collections_to_search,
-                )
-
-                ranking_result = await agent.collection_ranking_component.arun(
-                    ranking_input,
-                )
-
-                timer.add_metadata(
-                    collections_to_rank=len(collections),
-                    collections_after_ranking=len(ranking_result.ranked_collections),
-                    ranking_enabled=True,
-                )
-            ranked_collections = [
-                collections[rc.collection_index]
-                for rc in ranking_result.ranked_collections
-                if 0 <= rc.collection_index < len(collections)
-            ]
-            print(f"          ✅ Ranked to {len(ranked_collections)} top collections")
+            print(
+                f"          ℹ️  Truncated to {len(ranked_collections)} collections (no ranking in demo)",
+            )
 
         path_data["collections_ranked"] = ranked_collections
 
@@ -580,11 +522,9 @@ async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> st
         topic_splitting_model="gpt-5-nano",
         scientific_decomposition_model="gpt-5-nano",
         repository_routing_model="gpt-5-nano",
-        collection_ranking_model="gpt-5-nano",
         cmr_query_model="gpt-5-nano",
         approach_filtering_model="gpt-5-nano",
         final_ranking_model="gpt-5-nano",
-        angle_generation_model="gpt-5-nano",
     )
 
     # Create fast agent

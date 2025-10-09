@@ -114,40 +114,9 @@ class DecompositionResult(BaseModel):
     )
 
 
-# Legacy Schema (for backward compatibility)
-class AngleSearchResult(BaseModel):
-    """Complete search result for a single scientific angle."""
-
-    scientific_angle: Dict[str, Any] = Field(
-        ...,
-        description="The scientific angle that generated this result",
-    )
-    cmr_queries: List[Dict[str, Any]] = Field(
-        ...,
-        description="CMR queries generated for this angle",
-    )
-    collections: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Deduplicated and ranked collections for this angle",
-    )
-    granules: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Data granules/files found for this angle",
-    )
-    total_collections_found: int = Field(
-        default=0,
-        description="Total collections found before deduplication/ranking",
-    )
-    total_granules_found: int = Field(
-        default=0,
-        description="Total granules found for this angle",
-    )
-
-
 class DataSearchAgentOutputSchema(OutputSchema):
     """Base output schema for data search agents."""
 
-    # New workflow structure
     topics: List[TopicResult] = Field(
         default_factory=list,
         description="Search results organized by topic and decomposition",
@@ -156,20 +125,6 @@ class DataSearchAgentOutputSchema(OutputSchema):
     total_results: int = Field(
         ...,
         description="Total number of results found across all topics",
-    )
-
-    # Legacy structure for backward compatibility during transition
-    angles: List[AngleSearchResult] = Field(
-        default_factory=list,
-        description="Search results organized by scientific angle (legacy)",
-    )
-    granules: List[dict] = Field(
-        default_factory=list,
-        description="Flattened list of all granules (for backward compatibility)",
-    )
-    collections_searched: List[dict] = Field(
-        default_factory=list,
-        description="Flattened list of all collections (for backward compatibility)",
     )
 
 

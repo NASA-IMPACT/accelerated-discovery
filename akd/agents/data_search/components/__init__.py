@@ -5,7 +5,6 @@ from ._base import BaseDataSearchComponent
 
 # New workflow components
 from .approach_collection_filtering import ApproachCollectionFilteringComponent
-from .collection_ranking import CollectionRankingComponent
 from .final_collection_ranking import FinalCollectionRankingComponent
 from .known_parameters import KnownParametersComponent, QueryApproach
 from .repository_router import RepositoryRouterComponent
@@ -31,5 +30,4 @@ __all__ = [
     "SearchableQuery",
     "ApproachCollectionFilteringComponent",
     "FinalCollectionRankingComponent",
-    "CollectionRankingComponent",
 ]

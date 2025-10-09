@@ -8,16 +8,14 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, List
 
-# Temporary compatibility class for legacy methods
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import Field, HttpUrl
 
 from akd.agents._base import BaseAgentConfig
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
 from akd.utils.logging import ContextualLogger, log_component_action, log_search_event
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
-from ._base import (  # New workflow schemas; Base schemas; Legacy schemas
-    AngleSearchResult,
+from ._base import (
     BaseDataSearchAgent,
     CollectionSynthesisResult,
     DataSearchAgentConfig,
@@ -27,7 +25,7 @@ from ._base import (  # New workflow schemas; Base schemas; Legacy schemas
     GranuleSynthesisResult,
     TopicResult,
 )
-from .components import (  # New workflow components
+from .components import (
     KnownParametersComponent,
     RepositoryRouterComponent,
     ScientificDecomposition,
@@ -37,18 +35,7 @@ from .components import (  # New workflow components
     Topic,
     TopicSplittingComponent,
 )
-from .components.collection_ranking import (
-    CollectionRankingComponent,
-    CollectionRankingInputSchema,
-)
 from .components.repository_router import NASARepositoryEnum
-
-
-class ScientificAngle(BaseModel):
-    """Legacy compatibility class - not used in new workflow."""
-
-    title: str = Field(..., description="Title of the scientific angle")
-    scientific_justification: str = Field(..., description="Scientific justification")
 
 
 class CMRDataSearchAgentConfig(DataSearchAgentConfig):
@@ -130,12 +117,6 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
         description="Model to use for final cross-approach ranking",
     )
 
-    # Legacy compatibility
-    angle_generation_model: str = Field(
-        default="gpt-4o",
-        description="Legacy parameter - now maps to topic_splitting_model for backward compatibility",
-    )
-
 
 class CMRDataSearchAgent(BaseDataSearchAgent):
     """
@@ -207,9 +188,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         searchable_params_config = BaseAgentConfig(
             model_name=self.config.cmr_query_model,
         )
-        ranking_config = BaseAgentConfig(
-            model_name=self.config.collection_ranking_model,
-        )
 
         # New workflow components
         self.topic_splitting_component = TopicSplittingComponent(
@@ -230,10 +208,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         )
         self.searchable_parameters_component = SearchableParametersComponent(
             config=searchable_params_config,
-            debug=debug,
-        )
-        self.collection_ranking_component = CollectionRankingComponent(
-            config=ranking_config,
             debug=debug,
         )
 
@@ -492,10 +466,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
                 topics=topic_results,
                 search_metadata=search_metadata,
                 total_results=total_granules,
-                # Empty legacy fields for schema compatibility
-                angles=[],
-                granules=[],
-                collections_searched=[],
             )
 
             await self._emit_progress_safely(
@@ -1154,24 +1124,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
 
         return search_params
 
-    def _create_legacy_query_params(
-        self,
-        original_query: str,
-        angles: List[ScientificAngle],
-    ) -> Dict[str, Any]:
-        """Create legacy query params for backward compatibility with synthesis components."""
-        return {
-            "query": original_query,
-            "keywords": [angle.title for angle in angles],
-            "data_type_indicators": [],
-            "platforms": [],
-            "instruments": [],
-            "temporal_start": None,
-            "temporal_end": None,
-            "spatial_bounds": None,
-            "search_variations": [],
-        }
-
     async def _execute_collection_search(self, search_params, search_id: str):
         """Execute a single collection search."""
         log_component_action(
@@ -1181,141 +1133,6 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
         )
 
         return await self.collection_search_tool.arun(search_params)
-
-    def _deduplicate_collections_within_angle(
-        self,
-        collections: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
-        """
-        Deduplicate collections within a single angle based on concept_id.
-
-        Args:
-            collections: List of collection dictionaries
-
-        Returns:
-            Deduplicated list of collections, preserving order of first occurrence
-        """
-        seen_concept_ids = set()
-        deduplicated = []
-
-        for collection in collections:
-            concept_id = collection.get("concept_id")
-            if concept_id and concept_id not in seen_concept_ids:
-                seen_concept_ids.add(concept_id)
-                deduplicated.append(collection)
-            elif not concept_id:
-                # Include collections without concept_id (shouldn't happen but be safe)
-                deduplicated.append(collection)
-
-        return deduplicated
-
-    async def _process_single_angle(
-        self,
-        angle: ScientificAngle,
-        original_query: str,
-        params: DataSearchAgentInputSchema,
-    ) -> AngleSearchResult:
-        """
-        Process a single scientific angle through the complete pipeline.
-
-        Args:
-            angle: Scientific angle to process
-            original_query: Original user query
-            params: Search parameters
-
-        Returns:
-            Complete search result for this angle
-        """
-        search_logger = ContextualLogger("angle_processing")
-        search_logger.info(f"Processing angle: {angle.title}")
-
-        # Step 3a: Generate CMR queries for this angle
-        cmr_queries_output = await self.cmr_query_generation_component.process(
-            angle,
-            original_query,
-        )
-        cmr_queries = cmr_queries_output.search_queries
-
-        # Step 3b: Execute collection searches for this angle's queries
-        collection_results = await self._search_collections_with_cmr_queries(
-            cmr_queries,
-            params,
-        )
-
-        # Step 3c: Extract and deduplicate collections for this angle
-        angle_collections = []
-        for result_dict in collection_results:
-            if isinstance(result_dict, dict) and "collections" in result_dict:
-                collections = result_dict["collections"]
-                if isinstance(collections, list):
-                    angle_collections.extend(collections)
-
-        # Deduplicate within this angle
-        deduplicated_collections = self._deduplicate_collections_within_angle(
-            angle_collections,
-        )
-        total_collections_found = len(angle_collections)
-
-        search_logger.info(
-            f"Found {total_collections_found} collections, {len(deduplicated_collections)} after deduplication",
-        )
-
-        # Step 3d: Rank collections for this angle (limit to top collections)
-        ranked_collections = deduplicated_collections
-        if len(deduplicated_collections) > self.config.max_collections_to_search:
-            # Use collection ranking component to select best collections
-
-            ranking_input = CollectionRankingInputSchema(
-                original_query=original_query,
-                scientific_angle=safe_model_dump(angle),
-                collections=deduplicated_collections,
-                max_collections=self.config.max_collections_to_search,
-            )
-
-            ranking_result = await self.collection_ranking_component.arun(ranking_input)
-            ranked_collections = [
-                deduplicated_collections[rc.collection_index]
-                for rc in ranking_result.ranked_collections
-                if 0 <= rc.collection_index < len(deduplicated_collections)
-            ]
-
-        search_logger.info(
-            f"Selected {len(ranked_collections)} collections for granule search",
-        )
-
-        # Step 3e: Search granules for this angle's collections
-        granule_results = []
-        if ranked_collections:
-            # Build legacy query params for granule search
-            legacy_query_params = self._create_legacy_query_params(
-                original_query,
-                [angle],
-            )
-            granule_results = await self._search_granules(
-                ranked_collections,
-                legacy_query_params,
-                params,
-            )
-
-        # Step 3f: Process granules for this angle
-        angle_granules = []
-        for result_dict in granule_results:
-            if isinstance(result_dict, dict) and "granules" in result_dict:
-                granules = result_dict["granules"]
-                if isinstance(granules, list):
-                    angle_granules.extend(granules)
-
-        search_logger.info(f"Found {len(angle_granules)} granules for angle")
-
-        # Return complete angle result
-        return AngleSearchResult(
-            scientific_angle=safe_model_dump(angle),
-            cmr_queries=safe_model_dump_list(cmr_queries),
-            collections=ranked_collections,
-            granules=angle_granules,
-            total_collections_found=total_collections_found,
-            total_granules_found=len(angle_granules),
-        )
 
     async def _synthesize_collections(
         self,
@@ -1477,8 +1294,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
     ) -> DataSearchAgentOutputSchema:
         """Create empty response with explanation."""
         return DataSearchAgentOutputSchema(
-            angles=[],  # Required field in new schema
-            granules=[],
+            topics=[],
             search_metadata={
                 "original_query": query,
                 "status": "no_results",
@@ -1496,8 +1312,7 @@ class CMRDataSearchAgent(BaseDataSearchAgent):
     ) -> DataSearchAgentOutputSchema:
         """Create error response."""
         return DataSearchAgentOutputSchema(
-            angles=[],  # Required field in new schema
-            granules=[],
+            topics=[],
             search_metadata={
                 "original_query": query,
                 "status": "error",

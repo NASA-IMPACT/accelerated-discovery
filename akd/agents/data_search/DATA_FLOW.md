@@ -105,9 +105,8 @@ All components inherit from **BaseDataSearchComponent** which provides:
 3. **ScientificDecompositionComponent** (`scientific_decomposition.py`)
 4. **KnownParametersComponent** (`known_parameters.py`)
 5. **SearchableParametersComponent** (`searchable_parameters.py`)
-6. **ApproachCollectionFilteringComponent** (`approach_collection_filtering.py`) - NEW
-7. **FinalCollectionRankingComponent** (`final_collection_ranking.py`) - NEW
-8. **CollectionRankingComponent** (`collection_ranking.py`) - Legacy (angles workflow)
+6. **ApproachCollectionFilteringComponent** (`approach_collection_filtering.py`)
+7. **FinalCollectionRankingComponent** (`final_collection_ranking.py`)
 
 ### Base Component Architecture
 
@@ -736,9 +735,9 @@ async def _execute_with_retry(self, operation_name: str, custom_error_prefix: Op
                 raise RuntimeError(f"{error_prefix}: {e}")
 ```
 
-**Components with retry enabled**: TopicSplitting, RepositoryRouter, ScientificDecomposition, KnownParameters, SearchableParameters (5 of 8)
+**Components with retry enabled**: TopicSplitting, RepositoryRouter, ScientificDecomposition, KnownParameters, SearchableParameters (5 of 7)
 
-**Components with retry disabled**: ApproachCollectionFiltering, FinalCollectionRanking, CollectionRanking (3 ranking components)
+**Components with retry disabled**: ApproachCollectionFiltering, FinalCollectionRanking (2 ranking components)
 
 ### Agent-Level Error Handling
 **Location**: `akd/agents/data_search/cmr_data_search.py:418`

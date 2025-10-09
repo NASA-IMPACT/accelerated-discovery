@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from akd.agents._base import BaseAgentConfig
 from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
 from akd.agents.data_search.components import (
-    CollectionRankingComponent,
     KnownParametersComponent,
     RepositoryRouterComponent,
     ScientificDecomposition,
@@ -33,7 +32,6 @@ MODEL_CONFIG = {
     "topic_splitting": "gpt-5-mini",
     "scientific_decomposition": "gpt-5-mini",
     "repository_routing": "gpt-5-mini",
-    "collection_ranking": "gpt-5-mini",
     "cmr_query": "gpt-5-mini",
 }
 
@@ -59,10 +57,7 @@ agent_config = CMRDataSearchAgentConfig(
     topic_splitting_model=MODEL_CONFIG["topic_splitting"],
     scientific_decomposition_model=MODEL_CONFIG["scientific_decomposition"],
     repository_routing_model=MODEL_CONFIG["repository_routing"],
-    collection_ranking_model=MODEL_CONFIG["collection_ranking"],
     cmr_query_model=MODEL_CONFIG["cmr_query"],
-    # Legacy compatibility
-    angle_generation_model=MODEL_CONFIG["topic_splitting"],
 )
 
 # Initialize the agent with our configured models
@@ -72,7 +67,6 @@ print("\n🤖 Agent initialized with component-specific models:")
 print(f"   • Topic Splitting: {agent_config.topic_splitting_model}")
 print(f"   • Scientific Decomposition: {agent_config.scientific_decomposition_model}")
 print(f"   • Repository Routing: {agent_config.repository_routing_model}")
-print(f"   • Collection Ranking: {agent_config.collection_ranking_model}")
 print(f"   • CMR Query Generation: {agent_config.cmr_query_model}")
 
 
@@ -290,68 +284,6 @@ async def test_searchable_parameters_only(
     return searchable_output.searchable_queries
 
 
-async def test_collection_ranking_only():
-    """Test only the collection ranking component with mock data."""
-    print("\n🧪 TESTING COLLECTION RANKING ONLY")
-
-    # Mock collections data for testing
-    mock_collections = [
-        {
-            "concept_id": "C1234567890-LAADS",
-            "title": "MODIS Terra Land Surface Temperature",
-            "abstract": "Daily land surface temperature data from MODIS Terra satellite",
-            "dataset_id": "MOD11A1",
-        },
-        {
-            "concept_id": "C9876543210-LAADS",
-            "title": "MODIS Aqua Land Surface Temperature",
-            "abstract": "Daily land surface temperature data from MODIS Aqua satellite",
-            "dataset_id": "MYD11A1",
-        },
-        {
-            "concept_id": "C5555555555-LPCLOUD",
-            "title": "Landsat 8 Surface Temperature",
-            "abstract": "Surface temperature from Landsat 8 thermal infrared sensor",
-            "dataset_id": "LANDSAT_8_C1",
-        },
-    ]
-
-    mock_scientific_angle = {
-        "title": "Land Surface Temperature",
-        "scientific_justification": "Direct measurement of surface heating for climate studies",
-    }
-
-    # Initialize component
-    config = BaseAgentConfig(model_name=MODEL_CONFIG["collection_ranking"])
-    component = CollectionRankingComponent(config=config, debug=True)
-
-    # Test collection ranking
-    print("\n6️⃣ Collection Ranking:")
-    from akd.agents.data_search.components.collection_ranking import (
-        CollectionRankingInputSchema,
-    )
-
-    ranking_input = CollectionRankingInputSchema(
-        original_query="Find land surface temperature data for climate studies",
-        scientific_angle=mock_scientific_angle,
-        collections=mock_collections,
-        max_collections=2,
-    )
-
-    ranking_result = await component.arun(ranking_input)
-
-    print(f"   ✅ Ranked {len(ranking_result.ranked_collections)} collections:")
-    print(f"   📋 Summary: {ranking_result.ranking_summary}")
-
-    for i, ranked_col in enumerate(ranking_result.ranked_collections, 1):
-        original_collection = mock_collections[ranked_col.collection_index]
-        print(
-            f"\n   {i}. {original_collection['dataset_id']} - {original_collection['title']}",
-        )
-        print(f"      Relevance Score: {ranked_col.relevance_score:.2f}")
-        print(f"      Reasoning: {ranked_col.ranking_reasoning}")
-
-
 # =============================================================================
 # ORIGINAL TESTING FUNCTIONS (PRESERVED)
 # =============================================================================
@@ -555,33 +487,12 @@ async def test_new_workflow(query: str = None):
 
     # Step 7: Collection Ranking (if too many collections)
     print("\n7️⃣ Collection Ranking:")
+    # Limit collections (no LLM-based ranking in demo)
     if len(collections) > agent.config.max_collections_to_search:
         print(
-            f"   Too many collections ({len(collections)}), ranking to top {agent.config.max_collections_to_search}",
+            f"   Too many collections ({len(collections)}), truncating to top {agent.config.max_collections_to_search}",
         )
-
-        from akd.agents.data_search.components.collection_ranking import (
-            CollectionRankingInputSchema,
-        )
-
-        ranking_input = CollectionRankingInputSchema(
-            original_query=demo_query,
-            topic_title=first_topic.title,
-            topic_context=first_topic.functional_context,
-            decomposition_title=first_decomp.title,
-            decomposition_justification=first_decomp.scientific_justification,
-            collections=collections,
-            max_collections=agent.config.max_collections_to_search,
-        )
-
-        ranking_result = await agent.collection_ranking_component.arun(ranking_input)
-        ranked_collections = [
-            collections[rc.collection_index]
-            for rc in ranking_result.ranked_collections
-            if 0 <= rc.collection_index < len(collections)
-        ]
-        print(f"   ✅ Ranked to {len(ranked_collections)} top collections")
-        collections = ranked_collections
+        collections = collections[: agent.config.max_collections_to_search]
     else:
         print(f"   Using all {len(collections)} collections (within limit)")
 
@@ -701,8 +612,6 @@ Examples:
         await test_known_parameters_only(args.query)
     elif args.component == "searchable":
         await test_searchable_parameters_only(args.query)
-    elif args.component == "ranking":
-        await test_collection_ranking_only()
     elif args.component == "all":
         print("\n" + "=" * 80)
         print("TESTING ALL INDIVIDUAL COMPONENTS")
@@ -714,7 +623,6 @@ Examples:
         await test_scientific_decomposition_only(args.query)
         await test_known_parameters_only(args.query)
         await test_searchable_parameters_only(args.query)
-        await test_collection_ranking_only()
 
         print("\n" + "=" * 80)
         print("ALL INDIVIDUAL COMPONENT TESTS COMPLETED!")
