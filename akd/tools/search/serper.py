@@ -505,6 +505,7 @@ class SerperSearchTool(SearchTool):
                 title=result.pop("title", "Untitled"),
                 content=result.pop("snippet", ""),
                 query=result.pop("query", "Unknown query"),
+                pdf_url=result.pop("pdfUrl", None),
                 category=result.pop("category", None),
                 published_date=result.pop("date", None),
                 engine="serper",
