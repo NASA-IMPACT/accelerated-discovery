@@ -6,6 +6,12 @@ from .risk import (
     RiskAgentOutputSchema,
     RiskCriteriaOutputSchema,
 )
+from .risk_report import (
+    RiskReportAgent,
+    RiskReportAgentConfig,
+    RiskReportAgentInputSchema,
+    RiskReportAgentOutputSchema,
+)
 
 __all__ = [
     "Criterion",
@@ -14,4 +20,8 @@ __all__ = [
     "RiskAgentInputSchema",
     "RiskAgentOutputSchema",
     "RiskCriteriaOutputSchema",
+    "RiskReportAgentInputSchema",
+    "RiskReportAgentOutputSchema",
+    "RiskReportAgentConfig",
+    "RiskReportAgent",
 ]

@@ -1,11 +1,21 @@
 """Guardrails decorator and utilities for agent validation."""
 
 import copy
-from typing import List, Optional
+import re
+from collections import defaultdict
+from typing import Any, Callable, Dict, List, Optional
 
+from deepeval.test_case import LLMTestCase
 from loguru import logger
 
 from akd.agents._base import BaseAgent
+from akd.agents.risk import (
+    RiskAgent,
+    RiskAgentInputSchema,
+    RiskAgentOutputSchema,
+    RiskReportAgent,
+    RiskReportAgentInputSchema,
+)
 from akd.configs.guardrails_config import GuardrailsConfig
 from akd.tools._base import BaseTool
 from akd.tools.granite_guardian_tool import (
@@ -22,23 +32,31 @@ def add_guardrails(
     config: Optional[GuardrailsConfig] = None,
     input_fields: Optional[List[str]] = None,
     output_fields: Optional[List[str]] = None,
+    risk_ids: Optional[List[str]] = None,
+    risk_weights: Optional[dict[str, float]] = None,
+    input_extractor: Callable[[Any], List[str]] = lambda x: [],
+    output_extractor: Callable[[Any], List[str]] = lambda x: [],
 ):
     """
     Decorator to add Granite Guardian guardrails validation to any agent or tool class.
 
     This decorator enhances agent and tool classes with input/output risk validation using
-    the Granite Guardian model. It follows the framework's decorator pattern for
+    the Granite Guardian model and Risk Agent evaluation. It follows the framework's decorator pattern for
     adding cross-cutting concerns to agents and tools.
 
     Args:
-        input_guardrails: Risk types for input validation
-        output_guardrails: Risk types for output validation
-        config: Complete guardrails configuration (overrides individual parameters)
-        input_fields: Field names to prioritize when extracting input text for validation
-        output_fields: Field names to prioritize when extracting output text for validation
+        input_guardrails: Granite Guardian risk types for input validation
+        output_guardrails: Granite Guardian risk types for output validation
+        config: Complete Granite Guardian  guardrails configuration (overrides individual parameters)
+        input_fields: Field names to prioritize when extracting input text for validation using Granite Guardian
+        output_fields: Field names to prioritize when extracting output text for validation using Granite Guardian
+        risk_ids: List of risk IDs for RiskAgent (if None -> RiskAgent is skipped)
+        risk_weights: Optional weighting of risks
+        input_extractor/output_extractor: Functions that map your agent's
+            input/output objects into lists of strings (required if you want RiskAgent)
 
     Returns:
-        Decorator function that wraps agent/tool classes with guardian validation
+        Decorator function that wraps agent/tool classes with guardian validation and Risk Agent evaluation
 
     Usage:
         @add_guardrails(
@@ -46,6 +64,10 @@ def add_guardrails(
             output_guardrails=[RiskDefinition.ANSWER_RELEVANCE],
             input_fields=["query", "content"],
             output_fields=["response", "answer"]
+            risk_ids = ["positivity-bias", "lack-of-adaptive-reasoning"]
+            risk_weights = {"positivity-bias": 1.5}
+            input_extractor = lambda p: [p.query]
+            output_extractor  = labda r: [r.results[0]["content"]] #e.g. mapping research report for deep lit agent
         )
         class MyAgent(InstructorBaseAgent):
             pass
@@ -60,7 +82,7 @@ def add_guardrails(
 
     def decorator(cls):
         class GuardedClass(cls):
-            """Agent/Tool class enhanced with Granite Guardian guardrails validation."""
+            """Agent/Tool class enhanced with Granite Guardian guardrails validation + RiskAgent scoring."""
 
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -71,9 +93,14 @@ def add_guardrails(
                 )
                 # Store field preferences
                 self.input_fields = input_fields or self.guardrails_config.input_fields
-                self.output_fields = (
-                    output_fields or self.guardrails_config.output_fields
-                )
+                self.output_fields = output_fields or self.guardrails_config.output_fields
+
+                # RiskAgent
+                self._risk_agent = RiskAgent() if risk_ids else None
+                self._risk_ids = risk_ids or []
+                self._risk_weights = risk_weights
+                self._risk_input_extractor = input_extractor
+                self._risk_output_extractor = output_extractor
 
             def _setup_guardrails_validation(
                 self,
@@ -85,12 +112,8 @@ def add_guardrails(
                 self.guardrails_config = (config or GuardrailsConfig()).model_copy(
                     deep=True,
                 )
-                self.guardrails_config.input_risk_types = (
-                    input_guardrails or self.guardrails_config.input_risk_types
-                )
-                self.guardrails_config.output_risk_types = (
-                    output_guardrails or self.guardrails_config.output_risk_types
-                )
+                self.guardrails_config.input_risk_types = input_guardrails or self.guardrails_config.input_risk_types
+                self.guardrails_config.output_risk_types = output_guardrails or self.guardrails_config.output_risk_types
 
                 self.guardrails_tool = None
                 if self.guardrails_config.enabled:
@@ -110,11 +133,7 @@ def add_guardrails(
                 is_input: bool = True,
             ) -> bool:
                 """Validate text with Granite Guardian model."""
-                if (
-                    not self.guardrails_config.enabled
-                    or not self.guardrails_tool
-                    or not text
-                ):
+                if not self.guardrails_config.enabled or not self.guardrails_tool or not text:
                     return True
 
                 try:
@@ -201,7 +220,7 @@ def add_guardrails(
                     # Try to get the field value
                     if isinstance(obj, dict) and field in obj:
                         value = obj[field]
-                    elif hasattr(obj, "model_fields") and field in obj.model_fields:
+                    elif hasattr(obj.__class__, "model_fields") and field in obj.__class__.model_fields:
                         value = getattr(obj, field, None)
                     elif hasattr(obj, field):
                         value = getattr(obj, field, None)
@@ -221,8 +240,8 @@ def add_guardrails(
                     for key, value in obj.items():
                         if "password" not in str(key).lower():
                             yield key, value
-                elif hasattr(obj, "model_fields"):  # Pydantic
-                    for field_name in obj.model_fields.keys():
+                elif hasattr(obj.__class__, "model_fields"):  # Pydantic
+                    for field_name in obj.__class__.model_fields.keys():
                         if "password" not in field_name.lower():
                             try:
                                 value = getattr(obj, field_name, None)
@@ -277,7 +296,7 @@ def add_guardrails(
                             )
                     elif (
                         isinstance(obj, (dict, type(None)))
-                        or hasattr(obj, "model_fields")
+                        or hasattr(obj.__class__, "model_fields")
                         or hasattr(obj, "__dict__")
                     ):
                         # Handle all object types with unified field iteration
@@ -299,6 +318,55 @@ def add_guardrails(
                 finally:
                     visited.discard(id(obj))
 
+            def _extract_high_importance_criteria(self, verbose_steps: List[str]) -> Dict[str, List[str]]:
+                """
+                Extracts criteria text from Level == 0 TaskNode entries where importance is 'high'.
+                In future may incude medium importance nodes
+
+                Parameters
+                ----------
+                verbose_steps : List[str]
+                    The result.dag_metric._verbose_steps list.
+
+                Returns
+                -------
+                Dict[str, List[str]]
+                    A dictionary mapping each label from risk taxonomy (e.g., 'consistency', 'positivity-bias')
+                    to a list of criteria.
+                """
+                criteria_by_label = defaultdict(list)
+
+                # Regex patterns
+                level_pattern = re.compile(r"Level == (\d+)")
+                label_pattern = re.compile(r"Label:\s*([^\|]+)\|")
+                importance_pattern = re.compile(r"importance:\s*(\w+)", re.IGNORECASE)
+                instructions_pattern = re.compile(r"Instructions:\s*(.*?)\nAnswer strictly", re.DOTALL | re.IGNORECASE)
+
+                for block in verbose_steps:
+                    # Check Level
+                    level_match = level_pattern.search(block)
+                    if not level_match or level_match.group(1) != "0":
+                        continue  # Only Level == 0 nodes
+
+                    # Extract label
+                    label_match = label_pattern.search(block)
+                    if not label_match:
+                        continue
+                    label = label_match.group(1).strip()
+
+                    # Extract importance
+                    importance_match = importance_pattern.search(block)
+                    if not importance_match or importance_match.group(1).lower() != "high":
+                        continue  # Only high importance
+
+                    # Extract instructions / criteria text
+                    instructions_match = instructions_pattern.search(block)
+                    if instructions_match:
+                        criteria_text = instructions_match.group(1).strip()
+                        criteria_by_label[label].append(criteria_text)
+
+                return dict(criteria_by_label)
+
             async def _arun(self, params, **kwargs):
                 """Enhanced _arun with guardrails validation."""
                 # Input validation
@@ -313,6 +381,7 @@ def add_guardrails(
                         is_input=True,
                     )
                 else:
+                    input_text = None
                     input_passed = True
 
                 # Run parent _arun
@@ -330,10 +399,85 @@ def add_guardrails(
                         is_input=False,
                     )
                 else:
+                    output_text = None
                     output_passed = True
 
                 # Add guardrails status as computed field
                 self._add_guardrails_status(response, input_passed and output_passed)
+
+                # --- RiskAgent scoring ---
+                if self._risk_agent:
+                    try:
+                        inputs = self._risk_input_extractor(params) if self._risk_input_extractor else []
+                        outputs = self._risk_output_extractor(response) if self._risk_output_extractor else []
+
+                        # Fallback to guardian-extracted text if no explicit extractor
+                        if not inputs and input_text:
+                            inputs = [input_text]
+                        if not outputs and output_text:
+                            outputs = [output_text]
+
+                        # Safety checks
+                        if not inputs or not outputs:
+                            logger.error(
+                                "[RiskEval] Could not find usable inputs/outputs for RiskAgent. "
+                                "Either provide risk_input_extractor/risk_output_extractor "
+                                "or enable guardrails so we can reuse its extracted text.",
+                            )
+                            return response
+
+                        ra_input = RiskAgentInputSchema(
+                            inputs=inputs,
+                            outputs=outputs,
+                            risk_ids=self._risk_ids,
+                            risk_weights=self._risk_weights,
+                        )
+                        ra_result: RiskAgentOutputSchema = await self._risk_agent.arun(ra_input)
+
+                        # Run DAG metric
+                        flattened_input = "\n".join(
+                            [f"User: {i}\nModel: {o}" for i, o in zip(inputs[:-1], outputs[:-1])]
+                            + [f"User: {inputs[-1]}"],
+                        )
+                        test_case = LLMTestCase(
+                            input=flattened_input,
+                            actual_output=outputs[-1],
+                        )
+                        ra_result.dag_metric.measure(test_case)
+
+                        if ra_result.dag_metric.score != 1.0:
+                            risk_report_agent = RiskReportAgent()
+
+                            risky_content = "\n".join(
+                                [f"User: {i}\nModel: {o}" for i, o in zip(inputs, outputs)],
+                            )
+
+                            failed_criteria = self._extract_high_importance_criteria(
+                                ra_result.dag_metric._verbose_steps,
+                            )
+
+                            risk_report_response = await risk_report_agent.arun(
+                                RiskReportAgentInputSchema(
+                                    risky_content=risky_content,
+                                    failed_criteria=failed_criteria,
+                                ),
+                            )
+
+                            risk_report = risk_report_response.risk_report
+                        else:
+                            risk_report = None
+
+                        object.__setattr__(
+                            response,
+                            "risk_summary",
+                            {
+                                "risk_report": risk_report,
+                                "risk_score": ra_result.dag_metric.score,
+                            },
+                        )
+                    except Exception as e:
+                        logger.error(f"[RiskEval] Error running RiskAgent: {e}")
+
                 return response
 
             def _add_guardrails_status(self, response, guardrails_passed: bool) -> None:
@@ -388,6 +532,10 @@ def apply_guardrails(
     output_guardrails: List[RiskDefinition] | None = None,
     input_fields: List[str] | None = None,
     output_fields: List[str] | None = None,
+    risk_ids: List[str] | None = None,
+    risk_weights: dict[str, float] | None = None,
+    input_extractor: Callable[[Any], List[str]] | None = None,
+    output_extractor: Callable[[Any], List[str]] | None = None,
     safe: bool = True,
 ) -> BaseAgent | BaseTool:
     """
@@ -442,11 +590,14 @@ def apply_guardrails(
 
     # Only apply guardrails if we have non-empty lists or a config
     component_name = component.__class__.__name__
-    has_input_guardrails = input_guardrails and len(input_guardrails) > 0
-    has_output_guardrails = output_guardrails and len(output_guardrails) > 0
-    has_config = config is not None
+    has_guardian = (
+        (input_guardrails and len(input_guardrails) > 0)
+        or (output_guardrails and len(output_guardrails) > 0)
+        or config is not None
+    )
+    has_risk_eval = risk_ids is not None and len(risk_ids) > 0
 
-    if has_input_guardrails or has_output_guardrails or has_config:
+    if has_guardian or has_risk_eval:
         # Try-catch to make sure we continue if deepcopy fails
         try:
             component = copy.deepcopy(component) if safe else component
@@ -462,6 +613,10 @@ def apply_guardrails(
             config=config,
             input_fields=input_fields,
             output_fields=output_fields,
+            risk_ids=risk_ids,
+            risk_weights=risk_weights,
+            input_extractor=input_extractor or (lambda x: []),
+            output_extractor=output_extractor or (lambda x: []),
         )(component.__class__)
 
         # Create new guarded component instance preserving original state

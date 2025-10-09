@@ -1,15 +1,16 @@
 """Test guardrails decorator functionality."""
 
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import BaseAgent, InstructorBaseAgent
 from akd.configs.guardrails_config import GuardrailsConfig
-from akd.guardrails import add_guardrails
+from akd.guardrails import add_guardrails, apply_guardrails
 from akd.tools._base import BaseTool
 from akd.tools.granite_guardian_tool import RiskDefinition
 
@@ -38,6 +39,26 @@ class ToolOutputSchema(OutputSchema):
 
     result: str = Field(..., description="Tool result")
     text: str = Field(default="", description="Additional text field")
+
+
+# Mocked agent + schemas for risk
+class DummyInput(BaseModel):
+    query: str
+
+
+class DummyOutput(BaseModel):
+    extra: dict = Field(default_factory=dict)
+
+
+class DummyAgent(BaseAgent):
+    input_schema = DummyInput
+    output_schema = DummyOutput
+
+    async def get_response_async(self, *args, **kwargs):
+        raise NotImplementedError("not used in this test")
+
+    async def _arun(self, params: DummyInput, **kwargs: Any) -> DummyOutput:
+        return DummyOutput(extra={"research_report": "Mock report content"})
 
 
 # Test with agent
@@ -321,9 +342,7 @@ async def test_guardrails_status_field():
     result = await agent.arun(test_input)
 
     assert hasattr(result, "guardrails_validated")
-    assert (
-        result.guardrails_validated() is False
-    )  # Should be False since output validation failed
+    assert result.guardrails_validated() is False  # Should be False since output validation failed
 
 
 @pytest.mark.asyncio
@@ -402,6 +421,52 @@ TestTool.__test__ = False
 TestAgentWithConfig.__test__ = False
 
 
+# Unit test for risk-only guardrails
+@pytest.mark.asyncio
+async def test_risk_guardrails_flow(monkeypatch):
+    """Test RiskAgent-based guardrails path with all LLM components mocked."""
+
+    # --- Patch RiskAgent and RiskReportAgent behavior ---
+    mock_ra_output = AsyncMock()
+    mock_ra_output.dag_metric.score = 0.0
+    mock_ra_output.dag_metric._verbose_steps = [
+        "Level == 0 | Label: positivity-bias | importance: high | Instructions: Avoid bias\nAnswer strictly",
+    ]
+    mock_risk_agent = AsyncMock()
+    mock_risk_agent.arun = AsyncMock(return_value=mock_ra_output)
+
+    mock_report_output = AsyncMock()
+    mock_report_output.risk_report = "Mocked detailed risk report"
+    mock_risk_report_agent = AsyncMock()
+    mock_risk_report_agent.arun = AsyncMock(return_value=mock_report_output)
+
+    with (
+        patch("akd.guardrails.RiskAgent", return_value=mock_risk_agent),
+        patch("akd.guardrails.RiskReportAgent", return_value=mock_risk_report_agent),
+        patch("akd.guardrails.LLMTestCase", autospec=True),
+        patch("deepeval.metrics.DAGMetric.measure", new_callable=AsyncMock),
+    ):
+        # --- Apply guardrails ---
+        guarded_agent = apply_guardrails(
+            component=DummyAgent(),
+            risk_ids=["positivity-bias"],
+            input_extractor=lambda p: [p.query],
+            output_extractor=lambda o: [o.extra["research_report"]],
+        )
+
+        # --- Run test ---
+        result = await guarded_agent.arun(DummyInput(query="Is climate change good?"))
+
+        # --- Assertions ---
+        assert hasattr(result, "risk_summary")
+        risk_summary = result.risk_summary
+        assert isinstance(risk_summary, dict)
+        assert "risk_score" in risk_summary
+        assert "risk_report" in risk_summary
+        assert risk_summary["risk_score"] == 0.0
+        assert "Mocked detailed risk report" in risk_summary["risk_report"]
+
+
 if __name__ == "__main__":
     # Run all tests
     asyncio.run(test_guardrails_decorator_metadata())
@@ -439,6 +504,9 @@ if __name__ == "__main__":
 
     asyncio.run(test_guardrails_disabled())
     print("✓ Disabled guardrails tests passed")
+
+    asyncio.run(test_risk_guardrails_flow(None))
+    print("✓ Risk-only guardrails tests passed")
 
     test_sync()
     print("✓ Synchronous tests passed")
