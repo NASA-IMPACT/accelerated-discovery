@@ -4,13 +4,33 @@ This document provides a comprehensive overview of the NASA Earth science data d
 
 ## Table of Contents
 
-1. [System Architecture](#system-architecture)
-2. [Core Components](#core-components)
-3. [Data Flow Pipeline](#data-flow-pipeline)
-4. [Parallel Processing](#parallel-processing)
-5. [Input/Output Specifications](#inputoutput-specifications)
-6. [Error Handling & Retry Logic](#error-handling--retry-logic)
-7. [Component Reference](#component-reference)
+1. [Core Philosophy](#core-philosophy)
+2. [System Architecture](#system-architecture)
+3. [Core Components](#core-components)
+4. [Data Flow Pipeline](#data-flow-pipeline)
+5. [Parallel Processing](#parallel-processing)
+6. [Input/Output Specifications](#inputoutput-specifications)
+7. [Error Handling & Retry Logic](#error-handling--retry-logic)
+8. [Testing & Validation](#testing--validation)
+9. [Component Reference](#component-reference)
+
+## Core Philosophy
+
+The data search agent addresses the fundamental challenge that **one single CMR query cannot reliably answer complex science questions**. Instead of attempting to generate perfect queries in a single shot, the system systematically decomposes and refines the original question through multiple structured steps.
+
+### Why This Approach Works
+
+**Progressive Refinement**: The system breaks down complex queries into manageable pieces:
+- Natural language → Functional topics (1-6)
+- Topics → Observable phenomena (1-6 per topic)
+- Phenomena → Query approaches (1-5 per phenomenon)
+- Approaches → Search variations (0-5 per approach)
+
+**Diversity Through Parallelization**: Multiple independent paths explore different aspects of the question simultaneously, ensuring comprehensive coverage and preventing any single interpretation from dominating results.
+
+**Context Preservation**: Each step maintains awareness of the original research question, ensuring that decomposition doesn't lose sight of the user's actual needs.
+
+**Ranking Over Filtering**: Rather than attempting to filter down to perfect results early, the system generates diverse options and uses LLM-powered ranking to identify the most scientifically relevant datasets.
 
 ## System Architecture
 
@@ -449,6 +469,101 @@ for collection in ranked_collections:
     granules.extend(result.results["granules"])
 ```
 
+### Example: End-to-End Query Flow
+
+**User Query**: "Weekly land cover changes in Tennessee, Oct 2017 - Nov 2018"
+
+**Step 1: Topic Splitting**
+```
+Topics identified: 1
+- Title: "Land cover changes"
+```
+
+**Step 2: Repository Routing**
+```
+Route: CMR (NASA satellite data repositories)
+Rationale: "CMR contains NASA satellite-based land cover datasets"
+```
+
+**Step 3: Scientific Decomposition**
+```
+Decomposition: "Land cover classification"
+Justification: "Direct observable for vegetation and land use changes"
+```
+
+**Step 4: Known Parameters**
+```
+Approach 1:
+- Instrument: "Sentinel-2 MSI"
+- Temporal: "2017-10-01T00:00:00Z,2018-11-30T23:59:59Z"
+- Spatial: Tennessee bounding box
+- Temporal Resolution: "weekly"
+
+Approach 2:
+- Instrument: "HLS"
+- Temporal: "2017-10-01T00:00:00Z,2018-11-30T23:59:59Z"
+- Spatial: Tennessee bounding box
+- Temporal Resolution: "weekly"
+```
+
+**Step 5: Searchable Parameters**
+```
+Query variations generated:
+1. Instrument=Sentinel-2, Keywords=""  (rely on instrument filtering)
+2. Instrument=Sentinel-2, Keywords="land cover"
+3. Instrument=HLS, Keywords=""
+4. Instrument=HLS, Keywords="land cover classification"
+```
+
+**Step 6: Collection Search & Ranking**
+```
+Collections found: 15 total
+After approach filtering: 8 collections (4 per approach)
+Final ranking: Top 5 collections selected
+- Rank 1: HLS Landsat 8 OLI Surface Reflectance (30m, weekly)
+- Rank 2: Sentinel-2 Level-2A Surface Reflectance
+- Rank 3: MODIS Land Cover Type (500m, annual - filtered due to resolution)
+```
+
+**Step 7: Granule Search**
+```
+Granules found: 234 data files
+- Collection: HLS L30 - 145 granules
+- Collection: Sentinel-2 L2A - 89 granules
+Total downloadable data: 234 files with download URLs
+```
+
+**Final Output Structure**:
+```json
+{
+  "topics": [
+    {
+      "topic": {"title": "Land cover changes", "functional_context": "..."},
+      "data_source": "CMR",
+      "decomposition_results": [
+        {
+          "decomposition": {"title": "Land cover classification", "scientific_justification": "..."},
+          "query_approaches": [...],
+          "searchable_queries": [...],
+          "collections": [5 ranked collections],
+          "granules": [234 data files],
+          "total_collections_found": 15,
+          "total_granules_found": 234
+        }
+      ]
+    }
+  ],
+  "search_metadata": {
+    "search_id": "...",
+    "original_query": "Weekly land cover changes in Tennessee, Oct 2017 - Nov 2018",
+    "timestamp": "2025-01-15T12:00:00Z",
+    "duration_seconds": 18.5,
+    "topics_processed": 1
+  },
+  "total_results": 234
+}
+```
+
 ## Parallel Processing
 
 The system employs several levels of parallelization for optimal performance:
@@ -754,6 +869,88 @@ except Exception as e:
     await self._emit_progress_safely("on_search_error", error_msg)
     return self._create_error_response(original_query, error_msg)
 ```
+
+## Testing & Validation
+
+### Component Testing
+
+Individual components can be tested independently using the demo scripts:
+
+```bash
+# Test topic splitting
+uv run examples/demo.py --test topic-splitting --query "Your research question"
+
+# Test repository routing
+uv run examples/demo.py --test repository-routing --query "Your research question"
+
+# Test scientific decomposition
+uv run examples/demo.py --test scientific-decomposition --query "Your research question"
+
+# Test known parameters extraction
+uv run examples/demo.py --test known-parameters --query "Your research question"
+
+# Test searchable parameters generation
+uv run examples/demo.py --test searchable-parameters --query "Your research question"
+
+# Test collection ranking
+uv run examples/demo.py --test collection-ranking --query "Your research question"
+```
+
+**Note**: Individual component tests automatically create required dependencies. For example, testing the decomposition component will first generate topics via the topic splitting component.
+
+### End-to-End Testing
+
+```bash
+# Test complete workflow with structured output
+uv run examples/demo.py --query "Your research question"
+
+# Test with timing data collection
+uv run examples/demo_capture.py --query "Your query" --output results.json
+
+# Analyze performance bottlenecks
+uv run examples/analyze_timing.py results.json --report bottlenecks
+```
+
+### MCP Server Testing
+
+```bash
+# Check if MCP server is running
+uv run tests/tools/data_search/test_cmr_mcp_connection.py
+
+# Test data search agent integration
+uv run tests/agents/data_search/test_cmr_data_search.py
+
+# Test complete refactored workflow
+uv run tests/agents/data_search/test_refactored_workflow.py
+```
+
+### Smoke Tests
+
+```bash
+# Quick validation of core functionality
+uv run tests/agents/data_search/test_rapid_smoke.py
+```
+
+### Output Validation
+
+The system provides structured output that can be validated:
+
+1. **Topic-based structure**: Results organized by topic → decomposition hierarchy
+2. **Complete provenance**: Each level preserves query approaches, searchable queries, and reasoning
+3. **Metadata tracking**: Search ID, timestamps, duration, component versions
+4. **Error resilience**: Failed components produce error results rather than breaking entire workflow
+
+### Prompt Engineering Testing
+
+All prompts are stored as markdown files in `components/prompts/`:
+- System prompts: `{component_name}_system.md`
+- User prompts: `{component_name}_user.md`
+
+To test prompt changes:
+1. Modify prompt template in `components/prompts/`
+2. Run component-specific test: `uv run examples/demo.py --test {component-name}`
+3. Verify structured output matches expected schema
+4. Check reasoning quality in output fields
 
 ## Component Reference
 
