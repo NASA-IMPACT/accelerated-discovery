@@ -11,6 +11,7 @@ from pydantic import Field, SecretStr
 from pydantic.networks import HttpUrl
 
 from akd.structures import SearchResultItem
+from akd.utils import parse_date
 
 from ._base import (
     SearchTool,
@@ -505,9 +506,13 @@ class SerperSearchTool(SearchTool):
                 title=result.pop("title", "Untitled"),
                 content=result.pop("snippet", ""),
                 query=result.pop("query", "Unknown query"),
-                pdf_url=result.pop("pdfUrl", None),
+                pdf_url=result.pop("pdfUrl", None) or result.pop("htmlUrl", None),
                 category=result.pop("category", None),
-                published_date=result.pop("date", None),
+                published_date=(
+                    parsed.date().isoformat()
+                    if (parsed := parse_date(result.pop("date", None)) or parse_date(result.pop("year", None)))
+                    else None
+                ),
                 engine="serper",
                 score=result.pop("score", 0.0),
                 extra=result,  # Any remaining fields

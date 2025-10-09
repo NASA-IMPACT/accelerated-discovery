@@ -1,9 +1,11 @@
 import asyncio
 import time
 from abc import abstractmethod
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import dateparser
 import gdown
 import requests
 from loguru import logger
@@ -107,9 +109,7 @@ class LangchainToolMixin:
 
         name = name or self.__class__.__name__
         doc = (self.__class__.__doc__ or "").strip()
-        description = description or f"A tool that executes {name}." + (
-            f" Description: {doc}" if doc else ""
-        )
+        description = description or f"A tool that executes {name}." + (f" Description: {doc}" if doc else "")
         return StructuredTool.from_function(
             func=_wrapped_run,
             coroutine=_wrapped_arun,
@@ -259,3 +259,43 @@ def get_model_fields(
         fields_info.append(field_data)
 
     return fields_info
+
+
+def parse_date(date_input: str | int | None) -> datetime | None:
+    """
+    Parse various date formats to datetime object.
+
+    Handles:
+    - Human-readable dates: "4 days ago", "yesterday", "2 days ago"
+    - Year integers: 2007, 2025
+    - ISO dates: "2025-10-05"
+    - Partial dates: "Oct 2025"
+
+    Args:
+        date_input: Date string, year integer, or None
+
+    Returns:
+        datetime object or None if parsing fails
+
+    Examples:
+        >>> parse_date("4 days ago")
+        datetime.datetime(2025, 10, 4, ...)
+        >>> parse_date(2007)
+        datetime.datetime(2007, 1, 1, 0, 0)
+        >>> parse_date("2025-10-05")
+        datetime.datetime(2025, 10, 5, 0, 0)
+    """
+    if date_input is None:
+        return None
+
+    # Handle year integers
+    if isinstance(date_input, int):
+        return datetime(date_input, 1, 1)
+
+    # Handle string dates
+    if isinstance(date_input, str):
+        parsed = dateparser.parse(date_input)
+        if parsed:
+            return parsed
+
+    return None
