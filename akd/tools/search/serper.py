@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import os
 from typing import List, Literal, Optional
+from urllib.parse import urljoin
 
-import aiohttp
+import httpx
 from loguru import logger
 from pydantic import Field, SecretStr
+from pydantic.networks import HttpUrl
 
 from akd.structures import SearchResultItem
 
@@ -41,8 +43,8 @@ class SerperSearchToolConfig(SearchToolConfig):
         default_factory=lambda: SecretStr(os.getenv("SERPER_API_KEY", "")),
         description="Serper API key for authentication",
     )
-    base_url: str = Field(
-        default="https://google.serper.dev",
+    base_url: HttpUrl = Field(
+        default=os.getenv("SERPER_BASE_URL", "https://google.serper.dev"),
         description="Base URL for Serper API (without endpoint path)",
     )
     category: Literal["search", "scholar", "news", "images", "places"] = Field(
@@ -128,6 +130,39 @@ class SerperSearchTool(SearchTool):
                 "SERPER_API_KEY environment variable must be set or provided in config",
             )
 
+    def _validate_connection(self) -> None:
+        """
+        Validates the Serper API connection and authentication.
+
+        Performs a minimal POST request with a test query to verify the API key is valid.
+
+        Raises:
+            RuntimeError: If authentication fails or connection cannot be established.
+        """
+        endpoint = urljoin(str(self.base_url), "search")
+        headers = {
+            "X-API-KEY": self.api_key.get_secret_value(),
+            "Content-Type": "application/json",
+        }
+        # Minimal test payload
+        payload = {"q": "test", "num": 1}
+
+        try:
+            response = httpx.post(endpoint, json=payload, headers=headers, timeout=5.0)
+            if response.status_code not in range(200, 300):
+                if response.status_code in (401, 403):
+                    raise RuntimeError("Invalid or unauthorized SERPER_API_KEY")
+                raise RuntimeError(
+                    f"Serper API connection test failed: {response.status_code} {response.reason_phrase}",
+                )
+        except httpx.RequestError as e:
+            raise RuntimeError(f"Cannot connect to Serper API: {e}") from e
+
+    def _post_init(self) -> None:
+        """Post-initialization hook to validate API connection."""
+        super()._post_init()
+        self._validate_connection()
+
     def _get_search_endpoint(self, input_category: Optional[str] = None) -> str:
         """
         Determine the Serper API endpoint based on input category or default category.
@@ -155,11 +190,11 @@ class SerperSearchTool(SearchTool):
         else:
             serper_category = self.category
 
-        return f"{self.base_url}/{serper_category}"
+        return urljoin(str(self.base_url), serper_category)
 
     async def _fetch_serper_results(
         self,
-        session: aiohttp.ClientSession,
+        client: httpx.AsyncClient,
         query: str,
         category: Optional[str] = None,
         page: int = 1,
@@ -168,7 +203,7 @@ class SerperSearchTool(SearchTool):
         Fetches search results from Serper API for a single query.
 
         Args:
-            session: The aiohttp session to use for the request
+            client: The httpx async client to use for the request
             query: The search query string
             category: Optional category filter (mapped to Serper endpoint)
             page: Page number (1-indexed)
@@ -203,45 +238,46 @@ class SerperSearchTool(SearchTool):
             )
 
         try:
-            async with session.post(
+            response = await client.post(
                 endpoint,
                 json=payload,
                 headers=headers,
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    logger.error(
-                        f"HTTP Error fetching Serper results for query '{query}': "
-                        f"{response.status} {response.reason}\n{error_text}",
-                    )
-                    raise Exception(
-                        f"Failed to fetch search results for query '{query}': {response.status} {response.reason}",
-                    )
+            )
 
-                data = await response.json()
+            if response.status_code != 200:
+                error_text = response.text
+                logger.error(
+                    f"HTTP Error fetching Serper results for query '{query}': "
+                    f"{response.status_code} {response.reason_phrase}\n{error_text}",
+                )
+                raise Exception(
+                    f"Failed to fetch search results for query '{query}': {response.status_code} {response.reason_phrase}",
+                )
 
-                # Results key varies by endpoint:
-                # - /search: "organic"
-                # - /scholar: "organic"
-                # - /news: "news"
-                # - /images: "images"
-                results = data.get("organic", data.get("news", data.get("images", [])))
+            data = response.json()
 
-                # Add query and category to each result for consistency with SearxNG
-                for result in results:
-                    result["query"] = query
-                    if category:
-                        result["category"] = category
+            # Results key varies by endpoint:
+            # - /search: "organic"
+            # - /scholar: "organic"
+            # - /news: "news"
+            # - /images: "images"
+            results = data.get("organic", data.get("news", data.get("images", [])))
 
-                # Add search metadata if available
-                if "searchParameters" in data:
-                    search_params = data["searchParameters"]
-                    if self.debug:
-                        logger.debug(f"Search parameters: {search_params}")
+            # Add query and category to each result for consistency with SearxNG
+            for result in results:
+                result["query"] = query
+                if category:
+                    result["category"] = category
 
-                return results
+            # Add search metadata if available
+            if "searchParameters" in data:
+                search_params = data["searchParameters"]
+                if self.debug:
+                    logger.debug(f"Search parameters: {search_params}")
 
-        except aiohttp.ClientError as e:
+            return results
+
+        except httpx.RequestError as e:
             logger.error(f"Network error fetching Serper results for query '{query}': {e}")
             raise
         except Exception as e:
@@ -330,7 +366,7 @@ class SerperSearchTool(SearchTool):
 
     async def _fetch_serper_results_paginated(
         self,
-        session: aiohttp.ClientSession,
+        client: httpx.AsyncClient,
         query: str,
         category: Optional[str],
         target_results: int,
@@ -339,7 +375,7 @@ class SerperSearchTool(SearchTool):
         Fetches search results across multiple pages to reach target number.
 
         Args:
-            session: The aiohttp session to use
+            client: The httpx async client to use
             query: The search query
             category: Optional category filter
             target_results: Target number of results to fetch
@@ -356,7 +392,7 @@ class SerperSearchTool(SearchTool):
                     logger.debug(f"Fetching page {current_page} for query: {query}")
 
                 results = await self._fetch_serper_results(
-                    session,
+                    client,
                     query,
                     category,
                     current_page,
@@ -433,10 +469,10 @@ class SerperSearchTool(SearchTool):
             logger.info(f"📂 Category: {params.category}")
             logger.info(f"🔬 Search type: {self._get_search_endpoint(params.category)}")
 
-        async with aiohttp.ClientSession() as session:
+        async with httpx.AsyncClient() as client:
             tasks = [
                 self._fetch_serper_results_paginated(
-                    session,
+                    client,
                     query,
                     params.category,
                     target_results_per_query,
