@@ -82,47 +82,95 @@ Data Results (repository-specific format)
 
 ### Handler Architecture
 
+**Directory Structure**:
+```
+handlers/
+├── _base.py                    # BaseHandler abstract class
+├── __init__.py                 # Handler registry and status tracking
+├── cmr/                        # CMR handler (fully implemented)
+│   ├── __init__.py            # Exports
+│   ├── handler.py             # CMRHandler implementation
+│   ├── config.py              # CMRHandlerConfig
+│   ├── schemas.py             # All CMR-specific schemas
+│   ├── components.py          # CMR component wrappers
+│   └── prompts/               # CMR-specific prompt templates (8 files)
+└── pds4/                       # PDS4 handler (stub)
+    └── __init__.py            # PDS4Handler stub + PDS4HandlerConfig
+```
+
 **Base Handler** (`handlers/_base.py`):
 ```python
 class BaseHandler(ABC):
     @abstractmethod
     async def process_decomposition(
         self,
-        decomposition: ScientificDecomposition,
-        topic: Topic,
         original_query: str,
-        params: DataSearchAgentInputSchema,
-    ) -> DecompositionResult:
+        topic: dict,
+        decomposition: dict,
+    ) -> dict:
         """Process a decomposition and return repository-specific results."""
         pass
 ```
 
-**CMR Handler** (`handlers/cmr_handler.py`):
+**CMR Handler** (`handlers/cmr/handler.py`):
 - Fully implemented with complete pipeline
 - Returns CMR collections in `data_results` field
-- Uses CMR-specific components for parameters and ranking
+- Uses CMR-specific components (thin wrappers around shared implementations)
+- Passes `prompts_dir` to components for handler-specific prompt loading
 
-**PDS4 Handler** (`handlers/pds4_handler.py`):
-- Stub implementation (returns "implementation in progress" note)
+**PDS4 Handler** (`handlers/pds4/__init__.py`):
+- Stub implementation (returns "not_implemented" status)
 - Placeholder for future planetary data support
 - Will return PDS4 bundles when implemented
-- Agent automatically routes around stub handlers based on HANDLER_STATUS registry
+- Agent automatically routes around stub handlers based on HANDLER_STATUS registry in `handlers/__init__.py`
 
 ### Component Base Classes
 
-Repository-specific components inherit from intelligent base classes:
+Repository-specific components use a multi-layer inheritance pattern:
 
-**Parameter Extraction**:
-- `BaseKnownParametersComponent` - Abstract interface
-- `BaseSearchableParametersComponent` - Abstract interface
-- CMR implementations: `KnownParametersComponent`, `SearchableParametersComponent`
-- PDS4 stubs: `PDS4KnownParametersComponent`, `PDS4SearchableParametersComponent`
+**Component Directory Structure**:
+```
+components/
+├── _base.py                           # BaseDataSearchComponent (all LLM components)
+├── _base_parameters.py                # Abstract parameter component interfaces
+├── _base_ranking.py                   # Abstract ranking component interfaces
+├── _shared_parameters.py              # Shared parameter extraction logic
+├── _shared_ranking.py                 # Shared ranking/filtering logic
+└── prompts/                           # Universal component prompts
+    ├── topic_splitting_*.md
+    ├── repository_routing_*.md
+    └── scientific_decomposition_*.md
+```
 
-**Ranking and Filtering**:
-- `BaseApproachFilteringComponent` - Per-approach filtering
-- `BaseFinalRankingComponent` - Cross-approach ranking
-- CMR implementations: `ApproachCollectionFilteringComponent`, `FinalCollectionRankingComponent`
-- PDS4 stubs: `PDS4ApproachFilteringComponent`, `PDS4FinalRankingComponent`
+**Parameter Extraction Base Classes** (`components/_base_parameters.py`):
+- `BaseKnownParametersComponent[TQueryApproach]` - Abstract interface (ABC)
+- `BaseSearchableParametersComponent[TQueryApproach, TSearchableQuery]` - Abstract interface (ABC)
+
+**Shared Parameter Implementations** (`components/_shared_parameters.py`):
+- `SharedKnownParametersComponent[TInput, TOutput, TQueryApproach]` - Generic implementation
+- `SharedSearchableParametersComponent[TInput, TOutput, TQueryApproach, TSearchableQuery]` - Generic implementation
+
+**CMR Parameter Components** (`handlers/cmr/components.py`):
+- `CMRKnownParametersComponent` - Thin wrapper (sets schemas and template name)
+- `CMRSearchableParametersComponent` - Thin wrapper + `_create_searchable_query()` implementation
+
+**Ranking and Filtering Base Classes** (`components/_base_ranking.py`):
+- `BaseApproachFilteringComponent` - Per-approach filtering interface
+- `BaseFinalRankingComponent` - Cross-approach ranking interface
+
+**Shared Ranking Implementations** (`components/_shared_ranking.py`):
+- `SharedApproachFilteringComponent[TInput, TOutput]` - Generic approach filtering
+- `SharedFinalRankingComponent[TInput, TOutput]` - Generic final ranking
+
+**CMR Ranking Components** (`handlers/cmr/components.py`):
+- `CMRApproachCollectionFilteringComponent` - Thin wrapper (sets schemas and template name)
+- `CMRFinalCollectionRankingComponent` - Thin wrapper (sets schemas and template name)
+
+**Key Pattern**: All repository-specific components are thin wrappers that:
+1. Inherit from shared implementations
+2. Set `input_schema`, `output_schema`, and `template_name` class attributes
+3. Optionally override methods for repository-specific behavior
+4. Accept `prompts_dir` parameter in `__init__` for handler-specific prompts
 
 ### Generic Data Results
 
@@ -254,21 +302,31 @@ The data search system follows a two-layer architecture:
   - Maintains search state and metadata
   - Routes decompositions to appropriate repository handlers (CMR, PDS4, external)
 
-**Component Pipeline** (in `components/` directory):
+**Component Pipeline**:
 
-All components inherit from **BaseDataSearchComponent** which provides:
-- Automatic prompt template loading
+All components inherit from **BaseDataSearchComponent** (`components/_base.py`) which provides:
+- Automatic prompt template loading via `template_name` attribute
+- Support for `prompts_dir` parameter for handler-specific prompts
 - Retry logic with exponential backoff for rate limiting
 - Standardized error handling and logging
 - Memory management helpers
 
+**Universal Components** (in `components/` directory, used for all repositories):
 1. **TopicSplittingComponent** (`topic_splitting.py`)
 2. **RepositoryRouterComponent** (`repository_router.py`)
 3. **ScientificDecompositionComponent** (`scientific_decomposition.py`)
-4. **KnownParametersComponent** (`known_parameters.py`)
-5. **SearchableParametersComponent** (`searchable_parameters.py`)
-6. **ApproachCollectionFilteringComponent** (`approach_collection_filtering.py`)
-7. **FinalCollectionRankingComponent** (`final_collection_ranking.py`)
+
+**Handler-Specific Components** (CMR example in `handlers/cmr/`):
+4. **CMRKnownParametersComponent** (`components.py`) - inherits from `SharedKnownParametersComponent`
+5. **CMRSearchableParametersComponent** (`components.py`) - inherits from `SharedSearchableParametersComponent`
+6. **CMRApproachCollectionFilteringComponent** (`components.py`) - inherits from `SharedApproachFilteringComponent`
+7. **CMRFinalCollectionRankingComponent** (`components.py`) - inherits from `SharedFinalRankingComponent`
+
+**Shared Implementations** (in `components/` directory, extended by handlers):
+- **SharedKnownParametersComponent** (`_shared_parameters.py`) - Generic parameter extraction
+- **SharedSearchableParametersComponent** (`_shared_parameters.py`) - Generic search variation generation
+- **SharedApproachFilteringComponent** (`_shared_ranking.py`) - Generic per-approach filtering
+- **SharedFinalRankingComponent** (`_shared_ranking.py`) - Generic cross-approach ranking
 
 ### Base Component Architecture
 
@@ -294,8 +352,10 @@ All components inherit from **BaseDataSearchComponent** which provides:
 ### Utility Components
 
 **File: `utils/prompt_loader.py`**
-- Loads and formats prompt templates from the `components/prompts/` directory
-- Provides helper functions for prompt template management
+- Loads and formats prompt templates with optional `prompts_dir` parameter
+- Default location: `components/prompts/` for universal components
+- Handler-specific location: `handlers/{handler_name}/prompts/` (e.g., `handlers/cmr/prompts/`)
+- Provides helper functions: `load_prompt_template()`, `format_prompt_template()`, `load_and_format_prompt()`
 - Used by BaseDataSearchComponent for automatic prompt loading
 
 **File: `utils/cmr_keywords_fetcher.py`**
@@ -411,8 +471,10 @@ Data Files with Download URLs
 ```
 
 #### Step 4: Known Parameters Extraction
-**Component**: `KnownParametersComponent`
-**Location**: `akd/agents/data_search/components/known_parameters.py:146`
+**Component**: `CMRKnownParametersComponent` (CMR-specific wrapper)
+**Location**: `akd/agents/data_search/handlers/cmr/components.py`
+**Shared Implementation**: `SharedKnownParametersComponent`
+**Location**: `akd/agents/data_search/components/_shared_parameters.py`
 
 **Input**: Original query + topic + decomposition
 
@@ -437,8 +499,10 @@ Data Files with Download URLs
 ```
 
 #### Step 5: Searchable Parameters Generation
-**Component**: `SearchableParametersComponent`
-**Location**: `akd/agents/data_search/components/searchable_parameters.py:154`
+**Component**: `CMRSearchableParametersComponent` (CMR-specific wrapper)
+**Location**: `akd/agents/data_search/handlers/cmr/components.py`
+**Shared Implementation**: `SharedSearchableParametersComponent`
+**Location**: `akd/agents/data_search/components/_shared_parameters.py`
 
 **Input**: Original query + topic + decomposition + query approaches
 
@@ -515,8 +579,11 @@ for approach_idx in sorted(approach_collections.keys()):
 **Output**: Each approach has ≤25 deduplicated collections
 
 **Stage 3: Per-Approach Filtering and Ranking (Parallel)**
-Location: `akd/agents/data_search/handlers/cmr_handler.py` (_filter_and_rank_by_approach)
-Component: `akd/agents/data_search/components/approach_collection_filtering.py`
+Location: `akd/agents/data_search/handlers/cmr/handler.py` (_filter_and_rank_by_approach)
+Component: `CMRApproachCollectionFilteringComponent`
+Location: `akd/agents/data_search/handlers/cmr/components.py`
+Shared Implementation: `SharedApproachFilteringComponent`
+Location: `akd/agents/data_search/components/_shared_ranking.py`
 
 For each approach in parallel:
 ```python
@@ -549,8 +616,11 @@ filter_input = ApproachCollectionFilteringInputSchema(
 **Output**: Up to 5 approaches × 5 collections = max 25 filtered collections
 
 **Stage 4: Final Cross-Approach Ranking**
-Location: `akd/agents/data_search/handlers/cmr_handler.py` (_rank_collections method)
-Component: `akd/agents/data_search/components/final_collection_ranking.py`
+Location: `akd/agents/data_search/handlers/cmr/handler.py` (_rank_collections method)
+Component: `CMRFinalCollectionRankingComponent`
+Location: `akd/agents/data_search/handlers/cmr/components.py`
+Shared Implementation: `SharedFinalRankingComponent`
+Location: `akd/agents/data_search/components/_shared_ranking.py`
 
 ```python
 # Flatten all approach results
@@ -588,7 +658,7 @@ final_ranking_model: str = "gpt-5-mini"
 ```
 
 #### Step 7: Granule Search
-**Execution**: `akd/agents/data_search/handlers/cmr_handler.py` (_search_granules_for_collections - currently disabled)
+**Execution**: `akd/agents/data_search/handlers/cmr/handler.py` (_search_granules_for_collections - currently disabled)
 
 **Process**:
 1. For each selected collection, search for granules (data files)
@@ -754,7 +824,7 @@ decomp_results = await asyncio.gather(*decomp_tasks, return_exceptions=True)
 ```
 
 ### 3. Approach-Level Filtering Parallelism
-**Location**: `akd/agents/data_search/handlers/cmr_handler.py` (per-approach filtering)
+**Location**: `akd/agents/data_search/handlers/cmr/handler.py` (per-approach filtering)
 
 Per-approach collection filtering executes in parallel:
 ```python
@@ -783,7 +853,7 @@ if len(filtering_tasks) > 1:
 - Failures in one approach don't block others
 
 ### 4. Granule Search Parallelism
-**Location**: `akd/agents/data_search/handlers/cmr_handler.py` (granule search - currently disabled)
+**Location**: `akd/agents/data_search/handlers/cmr/handler.py` (granule search - currently disabled)
 
 Granule searches across collections execute in parallel:
 ```python
@@ -828,9 +898,9 @@ for i, result in enumerate(results):
 
 **3. Validation Limits**
 - **Issue**: Searchable parameters component limited to 15 queries but generated up to 25
-- **Solution**: Updated validation limit from 15 to 25 in `SearchableParametersOutput`
+- **Solution**: Updated validation limit from 15 to 25 in searchable parameters output schemas
 - **Impact**: Eliminated validation errors that caused workflow failures
-- **Location**: `akd/agents/data_search/components/searchable_parameters.py:106`
+- **Location**: Repository-specific schemas (e.g., `akd/agents/data_search/handlers/cmr/schemas.py`)
 
 **4. Model Configuration**
 - **Current**: All components use `gpt-5-mini` for optimal cost/performance balance
@@ -1097,7 +1167,7 @@ To test prompt changes:
 ## Component Reference
 
 ### Configuration
-**Location**: `akd/agents/data_search/data_search.py` and `akd/agents/data_search/handlers/cmr_handler.py`
+**Location**: `akd/agents/data_search/data_search.py` and `akd/agents/data_search/handlers/cmr/config.py`
 
 ```python
 # Main agent configuration
@@ -1144,17 +1214,24 @@ class CMRHandlerConfig(BaseModel):
 ```
 
 ### Prompt Templates
-**Location**: `akd/agents/data_search/components/prompts/`
 
-Each component uses specialized prompts:
+Prompts are organized by scope:
+
+**Universal Component Prompts** (`components/prompts/`):
 - `topic_splitting_system.md` / `topic_splitting_user.md`
 - `repository_routing_system.md` / `repository_routing_user.md`
 - `scientific_decomposition_system.md` / `scientific_decomposition_user.md`
+
+**CMR Handler Prompts** (`handlers/cmr/prompts/`):
 - `known_parameters_system.md` / `known_parameters_user.md`
 - `searchable_parameters_system.md` / `searchable_parameters_user.md`
-- `collection_ranking_system.md` / `collection_ranking_user.md` (legacy)
-- **NEW**: `approach_filtering_system.md` / `approach_filtering_user.md`
-- **NEW**: `final_ranking_system.md` / `final_ranking_user.md`
+- `approach_filtering_system.md` / `approach_filtering_user.md`
+- `final_ranking_system.md` / `final_ranking_user.md`
+
+**Future PDS4 Handler Prompts** (`handlers/pds4/prompts/` - when implemented):
+- PDS4-specific versions of parameter extraction and ranking prompts
+
+**Prompt Loading**: Components receive `prompts_dir` parameter in their `__init__` method, defaulting to `components/prompts/` but overridden to `handlers/{handler}/prompts/` for handler-specific components.
 
 ### Progress Tracking
 **Location**: `akd/agents/data_search/data_search.py` (progress handler integration)
