@@ -1,18 +1,158 @@
 # Data Search System - Data Flow Documentation
 
-This document provides a comprehensive overview of the NASA Earth science data discovery system, detailing how natural language queries are transformed into actual data files through a sophisticated pipeline of LLM-powered components and NASA CMR API interactions.
+This document provides a comprehensive overview of the NASA Earth science data discovery system, detailing how natural language queries are transformed into actual data files through a sophisticated pipeline of LLM-powered components and multi-repository data source interactions.
 
 ## Table of Contents
 
-1. [Core Philosophy](#core-philosophy)
-2. [System Architecture](#system-architecture)
-3. [Core Components](#core-components)
-4. [Data Flow Pipeline](#data-flow-pipeline)
-5. [Parallel Processing](#parallel-processing)
-6. [Input/Output Specifications](#inputoutput-specifications)
-7. [Error Handling & Retry Logic](#error-handling--retry-logic)
-8. [Testing & Validation](#testing--validation)
-9. [Component Reference](#component-reference)
+1. [Multi-Repository Architecture](#multi-repository-architecture)
+2. [Core Philosophy](#core-philosophy)
+3. [System Architecture](#system-architecture)
+4. [Core Components](#core-components)
+5. [Data Flow Pipeline](#data-flow-pipeline)
+6. [Parallel Processing](#parallel-processing)
+7. [Input/Output Specifications](#inputoutput-specifications)
+8. [Error Handling & Retry Logic](#error-handling--retry-logic)
+9. [Testing & Validation](#testing--validation)
+10. [Component Reference](#component-reference)
+
+## Multi-Repository Architecture
+
+### Overview
+
+The data search system supports multiple NASA data repositories and external data sources through a handler-based architecture:
+
+**Supported Repositories**:
+- **CMR** (Common Metadata Repository): NASA's primary Earth science data catalog (fully implemented)
+- **PDS4** (Planetary Data System 4): Planetary science data (stub implementation)
+- **External Sources**: USGS, NOAA, etc. (routing only)
+
+**Key Design Patterns**:
+1. **Repository-Agnostic Agent** (`DataSearchAgent`): Universal workflow that routes to appropriate repositories
+2. **Handler Pattern**: Repository-specific implementations (CMRHandler, PDS4Handler) handle data retrieval
+3. **Decomposition-Level Routing**: Each scientific decomposition routes to a single best repository
+4. **Component Inheritance**: Shared base classes for parameters extraction and ranking across repositories
+
+### Agent Usage
+
+**DataSearchAgent** (Multi-Repository Support)
+```python
+from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
+from akd.agents.data_search.handlers import CMRHandlerConfig, PDS4HandlerConfig
+
+# Configure handlers
+cmr_config = CMRHandlerConfig(
+    mcp_endpoint="http://localhost:8080/mcp/cmr/mcp/",
+    collection_search_page_size=20,
+    final_collection_count=25,
+)
+pds4_config = PDS4HandlerConfig(
+    mcp_endpoint="http://localhost:8080/mcp/pds4/mcp/",
+)
+
+# Create agent with nested handler configs
+config = DataSearchAgentConfig(
+    debug=True,
+    cmr=cmr_config,
+    pds4=pds4_config,
+)
+agent = DataSearchAgent(config=config)
+result = await agent.arun(DataSearchAgentInputSchema(query="Your research question"))
+```
+
+### Multi-Repository Workflow
+
+```
+Natural Language Query
+       ↓
+[1] Topic Splitting (1-6 topics)
+       ↓
+[2] Scientific Decomposition (1-6 per topic)
+       ↓
+[3] Repository Routing (per decomposition) ← Routes to CMR, PDS4, or external
+       ↓
+[4] Handler Dispatch
+       ├─→ CMRHandler (NASA Earth data)
+       │    └─→ Known Params → Searchable Params → Collection Search → Ranking
+       ├─→ PDS4Handler (Planetary data)  [stub]
+       │    └─→ Known Params → Searchable Params → Bundle Search → Ranking
+       └─→ External Source (informational note)
+       ↓
+Data Results (repository-specific format)
+```
+
+### Handler Architecture
+
+**Base Handler** (`handlers/_base.py`):
+```python
+class BaseHandler(ABC):
+    @abstractmethod
+    async def process_decomposition(
+        self,
+        decomposition: ScientificDecomposition,
+        topic: Topic,
+        original_query: str,
+        params: DataSearchAgentInputSchema,
+    ) -> DecompositionResult:
+        """Process a decomposition and return repository-specific results."""
+        pass
+```
+
+**CMR Handler** (`handlers/cmr_handler.py`):
+- Fully implemented with complete pipeline
+- Returns CMR collections in `data_results` field
+- Uses CMR-specific components for parameters and ranking
+
+**PDS4 Handler** (`handlers/pds4_handler.py`):
+- Stub implementation (returns "implementation in progress" note)
+- Placeholder for future planetary data support
+- Will return PDS4 bundles when implemented
+- Agent automatically routes around stub handlers based on HANDLER_STATUS registry
+
+### Component Base Classes
+
+Repository-specific components inherit from intelligent base classes:
+
+**Parameter Extraction**:
+- `BaseKnownParametersComponent` - Abstract interface
+- `BaseSearchableParametersComponent` - Abstract interface
+- CMR implementations: `KnownParametersComponent`, `SearchableParametersComponent`
+- PDS4 stubs: `PDS4KnownParametersComponent`, `PDS4SearchableParametersComponent`
+
+**Ranking and Filtering**:
+- `BaseApproachFilteringComponent` - Per-approach filtering
+- `BaseFinalRankingComponent` - Cross-approach ranking
+- CMR implementations: `ApproachCollectionFilteringComponent`, `FinalCollectionRankingComponent`
+- PDS4 stubs: `PDS4ApproachFilteringComponent`, `PDS4FinalRankingComponent`
+
+### Generic Data Results
+
+The system uses repository-agnostic schemas:
+- `data_results`: List of data items (collections for CMR, bundles for PDS4, etc.)
+- `total_results_found`: Count of results (repository-independent)
+- Each handler populates these fields with repository-specific data
+
+### Breaking Changes
+
+**No Backwards Compatibility**: The legacy `CMRDataSearchAgent` and `CMRDataSearchAgentConfig` have been completely removed. All code must migrate to the new unified architecture:
+
+**Old (REMOVED)**:
+```python
+from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
+config = CMRDataSearchAgentConfig(mcp_endpoint="...", max_collections_to_search=5)
+```
+
+**New (REQUIRED)**:
+```python
+from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
+from akd.agents.data_search.handlers import CMRHandlerConfig
+
+cmr_config = CMRHandlerConfig(mcp_endpoint="...", final_collection_count=5)
+agent_config = DataSearchAgentConfig(cmr=cmr_config)
+```
+
+---
+
+**Note**: The detailed workflow described in this document primarily focuses on the CMR implementation, as it is currently the only fully implemented handler. PDS4 and other repositories will follow the same general pattern once implemented.
 
 ## Core Philosophy
 
@@ -40,7 +180,7 @@ The data search system follows a two-layer architecture:
 ┌─────────────────────────────────────────┐
 │              Agent Layer                │
 │  ┌─────────────────────────────────────┐ │
-│  │       CMRDataSearchAgent            │ │
+│  │        DataSearchAgent              │ │
 │  │  (Orchestrates entire workflow)     │ │
 │  └─────────────────────────────────────┘ │
 │  ┌─────────────────────────────────────┐ │
@@ -48,9 +188,10 @@ The data search system follows a two-layer architecture:
 │  │  • TopicSplitting                   │ │
 │  │  • RepositoryRouter                 │ │
 │  │  • ScientificDecomposition          │ │
-│  │  • KnownParameters                  │ │
-│  │  • SearchableParameters             │ │
-│  │  • CollectionRanking                │ │
+│  │  • Handler Dispatch (CMR/PDS4)      │ │
+│  │  • KnownParameters (per handler)    │ │
+│  │  • SearchableParameters (per handler)│ │
+│  │  • Approach/Final Ranking (per handler)│ │
 │  └─────────────────────────────────────┘ │
 └─────────────────────────────────────────┘
 ┌─────────────────────────────────────────┐
@@ -105,12 +246,13 @@ The data search system follows a two-layer architecture:
 
 ### Agent Layer (`akd/agents/data_search/`)
 
-**File: `cmr_data_search.py`**
-- **CMRDataSearchAgent**: Main orchestrator coordinating the entire workflow
-  - Manages component pipeline execution
+**File: `data_search.py`**
+- **DataSearchAgent**: Main orchestrator coordinating the entire workflow
+  - Manages component pipeline execution (topic → routing → decomposition → handler dispatch)
   - Handles parallel processing coordination
   - Provides progress tracking and WebSocket integration
   - Maintains search state and metadata
+  - Routes decompositions to appropriate repository handlers (CMR, PDS4, external)
 
 **Component Pipeline** (in `components/` directory):
 
@@ -330,13 +472,13 @@ Data Files with Download URLs
 ```
 
 #### Step 6: Collection Search & Ranking (Approach-Aware Pipeline)
-**Execution**: `akd/agents/data_search/cmr_data_search.py:712-775`
-**Ranking**: `akd/agents/data_search/cmr_data_search.py:929-1038`
+**Execution**: `akd/agents/data_search/handlers/cmr_handler.py` (CMR-specific implementation)
+**Ranking**: `akd/agents/data_search/handlers/cmr_handler.py` (_rank_collections method)
 
 The collection search and ranking process now uses a four-stage approach-aware pipeline for better scalability and quality:
 
 **Stage 1: Per-Query Collection Limiting**
-Location: `akd/agents/data_search/cmr_data_search.py:712-775`
+Location: `akd/agents/data_search/handlers/cmr_handler.py` (_execute_searchable_queries)
 
 ```python
 # Group queries by source approach
@@ -356,7 +498,7 @@ for approach_idx, queries in approach_queries.items():
 **Output**: Up to 5 approaches × 5 queries/approach × 5 collections/query = max 125 collections grouped by approach
 
 **Stage 2: Per-Approach Deduplication**
-Location: `akd/agents/data_search/cmr_data_search.py:776-812`
+Location: `akd/agents/data_search/handlers/cmr_handler.py` (_deduplicate_approach_collections)
 
 ```python
 global_seen_ids = set()
@@ -373,7 +515,7 @@ for approach_idx in sorted(approach_collections.keys()):
 **Output**: Each approach has ≤25 deduplicated collections
 
 **Stage 3: Per-Approach Filtering and Ranking (Parallel)**
-Location: `akd/agents/data_search/cmr_data_search.py:814-927`
+Location: `akd/agents/data_search/handlers/cmr_handler.py` (_filter_and_rank_by_approach)
 Component: `akd/agents/data_search/components/approach_collection_filtering.py`
 
 For each approach in parallel:
@@ -407,7 +549,7 @@ filter_input = ApproachCollectionFilteringInputSchema(
 **Output**: Up to 5 approaches × 5 collections = max 25 filtered collections
 
 **Stage 4: Final Cross-Approach Ranking**
-Location: `akd/agents/data_search/cmr_data_search.py:929-1038`
+Location: `akd/agents/data_search/handlers/cmr_handler.py` (_rank_collections method)
 Component: `akd/agents/data_search/components/final_collection_ranking.py`
 
 ```python
@@ -446,7 +588,7 @@ final_ranking_model: str = "gpt-5-mini"
 ```
 
 #### Step 7: Granule Search
-**Execution**: `akd/agents/data_search/cmr_data_search.py:709`
+**Execution**: `akd/agents/data_search/handlers/cmr_handler.py` (_search_granules_for_collections - currently disabled)
 
 **Process**:
 1. For each selected collection, search for granules (data files)
@@ -569,7 +711,7 @@ Total downloadable data: 234 files with download URLs
 The system employs several levels of parallelization for optimal performance:
 
 ### 1. Topic-Level Parallelism
-**Location**: `akd/agents/data_search/cmr_data_search.py:346-405`
+**Location**: `akd/agents/data_search/data_search.py` (main agent orchestration)
 
 Topics are processed in parallel after routing:
 ```python
@@ -597,7 +739,7 @@ decomp_results = await asyncio.gather(*decomp_tasks, return_exceptions=True)
 ```
 
 ### 2. Decomposition-Level Parallelism
-**Location**: `akd/agents/data_search/cmr_data_search.py:520`
+**Location**: `akd/agents/data_search/data_search.py` (topic processing)
 
 Within each topic, all scientific decompositions execute in parallel:
 ```python
@@ -612,7 +754,7 @@ decomp_results = await asyncio.gather(*decomp_tasks, return_exceptions=True)
 ```
 
 ### 3. Approach-Level Filtering Parallelism
-**Location**: `akd/agents/data_search/cmr_data_search.py:886-900`
+**Location**: `akd/agents/data_search/handlers/cmr_handler.py` (per-approach filtering)
 
 Per-approach collection filtering executes in parallel:
 ```python
@@ -641,7 +783,7 @@ if len(filtering_tasks) > 1:
 - Failures in one approach don't block others
 
 ### 4. Granule Search Parallelism
-**Location**: `akd/agents/data_search/cmr_data_search.py:1108`
+**Location**: `akd/agents/data_search/handlers/cmr_handler.py` (granule search - currently disabled)
 
 Granule searches across collections execute in parallel:
 ```python
@@ -676,13 +818,13 @@ for i, result in enumerate(results):
 - **Issue**: Topics and routing were processed sequentially, limiting throughput for multi-topic queries
 - **Solution**: Implemented `asyncio.gather()` for parallel topic routing and processing
 - **Impact**: 14% reduction in wall-clock time for single-topic queries; expected 40-70% for multi-topic queries
-- **Location**: `akd/agents/data_search/cmr_data_search.py:326-405`
+- **Location**: `akd/agents/data_search/data_search.py` (parallel topic orchestration)
 
 **2. Decomposition Parallelization (2024-2025)**
 - **Issue**: Scientific decompositions were processed serially, causing ~10x slower performance
 - **Solution**: Implemented `asyncio.gather()` for parallel decomposition processing within each topic
 - **Impact**: Reduced processing time from ~17 minutes to ~2 minutes for typical workflows
-- **Location**: `akd/agents/data_search/cmr_data_search.py:520`
+- **Location**: `akd/agents/data_search/data_search.py` (topic processing)
 
 **3. Validation Limits**
 - **Issue**: Searchable parameters component limited to 15 queries but generated up to 25
@@ -855,7 +997,7 @@ async def _execute_with_retry(self, operation_name: str, custom_error_prefix: Op
 **Components with retry disabled**: ApproachCollectionFiltering, FinalCollectionRanking (2 ranking components)
 
 ### Agent-Level Error Handling
-**Location**: `akd/agents/data_search/cmr_data_search.py:418`
+**Location**: `akd/agents/data_search/data_search.py` (main agent error handling)
 
 The main agent provides graceful degradation:
 ```python
@@ -955,10 +1097,27 @@ To test prompt changes:
 ## Component Reference
 
 ### Configuration
-**Location**: `akd/agents/data_search/cmr_data_search.py:53`
+**Location**: `akd/agents/data_search/data_search.py` and `akd/agents/data_search/handlers/cmr_handler.py`
 
 ```python
-class CMRDataSearchAgentConfig(DataSearchAgentConfig):
+# Main agent configuration
+class DataSearchAgentConfig(BaseDataSearchConfig):
+    """Configuration for multi-repository data search agent."""
+    # Agent-level settings
+    debug: bool = False
+    enable_parallel_search: bool = True
+
+    # Model configuration per component
+    topic_splitting_model: str = "gpt-5-mini"
+    scientific_decomposition_model: str = "gpt-5-mini"
+    repository_routing_model: str = "gpt-5-mini"
+
+    # Handler configurations (nested)
+    cmr: CMRHandlerConfig = Field(default_factory=CMRHandlerConfig)
+    pds4: PDS4HandlerConfig = Field(default_factory=PDS4HandlerConfig)
+
+# CMR handler configuration (nested within DataSearchAgentConfig)
+class CMRHandlerConfig(BaseModel):
     # MCP server configuration
     mcp_endpoint: HttpUrl = "http://localhost:8080/mcp/cmr/mcp/"
 
@@ -966,7 +1125,7 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
     collection_search_page_size: int = 20
     granule_search_page_size: int = 50
 
-    # New approach-aware ranking configuration
+    # Approach-aware ranking configuration
     collections_per_query: int = 5           # Top N from each CMR query
     max_collections_per_approach: int = 5    # Top N per approach after filtering
     final_collection_count: int = 25         # Final ranked output size
@@ -976,14 +1135,10 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
     # Performance tuning
     collection_search_timeout: float = 30.0
     granule_search_timeout: float = 45.0
-    enable_parallel_search: bool = True
 
-    # Model configuration per component
-    topic_splitting_model: str = "gpt-5-mini"
-    scientific_decomposition_model: str = "gpt-5-mini"
-    repository_routing_model: str = "gpt-5-mini"
-    collection_ranking_model: str = "gpt-5-mini"  # Legacy (for angles workflow)
-    cmr_query_model: str = "gpt-5-mini"
+    # Component model configuration
+    known_parameters_model: str = "gpt-5-mini"
+    searchable_parameters_model: str = "gpt-5-mini"
     approach_filtering_model: str = "gpt-5-mini"  # Per-approach filtering
     final_ranking_model: str = "gpt-5-mini"       # Final cross-approach ranking
 ```
@@ -1002,7 +1157,7 @@ Each component uses specialized prompts:
 - **NEW**: `final_ranking_system.md` / `final_ranking_user.md`
 
 ### Progress Tracking
-**Location**: `akd/agents/data_search/cmr_data_search.py:229`
+**Location**: `akd/agents/data_search/data_search.py` (progress handler integration)
 
 Real-time progress updates via WebSocket:
 ```python

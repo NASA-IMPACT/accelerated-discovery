@@ -15,8 +15,9 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 
-from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
+from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
 from akd.agents.data_search._base import DataSearchAgentInputSchema
+from akd.agents.data_search.handlers import CMRHandlerConfig
 from akd.configs.data_search_config import get_config
 
 # Load environment variables from .env file
@@ -100,25 +101,30 @@ async def run_demo():
 
     # Configuration
     config = get_config()
-    agent_config = CMRDataSearchAgentConfig(
-        debug=True,  # Enable detailed logging
+
+    cmr_handler_config = CMRHandlerConfig(
         mcp_endpoint=config.mcp.endpoint,
-        max_collections_to_search=5,  # Limit for demo
         collection_search_page_size=20,
         granule_search_page_size=10,
-        enable_parallel_search=True,
+        final_collection_count=5,  # Limit for demo
         collection_search_timeout=30.0,
         granule_search_timeout=45.0,
         min_collection_relevance_score=0.3,
     )
 
+    agent_config = DataSearchAgentConfig(
+        debug=True,  # Enable detailed logging
+        enable_parallel_search=True,
+        cmr=cmr_handler_config,
+    )
+
     # Initialize agent
     print("🔧 Initializing CMR Data Search Agent...")
-    print(f"   MCP Endpoint: {agent_config.mcp_endpoint}")
-    print(f"   Max Collections: {agent_config.max_collections_to_search}")
+    print(f"   MCP Endpoint: {agent_config.cmr.mcp_endpoint}")
+    print(f"   Max Collections: {agent_config.cmr.final_collection_count}")
     print(f"   Parallel Search: {agent_config.enable_parallel_search}")
 
-    agent = CMRDataSearchAgent(config=agent_config, debug=True)
+    agent = DataSearchAgent(config=agent_config, debug=True)
 
     # Demo query
     demo_query = (

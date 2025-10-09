@@ -89,3 +89,63 @@ uv run python akd/agents/data_search/utils/cmr_keywords_fetcher.py
 ```
 
 The utility includes retry logic and proper error handling for reliable fetching.
+
+## CMR Fuzzy Matcher
+
+The `cmr_fuzzy_matcher.py` utility provides fuzzy string matching against CMR metadata to find relevant instruments, platforms, and science keywords based on partial or approximate name matches.
+
+### What it matches
+
+- **Instruments**: Fuzzy matching against instrument short names and long names
+- **Platforms**: Fuzzy matching against platform short names and long names
+- **Science Keywords**: Fuzzy matching against hierarchical science keyword terms
+
+### Usage
+
+```python
+from akd.agents.data_search.utils import (
+    find_instrument_matches,
+    find_platform_matches,
+    find_science_keyword_matches,
+    FuzzyMatch
+)
+
+# Find instrument matches
+matches = find_instrument_matches("MODIS", threshold=0.8)
+for match in matches:
+    print(f"{match.matched_value} (score: {match.similarity_score:.3f})")
+
+# Find platform matches
+matches = find_platform_matches("landsat", threshold=0.7)
+for match in matches:
+    print(f"{match.matched_value} (score: {match.similarity_score:.3f})")
+
+# Find science keyword matches
+matches = find_science_keyword_matches("precipitation", threshold=0.7)
+for match in matches:
+    print(f"{match.matched_value} (score: {match.similarity_score:.3f})")
+```
+
+### Function Parameters
+
+All matching functions accept:
+- `query` (str): The term to search for
+- `threshold` (float): Minimum similarity score (0.0 to 1.0, default: 0.7)
+- `data_dir` (Optional[Path]): Custom directory for CMR data files
+
+### FuzzyMatch Results
+
+Each match returns a `FuzzyMatch` object containing:
+- `matched_value`: The matching CMR term
+- `similarity_score`: Similarity score (0.0 to 1.0)
+- `original_query`: The original search query
+
+Results are sorted by similarity score in descending order.
+
+### Dependencies
+
+The fuzzy matcher requires `rapidfuzz` for string matching:
+
+```bash
+uv add rapidfuzz
+```

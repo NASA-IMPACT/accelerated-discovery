@@ -88,29 +88,29 @@ class DecompositionResult(BaseModel):
         ...,
         description="The scientific decomposition that was processed",
     )
+    repository: Optional[str] = Field(
+        None,
+        description="Repository used (CMR, PDS4, etc.) or external source name",
+    )
     query_approaches: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="Known parameter approaches generated",
+        description="Repository-specific query approaches generated",
     )
     searchable_queries: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="Complete queries with known + searchable parameters",
+        description="Complete queries with known + searchable parameters (repository-specific)",
     )
-    collections: List[Dict[str, Any]] = Field(
+    data_results: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="Ranked and filtered collections for this decomposition",
+        description="Data results from repository (collections for CMR, bundles for PDS4, etc.)",
     )
-    granules: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description="Data granules/files found for this decomposition",
-    )
-    total_collections_found: int = Field(
+    total_results_found: int = Field(
         default=0,
-        description="Total collections found before ranking/filtering",
+        description="Total data results found before filtering/ranking",
     )
-    total_granules_found: int = Field(
-        default=0,
-        description="Total granules found for this decomposition",
+    note: Optional[str] = Field(
+        None,
+        description="Additional information (external sources, errors, processing notes)",
     )
 
 
@@ -128,25 +128,28 @@ class DataSearchAgentOutputSchema(OutputSchema):
     )
 
 
-class DataSearchAgentConfig(BaseAgentConfig):
+class BaseDataSearchConfig(BaseAgentConfig):
     """Base configuration for data search agents."""
 
+    # Universal component models (used for all queries)
+    topic_splitting_model: str = Field(
+        default="gpt-5-nano",
+        description="Model for topic splitting",
+    )
+    scientific_decomposition_model: str = Field(
+        default="gpt-5-mini",
+        description="Model for scientific decomposition",
+    )
+    repository_routing_model: str = Field(
+        default="gpt-5-mini",
+        description="Model for repository routing",
+    )
+
+    # General settings
     debug: bool = Field(default=False, description="Enable debug logging")
-    max_collections_to_search: int = Field(
-        default=10,
-        description="Maximum number of collections to search for granules",
-    )
-    max_granules_per_collection: int = Field(
-        default=100,
-        description="Maximum granules to retrieve per collection",
-    )
     enable_parallel_search: bool = Field(
         default=True,
-        description="Enable parallel collection/granule searches",
-    )
-    timeout_seconds: float = Field(
-        default=30.0,
-        description="Request timeout in seconds",
+        description="Enable parallel searches",
     )
 
 
@@ -204,7 +207,7 @@ class BaseDataSearchAgent[
 
     input_schema = DataSearchAgentInputSchema
     output_schema = DataSearchAgentOutputSchema
-    config_schema = DataSearchAgentConfig
+    config_schema = BaseDataSearchConfig
 
     def _validate_query(self, query: str) -> str:
         """Validate and clean the input query."""

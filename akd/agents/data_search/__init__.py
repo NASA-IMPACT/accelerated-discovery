@@ -1,8 +1,8 @@
 """Data search agents for discovering scientific datasets."""
 
-from .cmr_data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
+from .data_search import DataSearchAgent, DataSearchAgentConfig
 
 __all__ = [
-    "CMRDataSearchAgent",
-    "CMRDataSearchAgentConfig",
+    "DataSearchAgent",
+    "DataSearchAgentConfig",
 ]

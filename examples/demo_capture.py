@@ -26,9 +26,10 @@ from dotenv import load_dotenv
 # Import timing collector
 from timing_collector import TimingCollector
 
-from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
+from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
 from akd.agents.data_search.components import ScientificDecomposition, Topic
 from akd.agents.data_search.components.repository_router import NASARepositoryEnum
+from akd.agents.data_search.handlers import CMRHandlerConfig
 from akd.configs.data_search_config import get_config
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
@@ -54,26 +55,41 @@ for component, model in MODEL_CONFIG.items():
 # Load base configuration
 config = get_config()
 
-# Configure agent with model-specific settings
-agent_config = CMRDataSearchAgentConfig(
-    debug=True,
+# Configure CMR handler
+cmr_handler_config = CMRHandlerConfig(
     mcp_endpoint=config.mcp.endpoint,
-    max_collections_to_search=5,
     collection_search_page_size=20,
     granule_search_page_size=10,
-    enable_parallel_search=True,
+    collections_per_query=5,
+    max_collections_per_approach=5,
+    final_collection_count=25,
+    min_collection_relevance_score=0.3,
     collection_search_timeout=30.0,
     granule_search_timeout=45.0,
-    min_collection_relevance_score=0.3,
-    # Model configurations for components
+    enable_parallel_search=True,
+    known_parameters_model=MODEL_CONFIG["cmr_query"],
+    searchable_parameters_model=MODEL_CONFIG["cmr_query"],
+    approach_filtering_model=MODEL_CONFIG["cmr_query"],
+    final_ranking_model=MODEL_CONFIG["cmr_query"],
+)
+
+# Configure agent with model-specific settings
+agent_config = DataSearchAgentConfig(
+    debug=True,
+    enable_parallel_search=True,
+    # Universal component models
     topic_splitting_model=MODEL_CONFIG["topic_splitting"],
     scientific_decomposition_model=MODEL_CONFIG["scientific_decomposition"],
     repository_routing_model=MODEL_CONFIG["repository_routing"],
-    cmr_query_model=MODEL_CONFIG["cmr_query"],
+    # Handler-specific configurations
+    cmr=cmr_handler_config,
 )
 
 # Initialize the agent
-agent = CMRDataSearchAgent(config=agent_config, debug=True)
+agent = DataSearchAgent(config=agent_config, debug=True)
+
+# Get CMR handler for direct component access (for demo purposes)
+cmr_handler = agent.get_cmr_handler()
 
 print("\n🤖 Agent initialized for capture workflow")
 
@@ -115,7 +131,7 @@ async def capture_single_path(
         # Known Parameters
         print("        🔍 Known Parameters...")
         async with timing_collector.measure("known_parameters") as timer:
-            known_params_output = await agent.known_parameters_component.process(
+            known_params_output = await cmr_handler.known_parameters_component.process(
                 query,
                 topic,
                 decomposition,
@@ -137,11 +153,13 @@ async def capture_single_path(
         # Searchable Parameters
         print("        🔍 Searchable Parameters...")
         async with timing_collector.measure("searchable_parameters") as timer:
-            searchable_output = await agent.searchable_parameters_component.process(
-                query,
-                topic,
-                decomposition,
-                known_params_output.query_approaches,
+            searchable_output = (
+                await cmr_handler.searchable_parameters_component.process(
+                    query,
+                    topic,
+                    decomposition,
+                    known_params_output.query_approaches,
+                )
             )
             timer.add_metadata(
                 searchable_queries_generated=len(searchable_output.searchable_queries),
@@ -169,13 +187,13 @@ async def capture_single_path(
                 try:
                     search_params = query_obj.get_mcp_parameters()
                     search_params["page_size"] = (
-                        agent.config.collection_search_page_size
+                        agent.config.cmr.collection_search_page_size
                     )
 
-                    tool_input = agent.collection_search_tool.input_schema(
+                    tool_input = cmr_handler.collection_search_tool.input_schema(
                         **search_params,
                     )
-                    result = await agent.collection_search_tool.arun(tool_input)
+                    result = await cmr_handler.collection_search_tool.arun(tool_input)
 
                     if hasattr(result, "collections") and result.collections:
                         collections.extend(result.collections)
@@ -198,8 +216,8 @@ async def capture_single_path(
         print(f"          ✅ Found {len(collections)} total collections")
 
         # Limit collections to max search limit (no LLM-based ranking in demo)
-        ranked_collections = collections[: agent.config.max_collections_to_search]
-        if len(collections) > agent.config.max_collections_to_search:
+        ranked_collections = collections[: agent.config.cmr.final_collection_count]
+        if len(collections) > agent.config.cmr.final_collection_count:
             print(
                 f"          ℹ️  Truncated to {len(ranked_collections)} collections (no ranking in demo)",
             )
@@ -221,13 +239,17 @@ async def capture_single_path(
                 try:
                     granule_params = {
                         "collection_concept_id": concept_id,
-                        "page_size": agent.config.granule_search_page_size,
+                        "page_size": agent.config.cmr.granule_search_page_size,
                     }
 
-                    granule_search_params = agent.granule_search_tool.input_schema(
-                        **granule_params,
+                    granule_search_params = (
+                        cmr_handler.granule_search_tool.input_schema(
+                            **granule_params,
+                        )
                     )
-                    result = await agent.granule_search_tool.arun(granule_search_params)
+                    result = await cmr_handler.granule_search_tool.arun(
+                        granule_search_params,
+                    )
 
                     if hasattr(result, "results") and result.results.get("granules"):
                         granules = result.results["granules"]
@@ -444,9 +466,9 @@ async def capture_full_workflow(query: str, output_file: str = None) -> str:
             "total_granules": total_granules,
             "duration_seconds": duration,
             "agent_config": {
-                "max_collections_to_search": agent.config.max_collections_to_search,
-                "collection_search_page_size": agent.config.collection_search_page_size,
-                "granule_search_page_size": agent.config.granule_search_page_size,
+                "final_collection_count": agent.config.cmr.final_collection_count,
+                "collection_search_page_size": agent.config.cmr.collection_search_page_size,
+                "granule_search_page_size": agent.config.cmr.granule_search_page_size,
             },
             "model_config": MODEL_CONFIG,
         },
@@ -508,27 +530,39 @@ async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> st
 
     # Override agent config for fast execution with gpt-5-nano
     # Note: Using localhost as AWS endpoint is currently returning 500 errors
-    fast_config = CMRDataSearchAgentConfig(
-        debug=True,
+    fast_cmr_config = CMRHandlerConfig(
         mcp_endpoint="http://localhost:8080/mcp/cmr/mcp/",
-        max_collections_to_search=1,  # Only 1 collection
         collection_search_page_size=5,  # Smaller page sizes
         granule_search_page_size=5,
-        enable_parallel_search=False,  # Sequential for simplicity
+        collections_per_query=1,
+        max_collections_per_approach=1,
+        final_collection_count=1,  # Only 1 collection
+        min_collection_relevance_score=0.0,  # No filtering
         collection_search_timeout=30.0,
         granule_search_timeout=45.0,
-        min_collection_relevance_score=0.0,  # No filtering
+        enable_parallel_search=False,  # Sequential for simplicity
         # All components use gpt-5-nano
-        topic_splitting_model="gpt-5-nano",
-        scientific_decomposition_model="gpt-5-nano",
-        repository_routing_model="gpt-5-nano",
-        cmr_query_model="gpt-5-nano",
+        known_parameters_model="gpt-5-nano",
+        searchable_parameters_model="gpt-5-nano",
         approach_filtering_model="gpt-5-nano",
         final_ranking_model="gpt-5-nano",
     )
 
+    fast_config = DataSearchAgentConfig(
+        debug=True,
+        enable_parallel_search=False,  # Sequential for simplicity
+        # All components use gpt-5-nano
+        topic_splitting_model="gpt-5-nano",
+        scientific_decomposition_model="gpt-5-nano",
+        repository_routing_model="gpt-5-nano",
+        cmr=fast_cmr_config,
+    )
+
     # Create fast agent
-    fast_agent = CMRDataSearchAgent(config=fast_config, debug=True)
+    fast_agent = DataSearchAgent(config=fast_config, debug=True)
+
+    # Get CMR handler for direct component access
+    fast_cmr_handler = fast_agent.get_cmr_handler()
 
     # Initialize timing collector
     timing_collector = TimingCollector(
@@ -578,7 +612,7 @@ async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> st
     print("\n4️⃣ Known Parameters (selecting [0]):")
     timing_collector.set_context(topic_idx=0, decomp_idx=0)
     async with timing_collector.measure("known_parameters") as timer:
-        known_params_output = await fast_agent.known_parameters_component.process(
+        known_params_output = await fast_cmr_handler.known_parameters_component.process(
             query,
             topic,
             decomposition,
@@ -600,11 +634,13 @@ async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> st
     # Step 5: Searchable Parameters → select [0]
     print("\n5️⃣ Searchable Parameters (selecting [0]):")
     async with timing_collector.measure("searchable_parameters") as timer:
-        searchable_output = await fast_agent.searchable_parameters_component.process(
-            query,
-            topic,
-            decomposition,
-            [approach],  # Pass only the selected approach, not all of them
+        searchable_output = (
+            await fast_cmr_handler.searchable_parameters_component.process(
+                query,
+                topic,
+                decomposition,
+                [approach],  # Pass only the selected approach, not all of them
+            )
         )
         timer.add_metadata(
             searchable_queries_generated=len(searchable_output.searchable_queries),
@@ -624,10 +660,12 @@ async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> st
     print("\n6️⃣ Collection Search (single query):")
     async with timing_collector.measure("collection_search") as timer:
         search_params = search_query.get_mcp_parameters()
-        search_params["page_size"] = fast_config.collection_search_page_size
+        search_params["page_size"] = fast_config.cmr.collection_search_page_size
 
-        tool_input = fast_agent.collection_search_tool.input_schema(**search_params)
-        result = await fast_agent.collection_search_tool.arun(tool_input)
+        tool_input = fast_cmr_handler.collection_search_tool.input_schema(
+            **search_params,
+        )
+        result = await fast_cmr_handler.collection_search_tool.arun(tool_input)
 
         collections = result.collections if hasattr(result, "collections") else []
         timer.add_metadata(
@@ -657,13 +695,15 @@ async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> st
             try:
                 granule_params = {
                     "collection_concept_id": concept_id,
-                    "page_size": fast_config.granule_search_page_size,
+                    "page_size": fast_config.cmr.granule_search_page_size,
                 }
 
-                granule_search_params = fast_agent.granule_search_tool.input_schema(
-                    **granule_params,
+                granule_search_params = (
+                    fast_cmr_handler.granule_search_tool.input_schema(
+                        **granule_params,
+                    )
                 )
-                result = await fast_agent.granule_search_tool.arun(
+                result = await fast_cmr_handler.granule_search_tool.arun(
                     granule_search_params,
                 )
 

@@ -9,6 +9,7 @@ Provides common functionality for LLM-powered components including:
 """
 
 import asyncio
+from pathlib import Path
 from typing import Generic, Optional, TypeVar
 
 from loguru import logger
@@ -60,6 +61,7 @@ class BaseDataSearchComponent(
         config: Optional[BaseAgentConfig] = None,
         debug: bool = False,
         template_name: Optional[str] = None,
+        prompts_dir: Optional[Path] = None,
     ):
         """
         Initialize the component with automatic prompt loading.
@@ -68,10 +70,14 @@ class BaseDataSearchComponent(
             config: Agent configuration (will create default if None)
             debug: Enable debug logging
             template_name: Override class-level template_name
+            prompts_dir: Optional directory for repository-specific prompts
         """
         # Allow instance-level template name override
         if template_name:
             self.template_name = template_name
+
+        # Store prompts_dir for later use
+        self.prompts_dir = prompts_dir
 
         # Create default config if not provided
         if config is None:
@@ -79,7 +85,10 @@ class BaseDataSearchComponent(
 
         # Load system prompt template if template_name is set
         if self.template_name:
-            config.system_prompt = load_prompt_template(f"{self.template_name}_system")
+            config.system_prompt = load_prompt_template(
+                f"{self.template_name}_system",
+                prompts_dir=prompts_dir,
+            )
 
         # Set temperature
         if not hasattr(config, "temperature") or config.temperature is None:
@@ -94,6 +103,7 @@ class BaseDataSearchComponent(
             try:
                 self.user_prompt_template = load_prompt_template(
                     f"{self.template_name}_user",
+                    prompts_dir=prompts_dir,
                 )
             except FileNotFoundError:
                 # User template is optional

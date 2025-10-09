@@ -20,13 +20,10 @@ from typing import Any, Dict
 
 from dotenv import load_dotenv
 
-from akd.agents.data_search import CMRDataSearchAgent, CMRDataSearchAgentConfig
-from akd.agents.data_search.components import (
-    ScientificDecomposition,
-    SearchableQuery,
-    Topic,
-)
-from akd.agents.data_search.components.known_parameters import QueryApproach
+from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
+from akd.agents.data_search.components import ScientificDecomposition, Topic
+from akd.agents.data_search.handlers import CMRHandlerConfig
+from akd.agents.data_search.handlers.cmr import CMRQueryApproach, CMRSearchableQuery
 from akd.configs.data_search_config import get_config
 
 # Load environment variables
@@ -90,25 +87,33 @@ class WorkflowLoader:
             },
         )
 
-        agent_config = CMRDataSearchAgentConfig(
-            debug=True,
+        cmr_handler_config = CMRHandlerConfig(
             mcp_endpoint=config.mcp.endpoint,
-            max_collections_to_search=5,
             collection_search_page_size=20,
             granule_search_page_size=10,
-            enable_parallel_search=True,
+            final_collection_count=5,
             collection_search_timeout=30.0,
             granule_search_timeout=45.0,
             min_collection_relevance_score=0.3,
-            # Model configurations
+            known_parameters_model=model_config.get("cmr_query", "gpt-5-mini"),
+            searchable_parameters_model=model_config.get("cmr_query", "gpt-5-mini"),
+            approach_filtering_model=model_config.get(
+                "collection_ranking",
+                "gpt-5-mini",
+            ),
+            final_ranking_model=model_config.get("collection_ranking", "gpt-5-mini"),
+        )
+
+        agent_config = DataSearchAgentConfig(
+            debug=True,
+            enable_parallel_search=True,
             topic_splitting_model=model_config["topic_splitting"],
             scientific_decomposition_model=model_config["scientific_decomposition"],
             repository_routing_model=model_config["repository_routing"],
-            collection_ranking_model=model_config["collection_ranking"],
-            cmr_query_model=model_config["cmr_query"],
+            cmr=cmr_handler_config,
         )
 
-        self.agent = CMRDataSearchAgent(config=agent_config, debug=True)
+        self.agent = DataSearchAgent(config=agent_config, debug=True)
 
     def list_available_data(self):
         """Print summary of all available data for testing."""
@@ -274,7 +279,7 @@ class WorkflowLoader:
             # Reconstruct query approaches
             query_approaches = []
             for qa_data in decomp_data["known_params"]["query_approaches"]:
-                query_approaches.append(QueryApproach(**qa_data))
+                query_approaches.append(CMRQueryApproach(**qa_data))
             return query_approaches
 
         elif component_name == "searchable_parameters":
@@ -287,7 +292,7 @@ class WorkflowLoader:
             # Reconstruct searchable queries
             searchable_queries = []
             for sq_data in decomp_data["searchable_params"]["searchable_queries"]:
-                searchable_queries.append(SearchableQuery(**sq_data))
+                searchable_queries.append(CMRSearchableQuery(**sq_data))
             return searchable_queries
 
         elif component_name == "collection_search":
