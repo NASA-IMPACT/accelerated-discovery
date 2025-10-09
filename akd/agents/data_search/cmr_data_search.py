@@ -89,31 +89,31 @@ class CMRDataSearchAgentConfig(DataSearchAgentConfig):
 
     # Model configuration for pipeline components
     topic_splitting_model: str = Field(
-        default="gpt-4o",
+        default="gpt-5-nano",
         description="Model to use for topic splitting",
     )
     scientific_decomposition_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         description="Model to use for scientific decomposition",
     )
     repository_routing_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         description="Model to use for repository routing decisions",
     )
     collection_ranking_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         description="Model to use for collection ranking and selection",
     )
     cmr_query_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         description="Model to use for CMR query generation",
     )
     approach_filtering_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         description="Model to use for per-approach collection filtering",
     )
     final_ranking_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         description="Model to use for final cross-approach ranking",
     )
 

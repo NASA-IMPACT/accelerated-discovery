@@ -421,8 +421,8 @@ final_result = await final_ranking_component.arun(final_input)
 collections_per_query: int = 5          # Top N from each CMR query
 max_collections_per_approach: int = 5   # Top N per approach after filtering
 final_collection_count: int = 25        # Final ranked output size
-approach_filtering_model: str = "gpt-4o-mini"
-final_ranking_model: str = "gpt-4o-mini"
+approach_filtering_model: str = "gpt-5-mini"
+final_ranking_model: str = "gpt-5-mini"
 ```
 
 #### Step 7: Granule Search

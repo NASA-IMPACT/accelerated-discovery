@@ -214,12 +214,12 @@ This section explains how the theoretical workflow above is implemented in the c
 
 ### Model Assignment (Optimized)
 
-- **Topic Splitting**: Uses `topic_splitting_model` (e.g., gpt-5-mini or gpt-4o) — requires broad reasoning for research question analysis
-- **Repository Routing**: Uses `repository_routing_model` (e.g., gpt-5-mini or gpt-4o-mini) — domain-specific routing decisions
-- **Scientific Decomposition**: Uses `scientific_decomposition_model` (e.g., gpt-5-mini or gpt-4o-mini) — focused domain expertise
-- **Known Parameters**: Uses `cmr_query_model` (e.g., gpt-5-mini or gpt-4o-mini) — structured parameter extraction
-- **Searchable Parameters**: Uses `cmr_query_model` (e.g., gpt-5-mini or gpt-4o-mini) — keyword generation
-- **Collection Ranking**: Uses `collection_ranking_model` (e.g., gpt-5-mini or gpt-4o-mini) — focused ranking and evaluation
+- **Topic Splitting**: Uses `topic_splitting_model` (e.g., gpt-5-mini) — requires broad reasoning for research question analysis
+- **Repository Routing**: Uses `repository_routing_model` (e.g., gpt-5-mini) — domain-specific routing decisions
+- **Scientific Decomposition**: Uses `scientific_decomposition_model` (e.g., gpt-5-mini) — focused domain expertise
+- **Known Parameters**: Uses `cmr_query_model` (e.g., gpt-5-mini) — structured parameter extraction
+- **Searchable Parameters**: Uses `cmr_query_model` (e.g., gpt-5-mini) — keyword generation
+- **Collection Ranking**: Uses `collection_ranking_model` (e.g., gpt-5-mini) — focused ranking and evaluation
 
 **Legacy Compatibility**: `angle_generation_model` parameter still supported for backward compatibility, maps to `topic_splitting_model`.
 
