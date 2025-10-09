@@ -11,7 +11,6 @@ from pydantic import Field, SecretStr
 from pydantic.networks import HttpUrl
 
 from akd.structures import SearchResultItem
-from akd.utils import parse_date
 
 from ._base import (
     SearchTool,
@@ -57,10 +56,10 @@ class SerperSearchToolConfig(SearchToolConfig):
         description="Maximum number of search results to return",
     )
     num_per_page: int = Field(
-        default=10,
+        default=20,
         gt=0,
         le=100,
-        description="Number of results per API call (max 100)",
+        description="Number of results per API call (max 10 for general search, max 20 for scholar)",
     )
     score_cutoff: float = Field(
         default=float(os.getenv("SERPER_SCORE_CUTOFF", "0.0")),
@@ -86,9 +85,15 @@ class SerperSearchToolConfig(SearchToolConfig):
         le=10,
         description="Maximum number of pages to fetch per query",
     )
+    result_multiplier: float = Field(
+        default=float(os.getenv("SERPER_RESULT_MULTIPLIER", "1.0")),
+        gt=0.0,
+        le=3.0,
+        description="Multiplier for over-fetching results to compensate for filtering (e.g., 1.5 fetches 50% extra). Use 1.0 to fetch exactly what's requested and save credits.",
+    )
 
     pre_authenticate: bool = Field(
-        default=True,
+        default=False,
         description="Whether to validate serper connection on initialization, which will gulp 1 credit. Disable to save credits if needed.",
     )
     debug: bool = Field(
@@ -118,6 +123,15 @@ class SerperSearchTool(SearchTool):
         "science": "scholar",
         "general": "search",
         "technology": "search",
+    }
+
+    # Maximum results per page for each Serper endpoint
+    _max_results_map = {
+        "search": 10,
+        "scholar": 20,
+        "news": 10,
+        "images": 10,
+        "places": 10,
     }
 
     def __init__(
@@ -232,10 +246,18 @@ class SerperSearchTool(SearchTool):
         # Get the appropriate endpoint based on category
         endpoint = self._get_search_endpoint(category)
 
+        # Determine max results allowed for this endpoint
+        category_for_endpoint = category or self.category or ""
+        serper_category = self._category_map.get(category_for_endpoint.lower(), self.category)
+        max_allowed = self._max_results_map.get(serper_category, 20)
+
+        # Enforce endpoint-specific limits
+        num_to_fetch = min(self.num_per_page, max_allowed)
+
         # Build request payload
         payload = {
             "q": query,
-            "num": self.num_per_page,
+            "num": num_to_fetch,
             "page": page,
             "gl": self.gl,
             "hl": self.hl,
@@ -244,7 +266,7 @@ class SerperSearchTool(SearchTool):
 
         if self.debug:
             logger.debug(
-                f"Fetching Serper results from {endpoint} for query '{query}'. Page: {page}, Num: {self.num_per_page}",
+                f"Fetching Serper results from {endpoint} for query '{query}'. Page: {page}, Num: {num_to_fetch}",
             )
 
         try:
@@ -463,10 +485,9 @@ class SerperSearchTool(SearchTool):
         max_results = max_results or params.max_results or self.max_results
         category = params.category or self.category
 
-        # Calculate target results per query (with multiplier for filtering)
-        multiplier = 1.5
+        # Calculate target results per query (with configurable multiplier for filtering)
         target_results_per_query = min(
-            int((max_results * multiplier) / len(params.queries)),
+            int((max_results * self.result_multiplier) / len(params.queries)),
             self.max_pages * self.num_per_page,  # Don't exceed max possible results
         )
 
@@ -475,7 +496,9 @@ class SerperSearchTool(SearchTool):
             logger.info(f"🔍 SERPER SEARCH QUERIES ({len(params.queries)} total):")
             for i, query in enumerate(params.queries, 1):
                 logger.info(f"  {i}. '{query}'")
-            logger.info(f"🎯 Target results per query: {target_results_per_query}")
+            logger.info(
+                f"🎯 Target results per query: {target_results_per_query} (multiplier: {self.result_multiplier}x)",
+            )
             logger.info(f"📂 Category: {category}")
             logger.info(f"🔬 Search type: {self._get_search_endpoint(category)}")
 
@@ -506,13 +529,9 @@ class SerperSearchTool(SearchTool):
                 title=result.pop("title", "Untitled"),
                 content=result.pop("snippet", ""),
                 query=result.pop("query", "Unknown query"),
-                pdf_url=result.pop("pdfUrl", None) or result.pop("htmlUrl", None),
+                pdf_url=result.pop("pdfUrl", None),
                 category=result.pop("category", None),
-                published_date=(
-                    parsed.date().isoformat()
-                    if (parsed := parse_date(result.pop("date", None)) or parse_date(result.pop("year", None)))
-                    else None
-                ),
+                published_date=result.pop("date", None),
                 engine="serper",
                 score=result.pop("score", 0.0),
                 extra=result,  # Any remaining fields
