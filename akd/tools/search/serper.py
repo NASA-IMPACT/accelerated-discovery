@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import List, Literal
+from typing import Literal
 from urllib.parse import urljoin
 
 import httpx
@@ -134,6 +134,15 @@ class SerperSearchTool(SearchTool):
         "places": 10,
     }
 
+    # Result key mapping for each Serper endpoint
+    _result_key_map = {
+        "search": "organic",
+        "scholar": "organic",
+        "news": "news",
+        "images": "images",
+        "places": "places",
+    }
+
     def __init__(
         self,
         config: SerperSearchToolConfig | None = None,
@@ -227,7 +236,7 @@ class SerperSearchTool(SearchTool):
         query: str,
         category: str | None = None,
         page: int = 1,
-    ) -> List[dict]:
+    ) -> tuple[list[dict], dict]:
         """
         Fetches search results from Serper API for a single query.
 
@@ -238,7 +247,7 @@ class SerperSearchTool(SearchTool):
             page: Page number (1-indexed)
 
         Returns:
-            List of search result dictionaries from Serper API
+            Tuple of (list of search result dictionaries, metadata dict containing extra fields)
 
         Raises:
             Exception: If the API request fails
@@ -288,12 +297,14 @@ class SerperSearchTool(SearchTool):
 
             data = response.json()
 
-            # Results key varies by endpoint:
-            # - /search: "organic"
-            # - /scholar: "organic"
-            # - /news: "news"
-            # - /images: "images"
-            results = data.get("organic", data.get("news", data.get("images", [])))
+            # Determine which key contains results based on the endpoint being used
+            # This logic mirrors _get_search_endpoint to ensure consistency
+            category_for_endpoint = category or self.category
+            serper_category = self._category_map.get(category_for_endpoint.lower(), self.category) or "scholar"
+            result_key = self._result_key_map.get(serper_category, "organic")
+
+            # Extract results using the appropriate key
+            results = data.get(result_key, [])
 
             # Add query and category to each result for consistency with SearxNG
             for result in results:
@@ -301,13 +312,16 @@ class SerperSearchTool(SearchTool):
                 if category:
                     result["category"] = category
 
-            # Add search metadata if available
-            if "searchParameters" in data:
-                search_params = data["searchParameters"]
-                if self.debug:
-                    logger.debug(f"Search parameters: {search_params}")
+            # Extract additional metadata fields for the extra field
+            # Include everything except the results themselves
+            # Exclude all possible result keys from metadata
+            excluded_keys = set(self._result_key_map.values())
+            metadata = {key: value for key, value in data.items() if key not in excluded_keys}
 
-            return results
+            if self.debug and metadata:
+                logger.debug(f"Captured metadata fields: {list(metadata.keys())}")
+
+            return results, metadata
 
         except httpx.RequestError as e:
             logger.error(f"Network error fetching Serper results for query '{query}': {e}")
@@ -401,7 +415,7 @@ class SerperSearchTool(SearchTool):
         query: str,
         category: str | None,
         target_results: int,
-    ) -> list[dict]:
+    ) -> tuple[list[dict], dict]:
         """
         Fetches search results across multiple pages to reach target number.
 
@@ -412,9 +426,10 @@ class SerperSearchTool(SearchTool):
             target_results: Target number of results to fetch
 
         Returns:
-            List of search result dictionaries
+            Tuple of (list of search result dictionaries, aggregated metadata dict)
         """
         all_results = []
+        aggregated_metadata = {}
         current_page = 1
 
         while len(all_results) < target_results and current_page <= self.max_pages:
@@ -422,7 +437,7 @@ class SerperSearchTool(SearchTool):
                 if self.debug:
                     logger.debug(f"Fetching page {current_page} for query: {query}")
 
-                results = await self._fetch_serper_results(
+                results, metadata = await self._fetch_serper_results(
                     client,
                     query,
                     category,
@@ -440,6 +455,15 @@ class SerperSearchTool(SearchTool):
 
                 all_results.extend(results)
                 all_results = await self._process_results(all_results)
+
+                # Merge metadata: keep first page's metadata for most fields
+                if current_page == 1:
+                    aggregated_metadata = metadata
+                else:
+                    # For list-based fields, we could append (but typically only page 1 has these)
+                    # For now, keep the first page's metadata as it's most relevant
+                    pass
+
                 current_page += 1
 
                 # Rate limiting: small delay between requests
@@ -456,7 +480,7 @@ class SerperSearchTool(SearchTool):
                 f"Fetched {len(all_results)} results across {current_page - 1} pages for query: {query}",
             )
 
-        return all_results
+        return all_results, aggregated_metadata
 
     async def _arun(
         self,
@@ -512,15 +536,39 @@ class SerperSearchTool(SearchTool):
                 )
                 for query in params.queries
             ]
-            results = await asyncio.gather(*tasks)
+            results_with_metadata = await asyncio.gather(*tasks)
+
+        # Separate results and metadata
+        all_results = []
+        all_metadata = []
+        for results, metadata in results_with_metadata:
+            all_results.append(results)
+            if metadata:
+                all_metadata.append(metadata)
 
         # Flatten and process final results
-        flat_results = [item for sublist in results for item in sublist]
+        flat_results = [item for sublist in all_results for item in sublist]
         filtered_results = await self._process_results(flat_results)
         filtered_results = filtered_results[:max_results]
 
         if self.debug:
             logger.debug(f"Returning {len(filtered_results)} total results")
+
+        # Merge metadata from all queries
+        merged_metadata = {}
+        if all_metadata:
+            for metadata in all_metadata:
+                for key, value in metadata.items():
+                    if key not in merged_metadata:
+                        # First occurrence: just add it
+                        merged_metadata[key] = value
+                    elif isinstance(value, list) and isinstance(merged_metadata[key], list):
+                        # Both are lists: extend (aggregate across queries)
+                        merged_metadata[key].extend(value)
+                    # For non-list fields, keep the first occurrence
+
+            if self.debug:
+                logger.debug(f"Merged metadata keys: {list(merged_metadata.keys())}")
 
         # Transform to SearchResultItem format
         search_results = [
@@ -542,4 +590,5 @@ class SerperSearchTool(SearchTool):
         return SerperSearchToolOutputSchema(
             results=search_results,
             category=params.category,
+            extra=merged_metadata,
         )
