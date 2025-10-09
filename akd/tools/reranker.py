@@ -16,7 +16,7 @@ class RerankerToolConfig(BaseToolConfig):
     This can be extended by specific reranker tool configurations.
     """
 
-    use_deduplication: bool = Field(default=True, description="Whether to use deduplication of results.")
+    deduplication: bool = Field(default=True, description="Whether to use deduplication of results.")
     model_name: str = Field(
         default="cross-encoder/ms-marco-MiniLM-L12-v2", description="The name of the reranker model to use."
     )
@@ -121,7 +121,7 @@ class CrossEncoderRerankerTool(RerankerTool):
 
     def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
         # deduplicate results
-        if self.config.use_deduplication:
+        if self.config.deduplication:
             results = self._deduplicate_results(results, key="url")
 
         pairs = [(query, result.content) for result in results]
