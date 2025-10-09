@@ -311,6 +311,7 @@ class SerperSearchTool(SearchTool):
                 result["query"] = query
                 if category:
                     result["category"] = category
+                result["page"] = page
 
             # Extract additional metadata fields for the extra field
             # Include everything except the results themselves
@@ -429,7 +430,7 @@ class SerperSearchTool(SearchTool):
             Tuple of (list of search result dictionaries, aggregated metadata dict)
         """
         all_results = []
-        aggregated_metadata = {}
+        all_page_metadata = []  # Collect metadata from each page
         current_page = 1
 
         while len(all_results) < target_results and current_page <= self.max_pages:
@@ -456,13 +457,9 @@ class SerperSearchTool(SearchTool):
                 all_results.extend(results)
                 all_results = await self._process_results(all_results)
 
-                # Merge metadata: keep first page's metadata for most fields
-                if current_page == 1:
-                    aggregated_metadata = metadata
-                else:
-                    # For list-based fields, we could append (but typically only page 1 has these)
-                    # For now, keep the first page's metadata as it's most relevant
-                    pass
+                # Collect metadata from each page for proper merging
+                if metadata:
+                    all_page_metadata.append(metadata)
 
                 current_page += 1
 
@@ -480,7 +477,57 @@ class SerperSearchTool(SearchTool):
                 f"Fetched {len(all_results)} results across {current_page - 1} pages for query: {query}",
             )
 
+        # Merge metadata from all pages using the dedicated merge method
+        aggregated_metadata = self._merge_metadata(all_page_metadata)
+
         return all_results, aggregated_metadata
+
+    def _merge_metadata(self, all_metadata: list[dict]) -> dict:
+        """
+        Merge metadata from multiple API calls/pages.
+
+        This method implements different merge strategies based on field type:
+        - credits: Sum across all API calls to track total credit usage
+        - Lists: Extend/aggregate items from all calls
+        - Other fields: Keep first occurrence (typically from page 1)
+
+        Args:
+            all_metadata: List of metadata dictionaries from each API call/page
+
+        Returns:
+            Merged metadata dictionary with aggregated values
+
+        Example:
+            >>> metadata1 = {"credits": 1, "searchParameters": {...}, "relatedSearches": ["a"]}
+            >>> metadata2 = {"credits": 1, "searchParameters": {...}, "relatedSearches": ["b"]}
+            >>> merged = self._merge_metadata([metadata1, metadata2])
+            >>> merged["credits"]  # 2 (summed)
+            >>> merged["relatedSearches"]  # ["a", "b"] (extended)
+        """
+        merged_metadata = {}
+
+        if not all_metadata:
+            return merged_metadata
+
+        for metadata in all_metadata:
+            for key, value in metadata.items():
+                if key not in merged_metadata:
+                    # First occurrence: just add it
+                    merged_metadata[key] = value
+                elif key == "credits" and isinstance(value, (int, float)):
+                    # Sum credits across all API calls to track total usage
+                    merged_metadata[key] += value
+                elif isinstance(value, list) and isinstance(merged_metadata[key], list):
+                    # Both are lists: extend (aggregate across queries/pages)
+                    merged_metadata[key].extend(value)
+                # For other non-list fields, keep the first occurrence
+
+        if self.debug and merged_metadata:
+            logger.debug(f"Merged metadata keys: {list(merged_metadata.keys())}")
+            if "credits" in merged_metadata:
+                logger.debug(f"Total credits used: {merged_metadata['credits']}")
+
+        return merged_metadata
 
     async def _arun(
         self,
@@ -555,20 +602,7 @@ class SerperSearchTool(SearchTool):
             logger.debug(f"Returning {len(filtered_results)} total results")
 
         # Merge metadata from all queries
-        merged_metadata = {}
-        if all_metadata:
-            for metadata in all_metadata:
-                for key, value in metadata.items():
-                    if key not in merged_metadata:
-                        # First occurrence: just add it
-                        merged_metadata[key] = value
-                    elif isinstance(value, list) and isinstance(merged_metadata[key], list):
-                        # Both are lists: extend (aggregate across queries)
-                        merged_metadata[key].extend(value)
-                    # For non-list fields, keep the first occurrence
-
-            if self.debug:
-                logger.debug(f"Merged metadata keys: {list(merged_metadata.keys())}")
+        merged_metadata = self._merge_metadata(all_metadata)
 
         # Transform to SearchResultItem format
         search_results = [
@@ -586,6 +620,8 @@ class SerperSearchTool(SearchTool):
             )
             for result in filtered_results
         ]
+
+        merged_metadata["total_pages_fetched"] = max([r.extra.get("page", 1) for r in search_results])
 
         return SerperSearchToolOutputSchema(
             results=search_results,
