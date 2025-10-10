@@ -21,7 +21,7 @@ class RerankerToolConfig(BaseToolConfig):
     model_name: str = Field(
         default="cross-encoder/ms-marco-MiniLM-L12-v2", description="The name of the reranker model to use."
     )
-    deduplication_key: str = Field(default="url", description="The key to use for deduplication of results.")
+    deduplication_keys: list[str] = Field(default=["url"], description="The keys to use for deduplication of results.")
     sort_key: str = Field(default="score", description="The key to use for sorting of results.")
 
 
@@ -57,18 +57,20 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
     def _deduplicate_results(
         self,
         results: list[SearchResultItem],
-        deduplication_key: str,
+        deduplication_keys: list[str],
     ) -> list[SearchResultItem]:
         """
-        Deduplicate results based on a unique key (default is URL).
+        Deduplicate results based on a list of keys.
         """
         seen = set()
         deduped = []
         for result in results:
-            val = str(getattr(result, deduplication_key, ""))
-            if val and val not in seen:
-                seen.add(val)
-                deduped.append(result)
+            for key in deduplication_keys:
+                val = str(getattr(result, key, ""))
+                if val and val not in seen:
+                    seen.add(val)
+                    deduped.append(result)
+                    break
         return deduped
 
     def _sort_results(
@@ -115,7 +117,9 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
 
         # deduplicate results
         if self.config.deduplication:
-            ranked_results = self._deduplicate_results(ranked_results, deduplication_key=self.config.deduplication_key)
+            ranked_results = self._deduplicate_results(
+                ranked_results, deduplication_keys=self.config.deduplication_keys
+            )
 
         return RerankerToolOutputSchema(query=params.query, results=ranked_results)
 
