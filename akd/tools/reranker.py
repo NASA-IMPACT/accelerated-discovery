@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import abstractmethod
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
@@ -20,6 +21,8 @@ class RerankerToolConfig(BaseToolConfig):
     model_name: str = Field(
         default="cross-encoder/ms-marco-MiniLM-L12-v2", description="The name of the reranker model to use."
     )
+    deduplication_key: str = Field(default="url", description="The key to use for deduplication of results.")
+    sort_key: str = Field(default="score", description="The key to use for sorting of results.")
 
 
 class RerankerToolInputSchema(InputSchema):
@@ -35,7 +38,7 @@ class RerankerToolOutputSchema(OutputSchema):
     """Schema for output of a tool for reranking search results."""
 
     query: str = Field(..., description="Reranking query.")
-    results: list[SearchResultItem] = Field(..., description="List of search results to rerank.")
+    results: list[SearchResultItem] = Field(..., description="List of reranked search results.")
 
 
 class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
@@ -54,7 +57,7 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
     def _deduplicate_results(
         self,
         results: list[SearchResultItem],
-        key: str = "url",
+        deduplication_key: str,
     ) -> list[SearchResultItem]:
         """
         Deduplicate results based on a unique key (default is URL).
@@ -62,7 +65,7 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
         seen = set()
         deduped = []
         for result in results:
-            val = str(getattr(result, key, ""))
+            val = str(getattr(result, deduplication_key, ""))
             if val and val not in seen:
                 seen.add(val)
                 deduped.append(result)
@@ -71,7 +74,7 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
     def _sort_results(
         self,
         results: list[SearchResultItem],
-        sort_by: str = "score",
+        sort_key: str,
     ) -> list[SearchResultItem]:
         """
         Sort results by the specified key. First checks for the key directly in the dict,
@@ -80,17 +83,17 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
 
         def __get_sort_key(result):
             # First check if sort_by key exists directly in the dict
-            if sort_by in result:
-                return result[sort_by]
+            if sort_key in result:
+                return result[sort_key]
 
             # Then check if 'extra' field exists and contains the sort_by key
-            if result.extra and isinstance(result.extra, dict) and sort_by in result.extra:
-                return result.extra[sort_by]
+            if result.extra and isinstance(result.extra, dict) and sort_key in result.extra:
+                return result.extra[sort_key]
 
             # If key not found anywhere, return a default value that will sort last
             # Using float('inf') for numerical sorting or empty string for string sorting
             if self.debug:
-                logger.warning(f"Sort key {sort_by} not found in results")
+                logger.warning(f"Sort key {sort_key} not found in results")
             return float("-inf")
 
         try:
@@ -102,11 +105,19 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
             return results
 
     # abstract method to be implemented by the subclass
+    @abstractmethod
     def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
         raise NotImplementedError("Subclass must implement this method")
 
     def _arun(self, params: RerankerToolInputSchema) -> RerankerToolOutputSchema:
-        return self._rerank_results(params.query, params.results)
+        # rerank results
+        ranked_results = self._rerank_results(params.query, params.results)
+
+        # deduplicate results
+        if self.config.deduplication:
+            ranked_results = self._deduplicate_results(ranked_results, deduplication_key=self.config.deduplication_key)
+
+        return RerankerToolOutputSchema(query=params.query, results=ranked_results)
 
 
 class CrossEncoderRerankerTool(RerankerTool):
@@ -120,10 +131,7 @@ class CrossEncoderRerankerTool(RerankerTool):
         self.debug = debug
 
     def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
-        # deduplicate results
-        if self.config.deduplication:
-            results = self._deduplicate_results(results, key="url")
-
+        # create pairs of query and results
         pairs = [(query, result.content) for result in results]
 
         # get similarity scores from CrossEncoder
@@ -135,4 +143,4 @@ class CrossEncoderRerankerTool(RerankerTool):
             result.extra["score"] = score
 
         # sort results
-        return self._sort_results(results, sort_by="score")
+        return self._sort_results(results, sort_key=self.config.sort_key)

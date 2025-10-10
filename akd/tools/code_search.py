@@ -27,6 +27,7 @@ from akd.tools.search import (
 )
 from akd.utils import get_akd_root, google_drive_downloader
 from akd.tools.reranker import CrossEncoderRerankerTool, RerankerToolConfig
+from akd.tools.reranker import RerankerToolInputSchema
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
@@ -208,7 +209,9 @@ class CombinedCodeSearchTool(CodeSearchTool):
     ) -> list[SearchResultItem]:
         """Rerank results for a single query."""
         query_results = [result for result in all_results if result.query == query]
-        return self._rerank_results(query_results, query)[:top_k_per_query]
+        reranked_results = self.reranker_tool._arun(RerankerToolInputSchema(query=query, results=query_results))
+        reranked_results = reranked_results.results
+        return reranked_results[:top_k_per_query]
 
     async def _arun(
         self,
@@ -236,13 +239,6 @@ class CombinedCodeSearchTool(CodeSearchTool):
         final_results = [result for query_results in reranked_results for result in query_results]
 
         return self.output_schema(results=final_results, category="technology")
-
-    def _rerank_results(self, results: list[SearchResultItem], query: str) -> list[SearchResultItem]:
-        """
-        Rerank results using a CrossEncoder model based on the query and result content.
-        """
-
-        return self.reranker_tool._rerank_results(query, results)
 
 
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
