@@ -22,7 +22,10 @@ class LLMMappingEntry(BaseModel):
     """Single LLM-generated mapping entry with metadata."""
 
     mapping: dict[str, str] = Field(..., description="Field mappings: target -> source")
-    generated_at: str = Field(..., description="ISO timestamp of generation")
+    generated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        description="ISO timestamp of generation",
+    )
     confidence: float = Field(..., ge=0.0, le=1.0, description="Overall confidence score")
     user_approved: bool = Field(..., description="Whether user approved this mapping")
     reasoning: dict[str, str] = Field(
@@ -178,7 +181,6 @@ class FieldMappingRegistry:
 
         entry = LLMMappingEntry(
             mapping=mapping,
-            generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             confidence=confidence,
             user_approved=user_approved,
             reasoning=reasoning,
