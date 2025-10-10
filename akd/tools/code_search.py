@@ -209,7 +209,7 @@ class CombinedCodeSearchTool(CodeSearchTool):
     ) -> list[SearchResultItem]:
         """Rerank results for a single query."""
         query_results = [result for result in all_results if result.query == query]
-        reranked_results = self.reranker_tool._arun(RerankerToolInputSchema(query=query, results=query_results))
+        reranked_results = await self.reranker_tool.arun(RerankerToolInputSchema(query=query, results=query_results))
         reranked_results = reranked_results.results
         return reranked_results[:top_k_per_query]
 
