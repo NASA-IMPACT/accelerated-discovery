@@ -54,7 +54,7 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
     output_schema = RerankerToolOutputSchema
     config_schema = RerankerToolConfig
 
-    def _deduplicate_results(
+    async def _deduplicate_results(
         self,
         results: list[SearchResultItem],
         deduplication_keys: list[str],
@@ -73,7 +73,7 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
                     break
         return deduped
 
-    def _sort_results(
+    async def _sort_results(
         self,
         results: list[SearchResultItem],
         sort_key: str,
@@ -108,16 +108,16 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
 
     # abstract method to be implemented by the subclass
     @abstractmethod
-    def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
+    async def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
         raise NotImplementedError("Subclass must implement this method")
 
     async def _arun(self, params: RerankerToolInputSchema) -> RerankerToolOutputSchema:
         # rerank results
-        ranked_results = self._rerank_results(params.query, params.results)
+        ranked_results = await self._rerank_results(params.query, params.results)
 
         # deduplicate results
         if self.config.deduplication:
-            ranked_results = self._deduplicate_results(
+            ranked_results = await self._deduplicate_results(
                 ranked_results, deduplication_keys=self.config.deduplication_keys
             )
 
@@ -134,7 +134,7 @@ class CrossEncoderRerankerTool(RerankerTool):
         self.reranker_model = CrossEncoder(self.config.model_name)
         self.debug = debug
 
-    def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
+    async def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
         # create pairs of query and results
         pairs = [(query, result.content) for result in results]
 
@@ -147,4 +147,4 @@ class CrossEncoderRerankerTool(RerankerTool):
             result.extra["score"] = score
 
         # sort results
-        return self._sort_results(results, sort_key=self.config.sort_key)
+        return await self._sort_results(results, sort_key=self.config.sort_key)
