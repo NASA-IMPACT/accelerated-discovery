@@ -285,17 +285,14 @@ def parse_date(date_input: str | int | None) -> datetime | None:
         >>> parse_date("2025-10-05")
         datetime.datetime(2025, 10, 5, 0, 0)
     """
-    if date_input is None:
-        return None
+    parsed_date = None
 
     # Handle year integers
     if isinstance(date_input, int):
-        return datetime(date_input, 1, 1)
+        parsed_date = datetime(date_input, 1, 1)
 
     # Handle string dates
-    if isinstance(date_input, str):
-        parsed = dateparser.parse(date_input)
-        if parsed:
-            return parsed
+    elif isinstance(date_input, str):
+        parsed_date = dateparser.parse(date_input)
 
-    return None
+    return parsed_date
