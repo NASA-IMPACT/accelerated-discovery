@@ -80,10 +80,10 @@ class SerperSearchToolConfig(SearchToolConfig):
         description="Whether to enable query autocorrection",
     )
     max_pages: int = Field(
-        default=int(os.getenv("SERPER_MAX_PAGES", "5")),
+        default=int(os.getenv("SERPER_MAX_PAGES", "1")),
         gt=0,
         le=10,
-        description="Maximum number of pages to fetch per query",
+        description="Maximum number of pages to fetch per query. Defaults to 1 to limit credit usage.",
     )
     result_multiplier: float = Field(
         default=float(os.getenv("SERPER_RESULT_MULTIPLIER", "1.0")),
@@ -621,7 +621,9 @@ class SerperSearchTool(SearchTool):
             for result in filtered_results
         ]
 
-        merged_metadata["total_pages_fetched"] = max([r.extra.get("page", 1) for r in search_results])
+        merged_metadata["total_pages_fetched"] = (
+            max([r.extra.get("page", 1) for r in search_results]) if search_results else 0
+        )
 
         return SerperSearchToolOutputSchema(
             results=search_results,
