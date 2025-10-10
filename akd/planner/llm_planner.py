@@ -5,6 +5,8 @@ This module provides an intelligent planner that can converse with users to unde
 their research requirements and generate validated workflow definitions in the AKD format.
 """
 
+from __future__ import annotations
+
 from enum import Enum
 from typing import Any, Optional
 
@@ -208,9 +210,13 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         self.conversation_state = {}
         self.reset_memory()
 
-    async def init_planner_session(self, initial_request: str) -> "InteractivePlannerSession":
+    async def init_planner_session(
+        self,
+        initial_request: str,
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> InteractivePlannerSession:
         """Start an interactive planning session."""
-        return InteractivePlannerSession(self, initial_request)
+        return InteractivePlannerSession(self, initial_request, conversation_history=conversation_history)
 
     async def _arun(self, params: PlannerInput, **kwargs) -> PlannerResponse:
         """Process user input and generate planner response."""
