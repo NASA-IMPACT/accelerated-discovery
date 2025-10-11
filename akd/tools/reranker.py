@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+
+import numpy as np
+from loguru import logger
 from pydantic.fields import Field
+from sentence_transformers import CrossEncoder
 
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
-from loguru import logger
-from sentence_transformers import CrossEncoder
-import numpy as np
 
 
 class RerankerToolConfig(BaseToolConfig):
@@ -19,7 +20,8 @@ class RerankerToolConfig(BaseToolConfig):
 
     deduplication: bool = Field(default=True, description="Whether to use deduplication of results.")
     model_name: str = Field(
-        default="cross-encoder/ms-marco-MiniLM-L12-v2", description="The name of the reranker model to use."
+        default="cross-encoder/ms-marco-MiniLM-L12-v2",
+        description="The name of the reranker model to use.",
     )
     deduplication_keys: list[str] = Field(default=["url"], description="The keys to use for deduplication of results.")
     sort_key: str = Field(default="score", description="The key to use for sorting of results.")
@@ -118,7 +120,8 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
         # deduplicate results
         if self.config.deduplication:
             ranked_results = await self._deduplicate_results(
-                ranked_results, deduplication_keys=self.config.deduplication_keys
+                ranked_results,
+                deduplication_keys=self.config.deduplication_keys,
             )
 
         return RerankerToolOutputSchema(query=params.query, results=ranked_results)
@@ -144,6 +147,7 @@ class CrossEncoderRerankerTool(RerankerTool):
 
         # attach scores
         for score, result in zip(scores, results):
+            result.score = score
             result.extra["score"] = score
 
         # sort results
