@@ -14,7 +14,6 @@ from pydantic import ValidationError, computed_field, Field
 from pydantic.networks import HttpUrl
 from scipy.spatial.distance import cdist
 from tenacity import retry, stop_after_attempt
-from sentence_transformers import CrossEncoder
 
 from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
@@ -27,6 +26,8 @@ from akd.tools.search import (
     SearxNGSearchToolConfig,
 )
 from akd.utils import get_akd_root, google_drive_downloader
+from akd.tools.reranker import CrossEncoderRerankerTool, RerankerToolConfig
+from akd.tools.reranker import RerankerToolInputSchema
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
@@ -142,11 +143,7 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
                 return result[sort_by]
 
             # Then check if 'extra' field exists and contains the sort_by key
-            if (
-                result.extra
-                and isinstance(result.extra, dict)
-                and sort_by in result.extra
-            ):
+            if result.extra and isinstance(result.extra, dict) and sort_by in result.extra:
                 return result.extra[sort_by]
 
             # If key not found anywhere, return a default value that will sort last
@@ -167,9 +164,13 @@ class CombinedCodeSearchToolConfig(CodeSearchToolConfig):
     Configuration for the combined code search tool.
     """
 
-    reranker_model_name: str = Field(
+    reranker_tool: str = Field(
+        "cross-encoder",
+        description="The tool to use for reranking the combined results.",
+    )
+    cross_encoder_model_name: str = Field(
         "cross-encoder/ms-marco-MiniLM-L12-v2",
-        description="The model to use for reranking the combined results.",
+        description="The model to use with the cross-encoder tool for reranking the combined results.",
     )
 
 
@@ -194,14 +195,23 @@ class CombinedCodeSearchTool(CodeSearchTool):
             GitHubCodeSearchTool(debug=debug),
             SDECodeSearchTool(debug=debug),
         ]
-        self.reranker_model = CrossEncoder(config.reranker_model_name)
+        # initialize reranker tool
+        if config.reranker_tool == "cross-encoder":
+            self.reranker_tool = CrossEncoderRerankerTool(
+                config=RerankerToolConfig(model_name=config.cross_encoder_model_name),
+                debug=debug,
+            )
+        else:
+            raise ValueError(f"Invalid reranker tool: {config.reranker_tool}")
 
     async def _rerank_query(
         self, query: str, all_results: list[SearchResultItem], top_k_per_query: int
     ) -> list[SearchResultItem]:
         """Rerank results for a single query."""
         query_results = [result for result in all_results if result.query == query]
-        return self._rerank_results(query_results, query)[:top_k_per_query]
+        reranked_results = await self.reranker_tool.arun(RerankerToolInputSchema(query=query, results=query_results))
+        reranked_results = reranked_results.results
+        return reranked_results[:top_k_per_query]
 
     async def _arun(
         self,
@@ -224,42 +234,11 @@ class CombinedCodeSearchTool(CodeSearchTool):
 
         top_k_per_query = params.top_k // len(params.queries)
         reranked_results = await asyncio.gather(
-            *[
-                self._rerank_query(query, all_results, top_k_per_query)
-                for query in params.queries
-            ]
+            *[self._rerank_query(query, all_results, top_k_per_query) for query in params.queries]
         )
-        final_results = [
-            result for query_results in reranked_results for result in query_results
-        ]
+        final_results = [result for query_results in reranked_results for result in query_results]
 
         return self.output_schema(results=final_results, category="technology")
-
-    def _rerank_results(
-        self, results: list[SearchResultItem], query: str
-    ) -> list[SearchResultItem]:
-        """
-        Rerank results using a CrossEncoder model based on the query and result content.
-        """
-
-        try:
-            # Generate (query, content) pairs
-            pairs = [(query, result.content) for result in results]
-
-            # Get similarity scores from CrossEncoder
-            scores = self.reranker_model.predict(pairs)
-            scores = 1 / (1 + np.exp(-scores))
-
-            # Attach scores
-            for score, result in zip(scores, results):
-                result.extra["score"] = score
-
-            # Sort results by score
-            deduped = self._deduplicate_results(results, key="url")
-            return self._sort_results(deduped, sort_by="score")
-        except Exception as e:
-            logger.error(f"Reranking failed: {e}")
-            return results
 
 
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
@@ -268,9 +247,7 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     data_file: str = str(
-        get_akd_root()
-        / "docs"
-        / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v4.csv")
+        get_akd_root() / "docs" / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v4.csv")
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
@@ -319,9 +296,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             if self.config.embedder_type == "sentence-transformers":
                 self.embedder = Embedder(self.config.embedding_model_name)
             elif self.config.embedder_type == "openai":
-                self.embedder = OpenAIEmbedder(
-                    model_name=self.config.embedding_model_name
-                )
+                self.embedder = OpenAIEmbedder(model_name=self.config.embedding_model_name)
 
             if self.config.embeddings_column not in self.repo_data.columns:
                 logger.warning(
@@ -334,21 +309,15 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
             # Parse embeddings if they are in string format
             if self.debug:
-                logger.debug(
-                    f"Embeddings column dtype: {self.repo_data[self.config.embeddings_column].dtype}"
-                )
+                logger.debug(f"Embeddings column dtype: {self.repo_data[self.config.embeddings_column].dtype}")
             if self.repo_data[self.config.embeddings_column].dtype == "object":
-                self.repo_data[self.config.embeddings_column] = self.repo_data[
-                    self.config.embeddings_column
-                ].apply(
+                self.repo_data[self.config.embeddings_column] = self.repo_data[self.config.embeddings_column].apply(
                     self.embedder._parse_embedding,
                 )
 
             # Stack all embeddings into a matrix
             if self.debug:
-                logger.debug(
-                    f"Embeddings column: {self.repo_data[self.config.embeddings_column].head()}"
-                )
+                logger.debug(f"Embeddings column: {self.repo_data[self.config.embeddings_column].head()}")
             self.embeddings_matrix = np.vstack(
                 self.repo_data[self.config.embeddings_column].tolist(),
             )
@@ -396,13 +365,8 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             batch_size: Size of batches for embedding generation
         """
         # Check if embeddings already exist
-        if (
-            self.config.embeddings_column in self.repo_data.columns
-            and not force_regenerate
-        ):
-            logger.info(
-                f"Embeddings column '{self.config.embeddings_column}' already exists. Skipping generation."
-            )
+        if self.config.embeddings_column in self.repo_data.columns and not force_regenerate:
+            logger.info(f"Embeddings column '{self.config.embeddings_column}' already exists. Skipping generation.")
             return
 
         logger.info(
@@ -448,9 +412,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         save_data = self.repo_data.copy()
 
         # Convert numpy arrays to string representation for CSV storage
-        save_data[self.config.embeddings_column] = save_data[
-            self.config.embeddings_column
-        ].apply(
+        save_data[self.config.embeddings_column] = save_data[self.config.embeddings_column].apply(
             lambda x: ",".join(map(str, x)) if isinstance(x, np.ndarray) else x,
         )
 
@@ -592,10 +554,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
         config.engines = ["github"]
         # Optional: Give the tool a more specific default title/description
         config.title = "GitHub Search"
-        config.description = (
-            "Tool for performing targeted searches on GitHub "
-            "for code, repositories, and issues."
-        )
+        config.description = "Tool for performing targeted searches on GitHub for code, repositories, and issues."
 
         super().__init__(config, debug)
 
@@ -662,8 +621,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
 
         if self.debug:
             logger.debug(
-                f"GitHubSearchTool: Forcing category to '{params.category}' "
-                f"and engines to {self.config.engines}",
+                f"GitHubSearchTool: Forcing category to '{params.category}' and engines to {self.config.engines}",
             )
 
         # Call the parent's _arun method with the modified parameters
@@ -687,9 +645,7 @@ class SDECodeSearchToolConfig(CodeSearchToolConfig):
     Configuration for the SDE code search tool.
     """
 
-    base_url: str = os.getenv(
-        "SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
-    )
+    base_url: str = os.getenv("SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search")
     page_size: int = 10
     max_pages: int = 1
     headers: dict = Field(
@@ -726,9 +682,7 @@ class SDECodeSearchTool(CodeSearchTool):
         }
         if self.debug:
             logger.debug(f"Payload: {payload}")
-        response = requests.post(
-            self.base_url, headers=self.headers, data=json.dumps(payload)
-        )
+        response = requests.post(self.base_url, headers=self.headers, data=json.dumps(payload))
         if self.debug:
             logger.debug(f"Response: {response.json()}")
         return response.json()["documents"]
@@ -746,9 +700,7 @@ class SDECodeSearchTool(CodeSearchTool):
         for query in params.queries:
             query_results = []
             if self.debug:
-                logger.debug(
-                    f"Searching for query: '{query}' with top_k={params.max_results}"
-                )
+                logger.debug(f"Searching for query: '{query}' with top_k={params.max_results}")
 
             try:
                 for page in range(self.max_pages):
@@ -761,9 +713,7 @@ class SDECodeSearchTool(CodeSearchTool):
                         else:
                             break
                     except Exception as e:
-                        logger.error(
-                            f"Error during search for query '{query}' on page {page}: {e}"
-                        )
+                        logger.error(f"Error during search for query '{query}' on page {page}: {e}")
                         continue  # continue to the next page
                 all_results_data.extend(query_results[: params.top_k])
             except Exception as e:
