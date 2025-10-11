@@ -114,6 +114,8 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
         raise NotImplementedError("Subclass must implement this method")
 
     async def _arun(self, params: RerankerToolInputSchema) -> RerankerToolOutputSchema:
+        if not params.results:
+            return RerankerToolOutputSchema(query=params.query, results=[])
         # rerank results
         ranked_results = await self._rerank_results(params.query, params.results)
 
