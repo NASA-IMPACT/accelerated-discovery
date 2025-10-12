@@ -875,7 +875,8 @@ All parallel operations include robust error handling:
 successful_results = []
 for i, result in enumerate(results):
     if isinstance(result, Exception):
-        log_component_action("Search", "FAILED", {"error": str(result)})
+        # Log error
+        pass
     else:
         successful_results.append(result.results)
 ```
@@ -1245,21 +1246,9 @@ async def _emit_progress_safely(self, method_name: str, *args, **kwargs):
     try:
         method = getattr(self.progress_handler, method_name)
         await method(*args, **kwargs)
-    except Exception as e:
+    except Exception:
         # Progress failures don't stop the search
-        self.agent_logger.warning(f"Progress update failed: {e}")
-```
-
-### Logging and Observability
-**Location**: Throughout codebase
-
-Comprehensive logging using structured events:
-```python
-from akd.utils.logging import log_component_action, log_search_event
-
-log_search_event(search_id, "SEARCH_STARTED", {"query": query})
-log_component_action("TopicSplitting", "STARTED", {"query": query})
-log_component_action("CollectionSearch", "EXECUTE", {"params": params})
+        pass
 ```
 
 ### Legacy Compatibility

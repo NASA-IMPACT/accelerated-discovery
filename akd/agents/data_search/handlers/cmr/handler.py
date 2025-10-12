@@ -12,7 +12,6 @@ from akd.agents._base import BaseAgentConfig
 from akd.agents.data_search._base import DataSearchAgentInputSchema, DecompositionResult
 from akd.agents.data_search.components import ScientificDecomposition, Topic
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
-from akd.utils.logging import ContextualLogger, log_component_action
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
 from .._base import BaseHandler
@@ -88,9 +87,6 @@ class CMRHandler(BaseHandler):
             prompts_dir=cmr_prompts_dir,
         )
 
-        # Logger
-        self.handler_logger = ContextualLogger("CMRHandler")
-
     async def process_decomposition(
         self,
         decomposition: ScientificDecomposition,
@@ -110,63 +106,29 @@ class CMRHandler(BaseHandler):
 
         Granule search is kept for future use but not currently executed.
         """
-        self.handler_logger.info(f"Processing decomposition: {decomposition.title}")
-
         # Step 1: Known Parameters
-        log_component_action(
-            "KnownParameters",
-            "STARTED",
-            {"decomposition": decomposition.title},
-        )
         known_params_output = await self.known_parameters_component.process(
             original_query,
             topic,
             decomposition,
         )
-        self.handler_logger.info(
-            f"Generated {len(known_params_output.query_approaches)} query approaches",
-        )
 
         # Step 2: Searchable Parameters
-        log_component_action(
-            "SearchableParameters",
-            "STARTED",
-            {"approaches": len(known_params_output.query_approaches)},
-        )
         searchable_output = await self.searchable_parameters_component.process(
             original_query,
             topic,
             decomposition,
             known_params_output.query_approaches,
         )
-        self.handler_logger.info(
-            f"Generated {len(searchable_output.searchable_queries)} searchable queries",
-        )
 
         # Step 3: Query Execution
-        log_component_action(
-            "QueryExecution",
-            "STARTED",
-            {"queries": len(searchable_output.searchable_queries)},
-        )
         approach_collections = await self._execute_searchable_queries(
             searchable_output.searchable_queries,
             params,
         )
         total_collections = sum(len(c) for c in approach_collections.values())
-        self.handler_logger.info(
-            f"Found {total_collections} collections across {len(approach_collections)} approaches",
-        )
 
         # Step 4: Collection Ranking & Filtering
-        log_component_action(
-            "CollectionRanking",
-            "STARTED",
-            {
-                "approaches": len(approach_collections),
-                "total_collections": total_collections,
-            },
-        )
         ranked_collections = await self._rank_collections(
             approach_collections,
             original_query,
@@ -174,7 +136,6 @@ class CMRHandler(BaseHandler):
             decomposition,
             known_params_output.query_approaches,
         )
-        self.handler_logger.info(f"Ranked to {len(ranked_collections)} top collections")
 
         # Step 5: Granule Search (KEPT FOR FUTURE USE - NOT CURRENTLY CALLED)
         # granules = await self._search_granules_for_collections(
@@ -250,8 +211,8 @@ class CMRHandler(BaseHandler):
                         ]
                         all_collections.extend(limited)
 
-                except Exception as e:
-                    self.handler_logger.warning(f"Query execution failed: {e}")
+                except Exception:
+                    pass
 
             approach_collections[approach_idx] = all_collections
 
@@ -280,11 +241,6 @@ class CMRHandler(BaseHandler):
                     deduplicated.append(collection)
 
             deduplicated_by_approach[approach_idx] = deduplicated
-
-            self.handler_logger.debug(
-                f"Approach {approach_idx}: {len(collections)} → "
-                f"{len(deduplicated)} after deduplication",
-            )
 
         return deduplicated_by_approach
 
@@ -316,9 +272,6 @@ class CMRHandler(BaseHandler):
 
             # Get the corresponding QueryApproach
             if approach_idx >= len(query_approaches):
-                self.handler_logger.warning(
-                    f"No QueryApproach for index {approach_idx}",
-                )
                 continue
 
             approach = query_approaches[approach_idx]
@@ -370,9 +323,6 @@ class CMRHandler(BaseHandler):
 
         for (approach_idx, collections, _), result in zip(filtering_tasks, results):
             if isinstance(result, Exception):
-                self.handler_logger.error(
-                    f"Approach {approach_idx} filtering failed: {result}",
-                )
                 continue
 
             # Extract selected collections
@@ -383,11 +333,6 @@ class CMRHandler(BaseHandler):
             ]
 
             filtered_by_approach[approach_idx] = selected
-
-            self.handler_logger.info(
-                f"Approach {approach_idx}: {len(collections)} → "
-                f"{len(selected)} collections selected",
-            )
 
         return filtered_by_approach
 
@@ -413,13 +358,6 @@ class CMRHandler(BaseHandler):
         # Stage 1: Per-approach deduplication
         deduplicated = self._deduplicate_approach_collections(approach_collections)
 
-        total_before = sum(len(c) for c in approach_collections.values())
-        total_after = sum(len(c) for c in deduplicated.values())
-        self.handler_logger.info(
-            f"Deduplication across {len(deduplicated)} approaches: "
-            f"{total_before} → {total_after} collections",
-        )
-
         # Stage 2: Per-approach filtering and ranking (parallel)
         filtered_by_approach = await self._filter_and_rank_by_approach(
             deduplicated,
@@ -434,13 +372,7 @@ class CMRHandler(BaseHandler):
         for approach_idx in sorted(filtered_by_approach.keys()):
             all_filtered.extend(filtered_by_approach[approach_idx])
 
-        self.handler_logger.info(
-            f"After approach filtering: {len(all_filtered)} total collections "
-            f"from {len(filtered_by_approach)} approaches",
-        )
-
         if not all_filtered:
-            self.handler_logger.warning("No collections passed approach filtering")
             return []
 
         # Get CMR prompts directory
@@ -479,14 +411,9 @@ class CMRHandler(BaseHandler):
                 if 0 <= rc.collection_index < len(all_filtered)
             ]
 
-            self.handler_logger.info(
-                f"Final ranking complete: {len(final_ranked)} collections ranked",
-            )
-
             return final_ranked
 
-        except Exception as e:
-            self.handler_logger.error(f"Final ranking failed: {e}")
+        except Exception:
             # Fallback: return up to final_collection_count
             return all_filtered[: self.config.final_collection_count]
 
@@ -533,9 +460,7 @@ class CMRHandler(BaseHandler):
                 if hasattr(result, "results") and result.results.get("granules"):
                     all_granules.extend(result.results["granules"])
 
-            except Exception as e:
-                self.handler_logger.warning(
-                    f"Granule search failed for collection {concept_id}: {e}",
-                )
+            except Exception:
+                pass
 
         return all_granules

@@ -10,7 +10,6 @@ from pydantic.networks import HttpUrl
 
 from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
-from akd.utils.logging import ContextualLogger
 
 
 class DataSearchToolConfig(BaseToolConfig):
@@ -85,10 +84,6 @@ class BaseDataSearchTool[
     input_schema = DataSearchToolInputSchema
     output_schema = DataSearchToolOutputSchema
     config_schema = DataSearchToolConfig
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tool_logger = ContextualLogger(self.__class__.__name__)
 
     def _prepare_request_headers(self) -> dict:
         """Prepare common HTTP headers for requests."""
@@ -166,10 +161,7 @@ class BaseDataSearchTool[
                             raise Exception(f"Invalid JSON in tool result: {e}")
 
             raise Exception("No valid data found in MCP response")
-        except Exception as e:
-            self.tool_logger.error(f"MCP response parsing failed: {e}")
-            if self.debug:
-                self.tool_logger.debug(f"Raw response: {response_text[:500]}...")
+        except Exception:
             raise
 
     def _validate_tool_result(self, tool_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -250,10 +242,6 @@ class BaseDataSearchTool[
         for attempt in range(config.max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
-                    self.tool_logger.debug(
-                        f"Making MCP request (attempt {attempt + 1}): {tool_name}",
-                    )
-
                     response = await client.post(
                         str(config.mcp_endpoint),
                         json=request_data,
@@ -264,9 +252,6 @@ class BaseDataSearchTool[
                         try:
                             return self._parse_mcp_response(response.text)
                         except Exception as parse_error:
-                            self.tool_logger.error(
-                                f"Failed to parse MCP response: {parse_error}",
-                            )
                             last_exception = parse_error
                             if attempt == config.max_retries:
                                 raise
@@ -276,10 +261,6 @@ class BaseDataSearchTool[
                         last_exception = Exception(error_msg)
                         if attempt < config.max_retries:
                             wait_time = config.retry_delay * (2**attempt)
-                            self.tool_logger.warning(
-                                f"Request failed (attempt {attempt + 1}): {error_msg}. "
-                                f"Retrying in {wait_time}s...",
-                            )
                             await asyncio.sleep(wait_time)
                             continue
                         else:
@@ -290,10 +271,6 @@ class BaseDataSearchTool[
                 last_exception = Exception(error_msg)
                 if attempt < config.max_retries:
                     wait_time = config.retry_delay * (2**attempt)
-                    self.tool_logger.warning(
-                        f"Request timeout (attempt {attempt + 1}). "
-                        f"Retrying in {wait_time}s...",
-                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:
@@ -303,10 +280,6 @@ class BaseDataSearchTool[
                 last_exception = e
                 if attempt < config.max_retries:
                     wait_time = config.retry_delay * (2**attempt)
-                    self.tool_logger.warning(
-                        f"Request failed (attempt {attempt + 1}): {e}. "
-                        f"Retrying in {wait_time}s...",
-                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:

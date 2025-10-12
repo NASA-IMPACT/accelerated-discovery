@@ -6,8 +6,6 @@ from typing import Optional
 
 from pydantic import Field
 
-from akd.utils.logging import log_api_request
-
 from ._base import (
     BaseDataSearchTool,
     DataSearchToolConfig,
@@ -73,10 +71,6 @@ class CMRGranuleSearchTool(
         Returns:
             CMRGranuleSearchOutputSchema with granule results
         """
-        self.tool_logger.debug(
-            f"Starting CMR granule search for collection {params.collection_concept_id}",
-        )
-
         # Prepare MCP arguments
         arguments = {
             "collection_concept_id": params.collection_concept_id,
@@ -120,14 +114,6 @@ class CMRGranuleSearchTool(
             page_size_returned = result.get("page_size", page_size)
             page_number = result.get("page_number", 1)
 
-            # Log API request details
-            log_api_request("POST", str(self.config.mcp_endpoint), 200, query_time_ms)
-            self.tool_logger.info(
-                f"CMR granule search completed: {total_hits} total hits, "
-                f"{len(granules)} granules returned, "
-                f"query time: {query_time_ms}ms",
-            )
-
             return CMRGranuleSearchOutputSchema(
                 results=result,  # Return full MCP response
                 total_hits=total_hits,
@@ -149,8 +135,6 @@ class CMRGranuleSearchTool(
             error_msg = (
                 f"CMR granule search failed for {params.collection_concept_id}: {e}"
             )
-            log_api_request("POST", str(self.config.mcp_endpoint), status_code=500)
-            self.tool_logger.error(error_msg)
             raise Exception(error_msg)
 
     def _build_search_summary(self, params: CMRGranuleSearchInputSchema) -> str:

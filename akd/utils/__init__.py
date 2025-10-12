@@ -9,15 +9,6 @@ from typing import Any, Dict, Optional
 import gdown
 from loguru import logger
 
-from .logging import (
-    ContextualLogger,
-    get_logger,
-    log_api_request,
-    log_component_action,
-    log_search_event,
-    log_websocket_event,
-    setup_logging,
-)
 from .serialization import (
     SafeJSONEncoder,
     create_error_message,
@@ -177,12 +168,4 @@ __all__ = [
     "create_progress_message",
     "create_error_message",
     "SafeJSONEncoder",
-    # Logging utilities
-    "setup_logging",
-    "get_logger",
-    "log_search_event",
-    "log_component_action",
-    "log_api_request",
-    "log_websocket_event",
-    "ContextualLogger",
 ]

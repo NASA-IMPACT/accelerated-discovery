@@ -14,7 +14,6 @@ from typing import Any
 from pydantic import Field
 
 from akd.agents._base import BaseAgentConfig
-from akd.utils.logging import ContextualLogger, log_component_action, log_search_event
 from akd.utils.serialization import safe_model_dump
 
 from ._base import (
@@ -119,14 +118,10 @@ class DataSearchAgent(BaseDataSearchAgent):
         self.progress_handler = None
         self._progress_handler_ready = False
 
-        # Logger
-        self.agent_logger = ContextualLogger("DataSearchAgent")
-
     def set_progress_handler(self, progress_handler):
         """Set the progress handler for real-time frontend updates."""
         self.progress_handler = progress_handler
         self._progress_handler_ready = True
-        self.agent_logger.debug("Progress handler set and marked as ready")
 
     async def _wait_for_progress_handler_ready(self, timeout: float = 5.0):
         """Wait for progress handler to be ready or timeout."""
@@ -136,9 +131,6 @@ class DataSearchAgent(BaseDataSearchAgent):
         start_time = datetime.now()
         while not self._progress_handler_ready:
             if (datetime.now() - start_time).total_seconds() > timeout:
-                self.agent_logger.warning(
-                    "Progress handler readiness timeout - proceeding without waiting",
-                )
                 break
             await asyncio.sleep(0.1)
 
@@ -153,9 +145,8 @@ class DataSearchAgent(BaseDataSearchAgent):
         try:
             method = getattr(self.progress_handler, method_name)
             await method(*args, **kwargs)
-            self.agent_logger.debug(f"Progress update sent: {method_name}")
-        except Exception as e:
-            self.agent_logger.warning(f"Progress update failed for {method_name}: {e}")
+        except Exception:
+            pass
 
     def _get_handler(self, repository: NASARepositoryEnum):
         """Get or create handler for repository."""
@@ -268,21 +259,10 @@ class DataSearchAgent(BaseDataSearchAgent):
         search_start_time = datetime.now()
         original_query = params.query
 
-        # Create search-specific logger
         search_id = (
             getattr(self.progress_handler, "search_id", "unknown")
             if self.progress_handler
             else "unknown"
-        )
-        search_logger = ContextualLogger("DataSearchAgent", search_id)
-
-        log_search_event(
-            search_id,
-            "SEARCH_STARTED",
-            {"query": original_query, "start_time": search_start_time.isoformat()},
-        )
-        search_logger.info(
-            f"Starting multi-repository data search: '{original_query}'",
         )
 
         await self._wait_for_progress_handler_ready()
@@ -290,13 +270,7 @@ class DataSearchAgent(BaseDataSearchAgent):
 
         try:
             # Step 1: Topic Splitting
-            log_component_action("TopicSplitting", "STARTED", {"query": original_query})
-            search_logger.info("Step 1: Identifying functional topics")
-
             topics_output = await self.topic_splitting_component.process(original_query)
-            search_logger.info(
-                f"Identified {len(topics_output.topics)} functional topics",
-            )
 
             # Step 2: Process topics in parallel
             topic_tasks = []
@@ -304,16 +278,12 @@ class DataSearchAgent(BaseDataSearchAgent):
                 task = self._process_single_topic(topic, original_query, params)
                 topic_tasks.append(task)
 
-            search_logger.info(f"Processing {len(topic_tasks)} topics in parallel...")
             topic_results = await asyncio.gather(*topic_tasks, return_exceptions=True)
 
             # Handle any exceptions from parallel execution
             final_topic_results = []
             for i, result in enumerate(topic_results):
                 if isinstance(result, Exception):
-                    search_logger.error(
-                        f"Topic {i + 1} processing failed: {result}",
-                    )
                     # Create error result
                     error_result = TopicResult(
                         topic=safe_model_dump(topics_output.topics[i]),
@@ -332,21 +302,6 @@ class DataSearchAgent(BaseDataSearchAgent):
             )
 
             search_duration = (datetime.now() - search_start_time).total_seconds()
-
-            log_component_action(
-                "TopicProcessing",
-                "COMPLETED",
-                {
-                    "topics_processed": len(final_topic_results),
-                    "total_results": total_results,
-                    "duration_seconds": search_duration,
-                },
-            )
-
-            search_logger.info(
-                f"Search completed: {total_results} results found across "
-                f"{len(final_topic_results)} topics in {search_duration:.1f}s",
-            )
 
             # Build search metadata
             search_metadata = {
@@ -374,11 +329,7 @@ class DataSearchAgent(BaseDataSearchAgent):
 
         except Exception as e:
             error_msg = f"Multi-repository data search failed: {e}"
-            log_search_event(search_id, "SEARCH_FAILED", {"error": str(e)})
-            search_logger.error(error_msg)
-
             await self._emit_progress_safely("on_search_error", error_msg)
-
             return self._create_error_response(original_query, error_msg)
 
     async def _process_single_topic(
@@ -398,21 +349,10 @@ class DataSearchAgent(BaseDataSearchAgent):
         Returns:
             Complete topic result with all decompositions
         """
-        search_logger = ContextualLogger("topic_processing")
-        search_logger.info(f"Processing topic: {topic.title}")
-
         # Scientific Decomposition
-        log_component_action(
-            "ScientificDecomposition",
-            "STARTED",
-            {"topic": topic.title},
-        )
         decomp_output = await self.scientific_decomposition_component.process(
             original_query,
             topic,
-        )
-        search_logger.info(
-            f"Generated {len(decomp_output.decompositions)} decompositions for topic '{topic.title}'",
         )
 
         # Process each decomposition in parallel
@@ -426,16 +366,12 @@ class DataSearchAgent(BaseDataSearchAgent):
             )
             decomp_tasks.append(task)
 
-        search_logger.info(
-            f"Processing {len(decomp_tasks)} decompositions in parallel",
-        )
         decomp_results = await asyncio.gather(*decomp_tasks, return_exceptions=True)
 
         # Handle exceptions
         final_results = []
         for i, result in enumerate(decomp_results):
             if isinstance(result, Exception):
-                search_logger.error(f"Decomposition {i + 1} failed: {result}")
                 error_result = DecompositionResult(
                     decomposition=safe_model_dump(decomp_output.decompositions[i]),
                     repository=None,
@@ -481,15 +417,7 @@ class DataSearchAgent(BaseDataSearchAgent):
         Returns:
             Complete decomposition result
         """
-        search_logger = ContextualLogger("decomposition_processing")
-        search_logger.info(f"Processing decomposition: {decomposition.title}")
-
         # Route decomposition to best repository
-        log_component_action(
-            "RepositoryRouting",
-            "STARTED",
-            {"decomposition": decomposition.title},
-        )
         routing_output = await self.repository_router_component.process(
             original_query,
             topic,
@@ -497,13 +425,8 @@ class DataSearchAgent(BaseDataSearchAgent):
         )
         route = routing_output.route
 
-        search_logger.info(
-            f"Routed to: {route.repository} (external: {route.is_external})",
-        )
-
         # Handle external sources
         if route.is_external:
-            search_logger.info(f"External source: {route.repository}")
             return self._create_external_result(decomposition, route)
 
         # Dispatch to NASA repository handler
@@ -514,17 +437,10 @@ class DataSearchAgent(BaseDataSearchAgent):
             # Check handler status before dispatching
             handler_status = HANDLER_STATUS.get(repository)
             if handler_status == HandlerStatus.STUB:
-                search_logger.info(
-                    f"Handler for {repository.value} is a stub - returning not implemented result",
-                )
                 return self._create_stub_result(decomposition, route)
 
             # Handler is implemented - dispatch to it
             handler = self._get_handler(repository)
-
-            search_logger.info(
-                f"Dispatching to {repository.value} handler",
-            )
 
             result = await handler.process_decomposition(
                 decomposition,
@@ -535,13 +451,11 @@ class DataSearchAgent(BaseDataSearchAgent):
 
             return result
 
-        except NotImplementedError as e:
+        except NotImplementedError:
             # Fallback in case handler raises NotImplementedError despite status check
-            search_logger.warning(f"Handler not implemented: {e}")
             return self._create_stub_result(decomposition, route)
 
         except Exception as e:
-            search_logger.error(f"Handler dispatch failed: {e}")
             return self._create_error_result(decomposition, route, str(e))
 
     def _create_error_response(
