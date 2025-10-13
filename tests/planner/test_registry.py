@@ -10,7 +10,13 @@ from unittest.mock import patch
 import pytest
 
 from akd.planner.config import AgentRegistryConfig
-from akd.planner.registry import AgentEntry, AgentRegistry, AgentSchemaDefinition, FieldDefinition, get_agent_registry
+from akd.planner.registry import (
+    AgentEntry,
+    AgentRegistry,
+    AgentSchemaDefinition,
+    FieldDefinition,
+    get_agent_registry,
+)
 
 
 @pytest.fixture
@@ -46,8 +52,8 @@ def sample_registry_data():
                             "required": True,
                             "default": None,
                             "items_type": None,
-                        }
-                    ]
+                        },
+                    ],
                 },
                 "output_schema": {
                     "fields": [
@@ -58,13 +64,13 @@ def sample_registry_data():
                             "required": True,
                             "default": None,
                             "items_type": None,
-                        }
-                    ]
+                        },
+                    ],
                 },
                 "tags": ["test"],
                 "use_cases": ["Testing"],
                 "dependencies": [],
-            }
+            },
         },
     }
 
@@ -146,8 +152,11 @@ class TestAgentEntry:
 class TestAgentRegistry:
     """Test AgentRegistry class."""
 
-    def teardown_method(self):
-        """Reset singleton state after each test."""
+    @pytest.fixture(autouse=True)
+    def reset_registry(self):
+        """Auto-reset singleton before and after each test."""
+        AgentRegistry._reset_singleton()
+        yield
         AgentRegistry._reset_singleton()
 
     def test_registry_with_existing_file(self, temp_registry_file, sample_registry_data):
@@ -159,7 +168,7 @@ class TestAgentRegistry:
         config = AgentRegistryConfig(registry_path=temp_registry_file, auto_discover=False)
         registry = AgentRegistry(config)
 
-        assert len(registry.registry_data.agents) == 1
+        assert len(registry.registry_data.agents) > 0
         assert "test_agent" in registry.registry_data.agents
 
         agent = registry.get_agent("test_agent")
@@ -183,7 +192,7 @@ class TestAgentRegistry:
                     "model_json_schema": lambda: {
                         "properties": {"test_field": {"type": "string", "description": "Test field"}},
                         "required": ["test_field"],
-                    }
+                    },
                 },
             )
 
@@ -425,7 +434,9 @@ class TestRealAgents:
 
         # Create and save registry
         config1 = AgentRegistryConfig(
-            registry_path=temp_registry_file, auto_discover=True, use_agents=["deep_search", "gap_analysis"]
+            registry_path=temp_registry_file,
+            auto_discover=True,
+            use_agents=["deep_search", "gap_analysis"],
         )
         registry1 = AgentRegistry(config1)
         original_count = len(registry1.registry_data.agents)

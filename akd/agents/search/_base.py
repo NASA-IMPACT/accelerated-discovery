@@ -89,6 +89,10 @@ class LitSearchAgentInputSchema(SearchAgentInputSchema):
 class LitSearchAgentOutputSchema(SearchAgentOutputSchema):
     """Base output schema for literature search agents."""
 
+    report: str = Field(
+        default="",
+        description="Synthesized research report from the literature search",
+    )
     extra: Dict[str, Any] = Field(
         default_factory=dict,
         description="Extra metadata and synthesis information",

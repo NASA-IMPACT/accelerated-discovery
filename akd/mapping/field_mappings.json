@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "description": "Explicit field mappings between agents (human-defined, highest trust)",
+  "mappings": {
+    "deep_search->gap_analysis": {
+      "search_results": "results"
+    },
+    "code_search->gap_analysis": {
+      "search_results": "results"
+    },
+    "deep_search->code_search": {
+      "query": "report"
+    }
+  }
+}

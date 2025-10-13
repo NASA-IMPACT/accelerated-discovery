@@ -48,6 +48,7 @@ dependencies = [
     "jsonpath-ng>=1.6.1",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
     "litellm>=1.74.2",
+    "dateparser>=1.2.2",
 ]
 
 [project.urls]
@@ -83,6 +84,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "slow: Slow tests",
+    "requires_ml: Tests requiring ML dependencies (sentence-transformers, etc.)",
 ]
 
 # Optional dependencies (extras)

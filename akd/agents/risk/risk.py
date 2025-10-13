@@ -259,7 +259,11 @@ class RiskAgent(
             f"3) Let total_weight = {denom} (sum of the weights).\n"
             "4) Let passed_weight = sum of weights for risks that passed (True).\n"
             "5) weighted_ratio = passed_weight / total_weight.\n"
-            "Select the verdict that matches the weighted_ratio bucket."
+            "6) Select the verdict that matches the weighted_ratio bucket:\n"
+            "- Choose the **highest threshold** that weighted_ratio meets.\n"
+            "- Example: If weighted_ratio = 1.0, it meets ≥ 0.25, ≥ 0.50, ≥ 0.75, and ≥ 0.90, "
+            "but you must select only the ≥ 0.90 verdict.\n"
+            "7) Do not select lower thresholds once a higher one applies."
         )
 
     def build_dag_from_criteria(
@@ -379,9 +383,9 @@ class RiskAgent(
         weights_text = "\n".join(weight_lines)
         denom = sum(weights.values())
         if denom == 0:
-            logger.error("Risk weights sum to zero; cannot compute weighted ration.")
+            logger.error("Risk weights sum to zero; cannot compute weighted ratio.")
             raise ValueError(
-                "Risk weights sum to zero; cannot compute weighted ration.",
+                "Risk weights sum to zero; cannot compute weighted ratio.",
             )
 
         # The child outputs we consult:

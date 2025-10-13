@@ -31,21 +31,19 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     """Configuration for CodeSearchAgent extending ControlledSearchAgentConfig."""
 
     # Model configurations
-    subagent_model: str = Field(
-        default="gpt-4o-mini", description="Model for query and relevancy agents"
+    subagent_model: str = Field(default="gpt-4o-mini", description="Model for query and relevancy agents")
+    reranker_tool: str = Field(
+        default="cross-encoder",
+        description="The tool to use for reranking the combined results.",
     )
-    reranker_model: str = Field(
+    cross_encoder_model_name: str = Field(
         default="cross-encoder/ms-marco-MiniLM-L12-v2",
-        description="Re-ranker model for combined search",
+        description="The model to use with the cross-encoder tool for reranking the combined results.",
     )
 
     # Local search configuration
-    embedding_model_name: str = Field(
-        default="thenlper/gte-large", description="Embedding model for local search"
-    )
-    data_file: str | None = Field(
-        default=None, description="Path to local repository data file"
-    )
+    embedding_model_name: str = Field(default="thenlper/gte-large", description="Embedding model for local search")
+    data_file: str | None = Field(default=None, description="Path to local repository data file")
     google_drive_file_id: str | None = Field(
         default="15kxTyLeBCPL82WjMTyDytcXag85vglCP",
         description="Google Drive file ID for repository database, uses gte-large embeddings",
@@ -53,23 +51,15 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
 
     # SDE search configuration
     sde_base_url: str = Field(
-        default=os.getenv(
-            "SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
-        ),
+        default=os.getenv("SDE_BASE_URL", "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"),
         description="SDE search API base URL",
     )
-    sde_search_type: Literal["vector", "hybrid", "keyword"] = Field(
-        default="vector", description="SDE search type"
-    )
+    sde_search_type: Literal["vector", "hybrid", "keyword"] = Field(default="vector", description="SDE search type")
     sde_page_size: int = Field(default=100, description="SDE search page size")
 
     # Tool selection
-    use_local_search: bool = Field(
-        default=True, description="Enable local repository search"
-    )
-    use_sde_search: bool = Field(
-        default=True, description="Enable SDE repository search"
-    )
+    use_local_search: bool = Field(default=True, description="Enable local repository search")
+    use_sde_search: bool = Field(default=True, description="Enable SDE repository search")
 
 
 class CodeSearchAgent(ControlledSearchAgent):
@@ -95,9 +85,7 @@ class CodeSearchAgent(ControlledSearchAgent):
 
         # Setup agents
         self.query_agent = query_agent or self._setup_query_agent()
-        self.followup_query_agent = (
-            followup_query_agent or self._setup_followup_query_agent()
-        )
+        self.followup_query_agent = followup_query_agent or self._setup_followup_query_agent()
         self.relevancy_agent = relevancy_agent or self._setup_relevancy_agent()
 
         # Create the underlying ControlledSearchAgent
@@ -116,9 +104,7 @@ class CodeSearchAgent(ControlledSearchAgent):
             return None
 
         try:
-            local_config = LocalRepoCodeSearchToolConfig(
-                embedding_model_name=self.config.embedding_model_name
-            )
+            local_config = LocalRepoCodeSearchToolConfig(embedding_model_name=self.config.embedding_model_name)
 
             if self.config.data_file:
                 if not os.path.exists(self.config.data_file):
@@ -168,9 +154,7 @@ class CodeSearchAgent(ControlledSearchAgent):
 
         except Exception as e:
             if self.config.debug:
-                logger.warning(
-                    f"[CodeSearchAgent] SDECodeSearchTool unavailable; continuing without it. Reason: {e}"
-                )
+                logger.warning(f"[CodeSearchAgent] SDECodeSearchTool unavailable; continuing without it. Reason: {e}")
             return None
 
     def _setup_search_tool(self) -> CombinedCodeSearchTool:
@@ -190,35 +174,28 @@ class CodeSearchAgent(ControlledSearchAgent):
 
         # Finalize or fail
         if not tools:
-            logger.error(
-                "[CodeSearchAgent] No search tools could be initialized (local and SDE both unavailable)."
-            )
+            logger.error("[CodeSearchAgent] No search tools could be initialized (local and SDE both unavailable).")
             raise ValueError("No search tools available")
 
         # Create combined tool
         combined_config = CombinedCodeSearchToolConfig(
-            reranker_model_name=self.config.reranker_model
+            reranker_tool=self.config.reranker_tool,
+            cross_encoder_model_name=self.config.cross_encoder_model_name,
         )
 
         return CombinedCodeSearchTool(config=combined_config, tools=tools)
 
     def _setup_query_agent(self) -> QueryAgent:
         """Setup query agent with code-specific prompt."""
-        config = BaseAgentConfig(
-            model_name=self.config.subagent_model, system_prompt=CODE_QUERY_PROMPT
-        )
+        config = BaseAgentConfig(model_name=self.config.subagent_model, system_prompt=CODE_QUERY_PROMPT)
         return QueryAgent(config=config)
 
     def _setup_followup_query_agent(self) -> FollowUpQueryAgent:
         """Setup follow-up query agent."""
-        config = BaseAgentConfig(
-            model_name=self.config.subagent_model, system_prompt=CODE_QUERY_PROMPT
-        )
+        config = BaseAgentConfig(model_name=self.config.subagent_model, system_prompt=CODE_QUERY_PROMPT)
         return FollowUpQueryAgent(config=config)
 
     def _setup_relevancy_agent(self) -> MultiRubricRelevancyAgent:
         """Setup relevancy agent."""
-        config = BaseAgentConfig(
-            model_name=self.config.subagent_model, system_prompt=CODE_RELEVANCY_PROMPT
-        )
+        config = BaseAgentConfig(model_name=self.config.subagent_model, system_prompt=CODE_RELEVANCY_PROMPT)
         return MultiRubricRelevancyAgent(config=config)

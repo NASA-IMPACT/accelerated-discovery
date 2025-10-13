@@ -315,10 +315,7 @@ class TestDeepLitSearchAgentComponents:
             ["Focus on urban areas", "Include recent studies"],
         )
 
-        assert (
-            instructions
-            == "Detailed research instructions for comprehensive literature review"
-        )
+        assert instructions == "Detailed research instructions for comprehensive literature review"
         mock_instruction_component.process.assert_called_once_with(
             "climate change adaptation",
             ["Focus on urban areas", "Include recent studies"],
@@ -688,15 +685,11 @@ class TestDeepLitSearchAgentIntegration:
         mock_triage_component.process.return_value = mock_triage_output
 
         mock_instruction_component = AsyncMock()
-        mock_instruction_component.process.return_value = (
-            "Detailed research instructions for AI applications"
-        )
+        mock_instruction_component.process.return_value = "Detailed research instructions for AI applications"
 
         mock_synthesis_component = AsyncMock()
         mock_synthesis_output = Mock()
-        mock_synthesis_output.research_report = (
-            "Comprehensive research report on AI applications"
-        )
+        mock_synthesis_output.research_report = "Comprehensive research report on AI applications"
         mock_synthesis_output.key_findings = ["Finding 1", "Finding 2"]
         mock_synthesis_output.sources_consulted = ["Source 1", "Source 2"]
         mock_synthesis_output.evidence_quality_score = 0.85
@@ -766,10 +759,7 @@ class TestDeepLitSearchAgentIntegration:
         assert len(result.results) >= 1
 
         # Check that the research synthesis fields are populated
-        assert (
-            result.extra["research_report"]
-            == "Comprehensive research report on AI applications"
-        )
+        assert result.report == "Comprehensive research report on AI applications"
         assert result.extra["key_findings"] == ["Finding 1", "Finding 2"]
         assert result.extra["evidence_quality_score"] == 0.85
         assert result.extra["citations"] == ["Citation 1", "Citation 2"]
@@ -804,16 +794,12 @@ class TestDeepLitSearchAgentIntegration:
 
         # Mock instruction component
         mock_instruction_component = AsyncMock()
-        mock_instruction_component.process.return_value = (
-            "Enhanced research instructions based on clarifications"
-        )
+        mock_instruction_component.process.return_value = "Enhanced research instructions based on clarifications"
 
         # Mock synthesis component
         mock_synthesis_component = AsyncMock()
         mock_synthesis_output = Mock()
-        mock_synthesis_output.research_report = (
-            "Enhanced research report with clarifications"
-        )
+        mock_synthesis_output.research_report = "Enhanced research report with clarifications"
         mock_synthesis_output.key_findings = ["Enhanced finding 1"]
         mock_synthesis_output.sources_consulted = ["Enhanced source 1"]
         mock_synthesis_output.evidence_quality_score = 0.9
@@ -874,10 +860,7 @@ class TestDeepLitSearchAgentIntegration:
         assert "What specific healthcare domain?" in agent.clarification_history
 
         # Verify enhanced research report in synthesis fields
-        assert (
-            result.extra["research_report"]
-            == "Enhanced research report with clarifications"
-        )
+        assert result.report == "Enhanced research report with clarifications"
 
         # Verify all components were called
         mock_triage_component.process.assert_called()
@@ -1203,12 +1186,8 @@ class TestDeepLitSearchAgentRealLLM:
             # Check for relevant keywords
             query_lower = query.lower()
             climate_keywords = ["climate", "machine learning", "ml", "ai"]
-            has_relevant_keyword = any(
-                keyword in query_lower for keyword in climate_keywords
-            )
-            assert has_relevant_keyword, (
-                f"Query should contain relevant keywords: '{query}'"
-            )
+            has_relevant_keyword = any(keyword in query_lower for keyword in climate_keywords)
+            assert has_relevant_keyword, f"Query should contain relevant keywords: '{query}'"
 
     @pytest.mark.integration
     @pytest.mark.asyncio
@@ -1242,9 +1221,7 @@ class TestDeepLitSearchAgentRealLLM:
 
         # Validate assessment
         assert isinstance(quality_score, float), "Quality score should be a float"
-        assert 0.0 <= quality_score <= 1.0, (
-            f"Quality score should be between 0 and 1: {quality_score}"
-        )
+        assert 0.0 <= quality_score <= 1.0, f"Quality score should be between 0 and 1: {quality_score}"
 
     @pytest.mark.integration
     @pytest.mark.asyncio

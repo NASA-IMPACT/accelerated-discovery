@@ -23,6 +23,12 @@ from .semantic_scholar_search import (
     SemanticScholarSearchToolInputSchema,
     SemanticScholarSearchToolOutputSchema,
 )
+from .serper import (
+    SerperSearchTool,
+    SerperSearchToolConfig,
+    SerperSearchToolInputSchema,
+    SerperSearchToolOutputSchema,
+)
 
 __all__ = [
     # Re-exported structures
@@ -38,6 +44,11 @@ __all__ = [
     "SearxNGSearchToolInputSchema",
     "SearxNGSearchToolOutputSchema",
     "SearxNGSearchToolConfig",
+    # Serper
+    "SerperSearchTool",
+    "SerperSearchToolInputSchema",
+    "SerperSearchToolOutputSchema",
+    "SerperSearchToolConfig",
     # Semantic Scholar
     "SemanticScholarSearchTool",
     "SemanticScholarSearchToolInputSchema",
