@@ -66,11 +66,7 @@ class RiskAgentInputSchema(InputSchema):
                 raise ValueError(
                     f"risk_weights keys {sorted(extra)} are not in risk_ids {sorted(self.risk_ids)}",
                 )
-            nonpos = {
-                k: v
-                for k, v in self.risk_weights.items()
-                if not (isinstance(v, (int, float)) and v > 0)
-            }
+            nonpos = {k: v for k, v in self.risk_weights.items() if not (isinstance(v, (int, float)) and v > 0)}
             if nonpos:
                 raise ValueError(
                     f"risk_weights must be positive numbers; got {nonpos}",
@@ -231,11 +227,11 @@ class RiskAgent(
             "Evaluate the risk pass/fail using the following rules:\n"
             f"1) HIGH: {high_clause}\n"
             f"2) MEDIUM: {medium_clause}\n"
-            f"   - Define MEDIUM_pass = True if count(True in MEDIUM) >= {m_required}; else False.\n"
+            f"   - Define MEDIUM_pass = True if count(`pass` in MEDIUM) >= {m_required}; else False.\n"
             f"   - Define MEDIUM_borderline = {borderline_expr}\n"
             f"3) LOW (tiebreaker only): {low_clause}\n\n"
             "Decision logic:\n"
-            "- If any HIGH is False -> return False.\n"
+            "- If any HIGH is False-> return False.\n"
             "- Else if MEDIUM_pass is True -> return True.\n"
             "- Else if MEDIUM_borderline is True ->\n"
             "      If any LOW is True -> return True; else return False.\n"
@@ -288,9 +284,7 @@ class RiskAgent(
 
                 node = TaskNode(
                     output_label=f"{risk_id}_{i + 1}",
-                    instructions=(
-                        f"{criterion.description}\nAnswer strictly with True or False."
-                    ),
+                    instructions=(f"{criterion.description}\nAnswer strictly with `Pass` or `Fail`."),
                     evaluation_params=[
                         LLMTestCaseParams.INPUT,
                         LLMTestCaseParams.ACTUAL_OUTPUT,
@@ -318,22 +312,21 @@ class RiskAgent(
             m_required = (m_total + 1) // 2  # ceil
             # Borderline = exactly one below required (only meaningful if m_total > 0)
             borderline_expr = (
-                "True if the count of True among the MEDIUM set equals "
-                f"{max(m_required - 1, 0)}; otherwise False."
+                f"True if the count of True among the MEDIUM set equals {max(m_required - 1, 0)}; otherwise False."
                 if m_total > 0
                 else "False"
             )
 
             # Build readable fragments used in instructions
             high_clause = (
-                f"All HIGH must be True. HIGH set: [{', '.join(high_labels)}]."
+                f"All HIGH must return `pass`. HIGH set: [{', '.join(high_labels)}]."
                 if high_labels
                 else "No HIGH criteria (treat as satisfied)."
             )
             medium_clause = (
-                "MEDIUM requires at least half (rounded up) to be True. "
+                "MEDIUM requires at least half (rounded up) to return `pass`. "
                 f"MEDIUM set: [{', '.join(medium_labels)}]. "
-                f"Total MEDIUM = {m_total}; required True = {m_required}."
+                f"Total MEDIUM = {m_total}; required `pass` = {m_required}."
                 if m_total
                 else "No MEDIUM criteria (treat as satisfied)."
             )

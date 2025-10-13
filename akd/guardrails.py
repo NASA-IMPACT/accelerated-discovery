@@ -320,19 +320,17 @@ def add_guardrails(
 
             def _extract_high_importance_criteria(self, verbose_steps: List[str]) -> Dict[str, List[str]]:
                 """
-                Extracts criteria text from Level == 0 TaskNode entries where importance is 'high'.
-                In future may incude medium importance nodes
-
+                Extracts criteria text from Level == 0 TaskNode entries where importance is 'high'
+                AND the model's verdict was Fail.
                 Parameters
                 ----------
                 verbose_steps : List[str]
                     The result.dag_metric._verbose_steps list.
-
                 Returns
                 -------
                 Dict[str, List[str]]
-                    A dictionary mapping each label from risk taxonomy (e.g., 'consistency', 'positivity-bias')
-                    to a list of criteria.
+                    A dictionary mapping each label from the risk taxonomy (e.g., 'consistency', 'positivity-bias')
+                    to a list of criteria that are both high-importance and failed (Fail).
                 """
                 criteria_by_label = defaultdict(list)
 
@@ -341,12 +339,13 @@ def add_guardrails(
                 label_pattern = re.compile(r"Label:\s*([^\|]+)\|")
                 importance_pattern = re.compile(r"importance:\s*(\w+)", re.IGNORECASE)
                 instructions_pattern = re.compile(r"Instructions:\s*(.*?)\nAnswer strictly", re.DOTALL | re.IGNORECASE)
+                verdict_pattern = re.compile(r"\n[a-zA-Z0-9_\-]+:\s*(Pass|Fail)", re.IGNORECASE)
 
                 for block in verbose_steps:
-                    # Check Level
+                    # Only Level == 0 nodes
                     level_match = level_pattern.search(block)
                     if not level_match or level_match.group(1) != "0":
-                        continue  # Only Level == 0 nodes
+                        continue
 
                     # Extract label
                     label_match = label_pattern.search(block)
@@ -354,10 +353,15 @@ def add_guardrails(
                         continue
                     label = label_match.group(1).strip()
 
-                    # Extract importance
+                    # Only include high importance
                     importance_match = importance_pattern.search(block)
                     if not importance_match or importance_match.group(1).lower() != "high":
-                        continue  # Only high importance
+                        continue
+
+                    # Only include if verdict == True
+                    verdict_match = verdict_pattern.search(block)
+                    if not verdict_match or verdict_match.group(1).lower() != "fail":
+                        continue
 
                     # Extract instructions / criteria text
                     instructions_match = instructions_pattern.search(block)
