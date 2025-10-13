@@ -265,9 +265,10 @@ The data search system follows a two-layer architecture:
 
 1. **Modularity**: Each component has a single responsibility and well-defined interfaces
 2. **Parallelization**: Independent operations execute concurrently for performance
-3. **Retry Logic**: Robust error handling with exponential backoff for API calls
-4. **Schema Validation**: Pydantic models ensure data integrity throughout the pipeline
-5. **Progress Tracking**: Real-time updates via WebSocket for frontend integration
+3. **Thread-Safe Component Instantiation**: Factory pattern creates fresh instances for parallel execution
+4. **Retry Logic**: Robust error handling with exponential backoff for API calls
+5. **Schema Validation**: Pydantic models ensure data integrity throughout the pipeline
+6. **Progress Tracking**: Real-time updates via WebSocket for frontend integration
 
 ## Core Components
 
@@ -297,10 +298,22 @@ The data search system follows a two-layer architecture:
 **File: `data_search.py`**
 - **DataSearchAgent**: Main orchestrator coordinating the entire workflow
   - Manages component pipeline execution (topic → routing → decomposition → handler dispatch)
-  - Handles parallel processing coordination
+  - Handles parallel processing coordination with **factory pattern** for thread safety
+  - Stores component **configs** (not instances) for creating fresh components per parallel task
   - Provides progress tracking and WebSocket integration
   - Maintains search state and metadata
   - Routes decompositions to appropriate repository handlers (CMR, PDS4, external)
+
+**Component Instantiation Architecture**:
+
+The agent uses a **factory pattern** to avoid race conditions in parallel execution:
+
+1. **Stores Configs, Not Components**: The agent stores `BaseAgentConfig` objects instead of component instances
+2. **Creates Fresh Instances**: Methods like `_process_single_topic()` create new component instances for each parallel task
+3. **Property Accessors**: Provides `@property` accessors for backward compatibility that create fresh instances
+4. **Singleton Exception**: `TopicSplittingComponent` is stored as a singleton (only called once per search, never in parallel)
+
+See [Parallelization Architecture & Thread Safety](#parallelization-architecture--thread-safety) for complete details.
 
 **Component Pipeline**:
 
@@ -312,15 +325,15 @@ All components inherit from **BaseDataSearchComponent** (`components/_base.py`) 
 - Memory management helpers
 
 **Universal Components** (in `components/` directory, used for all repositories):
-1. **TopicSplittingComponent** (`topic_splitting.py`)
-2. **RepositoryRouterComponent** (`repository_router.py`)
-3. **ScientificDecompositionComponent** (`scientific_decomposition.py`)
+1. **TopicSplittingComponent** (`topic_splitting.py`) - Stored as singleton, never called in parallel
+2. **RepositoryRouterComponent** (`repository_router.py`) - Created fresh per decomposition
+3. **ScientificDecompositionComponent** (`scientific_decomposition.py`) - Created fresh per topic
 
 **Handler-Specific Components** (CMR example in `handlers/cmr/`):
-4. **CMRKnownParametersComponent** (`components.py`) - inherits from `SharedKnownParametersComponent`
-5. **CMRSearchableParametersComponent** (`components.py`) - inherits from `SharedSearchableParametersComponent`
-6. **CMRApproachCollectionFilteringComponent** (`components.py`) - inherits from `SharedApproachFilteringComponent`
-7. **CMRFinalCollectionRankingComponent** (`components.py`) - inherits from `SharedFinalRankingComponent`
+4. **CMRKnownParametersComponent** (`components.py`) - Created fresh per decomposition
+5. **CMRSearchableParametersComponent** (`components.py`) - Created fresh per decomposition
+6. **CMRApproachCollectionFilteringComponent** (`components.py`) - Created fresh per approach
+7. **CMRFinalCollectionRankingComponent** (`components.py`) - Created once per decomposition
 
 **Shared Implementations** (in `components/` directory, extended by handlers):
 - **SharedKnownParametersComponent** (`_shared_parameters.py`) - Generic parameter extraction
@@ -348,6 +361,241 @@ All components inherit from **BaseDataSearchComponent** (`components/_base.py`) 
     - `retry_enabled`: Enable/disable retry logic (False for ranking components)
     - `max_retries`: Maximum retry attempts (default: 3)
     - `retry_base_delay`: Base delay for exponential backoff (default: 1.0s)
+    - `llm_timeout`: Timeout in seconds for LLM calls (default: 45.0, None = no timeout)
+
+## Parallelization Architecture & Thread Safety
+
+### Overview
+
+The data search system uses a **factory pattern** for component instantiation to enable safe parallel execution across multiple levels of the workflow. This architecture eliminates race conditions that can occur when multiple parallel tasks share component instances with mutable state.
+
+### The Challenge: Memory as Scratch Pad
+
+All LLM components inherit from `InstructorBaseAgent`, which uses a `memory` property as a conversation scratch pad:
+
+```python
+class InstructorBaseAgent:
+    @property
+    def memory(self) -> list[dict[str, str]]:
+        """Read-only access to conversation memory."""
+        return self._memory
+```
+
+**Key Characteristics**:
+- Each component maintains conversation history in `self.memory`
+- Components modify memory via `.clear()` and `.append()` operations
+- The `memory` property is **read-only** (no setter) - direct assignment fails
+- LLM calls via `get_response_async()` read from `self.memory`
+
+**Race Condition Problem**:
+When multiple parallel tasks share a single component instance, they interfere with each other's memory state:
+
+```python
+# ❌ BROKEN: Multiple parallel tasks sharing one component
+component = ScientificDecompositionComponent(config=config)
+
+async def process_topic(topic):
+    component.memory.clear()
+    component.memory.append({"role": "user", "content": f"Process {topic}"})
+    return await component.get_response_async()  # May see wrong memory!
+
+# These tasks will corrupt each other's memory
+tasks = [process_topic(t) for t in topics]
+results = await asyncio.gather(*tasks)  # ❌ Race condition!
+```
+
+### The Solution: Factory Pattern with Fresh Instances
+
+The system creates **fresh component instances** for each parallel operation, ensuring complete memory isolation:
+
+```python
+# ✅ CORRECT: Each parallel task gets its own component instance
+async def process_topic(topic, config):
+    # Create fresh component for this task
+    component = ScientificDecompositionComponent(config=config)
+    component.memory.clear()
+    component.memory.append({"role": "user", "content": f"Process {topic}"})
+    return await component.get_response_async()  # Isolated memory!
+
+# Each task has isolated state
+tasks = [process_topic(t, config) for t in topics]
+results = await asyncio.gather(*tasks)  # ✅ Thread-safe!
+```
+
+### Implementation Pattern
+
+**Agent and Handler Storage**: Store configs, not component instances
+
+**DataSearchAgent** (`data_search.py:92-106`):
+```python
+def __init__(self, config: DataSearchAgentConfig, debug: bool = False):
+    # Store component CONFIGS for creating per-call instances
+    self.topic_config = BaseAgentConfig(model_name=config.topic_splitting_model)
+    self.decomp_config = BaseAgentConfig(model_name=config.scientific_decomposition_model)
+    self.router_config = BaseAgentConfig(model_name=config.repository_routing_model)
+
+    # Only topic splitting is singleton (never called in parallel)
+    self.topic_splitting_component = TopicSplittingComponent(
+        config=self.topic_config,
+        debug=debug,
+    )
+```
+
+**CMRHandler** (`handlers/cmr/handler.py:73-78`):
+```python
+def __init__(self, config: CMRHandlerConfig, debug: bool = False):
+    # Store component CONFIGS for creating per-call instances
+    self.known_params_config = BaseAgentConfig(model_name=config.known_parameters_model)
+    self.searchable_params_config = BaseAgentConfig(model_name=config.searchable_parameters_model)
+```
+
+**Fresh Instance Creation in Parallel Methods**:
+
+**Topic Processing** (`data_search.py:378-383`):
+```python
+async def _process_single_topic(self, topic, original_query, params):
+    # Create fresh decomposition component for THIS topic
+    decomposition_component = ScientificDecompositionComponent(
+        config=self.decomp_config,
+        debug=self.config.debug,
+    )
+
+    # This component instance is isolated to this topic
+    decomp_output = await decomposition_component.process(original_query, topic)
+```
+
+**Decomposition Processing** (`data_search.py:453-458`):
+```python
+async def _process_single_decomposition(self, topic, decomposition, original_query, params):
+    # Create fresh router component for THIS decomposition
+    router_component = RepositoryRouterComponent(
+        config=self.router_config,
+        debug=self.config.debug,
+    )
+
+    # This component instance is isolated to this decomposition
+    routing_output = await router_component.process(original_query, topic, decomposition)
+```
+
+**Handler Component Creation** (`handlers/cmr/handler.py:133-144`):
+```python
+async def process_decomposition(self, decomposition, topic, original_query, params):
+    # Create fresh component instances for THIS decomposition
+    known_parameters_component = CMRKnownParametersComponent(
+        config=self.known_params_config,
+        debug=self.debug,
+        prompts_dir=self.cmr_prompts_dir,
+    )
+    searchable_parameters_component = CMRSearchableParametersComponent(
+        config=self.searchable_params_config,
+        debug=self.debug,
+        prompts_dir=self.cmr_prompts_dir,
+    )
+```
+
+### Property Accessors for Backward Compatibility
+
+To maintain compatibility with demo scripts and tests that access components via properties, agents and handlers provide `@property` accessors that create fresh instances:
+
+**DataSearchAgent Properties** (`data_search.py:180-210`):
+```python
+@property
+def scientific_decomposition_component(self):
+    """
+    Create and return a fresh ScientificDecompositionComponent instance.
+
+    This property creates a new component instance each time it's accessed to avoid
+    race conditions in parallel execution. Use for testing/demos only.
+    """
+    return ScientificDecompositionComponent(
+        config=self.decomp_config,
+        debug=self.config.debug,
+    )
+
+@property
+def repository_router_component(self):
+    """Create and return a fresh RepositoryRouterComponent instance."""
+    return RepositoryRouterComponent(
+        config=self.router_config,
+        debug=self.config.debug,
+    )
+```
+
+**CMRHandler Properties** (`handlers/cmr/handler.py:80-112`):
+```python
+@property
+def known_parameters_component(self):
+    """
+    Create and return a fresh CMRKnownParametersComponent instance.
+    Use for testing/demos only.
+    """
+    return CMRKnownParametersComponent(
+        config=self.known_params_config,
+        debug=self.debug,
+        prompts_dir=self.cmr_prompts_dir,
+    )
+```
+
+**Important**: Each property access creates a **new instance**. This is intentional for thread safety, but means repeated access in tight loops should cache the result if needed.
+
+### Singleton Components (Never Parallel)
+
+Some components are stored as singleton instances because they're **never called in parallel**:
+
+1. **TopicSplittingComponent**: Called once per search query at the beginning of the workflow
+2. **Tools (CMRCollectionSearchTool, CMRGranuleSearchTool)**: Stateless HTTP clients that are thread-safe
+
+### Memory Management Best Practices
+
+**Correct Memory Operations**:
+```python
+# ✅ Clear and append work fine
+component.memory.clear()
+component.memory.append({"role": "user", "content": "message"})
+
+# ✅ Access via property
+messages = component.memory
+```
+
+**Incorrect Memory Operations**:
+```python
+# ❌ FAILS: Property has no setter
+component.memory = [{"role": "user", "content": "message"}]
+
+# ❌ BROKEN: Trying to save/restore across parallel calls
+original_memory = component.memory.copy()
+# ... do work ...
+component.memory = original_memory  # FAILS!
+```
+
+### Thread Safety Guarantees
+
+With the factory pattern implementation:
+
+✅ **Topic-level parallelism is thread-safe**: Each topic gets its own decomposition component
+✅ **Decomposition-level parallelism is thread-safe**: Each decomposition gets its own router component
+✅ **Approach-level parallelism is thread-safe**: Each decomposition creates fresh parameter components
+✅ **Approach generation parallelism is thread-safe**: Each approach gets its own fresh component instance
+✅ **Query execution parallelism is thread-safe**: Stateless HTTP tools
+✅ **Filtering parallelism is thread-safe**: Each approach creates fresh filtering component
+✅ **Granule search parallelism is thread-safe**: Stateless HTTP tools
+
+### Testing Thread Safety
+
+Unit tests validate the parallelization architecture:
+
+**Location**: `examples/testing/test_parallel_fixes.py`
+
+Key test cases:
+1. **Parallel component execution**: Verifies no cross-contamination between parallel component calls
+2. **Memory isolation**: Confirms each component has isolated memory state
+3. **Fresh instance creation**: Validates that property accessors create new instances
+4. **Config storage pattern**: Ensures agents store configs, not component instances
+
+Run tests:
+```bash
+uv run examples/testing/test_parallel_fixes.py
+```
 
 ### Utility Components
 
@@ -592,14 +840,11 @@ filter_input = ApproachCollectionFilteringInputSchema(
     original_query=query,
     topic_title=topic.title,
     decomposition_title=decomp.title,
-    # Approach-specific context
-    approach_instrument=approach.instrument,
-    approach_platform=approach.platform,
-    approach_processing_level=approach.processing_level,
-    approach_temporal_range=approach.temporal,
-    approach_spatial_bounds=approach.bounding_box,
-    collections=approach_collections[i],  # ≤25 collections
-    max_collections=5  # Select top 5 per approach
+    # Approach object (contains all known parameters)
+    approach=approach,  # Single object with instrument, platform, processing_level, etc.
+    approach_keywords=[],  # Keywords kept separate
+    data_items=approach_collections[i],  # ≤25 collections
+    max_items=5  # Select top 5 per approach
 )
 
 # LLM applies two-part process:
@@ -778,40 +1023,45 @@ Total downloadable data: 234 files with download URLs
 
 ## Parallel Processing
 
-The system employs several levels of parallelization for optimal performance:
+The system employs several levels of parallelization for optimal performance. All parallelism is **thread-safe** thanks to the factory pattern that creates fresh component instances for each parallel task.
+
+See [Parallelization Architecture & Thread Safety](#parallelization-architecture--thread-safety) for the complete architecture that enables safe parallel execution.
 
 ### 1. Topic-Level Parallelism
 **Location**: `akd/agents/data_search/data_search.py` (main agent orchestration)
 
-Topics are processed in parallel after routing:
+Topics are processed in parallel, with each topic receiving fresh component instances:
+
 ```python
-# Repository routing executes in parallel for all topics
-routing_tasks = [
-    self.repository_router_component.process(original_query, topic)
+# Process topics in parallel
+topic_tasks = [
+    self._process_single_topic(topic, original_query, params)
     for topic in topics_output.topics
 ]
-routing_results = await asyncio.gather(*routing_tasks, return_exceptions=True)
-
-# All CMR topics process in parallel through complete pipeline
-cmr_topic_tasks = [
-    self._process_single_topic(topic, original_query, params)
-    for topic, route in zip(topics, routes)
-    if NASARepositoryEnum.CMR in route.repositories
-]
-cmr_results = await asyncio.gather(*cmr_topic_tasks, return_exceptions=True)
-
-# Within each topic, decompositions are also processed in parallel using asyncio.gather:
-decomp_tasks = [
-    self._process_decomposition(decomp, topic, query, params)
-    for decomp in decompositions
-]
-decomp_results = await asyncio.gather(*decomp_tasks, return_exceptions=True)
+topic_results = await asyncio.gather(*topic_tasks, return_exceptions=True)
 ```
+
+**Inside `_process_single_topic`** - fresh decomposition component created:
+```python
+async def _process_single_topic(self, topic, original_query, params):
+    # Create fresh decomposition component for THIS topic to avoid race conditions
+    decomposition_component = ScientificDecompositionComponent(
+        config=self.decomp_config,
+        debug=self.config.debug,
+    )
+
+    # This component instance is isolated to this topic
+    decomp_output = await decomposition_component.process(original_query, topic)
+    # ... continue processing
+```
+
+**Thread Safety**: Each topic gets its own `ScientificDecompositionComponent` instance with isolated memory state.
 
 ### 2. Decomposition-Level Parallelism
 **Location**: `akd/agents/data_search/data_search.py` (topic processing)
 
-Within each topic, all scientific decompositions execute in parallel:
+Within each topic, all scientific decompositions execute in parallel with fresh router components:
+
 ```python
 # Create tasks for parallel execution
 decomp_tasks = [
@@ -823,19 +1073,154 @@ decomp_tasks = [
 decomp_results = await asyncio.gather(*decomp_tasks, return_exceptions=True)
 ```
 
-### 3. Approach-Level Filtering Parallelism
+**Inside `_process_single_decomposition`** - fresh router component created:
+```python
+async def _process_single_decomposition(self, topic, decomposition, original_query, params):
+    # Create fresh router component for THIS decomposition to avoid race conditions
+    router_component = RepositoryRouterComponent(
+        config=self.router_config,
+        debug=self.config.debug,
+    )
+
+    # This component instance is isolated to this decomposition
+    routing_output = await router_component.process(original_query, topic, decomposition)
+    # ... continue processing
+```
+
+**Thread Safety**: Each decomposition gets its own `RepositoryRouterComponent` instance with isolated memory state.
+
+### 3. Approach-Level Parallelism (Handler Pipeline)
+**Location**: `akd/agents/data_search/handlers/cmr/handler.py` (CMR handler)
+
+Within each decomposition, the handler creates fresh parameter component instances:
+
+```python
+async def process_decomposition(self, decomposition, topic, original_query, params):
+    # Create fresh component instances for THIS decomposition to avoid race conditions
+    # (multiple decompositions may be processing in parallel)
+    known_parameters_component = CMRKnownParametersComponent(
+        config=self.known_params_config,
+        debug=self.debug,
+        prompts_dir=self.cmr_prompts_dir,
+    )
+    searchable_parameters_component = CMRSearchableParametersComponent(
+        config=self.searchable_params_config,
+        debug=self.debug,
+        prompts_dir=self.cmr_prompts_dir,
+    )
+
+    # Step 1: Known Parameters (single LLM call per decomposition)
+    known_params_output = await known_parameters_component.process(...)
+
+    # Step 2: Searchable Parameters (parallel LLM calls across approaches)
+    searchable_output = await searchable_parameters_component.process(...)
+```
+
+**Thread Safety**: Each decomposition gets its own parameter component instances with isolated memory.
+
+### 4. Searchable Query Generation Parallelism
+**Location**: `akd/agents/data_search/components/_shared_parameters.py` (searchable parameters component)
+
+Within the searchable parameters component, all approaches generate queries in parallel using the factory pattern:
+
+```python
+# Process all approaches in parallel with isolated component instances
+async def process_approach_isolated(approach, index):
+    """Process single approach with fresh component instance for thread safety."""
+    # Create fresh component for this approach to avoid race conditions
+    fresh_component = self.__class__(
+        config=self.config,
+        debug=self.debug,
+        prompts_dir=self.prompts_dir,
+    )
+    return await fresh_component._process_single_approach(
+        original_query, topic, decomposition, approach, index
+    )
+
+approach_tasks = [
+    process_approach_isolated(approach, i)
+    for i, approach in enumerate(query_approaches)
+]
+
+# Execute in parallel (up to 5 approaches concurrently)
+approach_results = await asyncio.gather(*approach_tasks, return_exceptions=True)
+
+# Flatten results and handle exceptions
+searchable_queries = []
+for result in approach_results:
+    if not isinstance(result, Exception):
+        searchable_queries.extend(result)
+```
+
+**Benefits**:
+- Reduces wall-clock time for multi-approach decompositions
+- Each approach generates 0-5 query variations independently
+- Up to 5 LLM calls execute in parallel per decomposition
+- Expected speedup: ~5x for searchable parameters generation phase
+
+**Thread Safety**: Each approach gets its own fresh component instance via the factory pattern, ensuring complete memory isolation. Within the `process()` method, a helper function creates a new component for each parallel approach, eliminating race conditions that would occur if approaches shared a single component instance.
+
+### 5. CMR Query Execution Parallelism
+**Location**: `akd/agents/data_search/handlers/cmr/handler.py` (query execution)
+
+All CMR collection searches execute in parallel across all approaches and queries:
+
+```python
+# Create parallel tasks for all queries across all approaches
+query_tasks = [
+    self._execute_single_query(query, params, query.approach_index)
+    for query in searchable_queries
+]
+
+# Execute all queries in parallel (up to 25 queries concurrently)
+results = await asyncio.gather(*query_tasks, return_exceptions=True)
+
+# Group results by approach
+approach_collections = {}
+for result in results:
+    if not isinstance(result, Exception):
+        approach_idx = result["approach_idx"]
+        if approach_idx not in approach_collections:
+            approach_collections[approach_idx] = []
+        approach_collections[approach_idx].extend(result["collections"])
+```
+
+**Benefits**:
+- All CMR queries execute concurrently (up to 5 approaches × 5 queries = 25 parallel queries)
+- Dramatically reduces wall-clock time for the query execution phase
+- Failures in one query don't block others
+- Expected speedup: ~5-25x for query execution phase
+
+**Thread Safety**: Collection search uses stateless HTTP tools that are inherently thread-safe.
+
+### 6. Approach-Level Filtering Parallelism
 **Location**: `akd/agents/data_search/handlers/cmr/handler.py` (per-approach filtering)
 
-Per-approach collection filtering executes in parallel:
+Per-approach collection filtering executes in parallel, with each approach creating its own filtering component:
+
 ```python
 # Create filtering task for each approach
 filtering_tasks = []
 for approach_idx in sorted(approach_collections.keys()):
-    filter_input = ApproachCollectionFilteringInputSchema(
-        # ... approach-specific parameters
-        collections=approach_collections[approach_idx],
+    # Build approach-specific filter input
+    filter_input = CMRApproachCollectionFilteringInputSchema(
+        original_query=query,
+        topic_title=topic.title,
+        decomposition_title=decomp.title,
+        # Approach object (contains all known parameters)
+        approach=approach,  # Single object with instrument, platform, processing_level, etc.
+        approach_keywords=[],  # Keywords kept separate
+        data_items=approach_collections[approach_idx],  # Use base class field name
+        max_items=5,  # Use base class field name
     )
-    filtering_component = ApproachCollectionFilteringComponent(config=component_config)
+
+    # Create fresh filtering component for THIS approach
+    component_config = BaseAgentConfig(model_name=self.config.approach_filtering_model)
+    filtering_component = CMRApproachCollectionFilteringComponent(
+        config=component_config,
+        prompts_dir=cmr_prompts_dir,
+    )
+
     task = filtering_component.arun(filter_input)
     filtering_tasks.append((approach_idx, collections, task))
 
@@ -843,7 +1228,7 @@ for approach_idx in sorted(approach_collections.keys()):
 if len(filtering_tasks) > 1:
     results = await asyncio.gather(
         *[task for _, _, task in filtering_tasks],
-        return_exceptions=True
+        return_exceptions=True,
     )
 ```
 
@@ -852,20 +1237,37 @@ if len(filtering_tasks) > 1:
 - Each approach can have different filtering criteria based on instrument/platform
 - Failures in one approach don't block others
 
-### 4. Granule Search Parallelism
+**Thread Safety**: Each approach gets its own `CMRApproachCollectionFilteringComponent` instance with isolated memory state.
+
+### 7. Granule Search Parallelism
 **Location**: `akd/agents/data_search/handlers/cmr/handler.py` (granule search - currently disabled)
 
 Granule searches across collections execute in parallel:
+
 ```python
+# Create parallel tasks for all collections
 granule_tasks = [
-    self._execute_granule_search(search_params, concept_id)
-    for collection in selected_collections
-    if (concept_id := collection.get("concept_id"))
+    self._search_granules_for_single_collection(collection, params)
+    for collection in collections
+    if collection.get("concept_id")
 ]
 
-if self.config.enable_parallel_search and len(granule_tasks) > 1:
-    results = await asyncio.gather(*granule_tasks, return_exceptions=True)
+# Execute all granule searches in parallel
+granule_results = await asyncio.gather(*granule_tasks, return_exceptions=True)
+
+# Flatten results and handle exceptions
+all_granules = []
+for result in granule_results:
+    if not isinstance(result, Exception):
+        all_granules.extend(result)
 ```
+
+**Benefits**:
+- All granule searches execute concurrently (up to 25 collections)
+- When enabled, will dramatically reduce granule search time
+- Failures in one collection don't block others
+
+**Thread Safety**: Granule search uses stateless HTTP tools that are inherently thread-safe.
 
 ### Error Handling in Parallel Operations
 
@@ -881,29 +1283,70 @@ for i, result in enumerate(results):
         successful_results.append(result.results)
 ```
 
+### Summary of Parallelization Levels
+
+All levels use the **factory pattern** to create fresh component instances, ensuring thread safety:
+
+1. **Topic-Level**: All topics process in parallel (fresh `ScientificDecompositionComponent` per topic)
+2. **Decomposition-Level**: All decompositions within each topic process in parallel (fresh `RepositoryRouterComponent` per decomposition)
+3. **Approach-Level (Handler)**: Each decomposition creates fresh parameter components (`CMRKnownParametersComponent`, `CMRSearchableParametersComponent`)
+4. **Approach Generation**: Within searchable parameters, all approaches generate queries in parallel (fresh component instance per approach)
+5. **Query Execution**: All CMR queries execute in parallel across all approaches (stateless HTTP tools)
+6. **Approach Filtering**: All approaches filter collections in parallel (fresh `CMRApproachCollectionFilteringComponent` per approach)
+7. **Granule Search**: All granule searches execute in parallel when enabled (stateless HTTP tools)
+
+**Key Architecture**: Components that execute in parallel create fresh instances. Stateless tools (HTTP clients) are inherently thread-safe. See [Parallelization Architecture & Thread Safety](#parallelization-architecture--thread-safety) for complete details.
+
 ## Performance Optimizations
 
 ### Recent Improvements (2024-2025)
 
-**1. Topic and Repository Routing Parallelization (2025)**
+**1. Factory Pattern for Thread-Safe Parallelization (2025)** ⭐ NEW
+- **Issue**: Multiple parallel tasks sharing component instances caused race conditions in memory state, leading to "property 'memory' has no setter" errors and cross-contamination between parallel operations
+- **Solution**: Implemented factory pattern where agents store component configs and create fresh instances for each parallel task
+- **Impact**: Eliminates race conditions across all 7 levels of parallelization, enabling safe concurrent execution of topics, decompositions, approaches, and queries
+- **Location**: `akd/agents/data_search/data_search.py` (agent), `akd/agents/data_search/handlers/cmr/handler.py` (handler), `akd/agents/data_search/components/_shared_parameters.py` (fixed memory handling)
+- **Documentation**: See [Parallelization Architecture & Thread Safety](#parallelization-architecture--thread-safety)
+- **Tests**: `examples/testing/test_parallel_fixes.py` validates thread safety
+
+**2. CMR Query Execution Parallelization (2025)** ⭐ NEW
+- **Issue**: All CMR queries executed sequentially (5 approaches × 5 queries = 25 queries), causing significant bottleneck
+- **Solution**: Implemented `asyncio.gather()` to execute all CMR queries in parallel across all approaches
+- **Impact**: Expected 5-25x speedup for query execution phase (depends on number of queries)
+- **Location**: `akd/agents/data_search/handlers/cmr/handler.py` (_execute_searchable_queries)
+
+**3. Searchable Query Generation Parallelization (2025)** ⭐ NEW
+- **Issue**: Each approach generated searchable queries sequentially (5 LLM calls), limiting throughput
+- **Solution**: Implemented `asyncio.gather()` with factory pattern to generate queries for all approaches in parallel with isolated component instances
+- **Impact**: Expected ~5x speedup for searchable parameters generation phase; eliminates race conditions in approach-level memory state
+- **Location**: `akd/agents/data_search/components/_shared_parameters.py` (SharedSearchableParametersComponent.process)
+- **Thread Safety Fix**: Each approach now receives a fresh component instance, preventing memory interference between parallel approach processing tasks
+
+**4. Granule Search Parallelization (2025)** ⭐ NEW
+- **Issue**: Granule searches would execute sequentially across collections when enabled
+- **Solution**: Implemented `asyncio.gather()` to search all collections in parallel
+- **Impact**: When enabled, expected ~25x speedup for granule search phase (for 25 collections)
+- **Location**: `akd/agents/data_search/handlers/cmr/handler.py` (_search_granules_for_collections)
+
+**5. Topic and Repository Routing Parallelization (2025)**
 - **Issue**: Topics and routing were processed sequentially, limiting throughput for multi-topic queries
 - **Solution**: Implemented `asyncio.gather()` for parallel topic routing and processing
 - **Impact**: 14% reduction in wall-clock time for single-topic queries; expected 40-70% for multi-topic queries
 - **Location**: `akd/agents/data_search/data_search.py` (parallel topic orchestration)
 
-**2. Decomposition Parallelization (2024-2025)**
+**6. Decomposition Parallelization (2024-2025)**
 - **Issue**: Scientific decompositions were processed serially, causing ~10x slower performance
 - **Solution**: Implemented `asyncio.gather()` for parallel decomposition processing within each topic
 - **Impact**: Reduced processing time from ~17 minutes to ~2 minutes for typical workflows
 - **Location**: `akd/agents/data_search/data_search.py` (topic processing)
 
-**3. Validation Limits**
+**7. Validation Limits**
 - **Issue**: Searchable parameters component limited to 15 queries but generated up to 25
 - **Solution**: Updated validation limit from 15 to 25 in searchable parameters output schemas
 - **Impact**: Eliminated validation errors that caused workflow failures
 - **Location**: Repository-specific schemas (e.g., `akd/agents/data_search/handlers/cmr/schemas.py`)
 
-**4. Model Configuration**
+**8. Model Configuration**
 - **Current**: All components use `gpt-5-mini` for optimal cost/performance balance
 - **Previous**: Mixed `gpt-4o` and `gpt-4o-mini` configuration
 - **Impact**: Consistent performance across all components with OpenAI's latest efficient model

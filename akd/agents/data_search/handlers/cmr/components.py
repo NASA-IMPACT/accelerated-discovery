@@ -118,8 +118,10 @@ class CMRSearchableParametersComponent(
         """
         # Parse keywords for metadata (though we primarily use the combined string)
         keywords_list = keyword_string.split() if keyword_string.strip() else []
-        primary_keywords = keywords_list[:4] if keywords_list else []
-        alternative_keywords = keywords_list[4:7] if len(keywords_list) > 4 else []
+        primary_keywords = keywords_list[:2] if keywords_list else []  # Max 2 keywords
+        alternative_keywords = (
+            keywords_list[2:4] if len(keywords_list) > 2 else []
+        )  # Max 2 keywords
 
         return CMRSearchableQuery(
             # Track source approach

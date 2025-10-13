@@ -131,6 +131,52 @@ class SharedSearchableParametersComponent(
     - Implement _create_searchable_query() to construct query objects
     """
 
+    async def _process_single_approach(
+        self,
+        original_query: str,
+        topic,
+        decomposition,
+        approach: TQueryApproach,
+        approach_index: int,
+    ) -> List[TSearchableQuery]:
+        """
+        Process a single approach to generate searchable queries.
+
+        Args:
+            original_query: Original research query
+            topic: Topic being processed
+            decomposition: Scientific decomposition
+            approach: Query approach to process
+            approach_index: Index of this approach
+
+        Returns:
+            List of searchable queries for this approach
+        """
+        if self.debug:
+            logger.debug(f"Processing query approach {approach_index + 1}")
+
+        # Format the user prompt for this specific approach
+        user_prompt = self._format_user_prompt(
+            original_query,
+            topic,
+            decomposition,
+            approach,
+        )
+
+        # Clear and set memory for this approach
+        # Note: Each approach gets a fresh component instance in parallel execution,
+        # so memory state is isolated and thread-safe
+        self.memory.clear()
+        self.memory.append({"role": "user", "content": user_prompt})
+
+        # Generate multiple search variations for this approach
+        approach_queries = await self._generate_search_variations_with_retry(
+            approach,
+            approach_index,
+        )
+
+        return approach_queries
+
     async def process(
         self,
         original_query: str,
@@ -139,7 +185,7 @@ class SharedSearchableParametersComponent(
         query_approaches: List[TQueryApproach],
     ) -> TOutput:
         """
-        Generate searchable parameters for query approaches.
+        Generate searchable parameters for query approaches in parallel.
 
         Args:
             original_query: Original research query for context
@@ -155,30 +201,44 @@ class SharedSearchableParametersComponent(
                 f"Generating searchable parameters for {len(query_approaches)} query approaches",
             )
 
-        searchable_queries = []
+        # Process all approaches in parallel with isolated component instances
+        # to avoid race conditions with shared memory state
+        import asyncio
 
-        for i, approach in enumerate(query_approaches):
-            if self.debug:
-                logger.debug(f"Processing query approach {i + 1}")
-
-            # Format the user prompt for this specific approach
-            user_prompt = self._format_user_prompt(
+        async def process_approach_isolated(approach, index):
+            """Process single approach with fresh component instance for thread safety."""
+            # Create fresh component for this approach to avoid race conditions
+            fresh_component = self.__class__(
+                config=self.config,
+                debug=self.debug,
+                prompts_dir=self.prompts_dir,
+            )
+            return await fresh_component._process_single_approach(
                 original_query,
                 topic,
                 decomposition,
                 approach,
+                index,
             )
 
-            # Clear previous context and add user message to memory for each approach
-            self.memory.clear()
-            self.memory.append({"role": "user", "content": user_prompt})
+        approach_tasks = [
+            process_approach_isolated(approach, i)
+            for i, approach in enumerate(query_approaches)
+        ]
 
-            # Generate multiple search variations for this approach
-            approach_queries = await self._generate_search_variations_with_retry(
-                approach,
-                i,
-            )
-            searchable_queries.extend(approach_queries)
+        # Execute in parallel
+        approach_results = await asyncio.gather(*approach_tasks, return_exceptions=True)
+
+        # Flatten results and handle exceptions
+        searchable_queries = []
+        for i, result in enumerate(approach_results):
+            if isinstance(result, Exception):
+                if self.debug:
+                    logger.warning(
+                        f"Failed to process approach {i + 1}: {result}",
+                    )
+                continue
+            searchable_queries.extend(result)
 
         # Generate overall strategy explanation
         strategy_explanation = self._generate_strategy_explanation(
@@ -202,11 +262,16 @@ class SharedSearchableParametersComponent(
                 from pydantic import BaseModel
 
                 class SearchVariations(BaseModel):
-                    search_queries: List[str] = Field(
-                        description="List of keyword combinations for separate searches (0-5 queries). Empty string means no additional keywords needed.",
-                        max_items=5,
+                    """Search variations for a single query approach."""
+
+                    searchable_queries: List[str] = Field(
+                        description="List of keyword combinations for separate searches (0-2 queries). Empty string means no additional keywords needed.",
+                        max_items=2,
                     )
-                    reasoning: str = Field(description="Explanation of search strategy")
+                    reasoning: str = Field(
+                        description="Explanation of search strategy for this approach",
+                        default="Generated search variations based on approach parameters.",
+                    )
 
                 # Temporarily override output schema for this call
                 original_output_schema = self.output_schema
@@ -219,7 +284,7 @@ class SharedSearchableParametersComponent(
 
                 # Create searchable queries for each variation
                 searchable_queries = []
-                for keyword_string in variations_response.search_queries:
+                for keyword_string in variations_response.searchable_queries:
                     # Let subclass create the repository-specific query object
                     searchable_query = self._create_searchable_query(
                         approach=approach,

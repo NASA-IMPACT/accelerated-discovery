@@ -48,8 +48,8 @@ class BaseApproachFilteringInputSchema(InputSchema):
     )
 
     # Repository-specific approach parameters should be added by subclass
-    # e.g., approach_instrument, approach_platform for CMR
-    # e.g., approach_target, approach_mission for PDS4
+    # e.g., approach: CMRQueryApproach (contains instrument, platform, etc.)
+    # e.g., approach: PDS4QueryApproach (contains target, mission, etc.)
 
     data_items: List[Dict[str, Any]] = Field(
         ...,

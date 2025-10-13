@@ -132,38 +132,38 @@ class SharedApproachFilteringComponent(
         """
         Extract approach-specific context fields for prompt formatting.
 
-        Default implementation handles CMR-like fields.
-        Subclasses can override for repository-specific fields.
+        Uses object composition pattern: params.approach contains all known parameters.
 
         Args:
-            params: Input parameters
+            params: Input parameters with approach object
 
         Returns:
             Dictionary of approach context fields for prompt template
         """
         context = {}
 
-        # Common CMR-like fields
-        approach_fields = [
-            "instrument",
-            "platform",
-            "processing_level",
-            "temporal_range",
-            "spatial_bounds",
-            "temporal_resolution",
-            "spatial_resolution",
-            "keywords",
-        ]
+        # Direct object access via params.approach
+        if hasattr(params, "approach"):
+            approach = params.approach
+            context.update(
+                {
+                    "approach_instrument": approach.instrument or "Not specified",
+                    "approach_platform": approach.platform or "Not specified",
+                    "approach_processing_level": approach.processing_level
+                    or "Not specified",
+                    "approach_temporal_range": approach.temporal or "Not specified",
+                    "approach_spatial_bounds": approach.bounding_box or "Not specified",
+                    "approach_temporal_resolution": approach.temporal_resolution
+                    or "Not specified",
+                    "approach_spatial_resolution": approach.spatial_resolution
+                    or "Not specified",
+                },
+            )
 
-        for field in approach_fields:
-            attr_name = f"approach_{field}"
-            if hasattr(params, attr_name):
-                value = getattr(params, attr_name)
-                if isinstance(value, list):
-                    # Handle list fields (like keywords)
-                    context[attr_name] = ", ".join(value) if value else "None"
-                else:
-                    context[attr_name] = value or "Not specified"
+        # Handle keywords separately (may come from params)
+        if hasattr(params, "approach_keywords"):
+            keywords = params.approach_keywords
+            context["approach_keywords"] = ", ".join(keywords) if keywords else "None"
 
         return context
 

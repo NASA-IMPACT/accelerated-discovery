@@ -151,17 +151,25 @@ class BaseDataSearchComponent(
                     logger.error(error_msg)
                     raise RuntimeError(error_msg) from e
 
-                # Check if it's a rate limit error (429 or mentions "rate")
-                if "429" in str(e) or "rate" in str(e).lower():
+                # Check if it's a retryable error (rate limit or timeout)
+                error_str = str(e)
+                is_rate_limit = "429" in error_str or "rate" in error_str.lower()
+                is_timeout = (
+                    isinstance(e, asyncio.TimeoutError) or "LLM timeout" in error_str
+                )
+
+                if is_rate_limit or is_timeout:
                     delay = self.retry_base_delay * (2**attempt)
+                    error_type = "Rate limit" if is_rate_limit else "Timeout"
+
                     if self.debug:
                         logger.warning(
-                            f"Rate limit hit, retrying in {delay}s "
+                            f"{error_type} hit, retrying in {delay}s "
                             f"(attempt {attempt + 1}/{self.max_retries + 1})",
                         )
                     await asyncio.sleep(delay)
                 else:
-                    # Non-rate-limit error - don't retry
+                    # Non-retryable error - don't retry
                     error_msg = f"{error_prefix}: {e}"
                     logger.error(error_msg)
                     raise RuntimeError(error_msg) from e
@@ -212,17 +220,25 @@ class BaseDataSearchComponent(
                     logger.error(error_msg)
                     raise RuntimeError(error_msg) from e
 
-                # Check if it's a rate limit error (429 or mentions "rate")
-                if "429" in str(e) or "rate" in str(e).lower():
+                # Check if it's a retryable error (rate limit or timeout)
+                error_str = str(e)
+                is_rate_limit = "429" in error_str or "rate" in error_str.lower()
+                is_timeout = (
+                    isinstance(e, asyncio.TimeoutError) or "LLM timeout" in error_str
+                )
+
+                if is_rate_limit or is_timeout:
                     delay = self.retry_base_delay * (2**attempt)
+                    error_type = "Rate limit" if is_rate_limit else "Timeout"
+
                     if self.debug:
                         logger.warning(
-                            f"Rate limit hit, retrying in {delay}s "
+                            f"{error_type} hit, retrying in {delay}s "
                             f"(attempt {attempt + 1}/{self.max_retries + 1})",
                         )
                     await asyncio.sleep(delay)
                 else:
-                    # Non-rate-limit error - don't retry
+                    # Non-retryable error - don't retry
                     error_msg = f"{error_prefix}: {e}"
                     logger.error(error_msg)
                     raise RuntimeError(error_msg) from e

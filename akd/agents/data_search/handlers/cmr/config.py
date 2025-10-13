@@ -1,12 +1,22 @@
 """Configuration for CMR repository handler."""
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import Field, HttpUrl
+
+from akd.tools.data_search._base import DataSearchToolConfig
 
 
-class CMRHandlerConfig(BaseModel):
-    """Configuration for CMR repository handler."""
+class CMRHandlerConfig(DataSearchToolConfig):
+    """Configuration for CMR repository handler.
 
-    # MCP endpoint
+    Extends DataSearchToolConfig to inherit tool configuration attributes:
+    - mcp_endpoint: MCP server endpoint URL
+    - timeout_seconds: Request timeout
+    - max_retries: Maximum retry attempts
+    - retry_delay: Base delay between retries
+    - page_size: Default page size
+    """
+
+    # Override MCP endpoint default for CMR
     mcp_endpoint: HttpUrl = Field(
         default="http://localhost:8080/mcp/cmr/mcp/",
         description="CMR MCP server endpoint URL",

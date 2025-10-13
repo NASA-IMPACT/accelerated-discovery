@@ -68,23 +68,49 @@ class CMRHandler(BaseHandler):
         )
 
         # Get CMR prompts directory
-        cmr_prompts_dir = Path(__file__).parent / "prompts"
+        self.cmr_prompts_dir = Path(__file__).parent / "prompts"
 
-        # Initialize CMR-specific components with model configurations and prompts_dir
-        known_params_config = BaseAgentConfig(model_name=config.known_parameters_model)
-        searchable_params_config = BaseAgentConfig(
+        # Store component configs for creating per-call instances
+        # This prevents race conditions when processing multiple decompositions in parallel
+        self.known_params_config = BaseAgentConfig(
+            model_name=config.known_parameters_model,
+        )
+        self.searchable_params_config = BaseAgentConfig(
             model_name=config.searchable_parameters_model,
         )
 
-        self.known_parameters_component = CMRKnownParametersComponent(
-            config=known_params_config,
-            debug=debug,
-            prompts_dir=cmr_prompts_dir,
+    @property
+    def known_parameters_component(self):
+        """
+        Create and return a fresh CMRKnownParametersComponent instance.
+
+        This property creates a new component instance each time it's accessed to avoid
+        race conditions in parallel execution. Use for testing/demos only.
+
+        Returns:
+            Fresh CMRKnownParametersComponent instance
+        """
+        return CMRKnownParametersComponent(
+            config=self.known_params_config,
+            debug=self.debug,
+            prompts_dir=self.cmr_prompts_dir,
         )
-        self.searchable_parameters_component = CMRSearchableParametersComponent(
-            config=searchable_params_config,
-            debug=debug,
-            prompts_dir=cmr_prompts_dir,
+
+    @property
+    def searchable_parameters_component(self):
+        """
+        Create and return a fresh CMRSearchableParametersComponent instance.
+
+        This property creates a new component instance each time it's accessed to avoid
+        race conditions in parallel execution. Use for testing/demos only.
+
+        Returns:
+            Fresh CMRSearchableParametersComponent instance
+        """
+        return CMRSearchableParametersComponent(
+            config=self.searchable_params_config,
+            debug=self.debug,
+            prompts_dir=self.cmr_prompts_dir,
         )
 
     async def process_decomposition(
@@ -106,15 +132,28 @@ class CMRHandler(BaseHandler):
 
         Granule search is kept for future use but not currently executed.
         """
+        # Create fresh component instances for this decomposition to avoid race conditions
+        # (multiple decompositions may be processing in parallel)
+        known_parameters_component = CMRKnownParametersComponent(
+            config=self.known_params_config,
+            debug=self.debug,
+            prompts_dir=self.cmr_prompts_dir,
+        )
+        searchable_parameters_component = CMRSearchableParametersComponent(
+            config=self.searchable_params_config,
+            debug=self.debug,
+            prompts_dir=self.cmr_prompts_dir,
+        )
+
         # Step 1: Known Parameters
-        known_params_output = await self.known_parameters_component.process(
+        known_params_output = await known_parameters_component.process(
             original_query,
             topic,
             decomposition,
         )
 
         # Step 2: Searchable Parameters
-        searchable_output = await self.searchable_parameters_component.process(
+        searchable_output = await searchable_parameters_component.process(
             original_query,
             topic,
             decomposition,
@@ -155,13 +194,58 @@ class CMRHandler(BaseHandler):
             note=None,
         )
 
+    async def _execute_single_query(
+        self,
+        query: CMRSearchableQuery,
+        params: DataSearchAgentInputSchema,
+        approach_idx: int,
+    ) -> Dict[str, Any]:
+        """
+        Execute a single CMR query and return results with approach index.
+
+        Args:
+            query: Query to execute
+            params: Search parameters
+            approach_idx: Index of the approach this query belongs to
+
+        Returns:
+            Dictionary with approach_idx and collections
+        """
+        # Get CMR-compatible parameters using helper method
+        search_params = query.get_mcp_parameters()
+
+        # Override with explicit input parameters
+        if params.temporal_range:
+            search_params["temporal"] = params.temporal_range
+        if params.spatial_bounds:
+            search_params["bounding_box"] = params.spatial_bounds
+
+        # Add pagination
+        search_params["page_size"] = self.config.collection_search_page_size
+
+        try:
+            # Execute search
+            tool_input = self.collection_search_tool.input_schema(**search_params)
+            result = await self.collection_search_tool.arun(tool_input)
+
+            # Extract and limit collections per query
+            collections = []
+            if hasattr(result, "collections") and result.collections:
+                collections = result.collections[: self.config.collections_per_query]
+
+            return {"approach_idx": approach_idx, "collections": collections}
+
+        except Exception:
+            # Return empty result on failure
+            return {"approach_idx": approach_idx, "collections": []}
+
     async def _execute_searchable_queries(
         self,
         searchable_queries: List[CMRSearchableQuery],
         params: DataSearchAgentInputSchema,
     ) -> Dict[int, List[Dict[str, Any]]]:
         """
-        Execute searchable queries and return collections grouped by approach.
+        Execute searchable queries in parallel and return collections grouped by approach.
 
         Args:
             searchable_queries: Queries to execute (each tagged with approach_index)
@@ -170,51 +254,29 @@ class CMRHandler(BaseHandler):
         Returns:
             Dictionary mapping approach_index to list of collections
         """
-        # Group queries by their source approach
-        approach_queries = {}  # approach_index -> [queries]
+        # Create parallel tasks for all queries across all approaches
+        query_tasks = []
         for query in searchable_queries:
-            approach_idx = query.approach_index
-            if approach_idx not in approach_queries:
-                approach_queries[approach_idx] = []
-            approach_queries[approach_idx].append(query)
+            task = self._execute_single_query(query, params, query.approach_index)
+            query_tasks.append(task)
 
-        # Execute and collect results per approach
+        # Execute all queries in parallel
+        results = await asyncio.gather(*query_tasks, return_exceptions=True)
+
+        # Group results by approach
         approach_collections = {}  # approach_index -> [collections]
 
-        for approach_idx, queries in approach_queries.items():
-            all_collections = []
+        for result in results:
+            if isinstance(result, Exception):
+                # Skip failed queries
+                continue
 
-            for query in queries:
-                # Get CMR-compatible parameters using helper method
-                search_params = query.get_mcp_parameters()
+            approach_idx = result["approach_idx"]
+            collections = result["collections"]
 
-                # Override with explicit input parameters
-                if params.temporal_range:
-                    search_params["temporal"] = params.temporal_range
-                if params.spatial_bounds:
-                    search_params["bounding_box"] = params.spatial_bounds
-
-                # Add pagination
-                search_params["page_size"] = self.config.collection_search_page_size
-
-                try:
-                    # Execute search
-                    tool_input = self.collection_search_tool.input_schema(
-                        **search_params,
-                    )
-                    result = await self.collection_search_tool.arun(tool_input)
-
-                    # Extract and limit collections per query
-                    if hasattr(result, "collections") and result.collections:
-                        limited = result.collections[
-                            : self.config.collections_per_query
-                        ]
-                        all_collections.extend(limited)
-
-                except Exception:
-                    pass
-
-            approach_collections[approach_idx] = all_collections
+            if approach_idx not in approach_collections:
+                approach_collections[approach_idx] = []
+            approach_collections[approach_idx].extend(collections)
 
         return approach_collections
 
@@ -282,16 +344,10 @@ class CMRHandler(BaseHandler):
                 topic_context=topic.functional_context,
                 decomposition_title=decomp.title,
                 decomposition_justification=decomp.scientific_justification,
-                approach_instrument=approach.instrument,
-                approach_platform=approach.platform,
-                approach_processing_level=approach.processing_level,
-                approach_temporal_range=approach.temporal,
-                approach_spatial_bounds=approach.bounding_box,
-                approach_temporal_resolution=approach.temporal_resolution,
-                approach_spatial_resolution=approach.spatial_resolution,
+                approach=approach,  # Pass whole approach object
                 approach_keywords=[],  # Keywords are in searchable queries
-                collections=collections,
-                max_collections=self.config.max_collections_per_approach,
+                data_items=collections,  # Use base class field name
+                max_items=self.config.max_collections_per_approach,  # Use base class field name
             )
 
             # Initialize component with configured model and prompts_dir
@@ -328,7 +384,7 @@ class CMRHandler(BaseHandler):
             # Extract selected collections
             selected = [
                 collections[fc.collection_index]
-                for fc in result.selected_collections
+                for fc in result.selected_items  # Use base field name
                 if 0 <= fc.collection_index < len(collections)
             ]
 
@@ -385,8 +441,11 @@ class CMRHandler(BaseHandler):
             topic_context=topic.functional_context,
             decomposition_title=decomp.title,
             decomposition_justification=decomp.scientific_justification,
-            collections=all_filtered,
-            max_collections=min(len(all_filtered), self.config.final_collection_count),
+            data_items=all_filtered,  # Use base class field name
+            max_items=min(
+                len(all_filtered),
+                self.config.final_collection_count,
+            ),  # Use base class field name
         )
 
         try:
@@ -405,7 +464,7 @@ class CMRHandler(BaseHandler):
             final_ranked = [
                 all_filtered[rc.collection_index]
                 for rc in sorted(
-                    final_result.ranked_collections,
+                    final_result.ranked_items,  # Use base field name
                     key=lambda x: x.final_rank,
                 )
                 if 0 <= rc.collection_index < len(all_filtered)
@@ -417,50 +476,82 @@ class CMRHandler(BaseHandler):
             # Fallback: return up to final_collection_count
             return all_filtered[: self.config.final_collection_count]
 
+    async def _search_granules_for_single_collection(
+        self,
+        collection: Dict[str, Any],
+        params: DataSearchAgentInputSchema,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for granules in a single collection.
+
+        Args:
+            collection: Collection to search
+            params: Search parameters
+
+        Returns:
+            List of granules found (empty list on failure)
+        """
+        concept_id = collection.get("concept_id")
+        if not concept_id:
+            return []
+
+        # Build granule search parameters
+        granule_params = {
+            "collection_concept_id": concept_id,
+            "page_size": self.config.granule_search_page_size,
+        }
+
+        # Add temporal/spatial constraints from input params
+        if params.temporal_range:
+            granule_params["temporal"] = params.temporal_range
+        if params.spatial_bounds:
+            granule_params["bounding_box"] = params.spatial_bounds
+
+        try:
+            # Execute granule search
+            granule_search_params = self.granule_search_tool.input_schema(
+                **granule_params,
+            )
+            result = await self.granule_search_tool.arun(granule_search_params)
+
+            # Extract granules
+            if hasattr(result, "results") and result.results.get("granules"):
+                return result.results["granules"]
+
+            return []
+
+        except Exception:
+            return []
+
     async def _search_granules_for_collections(
         self,
         collections: List[Dict[str, Any]],
         params: DataSearchAgentInputSchema,
     ) -> List[Dict[str, Any]]:
         """
-        Search for granules in the provided collections.
+        Search for granules in the provided collections in parallel.
 
         KEPT FOR FUTURE USE - Currently not called in process_decomposition.
 
         To enable: Uncomment granule search call in process_decomposition
         and include granules in data_results.
         """
+        # Create parallel tasks for all collections
+        granule_tasks = [
+            self._search_granules_for_single_collection(collection, params)
+            for collection in collections
+            if collection.get("concept_id")
+        ]
+
+        # Execute all granule searches in parallel
+        granule_results = await asyncio.gather(*granule_tasks, return_exceptions=True)
+
+        # Flatten results and handle exceptions
         all_granules = []
-
-        for collection in collections:
-            concept_id = collection.get("concept_id")
-            if not concept_id:
+        for result in granule_results:
+            if isinstance(result, Exception):
+                # Skip failed granule searches
                 continue
-
-            # Build granule search parameters
-            granule_params = {
-                "collection_concept_id": concept_id,
-                "page_size": self.config.granule_search_page_size,
-            }
-
-            # Add temporal/spatial constraints from input params
-            if params.temporal_range:
-                granule_params["temporal"] = params.temporal_range
-            if params.spatial_bounds:
-                granule_params["bounding_box"] = params.spatial_bounds
-
-            try:
-                # Execute granule search
-                granule_search_params = self.granule_search_tool.input_schema(
-                    **granule_params,
-                )
-                result = await self.granule_search_tool.arun(granule_search_params)
-
-                # Extract granules
-                if hasattr(result, "results") and result.results.get("granules"):
-                    all_granules.extend(result.results["granules"])
-
-            except Exception:
-                pass
+            all_granules.extend(result)
 
         return all_granules

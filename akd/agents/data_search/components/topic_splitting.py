@@ -31,9 +31,9 @@ class TopicSplittingOutput(BaseModel):
 
     topics: List[Topic] = Field(
         ...,
-        description="List of functional topics identified in the research question (1-6 topics)",
+        description="List of functional topics identified in the research question (1-2 topics)",
         min_items=1,
-        max_items=6,
+        max_items=2,
     )
 
 
@@ -52,7 +52,7 @@ class TopicSplittingComponent(
     """
     Component for identifying functional topics using LLM.
 
-    Takes a scientific research question and identifies 1-6 distinct functional topics
+    Takes a scientific research question and identifies 1-2 distinct functional topics
     that represent separate areas of inquiry requiring different data discovery approaches.
     """
 

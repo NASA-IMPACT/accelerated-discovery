@@ -35,9 +35,9 @@ class ScientificDecompositionOutput(BaseModel):
 
     decompositions: List[ScientificDecomposition] = Field(
         ...,
-        description="List of scientific decompositions for the topic (1-6 decompositions)",
+        description="List of scientific decompositions for the topic (1-2 decompositions)",
         min_items=1,
-        max_items=6,
+        max_items=2,
     )
 
 
@@ -60,7 +60,7 @@ class ScientificDecompositionComponent(
     """
     Component for generating scientific decompositions using LLM.
 
-    Takes a functional topic and decomposes it into 1-6 specific observable phenomena
+    Takes a functional topic and decomposes it into 1-2 specific observable phenomena
     that can be measured with satellite and Earth observation data.
     """
 

@@ -64,6 +64,10 @@ class CMRQueryApproach(BaseModel):
         """
         Get parameters that can be passed directly to CMR MCP API.
 
+        Note: processing_level is excluded because CMR's processing_level filter
+        is too restrictive and filters out valid results. Use get_filter_parameters()
+        to access processing_level for post-search filtering instead.
+
         Returns:
             Dictionary with only CMR-compatible search parameters
         """
@@ -73,8 +77,7 @@ class CMRQueryApproach(BaseModel):
             mcp_params["instrument"] = self.instrument
         if self.platform:
             mcp_params["platform"] = self.platform
-        if self.processing_level:
-            mcp_params["processing_level"] = self.processing_level
+        # processing_level intentionally excluded - used in filtering instead
         if self.temporal:
             mcp_params["temporal"] = self.temporal
         if self.bounding_box:
@@ -87,10 +90,12 @@ class CMRQueryApproach(BaseModel):
         Get parameters that must be used for post-search filtering.
 
         Returns:
-            Dictionary with resolution and other filter-only parameters
+            Dictionary with resolution, processing level, and other filter-only parameters
         """
         filter_params = {}
 
+        if self.processing_level:
+            filter_params["processing_level"] = self.processing_level
         if self.temporal_resolution:
             filter_params["temporal_resolution"] = self.temporal_resolution
         if self.spatial_resolution:
@@ -104,9 +109,9 @@ class CMRKnownParametersOutput(BaseKnownParametersOutput[CMRQueryApproach]):
 
     query_approaches: List[CMRQueryApproach] = Field(
         ...,
-        description="List of CMR query approaches using known parameters (1-5 approaches)",
+        description="List of CMR query approaches using known parameters (1-2 approaches)",
         min_items=1,
-        max_items=5,
+        max_items=2,
     )
     reasoning: str = Field(
         ...,
@@ -153,12 +158,12 @@ class CMRSearchableQuery(BaseModel):
     primary_keywords: List[str] = Field(
         default_factory=list,
         description="Primary search keywords for CMR metadata search",
-        max_items=4,
+        max_items=2,
     )
     alternative_keywords: List[str] = Field(
         default_factory=list,
         description="Alternative/synonym keywords",
-        max_items=3,
+        max_items=2,
     )
     combined_keyword_string: str = Field(
         default="",
@@ -169,6 +174,10 @@ class CMRSearchableQuery(BaseModel):
         """
         Get parameters that can be passed directly to CMR MCP API.
 
+        Note: processing_level is excluded because CMR's processing_level filter
+        is too restrictive and filters out valid results. Use get_filter_parameters()
+        to access processing_level for post-search filtering instead.
+
         Returns:
             Dictionary with only CMR-compatible search parameters
         """
@@ -178,8 +187,7 @@ class CMRSearchableQuery(BaseModel):
             mcp_params["instrument"] = self.instrument
         if self.platform:
             mcp_params["platform"] = self.platform
-        if self.processing_level:
-            mcp_params["processing_level"] = self.processing_level
+        # processing_level intentionally excluded - used in filtering instead
         if self.temporal:
             mcp_params["temporal"] = self.temporal
         if self.bounding_box:
@@ -196,10 +204,12 @@ class CMRSearchableQuery(BaseModel):
         Get parameters that must be used for post-search filtering.
 
         Returns:
-            Dictionary with resolution and other filter-only parameters
+            Dictionary with resolution, processing level, and other filter-only parameters
         """
         filter_params = {}
 
+        if self.processing_level:
+            filter_params["processing_level"] = self.processing_level
         if self.temporal_resolution:
             filter_params["temporal_resolution"] = self.temporal_resolution
         if self.spatial_resolution:
@@ -215,7 +225,7 @@ class CMRSearchableParametersOutput(BaseSearchableParametersOutput[CMRSearchable
         ...,
         description="Complete CMR queries with known + searchable parameters (expanded from approaches)",
         min_items=1,
-        max_items=25,  # Up to 5 approaches × 5 variations each
+        max_items=4,  # Up to 2 approaches × 2 variations each
     )
     keyword_strategy: str = Field(
         ...,
@@ -246,61 +256,28 @@ class CMRSearchableParametersInputSchema(InputSchema):
 class CMRApproachCollectionFilteringInputSchema(BaseApproachFilteringInputSchema):
     """CMR-specific input schema for filtering collections within a single approach."""
 
-    # CMR-specific approach context
-    approach_instrument: Optional[str] = Field(
-        None,
-        description="Instrument for this CMR query approach",
+    # Approach object (contains all known parameters)
+    approach: CMRQueryApproach = Field(
+        ...,
+        description="The CMR query approach that generated these collections",
     )
-    approach_platform: Optional[str] = Field(
-        None,
-        description="Platform for this CMR query approach",
-    )
-    approach_processing_level: Optional[str] = Field(
-        None,
-        description="Processing level for this CMR query approach",
-    )
-    approach_temporal_range: Optional[str] = Field(
-        None,
-        description="Temporal range for this CMR query approach",
-    )
-    approach_spatial_bounds: Optional[str] = Field(
-        None,
-        description="Spatial bounds for this CMR query approach",
-    )
-    approach_temporal_resolution: Optional[str] = Field(
-        None,
-        description="Required temporal resolution for this CMR query approach",
-    )
-    approach_spatial_resolution: Optional[str] = Field(
-        None,
-        description="Required spatial resolution for this CMR query approach",
-    )
+
+    # Keywords kept separate (may differ from approach due to query variations)
     approach_keywords: List[str] = Field(
         default_factory=list,
-        description="Keywords used in this CMR query approach",
+        description="Keywords used in the searchable queries for this approach",
     )
 
-    # Override to use CMR-specific naming
-    collections: List[Dict[str, Any]] = Field(
-        ...,
-        max_items=25,
-        description="CMR collections to filter (from this approach)",
-    )
-    max_collections: int = Field(
-        default=5,
-        description="Maximum collections to select from this approach",
-    )
-
-    # Alias base field to our CMR-specific field
+    # Use base class fields (data_items, max_items) and provide CMR-specific aliases
     @property
-    def data_items(self) -> List[Dict[str, Any]]:
-        """Alias for base class compatibility."""
-        return self.collections
+    def collections(self) -> List[Dict[str, Any]]:
+        """Alias for CMR-specific naming."""
+        return self.data_items
 
     @property
-    def max_items(self) -> int:
-        """Alias for base class compatibility."""
-        return self.max_collections
+    def max_collections(self) -> int:
+        """Alias for CMR-specific naming."""
+        return self.max_items
 
 
 class CMRFilteredRankedCollection(FilteredRankedItem):
@@ -321,17 +298,18 @@ class CMRFilteredRankedCollection(FilteredRankedItem):
 class CMRApproachCollectionFilteringOutput(BaseApproachFilteringOutput):
     """CMR-specific output from per-approach filtering."""
 
-    selected_collections: List[CMRFilteredRankedCollection] = Field(
+    # Override base field with CMR-specific type
+    selected_items: List[CMRFilteredRankedCollection] = Field(
         ...,
         max_items=5,
         description="Top CMR collections for this approach, ranked",
     )
 
-    # Alias base field
+    # Alias for CMR-specific naming
     @property
-    def selected_items(self) -> List[FilteredRankedItem]:
-        """Alias for base class compatibility."""
-        return self.selected_collections
+    def selected_collections(self) -> List[CMRFilteredRankedCollection]:
+        """Alias for CMR-specific naming."""
+        return self.selected_items
 
 
 # ============================================================================
@@ -342,27 +320,16 @@ class CMRApproachCollectionFilteringOutput(BaseApproachFilteringOutput):
 class CMRFinalCollectionRankingInputSchema(BaseFinalRankingInputSchema):
     """CMR-specific input schema for final cross-approach ranking."""
 
-    # Override to use CMR-specific naming
-    collections: List[Dict[str, Any]] = Field(
-        ...,
-        max_items=25,
-        description="Pre-filtered CMR collections from all approaches",
-    )
-    max_collections: int = Field(
-        default=25,
-        description="Maximum collections to return (ranked 1-N)",
-    )
-
-    # Alias base field
+    # Use base class fields (data_items, max_items) and provide CMR-specific aliases
     @property
-    def data_items(self) -> List[Dict[str, Any]]:
-        """Alias for base class compatibility."""
-        return self.collections
+    def collections(self) -> List[Dict[str, Any]]:
+        """Alias for CMR-specific naming."""
+        return self.data_items
 
     @property
-    def max_items(self) -> int:
-        """Alias for base class compatibility."""
-        return self.max_collections
+    def max_collections(self) -> int:
+        """Alias for CMR-specific naming."""
+        return self.max_items
 
 
 class CMRFinalRankedCollection(FinalRankedItem):
@@ -383,23 +350,24 @@ class CMRFinalRankedCollection(FinalRankedItem):
 class CMRFinalCollectionRankingOutput(BaseFinalRankingOutput):
     """CMR-specific output from final ranking."""
 
-    ranked_collections: List[CMRFinalRankedCollection] = Field(
+    # Override base fields with CMR-specific types/names
+    ranked_items: List[CMRFinalRankedCollection] = Field(
         ...,
         max_items=25,
         description="CMR collections ranked 1-25 (or fewer if less available)",
     )
-    total_collections_ranked: int = Field(
+    total_items_ranked: int = Field(
         ...,
         description="Total number of collections in the ranking",
     )
 
-    # Alias base field
+    # Aliases for CMR-specific naming
     @property
-    def ranked_items(self) -> List[FinalRankedItem]:
-        """Alias for base class compatibility."""
-        return self.ranked_collections
+    def ranked_collections(self) -> List[CMRFinalRankedCollection]:
+        """Alias for CMR-specific naming."""
+        return self.ranked_items
 
     @property
-    def total_items_ranked(self) -> int:
-        """Alias for base class compatibility."""
-        return self.total_collections_ranked
+    def total_collections_ranked(self) -> int:
+        """Alias for CMR-specific naming."""
+        return self.total_items_ranked

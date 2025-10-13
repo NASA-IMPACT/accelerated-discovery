@@ -89,25 +89,21 @@ class DataSearchAgent(BaseDataSearchAgent):
             debug=debug,
         )
 
-        # Initialize universal components (used for all queries)
-        topic_config = BaseAgentConfig(model_name=self.config.topic_splitting_model)
-        decomp_config = BaseAgentConfig(
+        # Store component configs for creating per-call instances
+        # This prevents race conditions in parallel execution
+        self.topic_config = BaseAgentConfig(
+            model_name=self.config.topic_splitting_model,
+        )
+        self.decomp_config = BaseAgentConfig(
             model_name=self.config.scientific_decomposition_model,
         )
-        router_config = BaseAgentConfig(
+        self.router_config = BaseAgentConfig(
             model_name=self.config.repository_routing_model,
         )
 
+        # Create singleton for topic splitting (only called once per query, never parallel)
         self.topic_splitting_component = TopicSplittingComponent(
-            config=topic_config,
-            debug=debug,
-        )
-        self.scientific_decomposition_component = ScientificDecompositionComponent(
-            config=decomp_config,
-            debug=debug,
-        )
-        self.repository_router_component = RepositoryRouterComponent(
-            config=router_config,
+            config=self.topic_config,
             debug=debug,
         )
 
@@ -182,6 +178,38 @@ class DataSearchAgent(BaseDataSearchAgent):
             CMRHandler instance with access to CMR-specific components
         """
         return self._get_handler(NASARepositoryEnum.CMR)
+
+    @property
+    def scientific_decomposition_component(self):
+        """
+        Create and return a fresh ScientificDecompositionComponent instance.
+
+        This property creates a new component instance each time it's accessed to avoid
+        race conditions in parallel execution. Use for testing/demos only.
+
+        Returns:
+            Fresh ScientificDecompositionComponent instance
+        """
+        return ScientificDecompositionComponent(
+            config=self.decomp_config,
+            debug=self.config.debug,
+        )
+
+    @property
+    def repository_router_component(self):
+        """
+        Create and return a fresh RepositoryRouterComponent instance.
+
+        This property creates a new component instance each time it's accessed to avoid
+        race conditions in parallel execution. Use for testing/demos only.
+
+        Returns:
+            Fresh RepositoryRouterComponent instance
+        """
+        return RepositoryRouterComponent(
+            config=self.router_config,
+            debug=self.config.debug,
+        )
 
     def _create_external_result(
         self,
@@ -349,8 +377,15 @@ class DataSearchAgent(BaseDataSearchAgent):
         Returns:
             Complete topic result with all decompositions
         """
+        # Create fresh decomposition component for this topic to avoid race conditions
+        # in parallel execution (multiple topics may be processing simultaneously)
+        decomposition_component = ScientificDecompositionComponent(
+            config=self.decomp_config,
+            debug=self.config.debug,
+        )
+
         # Scientific Decomposition
-        decomp_output = await self.scientific_decomposition_component.process(
+        decomp_output = await decomposition_component.process(
             original_query,
             topic,
         )
@@ -417,8 +452,15 @@ class DataSearchAgent(BaseDataSearchAgent):
         Returns:
             Complete decomposition result
         """
+        # Create fresh router component for this decomposition to avoid race conditions
+        # in parallel execution (multiple decompositions may be processing simultaneously)
+        router_component = RepositoryRouterComponent(
+            config=self.router_config,
+            debug=self.config.debug,
+        )
+
         # Route decomposition to best repository
-        routing_output = await self.repository_router_component.process(
+        routing_output = await router_component.process(
             original_query,
             topic,
             decomposition,

@@ -28,7 +28,6 @@ from timing_collector import TimingCollector
 
 from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
 from akd.agents.data_search.components import ScientificDecomposition, Topic
-from akd.agents.data_search.components.repository_router import NASARepositoryEnum
 from akd.agents.data_search.handlers import CMRHandlerConfig
 from akd.configs.data_search_config import get_config
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
@@ -42,10 +41,10 @@ print(f"🔑 OpenAI API Key loaded: {'Yes' if os.getenv('OPENAI_API_KEY') else '
 
 # Model configuration for each pipeline component
 MODEL_CONFIG = {
-    "topic_splitting": "gpt-5-mini",
-    "scientific_decomposition": "gpt-5-mini",
-    "repository_routing": "gpt-5-mini",
-    "cmr_query": "gpt-5-mini",
+    "topic_splitting": "gpt-5-nano",
+    "scientific_decomposition": "gpt-5-nano",
+    "repository_routing": "gpt-5-nano",
+    "cmr_query": "gpt-5-nano",
 }
 
 print("🎛️ Model Configuration:")
@@ -273,8 +272,17 @@ async def capture_single_path(
         print(f"          ✅ Found {len(all_granules)} granules")
 
     except Exception as e:
-        print(f"        ❌ Path processing failed: {e}")
-        path_data["error"] = str(e)
+        import traceback
+
+        error_details = {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+            "traceback": traceback.format_exc(),
+        }
+        print(f"        ❌ Path processing failed: {type(e).__name__}: {e}")
+        if os.getenv("DEBUG_VERBOSE"):
+            print(f"        Traceback: {error_details['traceback']}")
+        path_data["error"] = error_details
 
     return path_data
 
@@ -320,35 +328,7 @@ async def capture_full_workflow(query: str, output_file: str = None) -> str:
         # Set timing context for this topic
         timing_collector.set_context(topic_idx=topic_idx)
 
-        # Repository Routing
-        print("   🔍 Repository Routing...")
-        async with timing_collector.measure("repository_routing") as timer:
-            routing_output = await agent.repository_router_component.process(
-                query,
-                topic,
-            )
-            timer.add_metadata(
-                repositories_identified=len(routing_output.route.repositories),
-                repositories=routing_output.route.repositories,
-            )
-        print(f"     ✅ Repositories: {routing_output.route.repositories}")
-
-        # Check if CMR is selected
-        has_cmr = NASARepositoryEnum.CMR in routing_output.route.repositories
-        if not has_cmr:
-            print("     ⚠️ CMR not selected, skipping decomposition")
-            all_topic_results.append(
-                {
-                    "index": topic_idx,
-                    "topic": safe_model_dump(topic),
-                    "routing": safe_model_dump(routing_output.route),
-                    "decompositions": [],
-                    "note": f"Routed to {routing_output.route.repositories}; CMR not selected",
-                },
-            )
-            continue
-
-        # Scientific Decomposition
+        # Scientific Decomposition (note: routing happens per decomposition in actual workflow)
         print("   🔍 Scientific Decomposition...")
         async with timing_collector.measure("scientific_decomposition") as timer:
             decomp_output = await agent.scientific_decomposition_component.process(
@@ -373,13 +353,16 @@ async def capture_full_workflow(query: str, output_file: str = None) -> str:
             print(
                 f"      Queuing decomposition {decomp_idx + 1}: {decomposition.title}",
             )
-            task = capture_single_path(
-                query,
-                topic,
-                decomposition,
-                timing_collector,
-                topic_idx,
-                decomp_idx,
+            task = asyncio.create_task(
+                capture_single_path(
+                    query,
+                    topic,
+                    decomposition,
+                    timing_collector,
+                    topic_idx,
+                    decomp_idx,
+                ),
+                name=f"decomp-{topic_idx}-{decomp_idx}-{decomposition.title[:30]}",
             )
             decomp_tasks.append((decomp_idx, decomposition, task))
 
@@ -427,7 +410,10 @@ async def capture_full_workflow(query: str, output_file: str = None) -> str:
             {
                 "index": topic_idx,
                 "topic": safe_model_dump(topic),
-                "routing": safe_model_dump(routing_output.route),
+                "routing": {
+                    "repositories": ["CMR"],
+                    "note": "Demo assumes CMR routing; actual workflow routes per decomposition",
+                },
                 "decompositions": decomposition_results,
             },
         )
@@ -760,9 +746,9 @@ async def capture_fast_smoke_workflow(query: str, output_file: str = None) -> st
                             ],  # Only [0]
                         },
                         "collections_raw": collections,
-                        "collections_ranked": [selected_collection]
-                        if selected_collection
-                        else [],
+                        "collections_ranked": (
+                            [selected_collection] if selected_collection else []
+                        ),
                         "granules": granules,
                     },
                 ],
