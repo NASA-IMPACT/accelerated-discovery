@@ -321,7 +321,8 @@ def add_guardrails(
             def _extract_high_importance_criteria(self, verbose_steps: List[str]) -> Dict[str, List[str]]:
                 """
                 Extracts criteria text from Level == 0 TaskNode entries where importance is 'high'
-                AND the model's verdict was Fail.
+                AND the model's verdict was Fail. , preserving the order indicated by numeric suffixes
+                (e.g., positivity-bias_1, positivity-bias_2, etc.).
                 Parameters
                 ----------
                 verbose_steps : List[str]
@@ -330,7 +331,7 @@ def add_guardrails(
                 -------
                 Dict[str, List[str]]
                     A dictionary mapping each label from the risk taxonomy (e.g., 'consistency', 'positivity-bias')
-                    to a list of criteria that are both high-importance and failed (Fail).
+                    to an ordered list of criteria that are both high-importance and failed (Fail).
                 """
                 criteria_by_label = defaultdict(list)
 
@@ -338,8 +339,14 @@ def add_guardrails(
                 level_pattern = re.compile(r"Level == (\d+)")
                 label_pattern = re.compile(r"Label:\s*([^\|]+)\|")
                 importance_pattern = re.compile(r"importance:\s*(\w+)", re.IGNORECASE)
-                instructions_pattern = re.compile(r"Instructions:\s*(.*?)\nAnswer strictly", re.DOTALL | re.IGNORECASE)
-                verdict_pattern = re.compile(r"\n[a-zA-Z0-9_\-]+:\s*(Pass|Fail)", re.IGNORECASE)
+                instructions_pattern = re.compile(
+                    r"Instructions:\s*(.*?)\nAnswer strictly",
+                    re.DOTALL | re.IGNORECASE,
+                )
+                verdict_pattern = re.compile(
+                    r"\n([a-zA-Z0-9_\-]+):\s*(Pass|Fail)",
+                    re.IGNORECASE,
+                )
 
                 for block in verbose_steps:
                     # Only Level == 0 nodes
@@ -358,18 +365,36 @@ def add_guardrails(
                     if not importance_match or importance_match.group(1).lower() != "high":
                         continue
 
-                    # Only include if verdict == True
-                    verdict_match = verdict_pattern.search(block)
-                    if not verdict_match or verdict_match.group(1).lower() != "fail":
+                    # Find all verdict matches
+                    verdict_match = verdict_pattern.findall(block)
+                    if not verdict_match:
                         continue
 
-                    # Extract instructions / criteria text
-                    instructions_match = instructions_pattern.search(block)
-                    if instructions_match:
-                        criteria_text = instructions_match.group(1).strip()
-                        criteria_by_label[label].append(criteria_text)
+                    for vm in verdict_match:
+                        # Some malformed lines might only have one item
+                        if len(vm) != 2:
+                            continue
+                        criterion_id, verdict = vm
+                        if verdict.lower() != "fail":
+                            continue
 
-                return dict(criteria_by_label)
+                        # Extract numeric suffix (e.g., 3 from positivity-bias_3)
+                        num_match = re.search(r"_(\d+)$", criterion_id)
+                        order = int(num_match.group(1)) if num_match else 0
+
+                        # Extract criterion text
+                        instructions_match = instructions_pattern.search(block)
+                        if instructions_match:
+                            criteria_text = instructions_match.group(1).strip()
+                            criteria_by_label[label].append((order, criteria_text))
+
+                # Sort by numeric order within each label
+                sorted_criteria = {
+                    label: [text for _, text in sorted(items, key=lambda x: x[0])]
+                    for label, items in criteria_by_label.items()
+                }
+
+                return sorted_criteria
 
             async def _arun(self, params, **kwargs):
                 """Enhanced _arun with guardrails validation."""
