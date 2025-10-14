@@ -94,6 +94,8 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.0.0",
     "pre-commit>=4.2.0",
+    "memray>=1.18.0",
+    "scalene>=1.5.55",
 ]
 local = [
     "marimo==0.15.0",
