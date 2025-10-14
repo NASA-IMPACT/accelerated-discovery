@@ -170,10 +170,10 @@ class SearchPipeline(SearchTool):
     @property
     def _default_scraper(self) -> ScraperToolBase:
         return CompositeScraper(
-            DoclingScraper(debug=self.debug),
             Crawl4AIWebScraper(debug=self.debug),
             SimpleWebScraper(debug=self.debug),
             SimplePDFScraper(debug=self.debug),
+            DoclingScraper(debug=self.debug),
         )
 
     async def _resolve_essential_metadata(
@@ -346,13 +346,8 @@ class SearchPipeline(SearchTool):
                     updated_result = result.model_copy()
                     updated_result.score = getattr(assessed_result, "score", None)
 
-                    if (
-                        hasattr(assessed_result, "extra")
-                        and "relevancy_assessment" in assessed_result.extra
-                    ):
-                        updated_result.extra["relevancy_assessment"] = (
-                            assessed_result.extra["relevancy_assessment"]
-                        )
+                    if hasattr(assessed_result, "extra") and "relevancy_assessment" in assessed_result.extra:
+                        updated_result.extra["relevancy_assessment"] = assessed_result.extra["relevancy_assessment"]
 
                     updated_result.extra["should_fetch_full_content"] = should_scrape
                     return should_scrape, updated_result
@@ -588,11 +583,7 @@ class SearchPipeline(SearchTool):
 
             # Filter out exceptions if we're not failing on errors
             if not self.fail_on_scraping_errors:
-                enhanced_results = [
-                    result
-                    for result in enhanced_results
-                    if not isinstance(result, Exception)
-                ]
+                enhanced_results = [result for result in enhanced_results if not isinstance(result, Exception)]
         else:
             # Process sequentially
             enhanced_results = []
@@ -608,21 +599,14 @@ class SearchPipeline(SearchTool):
 
         # Step 4: Validate results
         if self.scraping_mode != SearchPipelineScrapingMode.ALWAYS_OFF:
-            successful_scrapes = sum(
-                1
-                for result in enhanced_results
-                if result.extra.get("full_text_scraped", False)
-            )
+            successful_scrapes = sum(1 for result in enhanced_results if result.extra.get("full_text_scraped", False))
 
             if self.debug:
                 logger.info(
                     f"Successfully scraped {successful_scrapes}/{len(enhanced_results)} results",
                 )
 
-            if (
-                self.min_successful_scrapes is not None
-                and successful_scrapes < self.min_successful_scrapes
-            ):
+            if self.min_successful_scrapes is not None and successful_scrapes < self.min_successful_scrapes:
                 raise Exception(
                     f"Only {successful_scrapes} successful scrapes, minimum required: {self.min_successful_scrapes}",
                 )
