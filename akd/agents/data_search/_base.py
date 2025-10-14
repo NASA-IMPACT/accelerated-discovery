@@ -67,10 +67,6 @@ class TopicResult(BaseModel):
         ...,
         description="The topic that was processed",
     )
-    data_source: str = Field(
-        ...,
-        description="Data source used (e.g., 'CMR', 'USGS')",
-    )
     decomposition_results: List["DecompositionResult"] = Field(
         default_factory=list,
         description="Results for each scientific decomposition of this topic",

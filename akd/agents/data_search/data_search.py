@@ -315,7 +315,6 @@ class DataSearchAgent(BaseDataSearchAgent):
                     # Create error result
                     error_result = TopicResult(
                         topic=safe_model_dump(topics_output.topics[i]),
-                        data_source="Unknown",
                         decomposition_results=[],
                         note=f"Processing error: {str(result)}",
                     )
@@ -420,16 +419,8 @@ class DataSearchAgent(BaseDataSearchAgent):
             else:
                 final_results.append(result)
 
-        # Determine primary data source from first successful result
-        data_source = "Unknown"
-        for result in final_results:
-            if result.repository:
-                data_source = result.repository
-                break
-
         return TopicResult(
             topic=safe_model_dump(topic),
-            data_source=data_source,
             decomposition_results=final_results,
         )
 
