@@ -61,6 +61,11 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     use_local_search: bool = Field(default=True, description="Enable local repository search")
     use_sde_search: bool = Field(default=True, description="Enable SDE repository search")
 
+    # System prompts
+    query_prompt: str = Field(default=CODE_QUERY_PROMPT, description="System prompt for query agent")
+    followup_query_prompt: str = Field(default=CODE_QUERY_PROMPT, description="System prompt for follow-up query agent")
+    relevancy_prompt: str = Field(default=CODE_RELEVANCY_PROMPT, description="System prompt for relevancy agent")
+
 
 class CodeSearchAgent(ControlledSearchAgent):
     """
@@ -81,7 +86,7 @@ class CodeSearchAgent(ControlledSearchAgent):
         self.config = config or CodeSearchAgentConfig()
         self.config.debug = debug
 
-        search_tool = search_tool or self._setup_search_tool()
+        self.search_tool = search_tool or self._setup_search_tool()
 
         # Setup agents
         self.query_agent = query_agent or self._setup_query_agent()
@@ -91,10 +96,10 @@ class CodeSearchAgent(ControlledSearchAgent):
         # Create the underlying ControlledSearchAgent
         super().__init__(
             config=self.config,
-            search_tool=search_tool,
-            query_agent=query_agent,
-            followup_query_agent=followup_query_agent,
-            relevancy_agent=relevancy_agent,
+            search_tool=self.search_tool,
+            query_agent=self.query_agent,
+            followup_query_agent=self.followup_query_agent,
+            relevancy_agent=self.relevancy_agent,
             debug=self.config.debug,
         )
 
@@ -187,15 +192,23 @@ class CodeSearchAgent(ControlledSearchAgent):
 
     def _setup_query_agent(self) -> QueryAgent:
         """Setup query agent with code-specific prompt."""
-        config = BaseAgentConfig(model_name=self.config.subagent_model, system_prompt=CODE_QUERY_PROMPT)
+        config = BaseAgentConfig(
+            model_name=self.config.subagent_model, system_prompt=self.config.query_prompt, debug=self.config.debug
+        )
         return QueryAgent(config=config)
 
     def _setup_followup_query_agent(self) -> FollowUpQueryAgent:
         """Setup follow-up query agent."""
-        config = BaseAgentConfig(model_name=self.config.subagent_model, system_prompt=CODE_QUERY_PROMPT)
+        config = BaseAgentConfig(
+            model_name=self.config.subagent_model,
+            system_prompt=self.config.followup_query_prompt,
+            debug=self.config.debug,
+        )
         return FollowUpQueryAgent(config=config)
 
     def _setup_relevancy_agent(self) -> MultiRubricRelevancyAgent:
         """Setup relevancy agent."""
-        config = BaseAgentConfig(model_name=self.config.subagent_model, system_prompt=CODE_RELEVANCY_PROMPT)
+        config = BaseAgentConfig(
+            model_name=self.config.subagent_model, system_prompt=self.config.relevancy_prompt, debug=self.config.debug
+        )
         return MultiRubricRelevancyAgent(config=config)

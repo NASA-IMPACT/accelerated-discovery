@@ -118,6 +118,7 @@ def agent():
         s2_tool_config=s2_config,
         model_name="gpt-4o-mini",
         api_key=openai_key,
+        output_graph=True,
         debug=True,
     )
     gap_agent = GapAgent(gap_agent_config)
