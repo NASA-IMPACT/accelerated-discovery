@@ -37,6 +37,7 @@ class SimpleWebScraper(WebScraper):
         Raises:
             HTTPError: If the HTTP request fails
             ValueError: If content length exceeds maximum
+            RuntimeError: If the content is a PDF
             RequestException: For other request-related errors
         """
         try:
@@ -46,6 +47,15 @@ class SimpleWebScraper(WebScraper):
             ) as client:
                 response = await client.get(url, headers=self.headers)
                 response.raise_for_status()
+
+                # Check if response is actually a PDF based on Content-Type
+                content_type = response.headers.get("content-type", "").lower()
+                if self.debug:
+                    logger.debug(f"Fetched URL: {url}. Headers: {response.headers}")
+                if "application/pdf" in content_type:
+                    raise RuntimeError(
+                        f"URL returns PDF content (Content-Type: {content_type}), use PDF scraper instead: {url}",
+                    )
 
                 if len(response.content) > self.max_content_length:
                     raise ValueError(
