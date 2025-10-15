@@ -2,6 +2,7 @@ import asyncio
 import time
 from abc import abstractmethod
 from datetime import datetime
+from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -26,6 +27,73 @@ def get_event_loop() -> asyncio.AbstractEventLoop:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop
+
+
+def async_lru_cache(maxsize=128):
+    """
+    LRU cache decorator for async functions using Python's built-in lru_cache.
+    Caches the result (not the coroutine) to avoid 'cannot reuse awaited coroutine' errors.
+
+    This decorator properly caches async function results, ensuring that:
+    1. Multiple calls with the same arguments return cached results
+    2. The cached results (not coroutines) are returned, avoiding reuse errors
+    3. Standard LRU eviction policies are applied
+
+    Args:
+        maxsize (int): Maximum size of the cache. Defaults to 128.
+
+    Example:
+        ```python
+        @async_lru_cache(maxsize=256)
+        async def fetch_data(query: str) -> dict:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"https://api.example.com/{query}") as resp:
+                    return await resp.json()
+
+        # First call - fetches from API
+        result1 = await fetch_data("test")
+
+        # Second call - returns cached result
+        result2 = await fetch_data("test")  # No API call made
+        ```
+
+    Note:
+        All arguments to the decorated function must be hashable.
+        For Pydantic models, ensure they have `frozen=True` in model_config
+        and implement `__hash__` if they contain unhashable fields like lists.
+    """
+
+    def decorator(async_fn):
+        # Cache to store results (not coroutines)
+        @lru_cache(maxsize=maxsize)
+        def _cached_result_key(*args, **kwargs):
+            """Create a unique cache key."""
+            return (args, tuple(sorted(kwargs.items())))
+
+        # Storage for actual results
+        _cache = {}
+
+        @wraps(async_fn)
+        async def wrapper(*args, **kwargs):
+            # Create cache key
+            cache_key = _cached_result_key(*args, **kwargs)
+
+            # Return cached result if available
+            if cache_key in _cache:
+                return _cache[cache_key]
+
+            # Execute async function and cache result
+            result = await async_fn(*args, **kwargs)
+            _cache[cache_key] = result
+            return result
+
+        # Expose cache for inspection/clearing
+        wrapper.cache_info = _cached_result_key.cache_info
+        wrapper.cache_clear = lambda: (_cached_result_key.cache_clear(), _cache.clear())
+
+        return wrapper
+
+    return decorator
 
 
 class AsyncRunMixin:

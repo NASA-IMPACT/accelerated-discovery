@@ -10,6 +10,7 @@ from pydantic import Field
 from pydantic.networks import HttpUrl
 
 from akd.structures import SearchResultItem
+from akd.utils import async_lru_cache
 
 from ._base import (
     SearchTool,
@@ -217,10 +218,7 @@ class SearxNGSearchTool(SearchTool):
         if self.strict and self.engines:
             results = list(
                 filter(
-                    lambda r: any(
-                        self.engine_names_match(engine, r.get("engine", ""))
-                        for engine in self.engines
-                    ),
+                    lambda r: any(self.engine_names_match(engine, r.get("engine", "")) for engine in self.engines),
                     results,
                 ),
             )
@@ -313,6 +311,7 @@ class SearxNGSearchTool(SearchTool):
 
         return all_results
 
+    @async_lru_cache(maxsize=256)
     async def _arun(
         self,
         params: SearxNGSearchToolInputSchema,
@@ -378,11 +377,9 @@ class SearxNGSearchTool(SearchTool):
             SearchResultItem(
                 url=result.pop("url", None),
                 pdf_url=result.pop("pdf_url", None) or None,
-                title=result.pop("title", None)
-                or "Untitled",  # Ensure title is never None
+                title=result.pop("title", None) or "Untitled",  # Ensure title is never None
                 content=result.pop("content", None),
-                query=result.pop("query", None)
-                or "Unknown query",  # Ensure query is never None
+                query=result.pop("query", None) or "Unknown query",  # Ensure query is never None
                 category=result.pop("category", None),
                 doi=result.pop("doi", None),
                 published_date=result.pop("publishedDate", None),

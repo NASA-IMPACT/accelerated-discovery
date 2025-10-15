@@ -3,6 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Literal, Optional
 
+from pydantic import ConfigDict
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
@@ -39,6 +40,8 @@ class SearchToolInputSchema(InputSchema):
     news, references, and other content.
     """
 
+    model_config = ConfigDict(frozen=True)  # Make immutable for caching support
+
     queries: List[str] = Field(..., description="List of search queries.")
     category: Optional[Literal["general", "science", "technology"]] = Field(
         "science",
@@ -48,6 +51,16 @@ class SearchToolInputSchema(InputSchema):
         None,
         description="Maximum number of search results to return.",
     )
+
+    def __hash__(self):
+        """Make the schema hashable for caching purposes."""
+        return hash(
+            (
+                tuple(self.queries),  # Convert list to tuple for hashing
+                self.category,
+                self.max_results,
+            ),
+        )
 
 
 class SearchToolOutputSchema(OutputSchema):
