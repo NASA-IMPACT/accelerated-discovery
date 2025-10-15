@@ -141,6 +141,13 @@ class SimpleWebScraper(WebScraper):
 
         html_content = await self._fetch_webpage(str(params.url))
 
+        # Additional check: detect if content is actually PDF binary data
+        # PDFs start with %PDF- magic bytes
+        if html_content.startswith("%PDF-"):
+            raise RuntimeError(
+                f"Fetched content appears to be PDF binary data (starts with %PDF-): {params.url}",
+            )
+
         # Parse HTML with BeautifulSoup
         soup = BeautifulSoup(html_content, "html.parser")
 
