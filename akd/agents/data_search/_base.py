@@ -71,6 +71,14 @@ class TopicResult(BaseModel):
         default_factory=list,
         description="Results for each scientific decomposition of this topic",
     )
+    total_cmr_results: int = Field(
+        default=0,
+        description="Sum of total_results_from_cmr across all decompositions",
+    )
+    total_filtered_results: int = Field(
+        default=0,
+        description="Sum of total_results_after_filtering across all decompositions",
+    )
     note: Optional[str] = Field(
         None,
         description="Note about data availability or alternative sources",
@@ -100,9 +108,13 @@ class DecompositionResult(BaseModel):
         default_factory=list,
         description="Data results from repository (collections for CMR, bundles for PDS4, etc.)",
     )
-    total_results_found: int = Field(
+    total_results_from_cmr: int = Field(
         default=0,
-        description="Total data results found before filtering/ranking",
+        description="Total collections returned by CMR across all queries (before dedup/filtering)",
+    )
+    total_results_after_filtering: int = Field(
+        default=0,
+        description="Total collections after dedup and filtering (len of data_results)",
     )
     note: Optional[str] = Field(
         None,
@@ -118,9 +130,13 @@ class DataSearchAgentOutputSchema(OutputSchema):
         description="Search results organized by topic and decomposition",
     )
     search_metadata: dict = Field(..., description="Search provenance and metadata")
-    total_results: int = Field(
-        ...,
-        description="Total number of results found across all topics",
+    total_cmr_results: int = Field(
+        default=0,
+        description="Total collections from CMR across all topics (before filtering)",
+    )
+    total_filtered_results: int = Field(
+        default=0,
+        description="Total collections after filtering across all topics",
     )
 
 
@@ -146,6 +162,20 @@ class BaseDataSearchConfig(BaseAgentConfig):
     enable_parallel_search: bool = Field(
         default=True,
         description="Enable parallel searches",
+    )
+
+    # Execution modes
+    single_path_mode: bool = Field(
+        default=False,
+        description="Execute only [0] branch at each selection point (topics, decompositions, approaches, queries)",
+    )
+    auto_save: bool = Field(
+        default=False,
+        description="Automatically save results to captured_data/ directory on successful completion",
+    )
+    capture_metadata: bool = Field(
+        default=True,
+        description="Include git info, prompt templates, and config in auto-saved output",
     )
 
 

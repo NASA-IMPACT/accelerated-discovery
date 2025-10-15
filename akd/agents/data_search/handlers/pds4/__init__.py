@@ -39,7 +39,8 @@ class PDS4Handler(BaseHandler):
             "status": "not_implemented",
             "message": "PDS4 handler is not yet implemented",
             "data_results": [],
-            "total_results_found": 0,
+            "total_results_from_cmr": 0,
+            "total_results_after_filtering": 0,
         }
 
 

@@ -94,6 +94,13 @@ class ScientificDecompositionComponent(
         # Format the user prompt
         user_prompt = self._format_user_prompt(original_query, topic)
 
+        # Save prompt to file for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "scientific_decomposition",
+            topic.title,
+        )
+
         # Add user message to memory
         self._add_user_message(user_prompt)
 
@@ -114,11 +121,22 @@ class ScientificDecompositionComponent(
 
     def _format_user_prompt(self, original_query: str, topic: Topic) -> str:
         """Format the user prompt with research context and topic."""
+        # Get min/max values from output schema
+        # metadata[0] = MinLen, metadata[1] = MaxLen
+        min_decompositions = (
+            self.output_schema.model_fields["decompositions"].metadata[0].min_length
+        )
+        max_decompositions = (
+            self.output_schema.model_fields["decompositions"].metadata[1].max_length
+        )
+
         return load_and_format_prompt(
             "scientific_decomposition_user",
             original_query=original_query,
             topic_title=topic.title,
             topic_context=topic.functional_context,
+            min_decompositions=min_decompositions,
+            max_decompositions=max_decompositions,
         )
 
     async def _arun(

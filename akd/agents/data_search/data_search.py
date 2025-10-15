@@ -110,40 +110,6 @@ class DataSearchAgent(BaseDataSearchAgent):
         # Handlers - initialized lazily when needed
         self._handlers = {}
 
-        # Optional progress handler for frontend integration
-        self.progress_handler = None
-        self._progress_handler_ready = False
-
-    def set_progress_handler(self, progress_handler):
-        """Set the progress handler for real-time frontend updates."""
-        self.progress_handler = progress_handler
-        self._progress_handler_ready = True
-
-    async def _wait_for_progress_handler_ready(self, timeout: float = 5.0):
-        """Wait for progress handler to be ready or timeout."""
-        if not self.progress_handler:
-            return
-
-        start_time = datetime.now()
-        while not self._progress_handler_ready:
-            if (datetime.now() - start_time).total_seconds() > timeout:
-                break
-            await asyncio.sleep(0.1)
-
-    async def _emit_progress_safely(self, method_name: str, *args, **kwargs):
-        """Safely emit progress updates with error handling."""
-        if not self.progress_handler or not hasattr(
-            self.progress_handler,
-            method_name,
-        ):
-            return
-
-        try:
-            method = getattr(self.progress_handler, method_name)
-            await method(*args, **kwargs)
-        except Exception:
-            pass
-
     def _get_handler(self, repository: NASARepositoryEnum):
         """Get or create handler for repository."""
         if repository not in self._handlers:
@@ -162,6 +128,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             self._handlers[repository] = handler_class(
                 config=handler_config,
                 debug=self.config.debug,
+                single_path_mode=self.config.single_path_mode,
             )
 
         return self._handlers[repository]
@@ -223,7 +190,8 @@ class DataSearchAgent(BaseDataSearchAgent):
             query_approaches=[],
             searchable_queries=[],
             data_results=[],
-            total_results_found=0,
+            total_results_from_cmr=0,
+            total_results_after_filtering=0,
             note=f"Data available from {route.repository}. {route.rationale}",
         )
 
@@ -239,7 +207,8 @@ class DataSearchAgent(BaseDataSearchAgent):
             query_approaches=[],
             searchable_queries=[],
             data_results=[],
-            total_results_found=0,
+            total_results_from_cmr=0,
+            total_results_after_filtering=0,
             note=f"{route.repository} handler implementation is in progress. {route.rationale}",
         )
 
@@ -256,7 +225,8 @@ class DataSearchAgent(BaseDataSearchAgent):
             query_approaches=[],
             searchable_queries=[],
             data_results=[],
-            total_results_found=0,
+            total_results_from_cmr=0,
+            total_results_after_filtering=0,
             note=f"Error processing with {route.repository}: {error_message}",
         )
 
@@ -287,23 +257,40 @@ class DataSearchAgent(BaseDataSearchAgent):
         search_start_time = datetime.now()
         original_query = params.query
 
-        search_id = (
-            getattr(self.progress_handler, "search_id", "unknown")
-            if self.progress_handler
-            else "unknown"
-        )
+        # Import metadata utilities
+        from .utils.metadata import generate_run_id, generate_search_id
 
-        await self._wait_for_progress_handler_ready()
-        await self._emit_progress_safely("on_search_started", original_query)
+        # Generate unique run ID for this search
+        run_id = generate_run_id()
+
+        # Generate search ID using run_id
+        search_id = generate_search_id(original_query, run_id)
 
         try:
             # Step 1: Topic Splitting
-            topics_output = await self.topic_splitting_component.process(original_query)
+            # Recreate with run_id for prompt saving
+            topic_splitting_component = TopicSplittingComponent(
+                config=self.topic_config,
+                debug=self.config.debug,
+                run_id=run_id,
+            )
+            topics_output = await topic_splitting_component.process(original_query)
+
+            # Select topics based on execution mode
+            if self.config.single_path_mode and topics_output.topics:
+                topics_to_process = [topics_output.topics[0]]
+                if self.config.debug:
+                    print(
+                        f"Single-path mode: Processing topic[0], "
+                        f"skipping {len(topics_output.topics) - 1} others",
+                    )
+            else:
+                topics_to_process = topics_output.topics
 
             # Step 2: Process topics in parallel
             topic_tasks = []
-            for topic in topics_output.topics:
-                task = self._process_single_topic(topic, original_query, params)
+            for topic in topics_to_process:
+                task = self._process_single_topic(topic, original_query, params, run_id)
                 topic_tasks.append(task)
 
             topic_results = await asyncio.gather(*topic_tasks, return_exceptions=True)
@@ -316,16 +303,18 @@ class DataSearchAgent(BaseDataSearchAgent):
                     error_result = TopicResult(
                         topic=safe_model_dump(topics_output.topics[i]),
                         decomposition_results=[],
+                        total_cmr_results=0,
+                        total_filtered_results=0,
                         note=f"Processing error: {str(result)}",
                     )
                     final_topic_results.append(error_result)
                 else:
                     final_topic_results.append(result)
 
-            # Calculate totals
-            total_results = sum(
-                sum(dr.total_results_found for dr in tr.decomposition_results)
-                for tr in final_topic_results
+            # Calculate totals - aggregate across all topics
+            total_cmr_all = sum(tr.total_cmr_results for tr in final_topic_results)
+            total_filtered_all = sum(
+                tr.total_filtered_results for tr in final_topic_results
             )
 
             search_duration = (datetime.now() - search_start_time).total_seconds()
@@ -337,6 +326,7 @@ class DataSearchAgent(BaseDataSearchAgent):
                 "timestamp": search_start_time.isoformat(),
                 "duration_seconds": search_duration,
                 "topics_processed": len(final_topic_results),
+                "single_path_mode": self.config.single_path_mode,
                 "workflow_version": "multi-repo-v1",
             }
 
@@ -344,19 +334,23 @@ class DataSearchAgent(BaseDataSearchAgent):
             final_response = DataSearchAgentOutputSchema(
                 topics=final_topic_results,
                 search_metadata=search_metadata,
-                total_results=total_results,
+                total_cmr_results=total_cmr_all,
+                total_filtered_results=total_filtered_all,
             )
 
-            await self._emit_progress_safely(
-                "on_search_completed",
-                safe_model_dump(final_response),
-            )
+            # Auto-save if configured
+            if self.config.auto_save:
+                from .utils.metadata import build_output_filename, save_with_metadata
+
+                output_file = build_output_filename(search_id)
+                save_with_metadata(final_response, self.config, output_file)
+                if self.config.debug:
+                    print(f"Results auto-saved to {output_file}")
 
             return final_response
 
         except Exception as e:
             error_msg = f"Multi-repository data search failed: {e}"
-            await self._emit_progress_safely("on_search_error", error_msg)
             return self._create_error_response(original_query, error_msg)
 
     async def _process_single_topic(
@@ -364,6 +358,7 @@ class DataSearchAgent(BaseDataSearchAgent):
         topic,
         original_query: str,
         params: DataSearchAgentInputSchema,
+        run_id: str,
     ) -> TopicResult:
         """
         Process a single topic through decomposition and routing.
@@ -372,6 +367,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             topic: Topic to process
             original_query: Original research question
             params: Search parameters
+            run_id: Unique ID for this search run
 
         Returns:
             Complete topic result with all decompositions
@@ -381,6 +377,7 @@ class DataSearchAgent(BaseDataSearchAgent):
         decomposition_component = ScientificDecompositionComponent(
             config=self.decomp_config,
             debug=self.config.debug,
+            run_id=run_id,
         )
 
         # Scientific Decomposition
@@ -389,14 +386,26 @@ class DataSearchAgent(BaseDataSearchAgent):
             topic,
         )
 
+        # Select decompositions based on execution mode
+        if self.config.single_path_mode and decomp_output.decompositions:
+            decompositions_to_process = [decomp_output.decompositions[0]]
+            if self.config.debug:
+                print(
+                    f"Single-path mode: Processing decomp[0], "
+                    f"skipping {len(decomp_output.decompositions) - 1} others",
+                )
+        else:
+            decompositions_to_process = decomp_output.decompositions
+
         # Process each decomposition in parallel
         decomp_tasks = []
-        for decomp in decomp_output.decompositions:
+        for decomp in decompositions_to_process:
             task = self._process_single_decomposition(
                 topic,
                 decomp,
                 original_query,
                 params,
+                run_id,
             )
             decomp_tasks.append(task)
 
@@ -412,16 +421,23 @@ class DataSearchAgent(BaseDataSearchAgent):
                     query_approaches=[],
                     searchable_queries=[],
                     data_results=[],
-                    total_results_found=0,
+                    total_results_from_cmr=0,
+                    total_results_after_filtering=0,
                     note=f"Processing error: {str(result)}",
                 )
                 final_results.append(error_result)
             else:
                 final_results.append(result)
 
+        # Aggregate statistics from decomposition results
+        total_cmr = sum(dr.total_results_from_cmr for dr in final_results)
+        total_filtered = sum(dr.total_results_after_filtering for dr in final_results)
+
         return TopicResult(
             topic=safe_model_dump(topic),
             decomposition_results=final_results,
+            total_cmr_results=total_cmr,
+            total_filtered_results=total_filtered,
         )
 
     async def _process_single_decomposition(
@@ -430,6 +446,7 @@ class DataSearchAgent(BaseDataSearchAgent):
         decomposition,
         original_query: str,
         params: DataSearchAgentInputSchema,
+        run_id: str,
     ) -> DecompositionResult:
         """
         Process a single decomposition through routing and handler dispatch.
@@ -439,6 +456,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             decomposition: Scientific decomposition to process
             original_query: Original research question
             params: Search parameters
+            run_id: Unique ID for this search run
 
         Returns:
             Complete decomposition result
@@ -448,6 +466,7 @@ class DataSearchAgent(BaseDataSearchAgent):
         router_component = RepositoryRouterComponent(
             config=self.router_config,
             debug=self.config.debug,
+            run_id=run_id,
         )
 
         # Route decomposition to best repository
@@ -480,6 +499,7 @@ class DataSearchAgent(BaseDataSearchAgent):
                 topic,
                 original_query,
                 params,
+                run_id,
             )
 
             return result
@@ -505,5 +525,6 @@ class DataSearchAgent(BaseDataSearchAgent):
                 "error": error_msg,
                 "search_timestamp": datetime.now().isoformat(),
             },
-            total_results=0,
+            total_cmr_results=0,
+            total_filtered_results=0,
         )

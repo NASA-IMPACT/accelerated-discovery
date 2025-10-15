@@ -25,6 +25,21 @@ TQueryApproach = TypeVar("TQueryApproach", bound=BaseModel)
 TSearchableQuery = TypeVar("TSearchableQuery", bound=BaseModel)
 
 
+class SearchVariations(BaseModel):
+    """Search variations for a single query approach."""
+
+    search_strings: List[str] = Field(
+        description="List of search strings for separate searches (0-3 strings). Empty string means no additional search string needed (use known parameters only).",
+        min_items=0,
+        max_items=3,
+        default_factory=list,
+    )
+    reasoning: str = Field(
+        description="Explanation of search strategy for this approach",
+        default="Generated search variations based on approach parameters.",
+    )
+
+
 class SharedKnownParametersComponent(
     BaseDataSearchComponent[TInput, TOutput],
     BaseKnownParametersComponent[TQueryApproach],
@@ -67,6 +82,13 @@ class SharedKnownParametersComponent(
         # Format the user prompt
         user_prompt = self._format_user_prompt(original_query, topic, decomposition)
 
+        # Save prompt to file for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "known_parameters",
+            decomposition.title,
+        )
+
         # Add user message to memory
         self._add_user_message(user_prompt)
 
@@ -90,6 +112,15 @@ class SharedKnownParametersComponent(
         decomposition,
     ) -> str:
         """Format the user prompt with research context."""
+        # Get min/max values from output schema
+        # metadata[0] = MinLen, metadata[1] = MaxLen
+        min_approaches = (
+            self.output_schema.model_fields["query_approaches"].metadata[0].min_length
+        )
+        max_approaches = (
+            self.output_schema.model_fields["query_approaches"].metadata[1].max_length
+        )
+
         return load_and_format_prompt(
             f"{self.template_name}_user",
             original_query=original_query,
@@ -97,6 +128,8 @@ class SharedKnownParametersComponent(
             topic_context=topic.functional_context,
             decomposition_title=decomposition.title,
             decomposition_justification=decomposition.scientific_justification,
+            min_approaches=min_approaches,
+            max_approaches=max_approaches,
             prompts_dir=self.prompts_dir,
         )
 
@@ -163,6 +196,13 @@ class SharedSearchableParametersComponent(
             approach,
         )
 
+        # Save prompt to file for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "searchable_parameters",
+            f"{decomposition.title}_approach{approach_index}",
+        )
+
         # Clear and set memory for this approach
         # Note: Each approach gets a fresh component instance in parallel execution,
         # so memory state is isolated and thread-safe
@@ -212,6 +252,7 @@ class SharedSearchableParametersComponent(
                 config=self.config,
                 debug=self.debug,
                 prompts_dir=self.prompts_dir,
+                run_id=self.run_id,
             )
             return await fresh_component._process_single_approach(
                 original_query,
@@ -258,22 +299,8 @@ class SharedSearchableParametersComponent(
         # Helper method to do the actual LLM call
         async def _do_llm_call():
             try:
-                # Get search variation suggestions from LLM
-                from pydantic import BaseModel
-
-                class SearchVariations(BaseModel):
-                    """Search variations for a single query approach."""
-
-                    searchable_queries: List[str] = Field(
-                        description="List of keyword combinations for separate searches (0-2 queries). Empty string means no additional keywords needed.",
-                        max_items=2,
-                    )
-                    reasoning: str = Field(
-                        description="Explanation of search strategy for this approach",
-                        default="Generated search variations based on approach parameters.",
-                    )
-
                 # Temporarily override output schema for this call
+                # Use module-level SearchVariations schema
                 original_output_schema = self.output_schema
                 self.output_schema = SearchVariations
 
@@ -282,14 +309,14 @@ class SharedSearchableParametersComponent(
                 # Restore original output schema
                 self.output_schema = original_output_schema
 
-                # Create searchable queries for each variation
+                # Create searchable queries for each search string variation
                 searchable_queries = []
-                for keyword_string in variations_response.searchable_queries:
+                for search_string in variations_response.search_strings:
                     # Let subclass create the repository-specific query object
                     searchable_query = self._create_searchable_query(
                         approach=approach,
                         approach_index=approach_index,
-                        keyword_string=keyword_string,
+                        keyword_string=search_string,
                     )
                     searchable_queries.append(searchable_query)
 
@@ -320,12 +347,23 @@ class SharedSearchableParametersComponent(
         # Get approach fields for prompt formatting
         approach_fields = self._extract_approach_fields(approach)
 
+        # Extract min/max variations from SearchVariations schema
+        # metadata[0] = MinLen, metadata[1] = MaxLen
+        min_variations = (
+            SearchVariations.model_fields["search_strings"].metadata[0].min_length
+        )
+        max_variations = (
+            SearchVariations.model_fields["search_strings"].metadata[1].max_length
+        )
+
         return load_and_format_prompt(
             f"{self.template_name}_user",
             original_query=original_query,
             topic_title=topic.title,
             decomposition_title=decomposition.title,
             decomposition_justification=decomposition.scientific_justification,
+            min_variations=min_variations,
+            max_variations=max_variations,
             prompts_dir=self.prompts_dir,
             **approach_fields,
         )

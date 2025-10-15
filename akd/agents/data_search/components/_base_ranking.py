@@ -68,36 +68,24 @@ class FilteredRankedItem(BaseModel):
         ...,
         description="Index in the input data items list (0-based)",
     )
-    relevance_score: float = Field(
+    reasoning: str = Field(
         ...,
-        ge=0.0,
-        le=1.0,
-        description="Relevance score for this item",
-    )
-    ranking_reasoning: str = Field(
-        ...,
-        description="Why this item was selected and how it ranks",
+        description="Brief explanation of why this item matches",
     )
 
 
 class BaseApproachFilteringOutput(BaseModel):
     """Base output schema for per-approach filtering."""
 
-    selected_items: List[FilteredRankedItem] = Field(
+    selected_item_indexes: List[int] = Field(
         ...,
-        description="Top items for this approach, ranked",
+        description="List of indexes (0-based) of collections that match, ordered by relevance (best first). Return 1-5 best matches.",
+        min_length=1,
+        max_length=5,
     )
-    total_reviewed: int = Field(
+    reasoning: str = Field(
         ...,
-        description="Total number of items reviewed",
-    )
-    total_filtered_out: int = Field(
-        ...,
-        description="Number of items filtered out",
-    )
-    filtering_summary: str = Field(
-        ...,
-        description="Summary of filtering decisions and selection rationale",
+        description="Brief explanation of filtering decisions",
     )
 
 
@@ -189,17 +177,14 @@ class FinalRankedItem(BaseModel):
 class BaseFinalRankingOutput(BaseModel):
     """Base output schema for final ranking."""
 
-    ranked_items: List[FinalRankedItem] = Field(
+    ranked_item_indexes: List[int] = Field(
         ...,
-        description="Items ranked by relevance",
+        description="List of indexes (0-based) ordered from best to worst match. Return all items in ranked order.",
+        min_length=1,
     )
-    total_items_ranked: int = Field(
+    reasoning: str = Field(
         ...,
-        description="Total number of items in the ranking",
-    )
-    ranking_summary: str = Field(
-        ...,
-        description="Summary of ranking decisions and key differentiators",
+        description="Brief explanation of ranking decisions and key differentiators",
     )
 
 

@@ -24,7 +24,7 @@ class BaseAgentConfig(BaseConfig):
     temperature: float = 0.0
     system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
     llm_timeout: float | None = Field(
-        default=45.0,
+        default=180.0,
         description="Timeout in seconds for individual LLM API calls. Set to None to disable. Timeouts trigger retry with exponential backoff.",
     )
 

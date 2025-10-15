@@ -1,6 +1,6 @@
 """Configuration for CMR repository handler."""
 
-from pydantic import Field, HttpUrl
+from pydantic import Field
 
 from akd.tools.data_search._base import DataSearchToolConfig
 
@@ -17,7 +17,7 @@ class CMRHandlerConfig(DataSearchToolConfig):
     """
 
     # Override MCP endpoint default for CMR
-    mcp_endpoint: HttpUrl = Field(
+    mcp_endpoint: str = Field(
         default="http://localhost:8080/mcp/cmr/mcp/",
         description="CMR MCP server endpoint URL",
     )

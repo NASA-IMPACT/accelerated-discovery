@@ -11,7 +11,6 @@ from .handler import CMRHandler
 from .schemas import (
     CMRApproachCollectionFilteringInputSchema,
     CMRApproachCollectionFilteringOutput,
-    CMRFilteredRankedCollection,
     CMRFinalCollectionRankingInputSchema,
     CMRFinalCollectionRankingOutput,
     CMRFinalRankedCollection,
@@ -41,7 +40,6 @@ __all__ = [
     "CMRSearchableParametersOutput",
     "CMRApproachCollectionFilteringInputSchema",
     "CMRApproachCollectionFilteringOutput",
-    "CMRFilteredRankedCollection",
     "CMRFinalCollectionRankingInputSchema",
     "CMRFinalCollectionRankingOutput",
     "CMRFinalRankedCollection",

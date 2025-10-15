@@ -110,6 +110,13 @@ class RepositoryRouterComponent(
         # Format the user prompt
         user_prompt = self._format_user_prompt(original_query, topic, decomposition)
 
+        # Save prompt to file for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "repository_routing",
+            decomposition.title,
+        )
+
         # Add user message to memory
         self._add_user_message(user_prompt)
 

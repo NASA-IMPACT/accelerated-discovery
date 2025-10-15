@@ -42,9 +42,15 @@ class CMRHandler(BaseHandler):
     6. Return collections as data_results (granule search kept for future)
     """
 
-    def __init__(self, config: CMRHandlerConfig, debug: bool = False):
+    def __init__(
+        self,
+        config: CMRHandlerConfig,
+        debug: bool = False,
+        single_path_mode: bool = False,
+    ):
         """Initialize CMR handler with configuration."""
         super().__init__(config, debug)
+        self.single_path_mode = single_path_mode
 
         # Initialize CMR-specific tools
         tool_config_params = {
@@ -119,6 +125,7 @@ class CMRHandler(BaseHandler):
         topic: Topic,
         original_query: str,
         params: DataSearchAgentInputSchema,
+        run_id: str,
     ) -> DecompositionResult:
         """
         Process a scientific decomposition through CMR pipeline.
@@ -138,11 +145,13 @@ class CMRHandler(BaseHandler):
             config=self.known_params_config,
             debug=self.debug,
             prompts_dir=self.cmr_prompts_dir,
+            run_id=run_id,
         )
         searchable_parameters_component = CMRSearchableParametersComponent(
             config=self.searchable_params_config,
             debug=self.debug,
             prompts_dir=self.cmr_prompts_dir,
+            run_id=run_id,
         )
 
         # Step 1: Known Parameters
@@ -152,17 +161,55 @@ class CMRHandler(BaseHandler):
             decomposition,
         )
 
+        # Select approaches based on execution mode
+        if self.single_path_mode and known_params_output.query_approaches:
+            approaches_to_use = [known_params_output.query_approaches[0]]
+            if self.debug:
+                print(
+                    f"Single-path mode: Using approach[0], "
+                    f"generated {len(known_params_output.query_approaches)} total",
+                )
+        else:
+            approaches_to_use = known_params_output.query_approaches
+
         # Step 2: Searchable Parameters
         searchable_output = await searchable_parameters_component.process(
             original_query,
             topic,
             decomposition,
-            known_params_output.query_approaches,
+            approaches_to_use,
         )
 
+        # Select queries based on execution mode
+        if self.single_path_mode and searchable_output.searchable_queries:
+            # In single-path mode, prefer a query with search string over one without
+            queries_with_search_strings = [
+                q for q in searchable_output.searchable_queries if q.search_string
+            ]
+
+            if queries_with_search_strings:
+                queries_to_execute = [queries_with_search_strings[0]]
+                if self.debug:
+                    print(
+                        f"Single-path mode: Executing query with search string, "
+                        f"generated {len(searchable_output.searchable_queries)} total",
+                    )
+            else:
+                queries_to_execute = [searchable_output.searchable_queries[0]]
+                if self.debug:
+                    print(
+                        f"Single-path mode: Executing query[0] (no search string), "
+                        f"generated {len(searchable_output.searchable_queries)} total",
+                    )
+        else:
+            queries_to_execute = searchable_output.searchable_queries
+
         # Step 3: Query Execution
-        approach_collections = await self._execute_searchable_queries(
-            searchable_output.searchable_queries,
+        (
+            approach_collections,
+            query_execution_logs,
+        ) = await self._execute_searchable_queries(
+            queries_to_execute,
             params,
         )
         total_collections = sum(len(c) for c in approach_collections.values())
@@ -174,6 +221,18 @@ class CMRHandler(BaseHandler):
             topic,
             decomposition,
             known_params_output.query_approaches,
+            run_id,
+        )
+
+        print(
+            f"DEBUG: process_decomposition - ranked_collections has {len(ranked_collections)} items",
+        )
+        print(f"DEBUG: process_decomposition - total_collections = {total_collections}")
+
+        # Augment queries with execution metadata
+        augmented_queries, total_cmr = self._augment_queries_with_execution_metadata(
+            searchable_output.searchable_queries,
+            query_execution_logs,
         )
 
         # Step 5: Granule Search (KEPT FOR FUTURE USE - NOT CURRENTLY CALLED)
@@ -182,17 +241,21 @@ class CMRHandler(BaseHandler):
         #     params,
         # )
 
-        return DecompositionResult(
+        result = DecompositionResult(
             decomposition=safe_model_dump(decomposition),
             repository="CMR",
             query_approaches=safe_model_dump_list(known_params_output.query_approaches),
-            searchable_queries=safe_model_dump_list(
-                searchable_output.searchable_queries,
-            ),
+            searchable_queries=augmented_queries,  # Now includes execution metadata
             data_results=ranked_collections,  # Collections for now
-            total_results_found=total_collections,
+            total_results_from_cmr=total_cmr,
+            total_results_after_filtering=len(ranked_collections),
             note=None,
         )
+
+        print(
+            f"DEBUG: DecompositionResult created with data_results={len(result.data_results)} items",
+        )
+        return result
 
     async def _execute_single_query(
         self,
@@ -224,26 +287,55 @@ class CMRHandler(BaseHandler):
         search_params["page_size"] = self.config.collection_search_page_size
 
         try:
+            print(f"DEBUG: CMR Search Parameters: {search_params}")
+
             # Execute search
             tool_input = self.collection_search_tool.input_schema(**search_params)
             result = await self.collection_search_tool.arun(tool_input)
 
             # Extract and limit collections per query
             collections = []
+            total_from_cmr = 0
             if hasattr(result, "collections") and result.collections:
+                total_from_cmr = len(result.collections)
                 collections = result.collections[: self.config.collections_per_query]
 
-            return {"approach_idx": approach_idx, "collections": collections}
+            print(
+                f"DEBUG: CMR returned {len(collections)} collections for approach {approach_idx}",
+            )
+            if collections:
+                print(
+                    f"DEBUG: First collection title: {collections[0].get('entry_title', 'N/A')[:80]}",
+                )
 
-        except Exception:
+            return {
+                "approach_idx": approach_idx,
+                "collections": collections,
+                "query_object": query,
+                "execution_metadata": {
+                    "mcp_parameters_sent": search_params,
+                    "cmr_collections_returned": total_from_cmr,
+                },
+            }
+
+        except Exception as e:
+            print(f"DEBUG: CMR search failed for approach {approach_idx}: {e}")
             # Return empty result on failure
-            return {"approach_idx": approach_idx, "collections": []}
+            return {
+                "approach_idx": approach_idx,
+                "collections": [],
+                "query_object": query,
+                "execution_metadata": {
+                    "mcp_parameters_sent": search_params,
+                    "cmr_collections_returned": 0,
+                },
+            }
 
     async def _execute_searchable_queries(
         self,
         searchable_queries: List[CMRSearchableQuery],
         params: DataSearchAgentInputSchema,
-    ) -> Dict[int, List[Dict[str, Any]]]:
+    ) -> tuple[Dict[int, List[Dict[str, Any]]], List[Dict[str, Any]]]:
         """
         Execute searchable queries in parallel and return collections grouped by approach.
 
@@ -252,7 +344,9 @@ class CMRHandler(BaseHandler):
             params: Search parameters
 
         Returns:
-            Dictionary mapping approach_index to list of collections
+            Tuple of (approach_collections, execution_logs)
+            - approach_collections: Dictionary mapping approach_index to list of collections
+            - execution_logs: List of execution metadata for each query
         """
         # Create parallel tasks for all queries across all approaches
         query_tasks = []
@@ -263,8 +357,9 @@ class CMRHandler(BaseHandler):
         # Execute all queries in parallel
         results = await asyncio.gather(*query_tasks, return_exceptions=True)
 
-        # Group results by approach
+        # Group results by approach and collect execution logs
         approach_collections = {}  # approach_index -> [collections]
+        execution_logs = []
 
         for result in results:
             if isinstance(result, Exception):
@@ -278,7 +373,56 @@ class CMRHandler(BaseHandler):
                 approach_collections[approach_idx] = []
             approach_collections[approach_idx].extend(collections)
 
-        return approach_collections
+            # Collect execution metadata
+            execution_logs.append(
+                {
+                    "query": result["query_object"],
+                    "metadata": result["execution_metadata"],
+                },
+            )
+
+        return approach_collections, execution_logs
+
+    def _augment_queries_with_execution_metadata(
+        self,
+        searchable_queries: List[CMRSearchableQuery],
+        execution_logs: List[Dict[str, Any]],
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """
+        Augment searchable query dicts with execution metadata.
+
+        Args:
+            searchable_queries: Original query objects
+            execution_logs: Execution metadata from _execute_searchable_queries
+
+        Returns:
+            Tuple of (augmented_queries, total_cmr_results)
+            - augmented_queries: List of query dicts with execution metadata added
+            - total_cmr_results: Sum of cmr_collections_returned across all queries
+        """
+        augmented = []
+        total_cmr = 0
+
+        for query in searchable_queries:
+            query_dict = safe_model_dump(query)
+
+            # Find matching execution log (match by query object identity)
+            matching_log = next(
+                (log for log in execution_logs if log["query"] == query),
+                None,
+            )
+
+            if matching_log:
+                metadata = matching_log["metadata"]
+                query_dict["mcp_parameters_sent"] = metadata["mcp_parameters_sent"]
+                query_dict["cmr_collections_returned"] = metadata[
+                    "cmr_collections_returned"
+                ]
+                total_cmr += metadata["cmr_collections_returned"]
+
+            augmented.append(query_dict)
+
+        return augmented, total_cmr
 
     def _deduplicate_approach_collections(
         self,
@@ -313,12 +457,18 @@ class CMRHandler(BaseHandler):
         topic: Topic,
         decomp: ScientificDecomposition,
         query_approaches: List[Any],
+        run_id: str = None,
     ) -> Dict[int, List[Dict[str, Any]]]:
         """
         Filter and rank collections within each approach in parallel.
         """
         if not approach_collections:
+            print("DEBUG: No approach_collections to filter")
             return {}
+
+        print(f"DEBUG: Filtering {len(approach_collections)} approaches")
+        for idx, colls in approach_collections.items():
+            print(f"DEBUG:   Approach {idx}: {len(colls)} collections")
 
         # Get CMR prompts directory
         cmr_prompts_dir = Path(__file__).parent / "prompts"
@@ -330,13 +480,19 @@ class CMRHandler(BaseHandler):
             collections = approach_collections[approach_idx]
 
             if not collections:
+                print(f"DEBUG: Approach {approach_idx} has no collections, skipping")
                 continue
 
             # Get the corresponding QueryApproach
             if approach_idx >= len(query_approaches):
+                print(f"DEBUG: No query approach for index {approach_idx}, skipping")
                 continue
 
             approach = query_approaches[approach_idx]
+
+            print(
+                f"DEBUG: Creating filter input for approach {approach_idx} with {len(collections)} collections",
+            )
 
             filter_input = CMRApproachCollectionFilteringInputSchema(
                 original_query=original_query,
@@ -345,7 +501,7 @@ class CMRHandler(BaseHandler):
                 decomposition_title=decomp.title,
                 decomposition_justification=decomp.scientific_justification,
                 approach=approach,  # Pass whole approach object
-                approach_keywords=[],  # Keywords are in searchable queries
+                approach_search_string=None,  # Search strings are in searchable queries
                 data_items=collections,  # Use base class field name
                 max_items=self.config.max_collections_per_approach,  # Use base class field name
             )
@@ -357,10 +513,13 @@ class CMRHandler(BaseHandler):
             filtering_component = CMRApproachCollectionFilteringComponent(
                 config=component_config,
                 prompts_dir=cmr_prompts_dir,
+                run_id=run_id,
             )
 
             task = filtering_component.arun(filter_input)
             filtering_tasks.append((approach_idx, collections, task))
+
+        print(f"DEBUG: Created {len(filtering_tasks)} filtering tasks")
 
         # Execute in parallel
         if len(filtering_tasks) > 1:
@@ -374,21 +533,54 @@ class CMRHandler(BaseHandler):
                 result = await task
                 results.append(result)
 
+        print(f"DEBUG: Got {len(results)} filtering results")
+
         # Map results back to collections
         filtered_by_approach = {}
 
         for (approach_idx, collections, _), result in zip(filtering_tasks, results):
             if isinstance(result, Exception):
+                print(
+                    f"DEBUG: Approach {approach_idx} filtering FAILED with exception: {result}",
+                )
                 continue
 
-            # Extract selected collections
+            print(f"DEBUG: Approach {approach_idx} result type: {type(result)}")
+            print(
+                f"DEBUG: Approach {approach_idx} selected {len(result.selected_item_indexes)} collections",
+            )
+
+            # Log the LLM's reasoning for filtering
+            print(f"DEBUG: Approach {approach_idx} LLM reasoning:")
+            print(f"  {result.reasoning}")
+
+            # Log selected collection indexes
+            if result.selected_item_indexes:
+                print(
+                    f"DEBUG: Selected collection indexes: {result.selected_item_indexes}",
+                )
+            else:
+                print(
+                    f"DEBUG: No collections selected by LLM for approach {approach_idx}",
+                )
+
+            # Extract selected collections using the list of indexes
             selected = [
-                collections[fc.collection_index]
-                for fc in result.selected_items  # Use base field name
-                if 0 <= fc.collection_index < len(collections)
+                collections[idx]
+                for idx in result.selected_item_indexes
+                if 0 <= idx < len(collections)
             ]
 
+            print(
+                f"DEBUG: Approach {approach_idx} extracted {len(selected)} selected collections",
+            )
             filtered_by_approach[approach_idx] = selected
+
+        print(
+            f"DEBUG: Final filtered_by_approach has {len(filtered_by_approach)} approaches",
+        )
+        for idx, colls in filtered_by_approach.items():
+            print(f"DEBUG:   Approach {idx}: {len(colls)} collections after filtering")
 
         return filtered_by_approach
 
@@ -399,6 +591,7 @@ class CMRHandler(BaseHandler):
         topic: Topic,
         decomp: ScientificDecomposition,
         query_approaches: List[Any] = None,
+        run_id: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Rank collections using approach-aware pipeline.
@@ -408,11 +601,18 @@ class CMRHandler(BaseHandler):
         2. Per-approach filtering and ranking (parallel)
         3. Final cross-approach ranking
         """
+        print(
+            f"DEBUG: _rank_collections called with {len(approach_collections)} approaches",
+        )
         if not approach_collections:
+            print("DEBUG: No approach_collections, returning empty list")
             return []
 
         # Stage 1: Per-approach deduplication
         deduplicated = self._deduplicate_approach_collections(approach_collections)
+        print(
+            f"DEBUG: After deduplication: {sum(len(c) for c in deduplicated.values())} total collections",
+        )
 
         # Stage 2: Per-approach filtering and ranking (parallel)
         filtered_by_approach = await self._filter_and_rank_by_approach(
@@ -421,6 +621,7 @@ class CMRHandler(BaseHandler):
             topic,
             decomp,
             query_approaches,
+            run_id,
         )
 
         # Flatten all approach results into single list
@@ -428,7 +629,12 @@ class CMRHandler(BaseHandler):
         for approach_idx in sorted(filtered_by_approach.keys()):
             all_filtered.extend(filtered_by_approach[approach_idx])
 
+        print(
+            f"DEBUG: After per-approach filtering: {len(all_filtered)} collections remain",
+        )
+
         if not all_filtered:
+            print("DEBUG: No collections passed filtering, returning empty list")
             return []
 
         # Get CMR prompts directory
@@ -456,25 +662,27 @@ class CMRHandler(BaseHandler):
             final_ranking_component = CMRFinalCollectionRankingComponent(
                 config=component_config,
                 prompts_dir=cmr_prompts_dir,
+                run_id=run_id,
             )
 
             final_result = await final_ranking_component.arun(final_input)
 
-            # Map indices to full collection objects and sort by rank
+            # Map ranked indexes to full collection objects (already in ranked order)
             final_ranked = [
-                all_filtered[rc.collection_index]
-                for rc in sorted(
-                    final_result.ranked_items,  # Use base field name
-                    key=lambda x: x.final_rank,
-                )
-                if 0 <= rc.collection_index < len(all_filtered)
+                all_filtered[idx]
+                for idx in final_result.ranked_item_indexes
+                if 0 <= idx < len(all_filtered)
             ]
 
+            print(f"DEBUG: Final ranking returned {len(final_ranked)} collections")
             return final_ranked
 
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: Final ranking FAILED with exception: {e}")
             # Fallback: return up to final_collection_count
-            return all_filtered[: self.config.final_collection_count]
+            fallback = all_filtered[: self.config.final_collection_count]
+            print(f"DEBUG: Returning fallback of {len(fallback)} collections")
+            return fallback
 
     async def _search_granules_for_single_collection(
         self,

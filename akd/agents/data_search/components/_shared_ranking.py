@@ -57,6 +57,19 @@ class SharedApproachFilteringComponent(
         # Extract approach context fields
         approach_context = self._extract_approach_context(params)
 
+        # Get min/max values from output schema
+        # metadata[0] = MinLen, metadata[1] = MaxLen
+        min_items = (
+            self.output_schema.model_fields["selected_item_indexes"]
+            .metadata[0]
+            .min_length
+        )
+        max_items_schema = (
+            self.output_schema.model_fields["selected_item_indexes"]
+            .metadata[1]
+            .max_length
+        )
+
         # Format user prompt
         user_prompt = self._format_user_prompt_from_template(
             original_query=params.original_query,
@@ -66,19 +79,27 @@ class SharedApproachFilteringComponent(
             decomposition_justification=params.decomposition_justification,
             num_items=len(data_items),
             items_list="\n\n".join(items_summary),
-            max_items=max_items,
+            min_items=min_items,
+            max_items=max_items_schema,
             **approach_context,
         )
 
-        self._set_messages(user_prompt)
+        # Save prompt to file for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "approach_filtering",
+            params.decomposition_title,
+            len(data_items),
+        )
+
+        self._add_user_message(user_prompt)
         result = await self.get_response_async()
 
         if self.debug:
-            selected_count = len(result.selected_items)
-            total_reviewed = result.total_reviewed
+            selected_count = len(result.selected_item_indexes)
             logger.info(
                 f"Approach filtering complete: {selected_count} "
-                f"selected from {total_reviewed} reviewed",
+                f"selected from {len(data_items)} reviewed",
             )
 
         return result
@@ -99,7 +120,7 @@ class SharedApproachFilteringComponent(
         """
         # Generic implementation - works for CMR-like collections
         summary_parts = [
-            f"{index}. {item.get('dataset_id', item.get('id', 'Unknown ID'))}",
+            f"Index {index}. {item.get('dataset_id', item.get('id', 'Unknown ID'))}",
         ]
 
         if item.get("title"):
@@ -107,8 +128,8 @@ class SharedApproachFilteringComponent(
 
         if item.get("abstract"):
             abstract = (
-                item["abstract"][:300] + "..."
-                if len(item["abstract"]) > 300
+                item["abstract"][:750] + "..."
+                if len(item["abstract"]) > 750
                 else item["abstract"]
             )
             summary_parts.append(f"   Abstract: {abstract}")
@@ -125,6 +146,17 @@ class SharedApproachFilteringComponent(
 
         if item.get("processing_level_id"):
             summary_parts.append(f"   Level: {item.get('processing_level_id')}")
+
+        # Resolution metadata
+        if item.get("horizontal_data_resolution"):
+            summary_parts.append(
+                f"   Spatial Resolution: {item.get('horizontal_data_resolution')}",
+            )
+
+        if item.get("temporal_resolution"):
+            summary_parts.append(
+                f"   Temporal Resolution: {item.get('temporal_resolution')}",
+            )
 
         return "\n".join(summary_parts)
 
@@ -160,10 +192,12 @@ class SharedApproachFilteringComponent(
                 },
             )
 
-        # Handle keywords separately (may come from params)
-        if hasattr(params, "approach_keywords"):
-            keywords = params.approach_keywords
-            context["approach_keywords"] = ", ".join(keywords) if keywords else "None"
+        # Handle search string separately (may come from params)
+        if hasattr(params, "approach_search_string"):
+            search_string = params.approach_search_string
+            context["approach_search_string"] = (
+                search_string if search_string else "None"
+            )
 
         return context
 
@@ -214,11 +248,19 @@ class SharedFinalRankingComponent(
             max_items=max_items,
         )
 
-        self._set_messages(user_prompt)
+        # Save prompt to file for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "final_ranking",
+            params.decomposition_title,
+            len(data_items),
+        )
+
+        self._add_user_message(user_prompt)
         result = await self.get_response_async()
 
         if self.debug:
-            ranked_count = len(result.ranked_items)
+            ranked_count = len(result.ranked_item_indexes)
             logger.info(f"Final ranking complete: {ranked_count} items ranked")
 
         return result
@@ -238,7 +280,7 @@ class SharedFinalRankingComponent(
             Formatted summary string
         """
         # Generic implementation - works for CMR-like collections
-        summary = f"{index}. {item.get('dataset_id', item.get('id', 'Unknown'))}"
+        summary = f"Index {index}. {item.get('dataset_id', item.get('id', 'Unknown'))}"
 
         if item.get("title"):
             summary += f"\n   Title: {item['title']}"

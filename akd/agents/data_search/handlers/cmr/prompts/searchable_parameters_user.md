@@ -1,14 +1,13 @@
-I need you to generate search variations that will discover relevant datasets when combined with the known parameters already identified.
-
 ## Research Context
 
 **Original Research Question:** {original_query}
 
 **Topic:** {topic_title}
+
 **Scientific Decomposition:** {decomposition_title}
 **Decomposition Justification:** {decomposition_justification}
 
-## Query Approach (Known Parameters)
+## Known Parameters for This Approach
 
 The following known parameters have been identified for this scientific decomposition:
 
@@ -20,35 +19,18 @@ The following known parameters have been identified for this scientific decompos
 **Temporal Resolution:** {approach_temporal_resolution}
 **Spatial Resolution:** {approach_spatial_resolution}
 
-## Task
+## Your Task
 
-Generate 0-5 separate search variations for this query approach. Each variation should be a different keyword combination (or empty for no additional keywords).
+**Analyze these parameters and decide:**
 
-**Remember: CMR uses AND logic** - all keywords in a search must match, so fewer keywords = more results.
+1. Are instrument + platform + spatial/temporal constraints **specific enough** to narrow results to the target phenomenon?
+   - **YES** → Return `[""]` (single empty string)
+   - **NO** → Add {min_variations}-{max_variations} focused search strings to narrow the scope
 
-## Decision Framework
+2. If adding search strings, what specific **phenomenon or measurable** from the decomposition should be targeted?
+   - Example: For "sea surface temperature" decomposition → `["sea surface temperature"]` or `["SST"]`
+   - Example: For "chlorophyll concentration" decomposition → `["chlorophyll"]` or `["ocean color"]`
 
-1. **Assess Specificity**: Are the known parameters (instrument/platform/level) already specific enough?
-   - If YES: Include an empty search (no additional keywords)
-   - If NO: Add keyword variations to narrow the scope
+**Remember**: Each search string you provide creates a separate query. Empty string means "use only the known parameters above."
 
-2. **Generate Variations**: Create separate searches for different ways scientists might describe this data:
-   - Formal scientific terminology
-   - Common abbreviations or acronyms
-   - Alternative expressions of the same concept
-
-3. **Keep Focused**: Each search should target one specific aspect, not combine multiple unrelated terms
-
-## Examples
-
-**High specificity case** (MODIS Terra Level 2):
-- "" (empty - let instrument/platform filter)
-- "sea surface temperature"
-- "SST"
-
-**Low specificity case** (Generic satellite, broad temporal range):
-- "land cover"
-- "vegetation classification"
-- "LULC"
-
-Generate your search variations as a list of keyword strings. Use empty string for no additional keywords.
+Generate your search variations as a list of strings ({min_variations}-{max_variations} items).

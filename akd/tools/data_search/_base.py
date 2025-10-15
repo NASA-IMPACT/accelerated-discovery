@@ -6,7 +6,6 @@ import json
 from typing import Any, Dict, Optional
 
 from pydantic import Field
-from pydantic.networks import HttpUrl
 
 from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool, BaseToolConfig
@@ -18,7 +17,7 @@ class DataSearchToolConfig(BaseToolConfig):
     Common settings for tools that interact with data repositories.
     """
 
-    mcp_endpoint: HttpUrl = Field(
+    mcp_endpoint: str = Field(
         default="http://localhost:8080/mcp/cmr/mcp/",
         description="MCP server endpoint URL",
     )

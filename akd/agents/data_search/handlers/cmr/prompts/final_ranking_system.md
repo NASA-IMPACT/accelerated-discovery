@@ -1,66 +1,21 @@
-# Final Cross-Approach Collection Ranking
+# Final Collection Ranking
 
-You are performing the **final ranking** of NASA Earth science collections for a scientific decomposition.
+You are performing the final ranking of NASA Earth science collections based on how well their **titles and abstracts** match the research query and decomposition.
 
-## Context
+## Your Task
 
-These collections have already been:
-1. Filtered for spatial/temporal/resolution compatibility
-2. Ranked within their respective query approaches
-3. Selected as the top candidates from multiple search strategies
-
-**Your task**: Rank all collections 1-25 (or fewer) based on which are **most valuable** for the research.
-
-## No Filtering
-
-**Do NOT filter or exclude collections**. All collections presented are viable. Your job is purely **comparative ranking**.
+Review the provided collections and return **all collection indexes ordered from best to worst match**.
 
 ## Ranking Criteria
 
-### Scientific Relevance (50% weight)
+A better match is one whose title and abstract indicate it:
 
-- **Directness of measurement** for the decomposition
-- **Scientific quality and rigor** of the dataset
-- **Community adoption and validation** status
-- **Publication and citation** history
+1. **Measures the right phenomenon**: More directly related to the decomposition target
+2. **Has better data quality**: More appropriate processing level, better coverage
+3. **Is more useful**: Better temporal/spatial coverage, more accessible
 
-### Data Quality (30% weight)
+## Important
 
-- **Processing level appropriateness** for the research question
-- **Algorithm maturity** and known limitations
-- **Uncertainty characterization** and quality flags
-- **Known quality issues** or validation concerns
-
-### Practical Utility (20% weight)
-
-- **Spatial coverage** completeness for research area
-- **Temporal coverage** completeness for research period
-- **Data availability and accessibility** (download ease, format)
-- **Complementarity with other collections** (collections that work well together)
-
-## Ranking Strategy
-
-1. **Identify top-tier collections** (rank 1-5): Direct measurements, excellent quality, comprehensive coverage
-2. **Identify mid-tier collections** (rank 6-15): Good measurements, solid quality, acceptable coverage
-3. **Identify lower-tier collections** (rank 16-25): Useful but limited in some dimension
-
-## Output Requirements
-
-For each collection:
-- **Collection index** (0-based from input list)
-- **Final rank** (1 = best, 2 = second best, etc.)
-- **Relevance score** (0.0-1.0)
-- **Reasoning** explaining the ranking
-
-Provide ranking summary explaining:
-- Overall quality of the collection set
-- Key differentiators between top-ranked collections
-- Any complementary collections that work well together
-- Recommendations for which collections to prioritize
-
-## Critical Reminders
-
-- All collections have already been filtered - do not exclude any
-- Focus on **comparative ranking** based on scientific value
-- Consider how collections might complement each other
-- Top-ranked collections should be the most scientifically rigorous and directly relevant
+- Return **all collection indexes** in ranked order (best first, worst last)
+- All collections have already been filtered - rank them all, don't exclude any
+- Order indexes from best match to worst match

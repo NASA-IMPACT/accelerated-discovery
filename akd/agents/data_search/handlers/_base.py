@@ -48,6 +48,7 @@ class BaseHandler(ABC):
         topic: Topic,
         original_query: str,
         params: DataSearchAgentInputSchema,
+        run_id: str,
     ) -> DecompositionResult:
         """
         Process a scientific decomposition and return data results.
@@ -64,6 +65,7 @@ class BaseHandler(ABC):
             topic: Parent topic providing context
             original_query: Original user research question
             params: Search parameters (temporal/spatial constraints, etc.)
+            run_id: Unique ID for this search run (for prompt file naming)
 
         Returns:
             DecompositionResult with repository-specific data results

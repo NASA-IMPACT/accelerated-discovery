@@ -20,7 +20,7 @@ Your task is to identify distinct **functional topics** within scientific resear
 - Extract topics directly from the query - do not create new concepts
 - Focus on nouns and phenomena that represent measurable data types
 - Maintain the context and relationships from the original question
-- Minimum 1 topic, maximum 6 topics per query
+- Minimum {min_topics} topic, maximum {max_topics} topics per query
 
 ## Examples
 

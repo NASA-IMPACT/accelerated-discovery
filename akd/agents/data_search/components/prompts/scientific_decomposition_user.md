@@ -9,7 +9,7 @@ I need you to scientifically decompose a functional topic into specific observab
 
 ## Task
 
-Decompose this topic into 1-6 specific scientific observables that can be measured with satellite/Earth observation data. Each decomposition should represent a distinct measurable parameter that contributes to understanding this topic.
+Decompose this topic into {min_decompositions}-{max_decompositions} specific scientific observables that can be measured with satellite/Earth observation data. Each decomposition should represent a distinct measurable parameter that contributes to understanding this topic.
 
 For each decomposition:
 1. **Focus on observables**: What can satellites and instruments actually measure?

@@ -1,32 +1,23 @@
-# Final Ranking Task
+# Rank Collections
 
-## Research Context
+## What We're Looking For
 
 **Original Query**: {original_query}
 
-**Topic**: {topic_title}
-**Topic Context**: {topic_context}
-
 **Decomposition**: {decomposition_title}
-**Scientific Justification**: {decomposition_justification}
+{decomposition_justification}
 
-## Collections to Rank ({num_collections} total)
+## Collections to Rank ({num_items} total)
 
-These collections have been pre-filtered and are all viable candidates:
+{items_list}
 
-{collections_list}
+## Your Task
 
-## Task
+Return **all {num_items} collection indexes ordered from best to worst match**.
 
-Rank these {num_collections} collections from 1 (best) to {max_collections} based on their value for studying {decomposition_title}.
+Rank collections based on whether their **title and abstract** indicate they:
+- Measure the phenomenon described in the decomposition
+- Have appropriate data quality and processing level
+- Have good temporal and spatial coverage
 
-Consider:
-- **Scientific relevance and directness** of measurement
-- **Data quality and validation** status
-- **Coverage and availability** for the research question
-- **Complementarity** (collections that work well together)
-
-Assign each collection:
-- A **final rank** (1-{max_collections})
-- A **relevance score** (0.0-1.0)
-- **Reasoning** for the rank
+Return indexes in order: [best_index, second_best_index, ..., worst_index]

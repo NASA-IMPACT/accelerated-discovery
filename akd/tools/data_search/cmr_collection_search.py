@@ -2,6 +2,7 @@
 CMR Collection Search Tool - Search for Earth science collections/datasets.
 """
 
+import warnings
 from typing import Optional
 
 from pydantic import Field
@@ -11,6 +12,13 @@ from ._base import (
     DataSearchToolConfig,
     DataSearchToolInputSchema,
     DataSearchToolOutputSchema,
+)
+
+# Suppress Pydantic HttpUrl serialization warning
+warnings.filterwarnings(
+    "ignore",
+    message=".*Expected.*HttpUrl.*but got.*str.*",
+    category=UserWarning,
 )
 
 

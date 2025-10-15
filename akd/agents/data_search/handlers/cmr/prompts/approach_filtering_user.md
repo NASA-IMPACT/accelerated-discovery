@@ -1,39 +1,40 @@
-# Filter and Rank Collections for Query Approach
+# Filter Collections
 
-## Research Context
+## What We're Looking For
 
 **Original Query**: {original_query}
 
-**Topic**: {topic_title}
-**Topic Context**: {topic_context}
-
 **Decomposition**: {decomposition_title}
-**Scientific Justification**: {decomposition_justification}
+{decomposition_justification}
 
-## This Query Approach
+## Search Approach
 
-**Instrument**: {approach_instrument}
-**Platform**: {approach_platform}
-**Processing Level**: {approach_processing_level}
-**Temporal Range**: {approach_temporal_range}
-**Spatial Bounds**: {approach_spatial_bounds}
-**Temporal Resolution Required**: {approach_temporal_resolution}
-**Spatial Resolution Required**: {approach_spatial_resolution}
-**Keywords**: {approach_keywords}
+- **Instrument**: {approach_instrument}
+- **Platform**: {approach_platform}
+- **Processing Level**: {approach_processing_level}
+- **Time Period**: {approach_temporal_range}
+- **Geographic Area**: {approach_spatial_bounds}
 
-## Collections to Evaluate ({num_collections} total)
+## Collections to Review ({num_items} total)
 
-{collections_list}
+{items_list}
 
-## Task
 
-**Part 1**: Filter out collections with fundamental mismatches (spatial, temporal, resolution, wrong measurement)
+## Your Task
 
-**Part 2**: From remaining collections, select and rank the **best 0-{max_collections}** for this approach
+Review the provided collections and return the **indexes of the {min_items}-{max_items} best matches**, ordered by relevance (best first).
 
-Focus on collections that:
-- Directly measure {decomposition_title}
-- Match the approach parameters (instrument, platform, etc.)
-- Have appropriate coverage and quality
+## Matching Criteria
 
-Return **0 collections** if none meet the requirements. Quality over quantity.
+A collection is a good match if its title and abstract indicate it:
+
+1. **Measures the right phenomenon**: Directly related to the decomposition target
+2. **Uses the right instrument/platform**: Matches the approach parameters (if specified)
+3. **Has appropriate coverage**: Covers the requested time period and geographic area
+
+## Important
+
+- Always return at least one collection, no matter what
+- Return **{min_items}-{max_items} indexes** based on match quality
+- Quality over quantity - only include strong matches
+- Order indexes from best match to worst match

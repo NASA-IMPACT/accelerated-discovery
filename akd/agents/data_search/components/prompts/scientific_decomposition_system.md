@@ -23,7 +23,7 @@ Scientific decomposition breaks abstract topics into individual observables that
 - Consider both primary and secondary indicators
 
 **Decomposition Strategy:**
-- Generate 1-6 decompositions per topic depending on complexity
+- Generate {min_decompositions}-{max_decompositions} decompositions per topic depending on complexity
 - Each decomposition should represent a distinct type of measurement
 - Avoid overly broad or overly narrow decompositions
 - Ensure CMR data availability for each decomposition

@@ -24,7 +24,7 @@ Analyze this research context and identify query approaches using only **known p
 
 1. **Spatial/Temporal Attention**: Carefully identify any explicit or implicit spatial and temporal requirements
 2. **Resolution Requirements**: Consider any temporal or spatial resolution needs
-3. **Multiple Approaches**: Create 1-5 different query approaches if multiple instruments/platforms could provide relevant data
+3. **Multiple Approaches**: Create {min_approaches}-{max_approaches} different query approaches if multiple instruments/platforms could provide relevant data
 4. **Broad Coverage**: Ensure at least one approach is broad enough to avoid over-filtering
 5. **Univerality**: If spatial, temporal, or resolution requirements are essential to the question then they should universally apply to all query approaches generated. Do not apply spatial/temporal/resolution values piecemeal unless there is a very good reason to do so.
 

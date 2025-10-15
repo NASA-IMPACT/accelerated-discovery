@@ -72,7 +72,7 @@ Known parameters are hard filters that can be directly identified without needin
 ### Query Approach Strategy
 
 **Multiple Approach Generation:**
-- Generate 1-5 different query approaches per decomposition
+- Generate {min_approaches}-{max_approaches} different query approaches per decomposition
 - Each approach should represent different ways to find the same scientific data
 - Consider instrument alternatives (Landsat vs Sentinel-2 for land cover)
 - Include both specific and broad approaches when appropriate
@@ -138,7 +138,7 @@ Known parameters are hard filters that can be directly identified without needin
 ## Output Requirements
 
 **Parameter Extraction Rules:**
-- Return 1-5 query approaches per decomposition
+- Return {min_approaches}-{max_approaches} query approaches per decomposition
 - Each approach contains ONLY known parameters that can be directly identified
 - Do NOT include keywords, search terms, or abstract concepts
 - Do NOT guess instruments unless clearly implied by the research context

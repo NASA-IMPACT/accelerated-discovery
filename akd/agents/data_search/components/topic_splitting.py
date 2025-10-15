@@ -79,6 +79,13 @@ class TopicSplittingComponent(
         # Format the user prompt
         user_prompt = self._format_user_prompt(query)
 
+        # Save prompt to file for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "topic_splitting",
+            query[:50],  # Use truncated query as context
+        )
+
         # Add user message to memory
         self._add_user_message(user_prompt)
 
@@ -97,9 +104,16 @@ class TopicSplittingComponent(
 
     def _format_user_prompt(self, query: str) -> str:
         """Format the user prompt with the research query."""
+        # Get min/max values from output schema
+        # metadata[0] = MinLen, metadata[1] = MaxLen
+        min_topics = self.output_schema.model_fields["topics"].metadata[0].min_length
+        max_topics = self.output_schema.model_fields["topics"].metadata[1].max_length
+
         return load_and_format_prompt(
             "topic_splitting_user",
             query=query,
+            min_topics=min_topics,
+            max_topics=max_topics,
         )
 
     async def _arun(

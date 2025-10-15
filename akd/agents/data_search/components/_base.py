@@ -62,6 +62,7 @@ class BaseDataSearchComponent(
         debug: bool = False,
         template_name: Optional[str] = None,
         prompts_dir: Optional[Path] = None,
+        run_id: Optional[str] = None,
     ):
         """
         Initialize the component with automatic prompt loading.
@@ -71,13 +72,15 @@ class BaseDataSearchComponent(
             debug: Enable debug logging
             template_name: Override class-level template_name
             prompts_dir: Optional directory for repository-specific prompts
+            run_id: Optional unique ID for this search run (for prompt file naming)
         """
         # Allow instance-level template name override
         if template_name:
             self.template_name = template_name
 
-        # Store prompts_dir for later use
+        # Store prompts_dir and run_id for later use
         self.prompts_dir = prompts_dir
+        self.run_id = run_id
 
         # Create default config if not provided
         if config is None:
@@ -259,7 +262,7 @@ class BaseDataSearchComponent(
         Args:
             content: User message content
         """
-        self.messages = [{"role": "user", "content": content}]
+        self._memory = [{"role": "user", "content": content}]
 
     def _format_user_prompt_from_template(self, **kwargs) -> str:
         """
@@ -280,6 +283,59 @@ class BaseDataSearchComponent(
             )
 
         return self.user_prompt_template.format(**kwargs)
+
+    def _save_prompt_to_file(
+        self,
+        prompt: str,
+        stage: str,
+        context: str = "",
+        num_items: Optional[int] = None,
+    ) -> None:
+        """
+        Save the prompt to a file for debugging.
+
+        Args:
+            prompt: The full prompt being sent to LLM
+            stage: Stage name (e.g., "topic_splitting", "approach_filtering")
+            context: Additional context (e.g., decomposition title, topic title)
+            num_items: Optional number of items being evaluated
+        """
+        if not self.run_id:
+            # No run_id available, skip saving
+            return
+
+        # Create filtering_messages directory if it doesn't exist
+        messages_dir = Path("filtering_messages")
+        messages_dir.mkdir(exist_ok=True)
+
+        # Import slugify for filename-safe context
+        from ..utils.metadata import slugify
+
+        # Slugify context for filename
+        safe_context = slugify(context) if context else ""
+
+        # Build filename
+        parts = [self.run_id, stage]
+        if safe_context:
+            parts.append(safe_context)
+        if num_items is not None:
+            parts.append(f"{num_items}items")
+        filename = "_".join(parts) + ".txt"
+
+        # Save prompt
+        filepath = messages_dir / filename
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"# Run ID: {self.run_id}\n")
+            f.write(f"# Stage: {stage}\n")
+            if context:
+                f.write(f"# Context: {context}\n")
+            if num_items is not None:
+                f.write(f"# Number of items: {num_items}\n")
+            f.write("\n" + "=" * 80 + "\n\n")
+            f.write(prompt)
+
+        if self.debug:
+            print(f"💾 Saved {stage} prompt to: {filepath}")
 
     async def process(self, *args, **kwargs) -> TOutput:
         """
