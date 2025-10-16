@@ -614,6 +614,19 @@ uv run examples/testing/test_parallel_fixes.py
 - Fuzzy string matching against CMR controlled vocabularies
 - Helps normalize user input to CMR-compatible terms
 
+**File: `utils/cmr_enum_validator.py`**
+- **CMREnumValidator**: Validates and corrects instrument/platform values using fuzzy matching
+- Implements 5 correction scenarios (see [enum_integration_plan.md](../../../enum_integration_plan.md)):
+  - **Scenario A**: Simple replacement (correct value in correct field)
+  - **Scenario B**: Single swap (one field misidentified)
+  - **Scenario C**: Double swap (both fields reversed)
+  - **Scenario D**: Biased swap with different scores (keep highest)
+  - **Scenario E**: Biased swap with same scores (keep original field)
+- Integrated in CMR handler after known parameters extraction (Step 1.5)
+- Corrections logged at both decomposition level and per-query level in output JSON
+- Uses improved_fuzzy_matcher.py for underlying fuzzy string matching
+- Default threshold: 0.7 (configurable)
+
 ## Data Flow Pipeline
 
 ### Overview
@@ -745,6 +758,36 @@ Data Files with Download URLs
     ]
 }
 ```
+
+**Step 4.5: Enum Validation** (CMR-specific)
+**Component**: `CMREnumValidator`
+**Location**: `akd/agents/data_search/utils/cmr_enum_validator.py`
+
+After known parameters extraction, the CMR handler validates and corrects instrument/platform values:
+
+**Process**:
+1. Fuzzy matches each instrument/platform value against CMR controlled vocabularies
+2. Applies correction logic (5 scenarios - see [Utility Components](#utility-components))
+3. Returns corrected approaches with metadata about changes made
+
+**Correction Metadata**:
+```python
+{
+    "corrections_applied": true,
+    "changes": [
+        {
+            "field": "instrument",
+            "original": "modis",
+            "corrected": "MODIS",
+            "score": 0.95
+        }
+    ]
+}
+```
+
+This metadata is logged at:
+- **Decomposition level**: Array of corrections for all approaches
+- **Query level**: Specific corrections for each searchable query's approach
 
 #### Step 5: Searchable Parameters Generation
 **Component**: `CMRSearchableParametersComponent` (CMR-specific wrapper)

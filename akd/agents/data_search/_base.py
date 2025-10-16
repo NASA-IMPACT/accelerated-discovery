@@ -116,6 +116,10 @@ class DecompositionResult(BaseModel):
         default=0,
         description="Total collections after dedup and filtering (len of data_results)",
     )
+    enum_corrections: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Metadata about instrument/platform enum corrections applied to query approaches",
+    )
     note: Optional[str] = Field(
         None,
         description="Additional information (external sources, errors, processing notes)",

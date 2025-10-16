@@ -169,6 +169,12 @@ class CMRSearchableQuery(BaseModel):
         description="Optional search string to narrow results when approach parameters are too broad (CMR treats as AND - all words must match)",
     )
 
+    # Enum validation metadata (added during augmentation)
+    enum_corrections: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Metadata about instrument/platform fuzzy matching corrections applied to this query's approach",
+    )
+
     def get_mcp_parameters(self) -> dict[str, str]:
         """
         Get parameters that can be passed directly to CMR MCP API.

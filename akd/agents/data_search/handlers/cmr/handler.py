@@ -8,9 +8,12 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List
 
+from loguru import logger
+
 from akd.agents._base import BaseAgentConfig
 from akd.agents.data_search._base import DataSearchAgentInputSchema, DecompositionResult
 from akd.agents.data_search.components import ScientificDecomposition, Topic
+from akd.agents.data_search.utils.cmr_enum_validator import CMREnumValidator
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
 from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
@@ -83,6 +86,12 @@ class CMRHandler(BaseHandler):
         )
         self.searchable_params_config = BaseAgentConfig(
             model_name=config.searchable_parameters_model,
+        )
+
+        # Initialize CMR enum validator for instrument/platform validation
+        self.enum_validator = CMREnumValidator(
+            threshold=0.7,
+            debug=debug,
         )
 
     @property
@@ -161,6 +170,32 @@ class CMRHandler(BaseHandler):
             decomposition,
         )
 
+        # Step 1.5: Validate and correct instrument/platform enums
+        validated_approaches = []
+        all_corrections = []
+
+        for approach in known_params_output.query_approaches:
+            corrected_approach, corrections_metadata = (
+                self.enum_validator.validate_approach(
+                    approach,
+                )
+            )
+            validated_approaches.append(corrected_approach)
+            all_corrections.append(corrections_metadata)
+
+        # Log summary of corrections
+        if self.debug:
+            total_corrections = sum(
+                1 for c in all_corrections if c["corrections_applied"]
+            )
+            if total_corrections > 0:
+                logger.info(
+                    f"Applied enum corrections to {total_corrections}/{len(validated_approaches)} approaches",
+                )
+
+        # Replace original approaches with validated ones
+        known_params_output.query_approaches = validated_approaches
+
         # Select approaches based on execution mode
         if self.single_path_mode and known_params_output.query_approaches:
             approaches_to_use = [known_params_output.query_approaches[0]]
@@ -229,10 +264,11 @@ class CMRHandler(BaseHandler):
         )
         print(f"DEBUG: process_decomposition - total_collections = {total_collections}")
 
-        # Augment queries with execution metadata
+        # Augment queries with execution metadata and enum corrections
         augmented_queries, total_cmr = self._augment_queries_with_execution_metadata(
             searchable_output.searchable_queries,
             query_execution_logs,
+            all_corrections,
         )
 
         # Step 5: Granule Search (KEPT FOR FUTURE USE - NOT CURRENTLY CALLED)
@@ -249,6 +285,7 @@ class CMRHandler(BaseHandler):
             data_results=ranked_collections,  # Collections for now
             total_results_from_cmr=total_cmr,
             total_results_after_filtering=len(ranked_collections),
+            enum_corrections=all_corrections,  # Instrument/platform corrections metadata
             note=None,
         )
 
@@ -387,13 +424,15 @@ class CMRHandler(BaseHandler):
         self,
         searchable_queries: List[CMRSearchableQuery],
         execution_logs: List[Dict[str, Any]],
+        enum_corrections: List[Dict[str, Any]] = None,
     ) -> tuple[List[Dict[str, Any]], int]:
         """
-        Augment searchable query dicts with execution metadata.
+        Augment searchable query dicts with execution metadata and enum corrections.
 
         Args:
             searchable_queries: Original query objects
             execution_logs: Execution metadata from _execute_searchable_queries
+            enum_corrections: List of correction metadata per approach (indexed by approach_index)
 
         Returns:
             Tuple of (augmented_queries, total_cmr_results)
@@ -419,6 +458,10 @@ class CMRHandler(BaseHandler):
                     "cmr_collections_returned"
                 ]
                 total_cmr += metadata["cmr_collections_returned"]
+
+            # Add enum corrections for this query's approach
+            if enum_corrections and 0 <= query.approach_index < len(enum_corrections):
+                query_dict["enum_corrections"] = enum_corrections[query.approach_index]
 
             augmented.append(query_dict)
 
