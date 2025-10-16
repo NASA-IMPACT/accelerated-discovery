@@ -145,15 +145,9 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         # Initialize embedded components
         self.triage_component = triage_component or TriageComponent(debug=debug)
-        self.clarification_component = (
-            clarification_component or ClarificationComponent(debug=debug)
-        )
-        self.instruction_component = (
-            instruction_component or InstructionBuilderComponent(debug=debug)
-        )
-        self.research_synthesis_component = (
-            research_synthesis_component or ResearchSynthesisComponent(debug=debug)
-        )
+        self.clarification_component = clarification_component or ClarificationComponent(debug=debug)
+        self.instruction_component = instruction_component or InstructionBuilderComponent(debug=debug)
+        self.research_synthesis_component = research_synthesis_component or ResearchSynthesisComponent(debug=debug)
 
         # Track research state
         self.research_history = []
@@ -290,16 +284,12 @@ class DeepLitSearchAgent(LitBaseAgent):
                 quality_scores.append(quality_score)
 
                 research_trace.append(
-                    f"Iteration {iterations}: Found {len(new_results)} new results, "
-                    f"quality score: {quality_score:.2f}",
+                    f"Iteration {iterations}: Found {len(new_results)} new results, quality score: {quality_score:.2f}",
                 )
 
                 # Check if we've reached quality threshold
                 avg_quality = sum(quality_scores) / len(quality_scores)
-                if (
-                    avg_quality >= self.config.quality_threshold
-                    and len(all_results) >= 10
-                ):
+                if avg_quality >= self.config.quality_threshold and len(all_results) >= 10:
                     research_trace.append(
                         f"Stopping: Quality threshold reached ({avg_quality:.2f})",
                     )
@@ -371,15 +361,9 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         reformulated_query = None
         if is_reformulated and original_query:
-            reformulated_query = (
-                queries[0] if queries and queries[0] != original_query else None
-            )
+            reformulated_query = queries[0] if queries and queries[0] != original_query else None
 
-        domain_context = (
-            f"Research iteration with {len(queries)} query variations"
-            if len(queries) > 1
-            else None
-        )
+        domain_context = f"Research iteration with {len(queries)} query variations" if len(queries) > 1 else None
 
         # Primary search tool
         try:
@@ -425,9 +409,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         unique_results = []
         for result in new_results:
-            if result.url not in existing_urls and (
-                not result.title or result.title.lower() not in existing_titles
-            ):
+            if result.url not in existing_urls and (not result.title or result.title.lower() not in existing_titles):
                 unique_results.append(result)
 
         return unique_results
@@ -471,10 +453,8 @@ class DeepLitSearchAgent(LitBaseAgent):
             [
                 rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED,
                 rubric_output.content_depth == ContentDepthLabel.COMPREHENSIVE,
-                rubric_output.evidence_quality
-                == EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE,
-                rubric_output.methodological_relevance
-                == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND,
+                rubric_output.evidence_quality == EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE,
+                rubric_output.methodological_relevance == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND,
                 rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT,
                 rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE,
             ],
@@ -498,9 +478,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         )
 
         # Enhance content with research instructions context
-        enhanced_content = (
-            f"Research Instructions: {instructions}\n\nCurrent Results:\n{content}"
-        )
+        enhanced_content = f"Research Instructions: {instructions}\n\nCurrent Results:\n{content}"
 
         followup_input = FollowUpQueryAgentInputSchema(
             original_queries=previous_queries,
@@ -526,6 +504,51 @@ class DeepLitSearchAgent(LitBaseAgent):
             )
 
         return followup_output.followup_queries
+
+    def _generate_answer(
+        self,
+        query: str,
+        results: List[SearchResultItem],
+        **kwargs,
+    ) -> str:
+        """
+        Generate a concise shortform answer from search results.
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Additional keyword arguments (e.g., additional_context)
+
+        Returns:
+            A concise shortform answer (placeholder for now)
+        """
+        # TODO: Implement actual answer generation logic using an LLM
+        # For now, return empty string as placeholder
+        return ""
+
+    def _generate_report(
+        self,
+        query: str,
+        results: List[SearchResultItem],
+        **kwargs,
+    ) -> str:
+        """
+        Generate a detailed research report from search results.
+
+        This is handled by the ResearchSynthesisComponent in DeepLitSearchAgent,
+        so this method returns the pre-generated report from kwargs.
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Must contain 'research_report' key with the generated report
+
+        Returns:
+            The detailed research report
+        """
+        # For DeepLitSearchAgent, the report is generated by ResearchSynthesisComponent
+        # So we just return it from kwargs
+        return kwargs.get("research_report", "")
 
     async def _arun(
         self,
@@ -582,12 +605,24 @@ class DeepLitSearchAgent(LitBaseAgent):
             original_query,
         )
 
-        # Step 5: Return research output with SearchResultItem objects directly
-        return LitSearchAgentOutputSchema(
+        # Step 5: Generate shortform answer and report
+        shortform_answer = self._generate_answer(
+            query=original_query,
             results=research_output["results"],
-            category=params.category,
+        )
+
+        detailed_report = self._generate_report(
+            query=original_query,
+            results=research_output["results"],
+            research_report=research_output["research_report"],
+        )
+
+        # Step 6: Return research output with SearchResultItem objects directly
+        return LitSearchAgentOutputSchema(
+            answer=shortform_answer,
+            report=detailed_report,
+            results=research_output["results"],
             iterations_performed=research_output["iterations_performed"],
-            report=research_output["research_report"],
             extra={
                 "key_findings": research_output["key_findings"],
                 "evidence_quality_score": research_output["evidence_quality_score"],

@@ -189,25 +189,16 @@ class ControlledSearchAgent(LitBaseAgent):
         analysis = RubricAnalysis()
 
         # Determine positive assessments using enum values directly
-        analysis.topic_alignment_positive = (
-            rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED
-        )
-        analysis.content_depth_positive = (
-            rubric_output.content_depth == ContentDepthLabel.COMPREHENSIVE
-        )
-        analysis.recency_relevance_positive = (
-            rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT
-        )
+        analysis.topic_alignment_positive = rubric_output.topic_alignment == TopicAlignmentLabel.ALIGNED
+        analysis.content_depth_positive = rubric_output.content_depth == ContentDepthLabel.COMPREHENSIVE
+        analysis.recency_relevance_positive = rubric_output.recency_relevance == RecencyRelevanceLabel.CURRENT
         analysis.methodological_relevance_positive = (
-            rubric_output.methodological_relevance
-            == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND
+            rubric_output.methodological_relevance == MethodologicalRelevanceLabel.METHODOLOGICALLY_SOUND
         )
         analysis.evidence_quality_positive = (
             rubric_output.evidence_quality == EvidenceQualityLabel.HIGH_QUALITY_EVIDENCE
         )
-        analysis.scope_relevance_positive = (
-            rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE
-        )
+        analysis.scope_relevance_positive = rubric_output.scope_relevance == ScopeRelevanceLabel.IN_SCOPE
 
         # Count positive rubrics
         positive_flags = [
@@ -260,9 +251,7 @@ class ControlledSearchAgent(LitBaseAgent):
         """Dynamic agentic stopping decision balancing quality, quantity, and adaptivity."""
 
         # Calculate progress metrics for dynamic decision making
-        result_progress = (
-            current_result_count / desired_max_results if desired_max_results > 0 else 0
-        )
+        result_progress = current_result_count / desired_max_results if desired_max_results > 0 else 0
         quality_score = rubric_analysis.positive_rubric_count / 6
 
         # Dynamic minimum results threshold (adaptive based on quality)
@@ -273,9 +262,7 @@ class ControlledSearchAgent(LitBaseAgent):
 
         # Never stop if we have too few results
         if current_result_count < min_results_threshold:
-            return False, (
-                f"CONTINUE: Need more results ({current_result_count}/{min_results_threshold:.0f} minimum)"
-            )
+            return False, (f"CONTINUE: Need more results ({current_result_count}/{min_results_threshold:.0f} minimum)")
 
         # Dynamic quality threshold - lower if we have many results, higher if few
         quality_threshold = self.config.min_positive_rubrics
@@ -318,9 +305,7 @@ class ControlledSearchAgent(LitBaseAgent):
         critical_rubrics = {"topic_alignment", "evidence_quality"}
         weak_critical = critical_rubrics.intersection(set(rubric_analysis.weak_rubrics))
 
-        if (
-            weak_critical and result_progress < 0.8
-        ):  # Only block if we don't have most results
+        if weak_critical and result_progress < 0.8:  # Only block if we don't have most results
             return False, (
                 f"CONTINUE: Critical rubrics weak ({weak_critical}) + need more results ({current_result_count}/{desired_max_results})"
             )
@@ -329,14 +314,9 @@ class ControlledSearchAgent(LitBaseAgent):
         if len(self.rubric_history) >= self.config.rubric_improvement_threshold:
             recent_scores = [
                 h["analysis"].positive_rubric_count
-                for h in self.rubric_history[
-                    -self.config.rubric_improvement_threshold :
-                ]
+                for h in self.rubric_history[-self.config.rubric_improvement_threshold :]
             ]
-            if all(
-                score <= rubric_analysis.positive_rubric_count
-                for score in recent_scores
-            ):
+            if all(score <= rubric_analysis.positive_rubric_count for score in recent_scores):
                 # Only stop for stagnation if we have BOTH reasonable quantity AND excellent quality
                 # Never stop for stagnation if we have less than 50% of requested results
                 if (
@@ -380,9 +360,7 @@ class ControlledSearchAgent(LitBaseAgent):
         # Basic stopping conditions
         if iteration >= self.config.max_iteration:
             criteria.stop_now = True
-            criteria.reasoning_trace = (
-                f"Max iterations reached ({iteration}/{self.config.max_iteration})"
-            )
+            criteria.reasoning_trace = f"Max iterations reached ({iteration}/{self.config.max_iteration})"
             return criteria
 
         if iteration > 0 and not current_results:
@@ -421,19 +399,15 @@ class ControlledSearchAgent(LitBaseAgent):
 
                 # Generate query focus recommendations for next iteration
                 if not stop_decision:
-                    criteria.recommended_query_focus = (
-                        self._generate_query_focus_recommendations(
-                            rubric_analysis,
-                        )
+                    criteria.recommended_query_focus = self._generate_query_focus_recommendations(
+                        rubric_analysis,
                     )
 
             except Exception as e:
                 logger.warning(f"Error in multi-rubric analysis: {e}")
                 # Fallback to continue searching if analysis fails
                 criteria.stop_now = False
-                criteria.reasoning_trace = (
-                    "Multi-rubric analysis failed, continuing search"
-                )
+                criteria.reasoning_trace = "Multi-rubric analysis failed, continuing search"
 
         return criteria
 
@@ -580,10 +554,8 @@ class ControlledSearchAgent(LitBaseAgent):
                 num_queries=num_queries,
             )
 
-            followup_result: FollowUpQueryAgentOutputSchema = (
-                await self.followup_query_agent.arun(
-                    followup_input,
-                )
+            followup_result: FollowUpQueryAgentOutputSchema = await self.followup_query_agent.arun(
+                followup_input,
             )
 
             if self.debug:
@@ -671,11 +643,7 @@ class ControlledSearchAgent(LitBaseAgent):
         adapted_queries = []
         for i, query in enumerate(queries):
             # Apply different adaptations to different queries for variety
-            focus_for_this_query = (
-                prioritized_focus[i % len(prioritized_focus)]
-                if prioritized_focus
-                else None
-            )
+            focus_for_this_query = prioritized_focus[i % len(prioritized_focus)] if prioritized_focus else None
 
             if focus_for_this_query:
                 adapted_query = self._apply_single_focus_adaptation(
@@ -732,10 +700,7 @@ class ControlledSearchAgent(LitBaseAgent):
             return base_size
 
         # If we have rubric analysis from previous iteration
-        if (
-            hasattr(previous_criteria, "rubric_analysis")
-            and previous_criteria.rubric_analysis
-        ):
+        if hasattr(previous_criteria, "rubric_analysis") and previous_criteria.rubric_analysis:
             rubric_count = previous_criteria.rubric_analysis.positive_rubric_count
 
             # If doing very poorly (0-1 positive rubrics), search more aggressively
@@ -767,12 +732,54 @@ class ControlledSearchAgent(LitBaseAgent):
             },
         )
 
+    def _generate_answer(
+        self,
+        query: str,
+        results: List[SearchResultItem],
+        **kwargs,
+    ) -> str:
+        """
+        Generate a concise shortform answer from search results.
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Additional keyword arguments
+
+        Returns:
+            A concise shortform answer (placeholder for now)
+        """
+        # TODO: Implement actual answer generation logic using an LLM
+        # For now, return empty string as placeholder
+        return ""
+
+    def _generate_report(
+        self,
+        query: str,
+        results: List[SearchResultItem],
+        **kwargs,
+    ) -> str:
+        """
+        Generate a detailed research report from search results.
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Additional keyword arguments
+
+        Returns:
+            A detailed research report (placeholder for now)
+        """
+        # TODO: Implement actual report generation logic using an LLM
+        # For now, return empty string as placeholder
+        return ""
+
     async def _arun(
         self,
         params: LitSearchAgentInputSchema,
         **kwargs: Any,
     ) -> LitSearchAgentOutputSchema:
-        desired_max_results = params.max_results
+        desired_max_results = params.search_mode.to_max_results()
         queries = [params.query]  # Convert single query to list for compatibility
 
         iteration = 0
@@ -804,10 +811,7 @@ class ControlledSearchAgent(LitBaseAgent):
             if iteration > 0:
                 # Get rubric focus from previous iteration's stopping criteria
                 rubric_focus = None
-                if (
-                    hasattr(criteria, "recommended_query_focus")
-                    and criteria.recommended_query_focus
-                ):
+                if hasattr(criteria, "recommended_query_focus") and criteria.recommended_query_focus:
                     rubric_focus = criteria.recommended_query_focus
 
                 logger.debug(f"Rubric focus for iteration {iteration}: {rubric_focus}")
@@ -830,7 +834,6 @@ class ControlledSearchAgent(LitBaseAgent):
             search_input = SearchToolInputSchema(
                 queries=current_queries,
                 max_results=search_limit,
-                category=params.category,
             )
 
             search_result = await self.search_tool.arun(
@@ -852,7 +855,6 @@ class ControlledSearchAgent(LitBaseAgent):
                 fallback_input = SearchToolInputSchema(
                     queries=queries,  # Use original queries
                     max_results=search_limit,
-                    category=params.category,
                 )
 
                 fallback_result = await self.search_tool.arun(
@@ -907,8 +909,20 @@ class ControlledSearchAgent(LitBaseAgent):
                 },
             )
 
+        # Generate shortform answer and report
+        shortform_answer = self._generate_answer(
+            query=params.query,
+            results=all_results,
+        )
+
+        detailed_report = self._generate_report(
+            query=params.query,
+            results=all_results,
+        )
+
         return LitSearchAgentOutputSchema(
+            answer=shortform_answer,
+            report=detailed_report,
             results=results_as_dicts,
-            category=params.category,
             iterations_performed=iteration,
         )
