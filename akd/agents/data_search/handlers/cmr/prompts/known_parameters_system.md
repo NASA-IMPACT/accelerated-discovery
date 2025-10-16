@@ -30,6 +30,15 @@ Known parameters are hard filters that can be directly identified without needin
 - Consider whether temporal requirements constrain available datasets
 - **Example**: "Oct 2017 - Nov 2018" → temporal: "2017-10-01T00:00:00Z,2018-11-30T23:59:59Z"
 
+**Multi-Temporal Comparison Queries:**
+- **CRITICAL**: For queries comparing multiple non-contiguous time periods, create SEPARATE query approaches (one per time period)
+- **NEVER** use semicolons or other delimiters to combine multiple temporal ranges in a single approach
+- CMR temporal parameter format is strictly: "start_datetime,end_datetime" (exactly TWO values)
+- **Example**: "Compare 2004 and 2025 data"
+  - ❌ WRONG: temporal: "2004-01-01T00:00:00Z,2004-12-31T23:59:59Z;2025-01-01T00:00:00Z,2025-12-31T23:59:59Z"
+  - ✅ CORRECT: Create Approach 1 with temporal: "2004-01-01T00:00:00Z,2004-12-31T23:59:59Z" and Approach 2 with temporal: "2025-01-01T00:00:00Z,2025-12-31T23:59:59Z"
+- When needed, consider different instruments for different time periods based on operational timeframes
+
 ### Resolution Requirements Validation
 
 **Spatial Resolution:**
@@ -73,9 +82,16 @@ Known parameters are hard filters that can be directly identified without needin
 
 **Multiple Approach Generation:**
 - Generate {min_approaches}-{max_approaches} different query approaches per decomposition
-- Each approach should represent different ways to find the same scientific data
-- Consider instrument alternatives (Landsat vs Sentinel-2 for land cover)
-- Include both specific and broad approaches when appropriate
+- **Quality over quantity**: Only create as many approaches as genuinely needed - do NOT force using all {max_approaches} approaches
+- Each approach should represent a meaningfully different way to find the same scientific data
+- Create multiple approaches when:
+  - Multiple instruments can provide the same measurement (e.g., Landsat vs Sentinel-2 for land cover)
+  - Different time periods require different instruments (e.g., MODIS for 2004, VIIRS for 2025)
+  - Both specific and broad searches are valuable for comprehensive coverage
+- Create fewer approaches when:
+  - Only one obvious instrument/platform combination exists
+  - The decomposition is narrow and well-defined
+  - Additional approaches would be redundant
 
 **Parameter Combination Logic:**
 - Don't over-constrain with too many parameters
@@ -138,12 +154,13 @@ Known parameters are hard filters that can be directly identified without needin
 ## Output Requirements
 
 **Parameter Extraction Rules:**
-- Return {min_approaches}-{max_approaches} query approaches per decomposition
+- Return {min_approaches}-{max_approaches} query approaches per decomposition (create only what's genuinely needed)
 - Each approach contains ONLY known parameters that can be directly identified
 - Do NOT include keywords, search terms, or abstract concepts
 - Do NOT guess instruments unless clearly implied by the research context
 - Include spatial/temporal bounds whenever they can be determined
 - Include resolution requirements when specified or clearly needed
+- Do NOT create redundant approaches just to reach {max_approaches} - quality beats quantity
 
 **Quality Validation:**
 - Ensure bounding boxes are valid (west < east, south < north)

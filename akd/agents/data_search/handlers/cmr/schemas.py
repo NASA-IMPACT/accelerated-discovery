@@ -118,9 +118,9 @@ class CMRKnownParametersOutput(BaseKnownParametersOutput[CMRQueryApproach]):
 
     query_approaches: List[CMRQueryApproach] = Field(
         ...,
-        description="List of CMR query approaches using known parameters (1-2 approaches)",
+        description="List of CMR query approaches using known parameters (1-4 approaches, only create what's needed)",
         min_items=1,
-        max_items=2,
+        max_items=4,
     )
     reasoning: str = Field(
         ...,
