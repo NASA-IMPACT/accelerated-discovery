@@ -45,7 +45,7 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     embedding_model_name: str = Field(default="thenlper/gte-large", description="Embedding model for local search")
     data_file: str | None = Field(default=None, description="Path to local repository data file")
     google_drive_file_id: str | None = Field(
-        default="15kxTyLeBCPL82WjMTyDytcXag85vglCP",
+        default="19Oi2gAE5aGyp11mIxCXsaGp1PA08_Aw3",
         description="Google Drive file ID for repository database, uses gte-large embeddings",
     )
 

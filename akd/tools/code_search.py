@@ -247,19 +247,19 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     data_file: str = str(
-        get_akd_root() / "docs" / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v4.csv")
+        get_akd_root()
+        / "docs"
+        / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v5.csv")
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
-        "1-3eD0kJFKgsgKhREA4dOW_V2gYfosK9R",
+        "19Oi2gAE5aGyp11mIxCXsaGp1PA08_Aw3",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
     wait_time: int = 1
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
     remove_embedding_column: bool = True
-    text_column: str = "text"
-    name_column: str = "name"
-    desc_column: str = "description"
+    context_columns: list[str] = ["description", "reformulated_text", "key_topics"]
     embeddings_column: str = "embeddings"
     debug: bool = False
 
@@ -293,6 +293,18 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
             logger.info("Loading data and embedding model...")
             self.repo_data = pd.read_csv(self.config.data_file)
+
+            missing = [
+                c
+                for c in self.config.context_columns
+                if c not in self.repo_data.columns
+            ]
+            if missing:
+                raise ValueError(
+                    f"Missing columns in {self.config.data_file}: {missing}. "
+                    f"Available columns: {list(self.repo_data.columns)}"
+                )
+
             if self.config.embedder_type == "sentence-transformers":
                 self.embedder = Embedder(self.config.embedding_model_name)
             elif self.config.embedder_type == "openai":
@@ -350,6 +362,32 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         else:
             logger.info(f"Data file already exists at '{data_file_path}'.")
 
+    def _stringify_columns(self, columns: list[str]) -> list[str]:
+        """
+        Concatenate the given columns row-wise and return a list of embedding texts
+        """
+
+        # Convert selected columns to strings with empty strings for NaN
+        df_str = (
+            self.repo_data[columns]
+            .applymap(
+                lambda v: " ".join(map(str, v))
+                if isinstance(v, (list, tuple))
+                else ("" if v is None else str(v))
+            )
+            .fillna("")
+        )
+
+        # Concatenate across columns for each row
+        texts = df_str.apply(
+            lambda row: " ".join(part for part in row if part), axis=1
+        ).tolist()
+
+        if self.debug:
+            logger.debug(f"Built {len(texts)} embedding texts; sample[0:2]={texts[:2]}")
+
+        return texts
+
     def generate_embeddings(
         self,
         force_regenerate: bool = False,
@@ -374,17 +412,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         )
 
         # Get texts to embed
-        texts = (
-            (
-                self.repo_data[self.config.name_column].fillna("")
-                + " "
-                + self.repo_data[self.config.desc_column].fillna("")
-                + " "
-                + self.repo_data[self.config.text_column].fillna("")
-            )
-            .astype(str)
-            .tolist()
-        )
+        texts = self._stringify_columns(self.config.context_columns)
 
         # Process in batches
         embeddings = []
