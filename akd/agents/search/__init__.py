@@ -14,6 +14,7 @@ from ._base import (
     SearchAgentConfig,
     SearchAgentInputSchema,
     SearchAgentOutputSchema,
+    SearchMode,
 )
 from .answer import (
     QuestionAnsweringAgent,
@@ -25,6 +26,7 @@ from .controlled import ControlledSearchAgent, ControlledSearchAgentConfig
 from .deep_search import DeepLitSearchAgent, DeepLitSearchAgentConfig
 
 __all__ = [
+    "SearchMode",
     # Base classes
     "SearchAgent",
     "SearchAgentConfig",

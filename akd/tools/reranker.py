@@ -149,6 +149,7 @@ class CrossEncoderRerankerTool(RerankerTool):
 
         # attach scores
         for score, result in zip(scores, results):
+            score = float(score)
             result.score = score
             result.extra["score"] = score
 
