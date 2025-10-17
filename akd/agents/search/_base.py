@@ -13,7 +13,7 @@ from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResultItem
 from akd.tools.search._base import SearchTool
 
-from .answer import AnswerAgent, AnswerAgentOutputSchema
+from .answer import QuestionAnsweringAgent, QuestionAnsweringAgentOutputSchema
 
 
 class SearchMode(str, Enum):
@@ -84,12 +84,12 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
 
     def __init__(
         self,
-        answer_agent: AnswerAgent | None = None,
+        answer_agent: QuestionAnsweringAgent | None = None,
         config: SearchAgentConfig | None = None,
         debug: bool = False,
     ):
         super().__init__(config=config, debug=debug)
-        self.answer_agent = answer_agent or AnswerAgent()
+        self.answer_agent = answer_agent or QuestionAnsweringAgent()
 
     async def get_response_async(
         self,
@@ -115,7 +115,7 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
         search_results: List[SearchResultItem],
         additional_context: str | None = None,
         **kwargs,
-    ) -> AnswerAgentOutputSchema:
+    ) -> QuestionAnsweringAgentOutputSchema:
         """
         Generate a concise shortform answer from search results.
 
