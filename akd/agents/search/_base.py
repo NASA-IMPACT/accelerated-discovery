@@ -36,7 +36,7 @@ class SearchMode(str, Enum):
 class SearchAgentInputSchema(InputSchema):
     """Base input schema for literature search agents."""
 
-    query: str = Field(..., description="Research query to search for")
+    query: str = Field(..., description="Query to search for. Can be question or subject/topic of interest.")
     search_mode: SearchMode = Field(
         default=SearchMode.MEDIUM,
         description="Search mode determining depth and breadth of search",
@@ -48,7 +48,7 @@ class SearchAgentOutputSchema(OutputSchema):
     """Base output schema for literature search agents."""
 
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
-    report: str = Field(..., description="Detailed report pertaining to the research query.")
+    report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
     results: List[SearchResultItem] = Field(..., description="List of search results")
     iterations_performed: int = Field(
         default=1,
@@ -97,6 +97,52 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
             OutputSchema: The response from the language model.
         """
         raise NotImplementedError("Subclasses must implement this method.")
+
+    @abstractmethod
+    def _generate_answer(
+        self,
+        query: str,
+        results: List[SearchResultItem],
+        **kwargs,
+    ) -> str:
+        """
+        Generate a concise shortform answer from search results.
+
+        Subclasses must implement this method to provide custom answer
+        generation logic (e.g., using an LLM).
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Additional keyword arguments (e.g., additional_context)
+
+        Returns:
+            A concise shortform answer to the query
+        """
+        raise NotImplementedError("Subclasses must implement _generate_answer()")
+
+    @abstractmethod
+    def _generate_report(
+        self,
+        query: str,
+        results: List[SearchResultItem],
+        **kwargs,
+    ) -> str:
+        """
+        Generate a detailed research report from search results.
+
+        Subclasses must implement this method to provide custom report
+        generation logic (e.g., using an LLM or synthesis agent).
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Additional keyword arguments (e.g., additional_context, research_report)
+
+        Returns:
+            A detailed research report
+        """
+        raise NotImplementedError("Subclasses must implement _generate_report()")
 
 
 class LitSearchAgentInputSchema(SearchAgentInputSchema):
@@ -191,49 +237,3 @@ class LitBaseAgent(SearchAgent[LitSearchAgentInputSchema, LitSearchAgentOutputSc
     ) -> str:
         """Format a standardized search summary."""
         return f"Literature search completed: {total_results} results in {iterations} iterations (quality: {quality_score:.2f})"
-
-    @abstractmethod
-    def _generate_answer(
-        self,
-        query: str,
-        results: List[SearchResultItem],
-        **kwargs,
-    ) -> str:
-        """
-        Generate a concise shortform answer from search results.
-
-        Subclasses must implement this method to provide custom answer
-        generation logic (e.g., using an LLM).
-
-        Args:
-            query: The original research query
-            results: List of search results
-            **kwargs: Additional keyword arguments (e.g., additional_context)
-
-        Returns:
-            A concise shortform answer to the query
-        """
-        raise NotImplementedError("Subclasses must implement _generate_answer()")
-
-    @abstractmethod
-    def _generate_report(
-        self,
-        query: str,
-        results: List[SearchResultItem],
-        **kwargs,
-    ) -> str:
-        """
-        Generate a detailed research report from search results.
-
-        Subclasses must implement this method to provide custom report
-        generation logic (e.g., using an LLM or synthesis agent).
-
-        Args:
-            query: The original research query
-            results: List of search results
-            **kwargs: Additional keyword arguments (e.g., additional_context, research_report)
-
-        Returns:
-            A detailed research report
-        """
-        raise NotImplementedError("Subclasses must implement _generate_report()")
