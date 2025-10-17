@@ -18,6 +18,8 @@ temp/
 data/
 models/
 documents/
+akd/mapping/llm_generated_mappings.json
+
 __marimo__/
 .DS_Store
 .devcontainer
