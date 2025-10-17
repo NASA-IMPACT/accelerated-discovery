@@ -13,6 +13,8 @@ from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResultItem
 from akd.tools.search._base import SearchTool
 
+from .answer import AnswerAgent, AnswerAgentOutputSchema
+
 
 class SearchMode(str, Enum):
     """Search mode determining the depth and breadth of search."""
@@ -49,7 +51,7 @@ class SearchAgentOutputSchema(OutputSchema):
 
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
     report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
-    results: List[SearchResultItem] = Field(..., description="List of search results")
+    results: list[SearchResultItem] = Field(..., description="List of search results")
     iterations_performed: int = Field(
         default=1,
         description="Number of search iterations performed",
@@ -80,6 +82,15 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
     output_schema = SearchAgentOutputSchema
     config_schema = SearchAgentConfig
 
+    def __init__(
+        self,
+        answer_agent: AnswerAgent | None = None,
+        config: SearchAgentConfig | None = None,
+        debug: bool = False,
+    ):
+        super().__init__(config=config, debug=debug)
+        self.answer_agent = answer_agent or AnswerAgent()
+
     async def get_response_async(
         self,
         *args,
@@ -98,13 +109,13 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
-    @abstractmethod
-    def _generate_answer(
+    async def _generate_answer(
         self,
         query: str,
-        results: List[SearchResultItem],
+        search_results: List[SearchResultItem],
+        additional_context: str | None = None,
         **kwargs,
-    ) -> str:
+    ) -> AnswerAgentOutputSchema:
         """
         Generate a concise shortform answer from search results.
 
@@ -119,10 +130,16 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
         Returns:
             A concise shortform answer to the query
         """
-        raise NotImplementedError("Subclasses must implement _generate_answer()")
+        return await self.answer_agent.arun(
+            self.answer_agent.input_schema(
+                query=query,
+                search_results=search_results,
+                additional_context=additional_context,
+            ),
+        )
 
     @abstractmethod
-    def _generate_report(
+    async def _generate_report(
         self,
         query: str,
         results: List[SearchResultItem],
@@ -154,8 +171,8 @@ class LitSearchAgentInputSchema(SearchAgentInputSchema):
 class LitSearchAgentOutputSchema(SearchAgentOutputSchema):
     """Base output schema for literature search agents."""
 
-    report: str = Field(
-        default="",
+    report: str | None = Field(
+        default=None,
         description="Synthesized research report from the literature search",
     )
 

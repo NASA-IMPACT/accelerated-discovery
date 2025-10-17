@@ -505,28 +505,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         return followup_output.followup_queries
 
-    def _generate_answer(
-        self,
-        query: str,
-        results: List[SearchResultItem],
-        **kwargs,
-    ) -> str:
-        """
-        Generate a concise shortform answer from search results.
-
-        Args:
-            query: The original research query
-            results: List of search results
-            **kwargs: Additional keyword arguments (e.g., additional_context)
-
-        Returns:
-            A concise shortform answer (placeholder for now)
-        """
-        # TODO: Implement actual answer generation logic using an LLM
-        # For now, return empty string as placeholder
-        return ""
-
-    def _generate_report(
+    async def _generate_report(
         self,
         query: str,
         results: List[SearchResultItem],
@@ -606,20 +585,21 @@ class DeepLitSearchAgent(LitBaseAgent):
         )
 
         # Step 5: Generate shortform answer and report
-        shortform_answer = self._generate_answer(
-            query=original_query,
-            results=research_output["results"],
-        )
-
-        detailed_report = self._generate_report(
+        detailed_report = await self._generate_report(
             query=original_query,
             results=research_output["results"],
             research_report=research_output["research_report"],
         )
 
+        shortform_answer = await self._generate_answer(
+            query=original_query,
+            search_results=research_output["results"],
+            additional_context=detailed_report,
+        )
+
         # Step 6: Return research output with SearchResultItem objects directly
         return LitSearchAgentOutputSchema(
-            answer=shortform_answer,
+            answer=shortform_answer.answer,
             report=detailed_report,
             results=research_output["results"],
             iterations_performed=research_output["iterations_performed"],
@@ -627,5 +607,6 @@ class DeepLitSearchAgent(LitBaseAgent):
                 "key_findings": research_output["key_findings"],
                 "evidence_quality_score": research_output["evidence_quality_score"],
                 "citations": research_output["citations"],
+                "answer_reasoning_traces": shortform_answer.reasoning_traces,
             },
         )

@@ -15,9 +15,10 @@ from ._base import (
     SearchAgentInputSchema,
     SearchAgentOutputSchema,
 )
+from .answer import AnswerAgent, AnswerAgentInputSchema, AnswerAgentOutputSchema
+from .code_search import CodeSearchAgent, CodeSearchAgentConfig
 from .controlled import ControlledSearchAgent, ControlledSearchAgentConfig
 from .deep_search import DeepLitSearchAgent, DeepLitSearchAgentConfig
-from .code_search import CodeSearchAgent, CodeSearchAgentConfig
 
 __all__ = [
     # Base classes
@@ -30,6 +31,9 @@ __all__ = [
     "LitSearchAgentOutputSchema",
     "LitSearchAgentConfig",
     # Specific agents
+    "AnswerAgent",
+    "AnswerAgentInputSchema",
+    "AnswerAgentOutputSchema",
     "ControlledSearchAgent",
     "ControlledSearchAgentConfig",
     "DeepLitSearchAgent",

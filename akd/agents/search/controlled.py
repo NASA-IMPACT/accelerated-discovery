@@ -732,31 +732,10 @@ class ControlledSearchAgent(LitBaseAgent):
             },
         )
 
-    def _generate_answer(
+    async def _generate_report(
         self,
         query: str,
-        results: List[SearchResultItem],
-        **kwargs,
-    ) -> str:
-        """
-        Generate a concise shortform answer from search results.
-
-        Args:
-            query: The original research query
-            results: List of search results
-            **kwargs: Additional keyword arguments
-
-        Returns:
-            A concise shortform answer (placeholder for now)
-        """
-        # TODO: Implement actual answer generation logic using an LLM
-        # For now, return empty string as placeholder
-        return ""
-
-    def _generate_report(
-        self,
-        query: str,
-        results: List[SearchResultItem],
+        results: list[SearchResultItem],
         **kwargs,
     ) -> str:
         """
@@ -896,33 +875,24 @@ class ControlledSearchAgent(LitBaseAgent):
 
         logger.debug(f"Final Stopping Criteria :: {criteria}")
 
-        # Convert SearchResultItem objects to dictionaries for output
-        results_as_dicts = []
-        for result in all_results:
-            results_as_dicts.append(
-                {
-                    "url": str(result.url),
-                    "title": result.title,
-                    "content": result.content,
-                    "category": result.category,
-                    "query": params.query,
-                },
-            )
-
         # Generate shortform answer and report
-        shortform_answer = self._generate_answer(
+        shortform_answer = await self._generate_answer(
             query=params.query,
-            results=all_results,
+            search_results=all_results,
+            additional_context=f"Final stopping criteria: {criteria}",
         )
 
-        detailed_report = self._generate_report(
+        detailed_report = await self._generate_report(
             query=params.query,
             results=all_results,
         )
 
         return LitSearchAgentOutputSchema(
-            answer=shortform_answer,
+            answer=shortform_answer.answer,
             report=detailed_report,
-            results=results_as_dicts,
+            results=all_results,
             iterations_performed=iteration,
+            extra=dict(
+                answer_reasoning_traces=shortform_answer.reasoning_traces,
+            ),
         )
