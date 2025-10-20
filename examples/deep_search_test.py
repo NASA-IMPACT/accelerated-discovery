@@ -8,11 +8,14 @@ import sys
 from pathlib import Path
 
 # Add the project root to the path
-project_root = Path(__file__).parent
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from akd.agents.search._base import LitSearchAgentInputSchema
-from akd.agents.search.deep_search import DeepLitSearchAgent, DeepLitSearchAgentConfig
+from akd.agents.search._base import LitSearchAgentInputSchema, SearchMode  # noqa: E402
+from akd.agents.search.deep_search import (  # noqa: E402
+    DeepLitSearchAgent,
+    DeepLitSearchAgentConfig,
+)
 
 
 async def test_deep_lit_search_agent():
@@ -39,7 +42,7 @@ async def test_deep_lit_search_agent():
 
     # Create a simple test query
     test_query = "machine learning applications in drug discovery"
-    input_schema = LitSearchAgentInputSchema(query=test_query, category="science", max_results=5)
+    input_schema = LitSearchAgentInputSchema(query=test_query, search_mode=SearchMode.FAST)
 
     print(f"\n🔍 Testing query: '{test_query}'")
 
@@ -50,7 +53,8 @@ async def test_deep_lit_search_agent():
         print("✅ Agent execution successful!")
         print(f"   - Number of results: {len(result.results)}")
         print(f"   - Iterations performed: {result.iterations_performed}")
-        print(f"   - Has research report: {result.get('report') is not None}")
+        print(f"   - Has shortform answer: {result.answer is not None and len(result.answer) >= 0}")
+        print(f"   - Has research report: {result.report is not None and len(result.report) > 0}")
         print(f"   - Has key findings: {result.extra.get('key_findings') is not None}")
         print(f"   - Has evidence quality score: {result.extra.get('evidence_quality_score') is not None}")
         print(f"   - Has citations: {result.extra.get('citations') is not None}")
@@ -64,12 +68,17 @@ async def test_deep_lit_search_agent():
             print(f"   - Has extra fields: {hasattr(first_result, 'extra') and first_result.extra is not None}")
 
         # Show synthesis summary if available
-        if result.extra.get("research_report"):
+        if result.report:
             print("\n📊 Research synthesis preview:")
-            print(f"   - Report length: {len(result.get('report'))} characters")
+            print(f"   - Report length: {len(result.report)} characters")
             if result.extra.get("key_findings"):
                 print(f"   - Key findings count: {len(result.extra['key_findings'])}")
             print(f"   - Evidence quality score: {result.extra.get('evidence_quality_score', 'N/A')}")
+
+        # Show shortform answer if available
+        if result.answer:
+            print("\n💡 Shortform Answer:")
+            print(f"   {result.answer}")
 
         return True
 
