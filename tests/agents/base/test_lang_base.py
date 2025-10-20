@@ -209,3 +209,122 @@ class TestLangBaseAgentFunctionality:
             except Exception as e:
                 # Expected if client creation fails
                 assert "Mock initialization error" in str(e)
+
+    def test_input_hints_disabled_by_default(self, mock_chatopenai_client):
+        """Test that input hints are disabled by default for LangBaseAgent."""
+        agent = TestLangBaseAgent()
+
+        system_prompt = agent._system_prompt
+
+        # Verify no input hints are present by default
+        assert "INPUT FIELD DESCRIPTIONS:" not in system_prompt
+        assert system_prompt == agent.system_prompt
+
+    def test_input_hints_enabled(self, mock_chatopenai_client):
+        """Test input hints functionality when enabled for LangBaseAgent."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        system_prompt = agent._system_prompt
+
+        # Verify input hints are present
+        assert "INPUT FIELD DESCRIPTIONS:" in system_prompt
+        assert "**query**:" in system_prompt
+        assert "**optional_param**:" in system_prompt
+        assert "Test query input" in system_prompt
+        assert "Optional parameter" in system_prompt
+
+        # Verify original system prompt is still there
+        assert agent.system_prompt in system_prompt
+
+    def test_prompt_template_uses_system_prompt_property(self, mock_chatopenai_client):
+        """Test that LangBaseAgent prompt template uses _system_prompt property."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # Get the system message from the prompt template
+        formatted_messages = agent.prompt_template.format_messages(memory=[])
+        system_message = formatted_messages[0]
+
+        # Verify the prompt template uses the enhanced system prompt
+        assert "INPUT FIELD DESCRIPTIONS:" in system_message.content
+        assert "**query**:" in system_message.content
+
+    def test_agent_description_disabled_by_default(self, mock_chatopenai_client):
+        """Test that agent description is not included when input hints are disabled."""
+        # Create agent with description via docstring
+        agent = TestLangBaseAgent()
+
+        system_prompt = agent._system_prompt
+
+        # Should not include description when input_hints=False (default)
+        assert "AGENT DESCRIPTION:" not in system_prompt
+        assert system_prompt == agent.system_prompt
+
+    def test_agent_description_with_input_hints_enabled_no_description(
+        self,
+        mock_chatopenai_client,
+    ):
+        """Test behavior when input hints enabled but no agent description available."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # Clear the description to simulate no description
+        agent.description = ""
+
+        system_prompt = agent._system_prompt
+
+        # Should not include agent description section when description is empty
+        assert "AGENT DESCRIPTION:" not in system_prompt
+        # But should still include input hints
+        assert "INPUT FIELD DESCRIPTIONS:" in system_prompt
+
+    def test_agent_description_with_input_hints_enabled_with_description(
+        self,
+        mock_chatopenai_client,
+    ):
+        """Test agent description inclusion when input hints enabled and description available."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # Set a test description
+        test_description = "This is a test agent for testing purposes"
+        agent.description = test_description
+
+        system_prompt = agent._system_prompt
+
+        # Should include both agent description and input hints
+        assert "AGENT DESCRIPTION:" in system_prompt
+        assert test_description in system_prompt
+        assert "INPUT FIELD DESCRIPTIONS:" in system_prompt
+        assert "**query**:" in system_prompt
+
+        # Verify order: original prompt, then description, then input hints
+        desc_pos = system_prompt.find("AGENT DESCRIPTION:")
+        input_pos = system_prompt.find("INPUT FIELD DESCRIPTIONS:")
+        assert desc_pos < input_pos
+
+    def test_agent_description_from_class_docstring(self, mock_chatopenai_client):
+        """Test that agent description is extracted from class docstring."""
+        config = BaseAgentConfig(input_hints=True)
+        agent = TestLangBaseAgent(config=config)
+
+        # The TestLangBaseAgent should have a docstring
+        system_prompt = agent._system_prompt
+
+        if agent.description:  # Only test if description exists
+            assert "AGENT DESCRIPTION:" in system_prompt
+            assert agent.description in system_prompt
+
+    def test_agent_description_from_config(self, mock_chatopenai_client):
+        """Test that agent description can be set via config."""
+        test_description = "Agent description from config"
+        config = BaseAgentConfig(input_hints=True, description=test_description)
+        agent = TestLangBaseAgent(config=config)
+
+        system_prompt = agent._system_prompt
+
+        # Should include the description from config
+        assert "AGENT DESCRIPTION:" in system_prompt
+        assert test_description in system_prompt
+        assert agent.description == test_description

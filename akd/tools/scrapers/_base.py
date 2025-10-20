@@ -241,13 +241,9 @@ class WebScraper(ScraperToolBase):
                 schema_data = json.loads(tag.string)
                 if isinstance(schema_data, dict):
                     if "datePublished" in schema_data:
-                        metadata["published_date"] = (
-                            metadata["published_date"] or schema_data["datePublished"]
-                        )
+                        metadata["published_date"] = metadata["published_date"] or schema_data["datePublished"]
                     if "keywords" in schema_data:
-                        metadata["keywords"] = (
-                            metadata["keywords"] or schema_data["keywords"]
-                        )
+                        metadata["keywords"] = metadata["keywords"] or schema_data["keywords"]
             except (json.JSONDecodeError, AttributeError):
                 pass
 
@@ -279,9 +275,7 @@ class WebScraper(ScraperToolBase):
                 metadata[meta_key] = metadata[meta_key] or meta_tag.get("content")
 
         # Build citation string for academic content
-        if metadata["doi"] or (
-            metadata["title"] and metadata["author"] and metadata["publication_date"]
-        ):
+        if metadata["doi"] or (metadata["title"] and metadata["author"] and metadata["publication_date"]):
             citation_parts = []
             if metadata["author"]:
                 citation_parts.append(metadata["author"])
@@ -304,7 +298,18 @@ class WebScraper(ScraperToolBase):
 
         if isinstance(metadata["keywords"], str):
             metadata["keywords"] = [metadata["keywords"]]
-        return ScrapedMetadata(**metadata)
+
+        # Separate standard fields from extra fields
+        # Standard fields are defined in ScrapedMetadata/SearchResultItem
+        valid_fields = ScrapedMetadata.model_fields.keys()
+        standard_metadata = {k: v for k, v in metadata.items() if k in valid_fields}
+        extra_metadata = {k: v for k, v in metadata.items() if k not in valid_fields}
+
+        # Put non-standard fields (like site_name, type, image_url, etc.) into 'extra'
+        if extra_metadata:
+            standard_metadata["extra"] = extra_metadata
+
+        return ScrapedMetadata(**standard_metadata)
 
     async def _extract_title(self, soup: BeautifulSoup) -> str | None:
         """

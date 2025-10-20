@@ -11,11 +11,12 @@ from langchain_openai import ChatOpenAI
 from litellm import acompletion, get_model_info
 from litellm.utils import trim_messages
 from loguru import logger
-from pydantic import AnyUrl, BaseModel, Field, model_validator
+from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+from akd.utils import get_model_fields
 
 
 class BaseAgentConfig(BaseConfig):
@@ -25,7 +26,7 @@ class BaseAgentConfig(BaseConfig):
     api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
     model_name: str | None = Field(default=CONFIG.model_config_settings.model_name)
     temperature: float = Field(
-        default=0.0,
+        default=CONFIG.model_config_settings.temperature,
         ge=0.0,
         le=2.0,
         description="Sampling temperature",
@@ -35,10 +36,14 @@ class BaseAgentConfig(BaseConfig):
         default=True,
         description="Whether to maintain conversation history/state",
     )
+    input_hints: bool = Field(
+        default=False,
+        description="Whether to include input schema field information in system prompt",
+    )
 
     # Token management
     max_tokens: int = Field(
-        default=100_000,
+        default=CONFIG.model_config_settings.max_tokens,
         ge=5,
         le=1_000_000,  # hard max to 1M tokens
         description="Maximum tokens for input message context",
@@ -85,6 +90,11 @@ class BaseAgent[
     This class provides the basic structure for an agent that can handle
     asynchronous operations, manage memory, and utilize a language model
     for generating responses based on user input.
+
+    Notes:
+    - We internally use `_system_prompt` to access actual system prompt that the model sees.
+    - The `_system_prompt` has enhanced prompt based on `input_hints` flag.
+    - We also have `_default_system_message` in InstructorBaseAgent that creates a dict
     """
 
     config_schema = BaseAgentConfig
@@ -107,6 +117,50 @@ class BaseAgent[
 
     def reset_memory(self) -> None:
         pass
+
+    @property
+    def _input_schema_info(self) -> str:
+        """
+        Extract field names and descriptions from input schema.
+
+        Returns:
+            str: Formatted string with field information, empty if no input schema.
+        """
+        if not hasattr(self, "input_schema") or not self.input_schema:
+            return ""
+
+        fields = get_model_fields(self.input_schema, skip_no_description=True)
+        if not fields:
+            return ""
+
+        return "\n".join(
+            [f"- **{field['name']}**: {field['description']}" for field in fields],
+        )
+
+    @property
+    def _system_prompt(self) -> str:
+        """
+        Enhanced system prompt with optional input hints.
+
+        Returns:
+            str: System prompt with input schema information if enabled.
+        """
+        content = self.system_prompt
+
+        # Early return if input hints disabled
+        if not self.input_hints:
+            return content
+
+        # Add agent description if available
+        if self.description:
+            content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
+
+        # Add input schema hints if available
+        input_info = self._input_schema_info
+        if input_info:
+            content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
+
+        return content
 
     @abstractmethod
     async def get_response_async(
@@ -164,7 +218,7 @@ class LangBaseAgent[
             [
                 {
                     "role": "system",
-                    "content": self.system_prompt,
+                    "content": self._system_prompt,
                 },
                 MessagesPlaceholder(variable_name="memory"),
             ],
@@ -296,12 +350,11 @@ class InstructorBaseAgent[
         """
         return {
             "role": "system",
-            "content": self.system_prompt,
+            "content": self._system_prompt,
         }
 
     def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
         """Create a model that's compatible with instructor but avoids IOSchema validation."""
-        from pydantic import create_model
 
         # Get the fields from the original model
         fields = {}
@@ -492,6 +545,7 @@ class LiteLLMInstructorBaseAgent[
             temperature=self.temperature,
             response_model=instructor_model,
             api_base=str(self.base_url).rstrip("/") if self.base_url else None,
+            api_key=self.api_key,
         )
 
         response_data = response.model_dump()

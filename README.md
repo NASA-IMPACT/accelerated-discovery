@@ -85,30 +85,53 @@ cp .env.example .env
 
 Refer to the [notebooks](notebooks) for examples.
 
+## Workflow Planning System
+
+The framework includes an LLM-based workflow planner that converts natural language research goals into executable workflows:
+
+### Interactive Planning
+
+```python
+from akd.planner.llm_planner import create_planner
+
+planner = await create_planner()
+session = await planner.plan_workflow("Find papers on AlphaFold and identify research gaps")
+response = await session.start()
+
+while not response.ready_to_generate:
+    user_input = input(f"{response.message}\nYour response: ")
+    response = await session.respond(user_input)
+
+workflow = await session.generate_workflow()
+workflow.save_to_file("research_workflow.json")
+```
+
+### Automated Planning
+
+```bash
+# Interactive session
+python scripts/demo_planner.py interactive
+
+# Automated mode (CI/CD, batch processing)
+python scripts/demo_planner.py automated "Research goal" --quiet -o workflow.json
+
+# Quick planning
+python scripts/demo_planner.py quick "Find papers on protein folding"
+```
+
+See [Planner Documentation](akd/planner/README.md) for comprehensive usage and deployment guides.
+
 ## Core Tools & Agents
 
-The framework provides a comprehensive suite of specialized tools and agents for scientific research:
+### Search Infrastructure
+- **Search Tools**: SearxNG (web), Semantic Scholar (academic), code repositories
+- **Search Agents**: Deep search with iterative refinement, controlled search workflows, query processing and refinement
+- **Relevancy Filtering**: Content assessment, link validation, context-aware filtering
 
-### Search Tools
-- **SearxNGSearchTool** (`akd.tools.search.searxng_search`) - General web search with privacy focus
-- **SemanticScholarSearchTool** (`akd.tools.search.semantic_scholar_search`) - Academic paper search and discovery
-- **Code Search Tool** (`akd.tools.code_search`) - Code repository search and analysis
-
-### Search Agents
-- **Deep Search Agent** (`akd.agents.search.deep_search`) - Advanced multi-step literature search with iterative refinement
-- **Controlled Search Agent** (`akd.agents.search.controlled`) - Structured search workflow with quality controls
-- **Query Agent & FollowUp Query Agent** (`akd.agents.query`) - Query processing, refinement, and follow-up generation
-- **Relevancy Agent** (`akd.agents.relevancy`) - Content relevance assessment and filtering
-
-### Extraction & Processing
-- **PyPaperBot Scraper** (`akd.tools.scrapers.pypaperbot`) - PDF content extraction and processing
-- **DoclingScraper** (`akd.tools.scrapers`) - Advanced document processing and text extraction
-- **Web Scrapers** (`akd.tools.scrapers.web_scrapers`) - Content extraction from web sources
-
-### Specialized Components
-- **Source Validator** (`akd.tools.source_validator`) - Source quality validation and verification
-- **Relevancy Checker** (`akd.tools.relevancy`) - Content relevance validation against research context
-- **Link Relevancy Assessor** (`akd.tools.link_relevancy_assessor`) - URL relevance assessment and filtering
+### Content Extraction
+- **Document Processing**: PDF extraction (PyPaperBot), advanced document parsing (Docling)
+- **Web Scraping**: Multi-source content extraction with validation
+- **Quality Control**: Source validation, credibility assessment, attribution tracking
 
 ## Scientific Guardrails
 
@@ -145,12 +168,15 @@ The framework implements deep guardrails specifically designed for scientific re
 ```
 akd/                    # Core framework
 ├── agents/            # Specialized research agents
+├── planner/           # LLM workflow planner and builder
 ├── nodes/             # NodeTemplate implementations
 ├── tools/             # Research tools and scrapers
-└── configs/           # Configuration management
+├── configs/           # Configuration and prompts
+└── mapping/           # Field mapping definitions
 
 examples/              # Usage examples
-scripts/               # Utility scripts
+scripts/               # Utility scripts and demos
+tests/                 # Comprehensive test suite
 ```
 
 ## Contributing

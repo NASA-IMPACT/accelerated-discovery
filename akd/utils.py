@@ -1,12 +1,15 @@
 import asyncio
 import time
 from abc import abstractmethod
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
-from pydantic import HttpUrl
-import requests
+
+import dateparser
 import gdown
+import requests
 from loguru import logger
+from pydantic import BaseModel, HttpUrl
 
 try:
     from langchain_core.tools.structured import StructuredTool
@@ -106,9 +109,7 @@ class LangchainToolMixin:
 
         name = name or self.__class__.__name__
         doc = (self.__class__.__doc__ or "").strip()
-        description = description or f"A tool that executes {name}." + (
-            f" Description: {doc}" if doc else ""
-        )
+        description = description or f"A tool that executes {name}." + (f" Description: {doc}" if doc else "")
         return StructuredTool.from_function(
             func=_wrapped_run,
             coroutine=_wrapped_arun,
@@ -220,3 +221,78 @@ def is_server_available(url: str | HttpUrl) -> bool:
     except requests.RequestException:
         logger.warning(f"URL {url} is not reachable.")
         return False
+
+
+def get_model_fields(
+    model_class: type[BaseModel],
+    skip_no_description: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Extract field information from a Pydantic model using the most Pydantic-native approach.
+    Uses Pydantic's built-in model_json_schema() method.
+
+    Args:
+        model_class: Pydantic model class to extract fields from
+        skip_no_description: If True, skip fields without descriptions
+
+    Returns:
+        List of dictionaries containing field information with all schema properties
+        plus 'name' and 'is_required' keys
+    """
+    if not model_class or not hasattr(model_class, "model_json_schema"):
+        return []
+
+    schema = model_class.model_json_schema()
+    properties = schema.get("properties", {})
+    required_fields = set(schema.get("required", []))
+
+    fields_info = []
+    for field_name, field_schema in properties.items():
+        if skip_no_description and not field_schema.get("description"):
+            continue
+
+        field_data = {
+            "name": field_name,
+            "is_required": field_name in required_fields,
+            **field_schema,  # Include all schema properties
+        }
+        fields_info.append(field_data)
+
+    return fields_info
+
+
+def parse_date(date_input: str | int | None) -> datetime | None:
+    """
+    Parse various date formats to datetime object.
+
+    Handles:
+    - Human-readable dates: "4 days ago", "yesterday", "2 days ago"
+    - Year integers: 2007, 2025
+    - ISO dates: "2025-10-05"
+    - Partial dates: "Oct 2025"
+
+    Args:
+        date_input: Date string, year integer, or None
+
+    Returns:
+        datetime object or None if parsing fails
+
+    Examples:
+        >>> parse_date("4 days ago")
+        datetime.datetime(2025, 10, 4, ...)
+        >>> parse_date(2007)
+        datetime.datetime(2007, 1, 1, 0, 0)
+        >>> parse_date("2025-10-05")
+        datetime.datetime(2025, 10, 5, 0, 0)
+    """
+    parsed_date = None
+
+    # Handle year integers
+    if isinstance(date_input, int):
+        parsed_date = datetime(date_input, 1, 1)
+
+    # Handle string dates
+    elif isinstance(date_input, str):
+        parsed_date = dateparser.parse(date_input)
+
+    return parsed_date

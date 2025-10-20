@@ -44,7 +44,7 @@ class SearchToolInputSchema(InputSchema):
         "science",
         description="Category of the search queries.",
     )
-    max_results: Optional[int] = Field(  
+    max_results: Optional[int] = Field(
         None,
         description="Maximum number of search results to return.",
     )
@@ -61,6 +61,10 @@ class SearchToolOutputSchema(OutputSchema):
     category: Optional[str] = Field(
         None,
         description="The category of the search results",
+    )
+    extra: dict | None = Field(
+        default_factory=dict,
+        description="Any additional information or metadata related to the search results",
     )
 
 

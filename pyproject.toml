@@ -48,6 +48,7 @@ dependencies = [
     "jsonpath-ng>=1.6.1",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
     "litellm>=1.74.2",
+    "dateparser>=1.2.2",
 ]
 
 [project.urls]
@@ -83,6 +84,7 @@ markers = [
     "unit: Unit tests",
     "integration: Integration tests",
     "slow: Slow tests",
+    "requires_ml: Tests requiring ML dependencies (sentence-transformers, etc.)",
 ]
 
 # Optional dependencies (extras)
@@ -92,6 +94,8 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.0.0",
     "pre-commit>=4.2.0",
+    "memray>=1.18.0",
+    "scalene>=1.5.55",
 ]
 local = [
     "marimo==0.15.0",
@@ -108,3 +112,12 @@ ml = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["F841"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.format]
+# Ensure LF line endings across platforms; used by Ruff formatter on save.
+line-ending = "lf"
+docstring-code-line-length = 120

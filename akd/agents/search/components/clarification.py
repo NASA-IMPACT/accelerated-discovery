@@ -8,7 +8,7 @@ from loguru import logger
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
+from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd.configs.prompts import CLARIFYING_AGENT_PROMPT
 from akd.structures import SearchResultItem
 
@@ -18,7 +18,8 @@ class ClarifyingAgentInputSchema(InputSchema):
 
     query: str = Field(..., description="Query that needs clarification")
     search_results: Optional[List[SearchResultItem]] = Field(
-        default=None, description="Existing search results for context"
+        default=None,
+        description="Existing search results for context",
     )
 
 
@@ -26,10 +27,12 @@ class ClarifyingAgentOutputSchema(OutputSchema):
     """Output schema for clarifying agent."""
 
     clarifying_questions: List[str] = Field(
-        ..., description="List of clarifying questions"
+        ...,
+        description="List of clarifying questions",
     )
     needs_clarification: bool = Field(
-        ..., description="Whether clarification is needed"
+        ...,
+        description="Whether clarification is needed",
     )
     reasoning: str = Field(..., description="Reasoning for clarification needs")
 
@@ -59,8 +62,9 @@ class ClarificationComponent:
         self.debug = debug
 
         # Create internal instructor agent for clarification processing
-        self._agent = InstructorBaseAgent[
-            ClarifyingAgentInputSchema, ClarifyingAgentOutputSchema
+        self._agent = LiteLLMInstructorBaseAgent[
+            ClarifyingAgentInputSchema,
+            ClarifyingAgentOutputSchema,
         ](config=self.config, debug=debug)
         self._agent.input_schema = ClarifyingAgentInputSchema
         self._agent.output_schema = ClarifyingAgentOutputSchema
@@ -69,7 +73,7 @@ class ClarificationComponent:
         self,
         query: str,
         search_results: Optional[List[SearchResultItem]] = None,
-        mock_answers: Optional[Dict[str, str]] = None
+        mock_answers: Optional[Dict[str, str]] = None,
     ) -> Tuple[str, List[str]]:
         """
         Generate clarifying questions and create enriched query.
@@ -86,16 +90,17 @@ class ClarificationComponent:
             logger.debug(f"Generating clarifying questions for: {query}")
 
         clarifying_input = ClarifyingAgentInputSchema(
-            query=query, search_results=search_results
+            query=query,
+            search_results=search_results,
         )
         clarifying_output = await self._agent.arun(clarifying_input)
 
         if self.debug:
             logger.debug(
-                f"Generated {len(clarifying_output.clarifying_questions)} questions"
+                f"Generated {len(clarifying_output.clarifying_questions)} questions",
             )
             logger.debug(
-                f"Clarification output preview | questions: {str(clarifying_output.clarifying_questions)[:200]} | reasoning: {clarifying_output.reasoning[:200]}"
+                f"Clarification output preview | questions: {str(clarifying_output.clarifying_questions)[:200]} | reasoning: {clarifying_output.reasoning[:200]}",
             )
 
         # Check if clarification is actually needed
@@ -116,10 +121,10 @@ class ClarificationComponent:
 
         if self.debug:
             logger.debug(
-                f"Created enriched query with {len(clarifications)} clarifications"
+                f"Created enriched query with {len(clarifications)} clarifications",
             )
             logger.debug(
-                f"Clarification enriched query preview | {enriched_query[:200]}"
+                f"Clarification enriched query preview | {enriched_query[:200]}",
             )
 
         return enriched_query, clarifications

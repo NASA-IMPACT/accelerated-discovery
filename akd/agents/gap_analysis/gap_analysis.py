@@ -50,7 +50,7 @@ class GapOutputSchema(OutputSchema):
         ...,
         description="Answers for each node selected from the graph.",
     )
-    graph: Dict = Field(..., description="Graph created from the ingested papers.")
+    graph: dict | None = Field(default=None, description="Graph created from the ingested papers.")
 
 
 class GapAgentConfig(BaseAgentConfig):
@@ -58,8 +58,8 @@ class GapAgentConfig(BaseAgentConfig):
 
     docling_config: DoclingScraperConfig = Field(
         default_factory=lambda: DoclingScraperConfig(
-            do_table_structure=True,
-            pdf_mode="accurate",
+            do_table_structure=False,
+            pdf_mode="fast",
             export_type="html",
             debug=False,
         ),
@@ -82,6 +82,11 @@ class GapAgentConfig(BaseAgentConfig):
             ],
         ),
         description="Configuration for S2 Tool.",
+    )
+
+    output_graph: bool = Field(
+        default=False,
+        description="Whether to output the graph or not.",
     )
 
 
@@ -120,19 +125,13 @@ class GapAgent(BaseAgent):
             List[PaperDataItem]: A list of paper data items retrieved from the Semantic Scholar tool.
             List[SearchResultItem]: The subset of search_results corresponding to the successfully fetched papers.
         """
-        arxiv_ids = [
-            res.url.path.split("/")[-1].split("v")[0] for res in search_results
-        ]
+        arxiv_ids = [res.url.path.split("/")[-1].split("v")[0] for res in search_results]
         paper_items = await self.semantic_search_tool.fetch_paper_by_external_id(
             SemanticScholarSearchToolInputSchema(queries=arxiv_ids),
         )
         fetched_paper_ids = [paper_item.external_id for paper_item in paper_items]
         skipped_ids = (set(arxiv_ids)) - set(fetched_paper_ids)
-        search_results = [
-            search_results[i]
-            for i in range(len(search_results))
-            if arxiv_ids[i] not in skipped_ids
-        ]
+        search_results = [search_results[i] for i in range(len(search_results)) if arxiv_ids[i] not in skipped_ids]
         for paper_item, res in zip(paper_items, search_results):
             if paper_item.url is None:
                 paper_item.url = str(res.url)
@@ -152,10 +151,7 @@ class GapAgent(BaseAgent):
             List[str]: A list of parsed PDF contents as strings.
         """
         pdf_urls = [res.pdf_url for res in search_results if res is not None]
-        tasks = [
-            self.docling_scraper.arun(OmniScraperInputSchema(url=url))
-            for url in pdf_urls
-        ]
+        tasks = [self.docling_scraper.arun(OmniScraperInputSchema(url=url)) for url in pdf_urls]
         results = await asyncio.gather(*tasks)
         parsed_pdfs = [res.content for res in results]
         return parsed_pdfs
@@ -263,11 +259,7 @@ class GapAgent(BaseAgent):
                 )
             else:
                 logger.debug(f"Running gap analysis to investigate {params.gap} gap.")
-        gap = (
-            GAP_QUERY_MAP[params.gap]
-            if params.gap in GAP_QUERY_MAP.keys()
-            else params.gap
-        )
+        gap = GAP_QUERY_MAP[params.gap] if params.gap in GAP_QUERY_MAP.keys() else params.gap
         paper_items, search_results = await self._fetch_paper_items(search_results)
         if self.debug:
             logger.debug(f"Fetch {len(paper_items)} papers from semantic scholar.")
@@ -291,10 +283,13 @@ class GapAgent(BaseAgent):
             all_selected_nodes=selected_nodes,
             llm=self.llm,
         )
+
+        graph = json_graph.node_link_data(graph, edges="edges") if self.config.output_graph else None
+
         return GapOutputSchema(
             output=output,
             attributed_source_answers=attributed_source_answers,
-            graph=json_graph.node_link_data(graph, edges="edges"),
+            graph=graph,
         )
 
     async def _arun(self, params: GapInputSchema, **kwargs) -> GapOutputSchema:

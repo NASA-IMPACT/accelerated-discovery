@@ -39,9 +39,7 @@ async def test_deep_lit_search_agent():
 
     # Create a simple test query
     test_query = "machine learning applications in drug discovery"
-    input_schema = LitSearchAgentInputSchema(
-        query=test_query, category="science", max_results=5
-    )
+    input_schema = LitSearchAgentInputSchema(query=test_query, category="science", max_results=5)
 
     print(f"\n🔍 Testing query: '{test_query}'")
 
@@ -52,13 +50,9 @@ async def test_deep_lit_search_agent():
         print("✅ Agent execution successful!")
         print(f"   - Number of results: {len(result.results)}")
         print(f"   - Iterations performed: {result.iterations_performed}")
-        print(
-            f"   - Has research report: {result.extra.get('research_report') is not None}"
-        )
+        print(f"   - Has research report: {result.get('report') is not None}")
         print(f"   - Has key findings: {result.extra.get('key_findings') is not None}")
-        print(
-            f"   - Has evidence quality score: {result.extra.get('evidence_quality_score') is not None}"
-        )
+        print(f"   - Has evidence quality score: {result.extra.get('evidence_quality_score') is not None}")
         print(f"   - Has citations: {result.extra.get('citations') is not None}")
 
         # Show first result if available
@@ -72,14 +66,10 @@ async def test_deep_lit_search_agent():
         # Show synthesis summary if available
         if result.extra.get("research_report"):
             print("\n📊 Research synthesis preview:")
-            print(
-                f"   - Report length: {len(result.extra['research_report'])} characters"
-            )
+            print(f"   - Report length: {len(result.get('report'))} characters")
             if result.extra.get("key_findings"):
                 print(f"   - Key findings count: {len(result.extra['key_findings'])}")
-            print(
-                f"   - Evidence quality score: {result.extra.get('evidence_quality_score', 'N/A')}"
-            )
+            print(f"   - Evidence quality score: {result.extra.get('evidence_quality_score', 'N/A')}")
 
         return True
 
@@ -96,9 +86,7 @@ if __name__ == "__main__":
     success = asyncio.run(test_deep_lit_search_agent())
 
     if success:
-        print(
-            "\n🎉 Test completed successfully! The refactored DeepLitSearchAgent is working."
-        )
+        print("\n🎉 Test completed successfully! The refactored DeepLitSearchAgent is working.")
     else:
         print("\n💥 Test failed. There are issues with the refactored agent.")
         sys.exit(1)

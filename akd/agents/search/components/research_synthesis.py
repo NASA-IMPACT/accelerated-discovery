@@ -8,7 +8,7 @@ from loguru import logger
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgentConfig, InstructorBaseAgent
+from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd.configs.prompts import DEEP_RESEARCH_AGENT_PROMPT
 from akd.structures import SearchResultItem
 
@@ -18,7 +18,8 @@ class ResearchSynthesisInputSchema(InputSchema):
 
     query: str = Field(..., description="Research query to synthesize")
     search_results: List[SearchResultItem] = Field(
-        ..., description="Search results to synthesize into a report"
+        ...,
+        description="Search results to synthesize into a report",
     )
     context: Optional[str] = Field(
         default=None,
@@ -30,7 +31,8 @@ class ResearchSynthesisOutputSchema(OutputSchema):
     """Output schema for the ResearchSynthesisAgent."""
 
     research_report: str = Field(
-        ..., description="Comprehensive research report in markdown format"
+        ...,
+        description="Comprehensive research report in markdown format",
     )
     key_findings: List[str] = Field(
         default_factory=list,
@@ -58,7 +60,10 @@ class ResearchSynthesisAgentConfig(BaseAgentConfig):
 
 
 class ResearchSynthesisAgent(
-    InstructorBaseAgent[ResearchSynthesisInputSchema, ResearchSynthesisOutputSchema]
+    LiteLLMInstructorBaseAgent[
+        ResearchSynthesisInputSchema,
+        ResearchSynthesisOutputSchema,
+    ],
 ):
     """
     Agent that synthesizes research results into comprehensive reports.
@@ -149,10 +154,10 @@ class ResearchSynthesisComponent:
             # Debug preview of input (200 chars cap)
             if self.debug:
                 preview_titles = ", ".join(
-                    [(r.title or "Untitled")[:40] for r in results[:5]]
+                    [(r.title or "Untitled")[:40] for r in results[:5]],
                 )[:200]
                 logger.debug(
-                    f"Synthesis input preview | query: {original_query[:200]} | results: {len(results)} | titles: {preview_titles} | context: {context[:200]}"
+                    f"Synthesis input preview | query: {original_query[:200]} | results: {len(results)} | titles: {preview_titles} | context: {context[:200]}",
                 )
 
             # Use the agent to synthesize the research
@@ -163,7 +168,7 @@ class ResearchSynthesisComponent:
                 logger.debug(f"Key findings: {len(agent_output.key_findings)}")
                 logger.debug(f"Evidence quality: {agent_output.evidence_quality_score}")
                 logger.debug(
-                    f"Synthesis output preview | report: {agent_output.research_report[:200]}"
+                    f"Synthesis output preview | report: {agent_output.research_report[:200]}",
                 )
 
             # Return the agent output directly - it has the expected interface

@@ -587,8 +587,8 @@ class DeepLitSearchAgent(LitBaseAgent):
             results=research_output["results"],
             category=params.category,
             iterations_performed=research_output["iterations_performed"],
+            report=research_output["research_report"],
             extra={
-                "research_report": research_output["research_report"],
                 "key_findings": research_output["key_findings"],
                 "evidence_quality_score": research_output["evidence_quality_score"],
                 "citations": research_output["citations"],
