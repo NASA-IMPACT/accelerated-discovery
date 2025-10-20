@@ -8,7 +8,7 @@ from loguru import logger
 from pydantic import BaseModel, ValidationError, create_model
 
 from akd.errors import SchemaValidationError
-from akd.utils import AsyncRunMixin, LangchainToolMixin
+from akd.utils import AsyncRunMixin, LangchainToolMixin, get_model_fields
 
 
 class BaseConfig(BaseModel):
@@ -81,15 +81,11 @@ class AbstractBaseMeta(ABCMeta):
         # Check if this class inherits from AbstractBase
         if any(isinstance(base, AbstractBaseMeta) for base in bases):
             # Validate input_schema
-            if "input_schema" not in dct and not any(
-                hasattr(base, "input_schema") for base in bases
-            ):
+            if "input_schema" not in dct and not any(hasattr(base, "input_schema") for base in bases):
                 raise TypeError(f"{name} must define 'input_schema' class attribute")
 
             # Validate output_schema
-            if "output_schema" not in dct and not any(
-                hasattr(base, "output_schema") for base in bases
-            ):
+            if "output_schema" not in dct and not any(hasattr(base, "output_schema") for base in bases):
                 raise TypeError(f"{name} must define 'output_schema' class attribute")
 
             # Validate schema types if they exist
@@ -145,11 +141,7 @@ class AbstractBase[
             debug (bool): If True, enables debug mode for additional logging.
             **kwargs: Additional keyword arguments (merged with config)
         """
-        config = (
-            config
-            or (self.config_schema() if self.config_schema else None)
-            or BaseConfig()
-        )
+        config = config or (self.config_schema() if self.config_schema else None) or BaseConfig()
         self.config = config
         self._kwargs = kwargs
         self._post_init()
@@ -165,15 +157,59 @@ class AbstractBase[
         for key, value in self._kwargs.items():
             setattr(self, key, value)
 
-        self.description = (
-            getattr(self, "description", None) or self.__class__.__doc__ or ""
-        ).strip()
+        self.description = (getattr(self, "description", None) or self.__class__.__doc__ or "").strip()
+
+        # Append input field hints to description if available
+        _in_schema = self._input_schema_info
+        if _in_schema:
+            self.description += f"\n\nINPUT FIELDS:\n{_in_schema}"
+        _out_schema = self._output_schema_info
+        if _out_schema:
+            self.description += f"\n\nOUTPUT FIELDS:\n{_out_schema}"
 
     def __set_attrs_from_config(self):
         if self.config is None:
             return
         for attr, value in self.config.model_dump().items():
             setattr(self, attr, value)
+
+    @property
+    def _input_schema_info(self) -> str:
+        """
+        Extract field names and descriptions from input schema.
+
+        Returns:
+            str: Formatted string with field information, empty if no input schema.
+        """
+        if not hasattr(self, "input_schema") or not self.input_schema:
+            return ""
+
+        fields = get_model_fields(self.input_schema, skip_no_description=False)
+        if not fields:
+            return ""
+
+        return "\n".join(
+            [f"- **{field['name']}**: {field.get('description', field['name'].replace('_', ' '))}" for field in fields],
+        )
+
+    @property
+    def _output_schema_info(self) -> str:
+        """
+        Extract field names and descriptions from output schema.
+
+        Returns:
+            str: Formatted string with field information, empty if no output schema.
+        """
+        if not hasattr(self, "output_schema") or not self.output_schema:
+            return ""
+
+        fields = get_model_fields(self.output_schema, skip_no_description=False)
+        if not fields:
+            return ""
+
+        return "\n".join(
+            [f"- **{field['name']}**: {field.get('description', field['name'].replace('_', ' '))}" for field in fields],
+        )
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> AbstractBase:
@@ -189,11 +225,7 @@ class AbstractBase[
                 **fields,
             )
 
-        config = (
-            cls.config_schema(**config_dict)
-            if cls.config_schema and config_dict
-            else None
-        )
+        config = cls.config_schema(**config_dict) if cls.config_schema and config_dict else None
         return cls(config=config, debug=debug)
 
     def _validate_input(self, params: Any) -> InSchema:
@@ -332,11 +364,7 @@ class UnrestrictedAbstractBase[
                 **fields,
             )
 
-        config = (
-            cls.config_schema(**config_dict)
-            if cls.config_schema and config_dict
-            else None
-        )
+        config = cls.config_schema(**config_dict) if cls.config_schema and config_dict else None
         return cls(config=config, debug=debug)
 
     def _validate_input(self, params: Any) -> InSchema:

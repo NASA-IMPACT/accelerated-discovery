@@ -16,7 +16,6 @@ from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
-from akd.utils import get_model_fields
 
 
 class BaseAgentConfig(BaseConfig):
@@ -118,25 +117,6 @@ class BaseAgent[
         pass
 
     @property
-    def _input_schema_info(self) -> str:
-        """
-        Extract field names and descriptions from input schema.
-
-        Returns:
-            str: Formatted string with field information, empty if no input schema.
-        """
-        if not hasattr(self, "input_schema") or not self.input_schema:
-            return ""
-
-        fields = get_model_fields(self.input_schema, skip_no_description=True)
-        if not fields:
-            return ""
-
-        return "\n".join(
-            [f"- **{field['name']}**: {field['description']}" for field in fields],
-        )
-
-    @property
     def _system_prompt(self) -> str:
         """
         Enhanced system prompt with optional input hints.
@@ -153,12 +133,6 @@ class BaseAgent[
         # Add agent description if available
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
-
-        # Add input schema hints if available
-        input_info = self._input_schema_info
-        if input_info:
-            content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
-
         return content
 
     @abstractmethod
