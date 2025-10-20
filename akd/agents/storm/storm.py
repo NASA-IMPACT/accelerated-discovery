@@ -9,7 +9,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 from loguru import logger
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, AnyUrl, Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
@@ -100,6 +100,18 @@ class StormAgentConfig(BaseAgentConfig):
         default=3,
         description="Maximum number of attempts to make before giving up, including the first",
     )
+    default_headers: dict = Field(
+        default=None,
+        description="Additional headers for the model",
+    )
+    long_context_base_url: AnyUrl = Field(
+        default=None,
+        description="Base URL for model.",
+    )
+    long_context_default_headers: dict = Field(
+        default=None,
+        description="Additional headers for the model",
+    )
 
 
 class StormAgent(BaseAgent):
@@ -116,12 +128,15 @@ class StormAgent(BaseAgent):
             model=self.config.model_name,
             temperature=self.config.temperature,
             api_key=self.config.api_key,
+            base_url=self.config.base_url,
+            default_headers=self.config.default_headers,
         )
-
         self.long_context_llm = ChatOpenAI(
             model=self.config.long_context_llm,
             temperature=self.config.temperature,
             api_key=self.config.api_key,
+            base_url=self.config.long_context_base_url,
+            default_headers=self.config.long_context_default_headers,
         )
 
         self.vectorstore = self.config.in_memory_vector_store(
