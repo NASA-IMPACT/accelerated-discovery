@@ -5,8 +5,8 @@ from typing import Any, cast
 
 import instructor
 import openai
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from litellm import acompletion, get_model_info
 from litellm.utils import trim_messages
@@ -74,8 +74,7 @@ class BaseAgentConfig(BaseConfig):
 
         if model_limit and self.max_tokens > model_limit:
             raise ValueError(
-                f"max_tokens ({self.max_tokens}) exceeds model '{self.model_name}' "
-                f"capacity ({model_limit} tokens)",
+                f"max_tokens ({self.max_tokens}) exceeds model '{self.model_name}' capacity ({model_limit} tokens)",
             )
         return self
 

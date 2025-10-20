@@ -85,9 +85,9 @@ class SearchResultItem(IOSchema):
     )
 
     extra: dict[str, Any] = Field(
-    default_factory=dict,
-    description="Extra information from the search result",
-)
+        default_factory=dict,
+        description="Extra information from the search result",
+    )
 
     @computed_field
     @property
@@ -106,6 +106,17 @@ class SearchResultItem(IOSchema):
     def validate_content(cls, v):
         """Convert None to empty string for content field."""
         return v if v is not None else ""
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def validate_score(cls, v):
+        """Convert numpy float types to Python float for JSON serialization."""
+        if v is None:
+            return None
+        # Handle numpy float types (float32, float64, etc.)
+        if hasattr(v, "item"):  # numpy scalar types have .item() method
+            return float(v.item())
+        return float(v)
 
 
 class ResearchData(BaseModel):
