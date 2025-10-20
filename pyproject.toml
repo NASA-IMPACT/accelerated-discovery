@@ -121,3 +121,4 @@ line-length = 120
 # Ensure LF line endings across platforms; used by Ruff formatter on save.
 line-ending = "lf"
 docstring-code-line-length = 120
+quote-style = "double"
