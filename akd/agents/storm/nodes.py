@@ -10,7 +10,7 @@ from akd.agents.search.aspect_search import (
     AspectSearchInputSchema,
 )
 
-from .structures import ResearchState
+from .structures import InterviewState, ResearchState
 from .tools import (
     get_draft_outline,
     get_draft_outline_from_sketch,
@@ -87,7 +87,7 @@ async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI) -> 
         Dict: Updated research state.
     """
 
-    def format_conversation(interview_state):
+    def format_conversation(interview_state: InterviewState) -> str:
         messages = interview_state["messages"]
         convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
         return f"Conversation with {interview_state['editor'].name}\n\n" + convo
@@ -96,10 +96,7 @@ async def refine_outline(state: ResearchState, long_context_llm: ChatOpenAI) -> 
         return {**state}
 
     conversations = "\n\n".join(
-        [
-            format_conversation(interview_state)
-            for interview_state in state["interview_results"]
-        ],
+        [format_conversation(interview_state) for interview_state in state["interview_results"]],
     )
     updated_outline = await get_refined_outline(
         topic=state["topic"],
@@ -121,10 +118,7 @@ async def index_references(state: ResearchState, vector_store: VectorStore) -> D
     Returns:
         ResearchState: Updated research state.
     """
-    reference_docs = [
-        Document(page_content=v, metadata={"source": k})
-        for k, v in state["references"].items()
-    ]
+    reference_docs = [Document(page_content=v, metadata={"source": k}) for k, v in state["references"].items()]
     await vector_store.aadd_documents(reference_docs)
     return state
 

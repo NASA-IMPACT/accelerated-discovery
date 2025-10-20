@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Optional
+from typing import Literal, Optional
 
 from langchain_community.vectorstores import InMemoryVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -14,6 +14,7 @@ from pydantic import AliasChoices, AnyUrl, Field
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.agents.search.aspect_search import AspectSearchConfig
+from akd.tools.search import SearchResultItem
 
 from .nodes import (
     conduct_interviews,
@@ -23,14 +24,14 @@ from .nodes import (
     write_article,
     write_sections,
 )
-from .structures import Outline, Perspectives, ResearchState
+from .structures import ArticleSection, Outline, Perspectives, ResearchState
 
 
 class StormInputSchema(InputSchema):
     """Input schema for storm agent"""
 
-    config: dict | None = Field(
-        default={"configurable": {"thread_id": "default-thread"}},
+    config: dict = Field(
+        default_factory=lambda: {"configurable": {"thread_id": "default-thread"}},
         description="The configuration dict to track the state of the storm agent.",
     )
     topic: str = Field(
@@ -59,7 +60,7 @@ class StormOutputSchema(OutputSchema):
         ...,
         description="References collected by aspect search",
     )
-    search_results: list = Field(
+    search_results: list[SearchResultItem] = Field(
         ...,
         description="Search results collected by aspect search",
     )
@@ -67,7 +68,7 @@ class StormOutputSchema(OutputSchema):
         ...,
         description="Outline of the article",
     )
-    sections: list = Field(
+    sections: list[ArticleSection] = Field(
         ...,
         description="List of sections of the article",
     )
@@ -89,7 +90,7 @@ class StormAgentConfig(BaseAgentConfig):
         description="Embedding model to index referenced documents.",
     )
     in_memory_vector_store: Optional[object] = Field(
-        default=InMemoryVectorStore,
+        default_factory=lambda: InMemoryVectorStore,
         description="Default vector store used for in-memory operations",
     )
     writer_context_k: int = Field(
@@ -111,6 +112,10 @@ class StormAgentConfig(BaseAgentConfig):
     long_context_default_headers: dict = Field(
         default=None,
         description="Additional headers for the model",
+    )
+    device: Literal["cpu", "gpu"] = Field(
+        default="cpu",
+        description="Device for the embedding model to use",
     )
 
 
@@ -135,14 +140,14 @@ class StormAgent(BaseAgent):
             model=self.config.long_context_llm,
             temperature=self.config.temperature,
             api_key=self.config.api_key,
-            base_url=str(self.config.long_context_base_url),
+            base_url=str(self.config.long_context_base_url or self.config.base_url),
             default_headers=self.config.long_context_default_headers,
         )
 
         self.vectorstore = self.config.in_memory_vector_store(
             embedding=HuggingFaceEmbeddings(
                 model_name=self.config.embedding_model,
-                model_kwargs={"device": "cpu"},
+                model_kwargs={"device": self.config.device},
             ),
         )
         self.retriever = self.vectorstore.as_retriever(k=self.config.writer_context_k)

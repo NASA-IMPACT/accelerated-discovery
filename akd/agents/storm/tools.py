@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import chain as as_runnable
@@ -52,11 +52,8 @@ def get_draft_outline_from_sketch(
     Returns:
         Outline: An outline generated for the topic containing sections, subsections and corresponsing descriptions.
     """
-    generate_outline_from_sketch = (
-        OUTLINE_FROM_SKETCH_PROMPT
-        | fast_llm.with_structured_output(
-            Outline,
-        )
+    generate_outline_from_sketch = OUTLINE_FROM_SKETCH_PROMPT | fast_llm.with_structured_output(
+        Outline,
     )
     return generate_outline_from_sketch.invoke(
         {"topic": topic, "outline_sketch": outline_sketch},
@@ -86,11 +83,8 @@ async def get_refined_outline(
     Returns:
         Outline: A refined outline object.
     """
-    refine_outline_chain = (
-        REFINE_OUTLINE_PROMPT
-        | long_context_llm.with_structured_output(
-            Outline,
-        )
+    refine_outline_chain = REFINE_OUTLINE_PROMPT | long_context_llm.with_structured_output(
+        Outline,
     )
     return await refine_outline_chain.ainvoke(
         {
@@ -129,32 +123,31 @@ async def retrieve(inputs: Dict, retriever: VectorStoreRetriever) -> Dict:
 
 async def section_writer(
     outline: Outline,
-    sections: List[OutlineSection],
+    sections: list[OutlineSection],
     topic: str,
     long_context_llm: ChatOpenAI,
     retriever: VectorStoreRetriever,
-) -> List[ArticleSection]:
+) -> list[ArticleSection]:
     """
     Generates article sections based on a given outline and topic by retrieving relevant context.
 
     Args:
         outline (Outline): The full outline structure for the article.
-        sections (List[OutlineSection]): List of sections to be written.
+        sections (list[OutlineSection]): List of sections to be written.
         topic (str): The user-defined topic.
         long_context_llm (ChatOpenAI): An LLM capable of handling long context.
         retriever (VectorStoreRetriever): Vectorstore retriever for fetching relevant documents.
 
     Returns:
-        List[ArticleSection]: A list of generated article sections.
+        list[ArticleSection]: A list of generated article sections.
     """
 
     @as_runnable
     async def section_writer(inputs: Dict) -> Dict:
         retrieved_data = await retrieve(inputs, retriever)
-        section = await (
-            SECTION_WRITER_PROMPT
-            | long_context_llm.with_structured_output(ArticleSection)
-        ).ainvoke({**retrieved_data})
+        section = await (SECTION_WRITER_PROMPT | long_context_llm.with_structured_output(ArticleSection)).ainvoke(
+            {**retrieved_data},
+        )
         return {"section": section, "references": retrieved_data["references"]}
 
     output = await section_writer.abatch(
