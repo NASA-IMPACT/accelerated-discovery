@@ -108,7 +108,7 @@ class AspectSearchAgent(BaseAgent):
             model=self.config.model_name,
             temperature=self.config.temperature,
             api_key=self.config.api_key,
-            base_url=self.config.base_url,
+            base_url=str(self.config.base_url),
             default_headers=self.config.default_headers,
         )
 

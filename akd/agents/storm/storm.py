@@ -128,14 +128,14 @@ class StormAgent(BaseAgent):
             model=self.config.model_name,
             temperature=self.config.temperature,
             api_key=self.config.api_key,
-            base_url=self.config.base_url,
+            base_url=str(self.config.base_url),
             default_headers=self.config.default_headers,
         )
         self.long_context_llm = ChatOpenAI(
             model=self.config.long_context_llm,
             temperature=self.config.temperature,
             api_key=self.config.api_key,
-            base_url=self.config.long_context_base_url,
+            base_url=str(self.config.long_context_base_url),
             default_headers=self.config.long_context_default_headers,
         )
 
