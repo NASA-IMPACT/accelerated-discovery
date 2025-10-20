@@ -162,10 +162,10 @@ class AbstractBase[
         # Append input field hints to description if available
         _in_schema = self._input_schema_info
         if _in_schema:
-            self.description += f"\n\nINPUT FIELDS:\n{_in_schema}"
+            self.description += f"\n\nINPUT FIELD DESCRIPTIONS:\n{_in_schema}"
         _out_schema = self._output_schema_info
         if _out_schema:
-            self.description += f"\n\nOUTPUT FIELDS:\n{_out_schema}"
+            self.description += f"\n\nOUTPUT FIELD DESCRIPTIONS:\n{_out_schema}"
 
     def __set_attrs_from_config(self):
         if self.config is None:
