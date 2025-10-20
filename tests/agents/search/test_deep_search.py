@@ -21,6 +21,7 @@ from akd.agents.search import (
     LitSearchAgentInputSchema,
     LitSearchAgentOutputSchema,
 )
+from akd.agents.search._base import SearchMode
 from akd.configs.project import get_project_settings
 from akd.structures import SearchResultItem
 from akd.tools.search._base import SearchToolInputSchema
@@ -749,7 +750,7 @@ class TestDeepLitSearchAgentIntegration:
         # Run the agent
         input_params = LitSearchAgentInputSchema(
             query="artificial intelligence applications in healthcare",
-            max_results=10,
+            search_mode=SearchMode.FAST,
         )
 
         result = await agent._arun(input_params)
@@ -1287,7 +1288,7 @@ class TestDeepLitSearchAgentRealLLM:
 
         input_params = LitSearchAgentInputSchema(
             query=query,
-            max_results=3,  # Reduced for faster testing
+            search_mode=SearchMode.FAST,  # Reduced for faster testing
         )
 
         # Run complete workflow

@@ -1,8 +1,9 @@
 import json
 import os
+import shutil
 import sys
 import tempfile
-import shutil
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -11,6 +12,12 @@ import requests
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from akd.agents.search import (
+    CodeSearchAgent,
+    CodeSearchAgentConfig,
+    LitSearchAgentInputSchema,
+    SearchMode,
+)
 from akd.tools.code_search import (
     CodeSearchToolInputSchema,
     GitHubCodeSearchTool,
@@ -18,11 +25,6 @@ from akd.tools.code_search import (
     LocalRepoCodeSearchToolConfig,
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
-)
-from akd.agents.search import (
-    CodeSearchAgent,
-    CodeSearchAgentConfig,
-    LitSearchAgentInputSchema,
 )
 from akd.tools.misc import Embedder
 from akd.tools.search import SearxNGSearchToolConfig
@@ -197,7 +199,9 @@ async def test_sde_api():
 @pytest.mark.asyncio
 async def test_sde_code_search(sde_tool):
     input_params = CodeSearchToolInputSchema(
-        queries=["weather prediction"], max_results=5, search_mode="keyword"
+        queries=["weather prediction"],
+        max_results=5,
+        search_mode="keyword",
     )
     # Input structure validation
     assert input_params.queries == ["weather prediction"]
@@ -213,6 +217,6 @@ async def test_sde_code_search(sde_tool):
 
 @pytest.mark.asyncio
 async def test_code_search_agent(code_search_agent):
-    input_params = LitSearchAgentInputSchema(query="weather prediction", max_results=5)
+    input_params = LitSearchAgentInputSchema(query="weather prediction", search_mode=SearchMode.FAST)
     output = await code_search_agent.arun(input_params)
     validate_output_structure(output)

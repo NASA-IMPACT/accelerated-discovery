@@ -1,30 +1,27 @@
 from __future__ import annotations
 
-from loguru import logger
-from pydantic import Field
+import os
 from typing import Literal
 
-import os
+from loguru import logger
+from pydantic import Field
 
+from akd.agents.query import FollowUpQueryAgent, QueryAgent
+from akd.agents.relevancy import MultiRubricRelevancyAgent
+from akd.configs.code_prompts import CODE_QUERY_PROMPT, CODE_RELEVANCY_PROMPT
 from akd.tools.code_search import (
+    CodeSearchTool,
+    CombinedCodeSearchTool,
+    CombinedCodeSearchToolConfig,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
-    CombinedCodeSearchTool,
-    CombinedCodeSearchToolConfig,
-    CodeSearchTool,
 )
-from akd.agents.query import FollowUpQueryAgent, QueryAgent
-from akd.agents.relevancy import MultiRubricRelevancyAgent
-from akd.agents.search import (
-    ControlledSearchAgent,
-    ControlledSearchAgentConfig,
-)
-from akd.configs.code_prompts import CODE_QUERY_PROMPT, CODE_RELEVANCY_PROMPT
 from akd.utils import is_server_available
 
 from ._base import BaseAgentConfig
+from .controlled import ControlledSearchAgent, ControlledSearchAgentConfig
 
 
 class CodeSearchAgentConfig(ControlledSearchAgentConfig):
@@ -115,7 +112,7 @@ class CodeSearchAgent(ControlledSearchAgent):
                 if not os.path.exists(self.config.data_file):
                     if self.config.debug:
                         logger.warning(
-                            f"[CodeSearchAgent] Local data_file not found: {self.config.data_file}. Skipping local search tool."
+                            f"[CodeSearchAgent] Local data_file not found: {self.config.data_file}. Skipping local search tool.",
                         )
                     return None
                 else:
@@ -125,7 +122,7 @@ class CodeSearchAgent(ControlledSearchAgent):
             else:
                 if self.config.debug:
                     logger.warning(
-                        "[CodeSearchAgent] No data_file or google_drive_file_id provided for local search. Skipping local search tool."
+                        "[CodeSearchAgent] No data_file or google_drive_file_id provided for local search. Skipping local search tool.",
                     )
                 return None
 
@@ -134,7 +131,7 @@ class CodeSearchAgent(ControlledSearchAgent):
         except Exception as e:
             if self.config.debug:
                 logger.warning(
-                    f"[CodeSearchAgent] LocalRepoCodeSearchTool unavailable; continuing without it. Reason: {e}"
+                    f"[CodeSearchAgent] LocalRepoCodeSearchTool unavailable; continuing without it. Reason: {e}",
                 )
             return None
 
@@ -193,7 +190,9 @@ class CodeSearchAgent(ControlledSearchAgent):
     def _setup_query_agent(self) -> QueryAgent:
         """Setup query agent with code-specific prompt."""
         config = BaseAgentConfig(
-            model_name=self.config.subagent_model, system_prompt=self.config.query_prompt, debug=self.config.debug
+            model_name=self.config.subagent_model,
+            system_prompt=self.config.query_prompt,
+            debug=self.config.debug,
         )
         return QueryAgent(config=config)
 
@@ -209,6 +208,8 @@ class CodeSearchAgent(ControlledSearchAgent):
     def _setup_relevancy_agent(self) -> MultiRubricRelevancyAgent:
         """Setup relevancy agent."""
         config = BaseAgentConfig(
-            model_name=self.config.subagent_model, system_prompt=self.config.relevancy_prompt, debug=self.config.debug
+            model_name=self.config.subagent_model,
+            system_prompt=self.config.relevancy_prompt,
+            debug=self.config.debug,
         )
         return MultiRubricRelevancyAgent(config=config)

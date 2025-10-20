@@ -2,42 +2,63 @@
 Base classes and shared utilities for literature search agents.
 """
 
-from typing import Any, Dict, List
+from abc import abstractmethod
+from enum import Enum
+from typing import Any, List
 
 from pydantic import BaseModel, Field
 
+from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResultItem
-from akd.tools.search._base import (
-    SearchTool,
-    SearchToolInputSchema,
-    SearchToolOutputSchema,
-)
+from akd.tools.search._base import SearchTool
+
+from .answer import QuestionAnsweringAgent, QuestionAnsweringAgentOutputSchema
 
 
-class SearchAgentInputSchema(SearchToolInputSchema):
+class SearchMode(str, Enum):
+    """Search mode determining the depth and breadth of search."""
+
+    FAST = "fast"  # 10 results - quick overview
+    MEDIUM = "medium"  # 20 results - balanced search
+    LONG = "long"  # 50 results - comprehensive search
+    EXTENSIVE = "extensive"  # 100 results - exhaustive search
+
+    def to_max_results(self) -> int:
+        """Convert search mode to maximum number of results."""
+        mapping = {
+            SearchMode.FAST: 10,
+            SearchMode.MEDIUM: 20,
+            SearchMode.LONG: 50,
+            SearchMode.EXTENSIVE: 100,
+        }
+        return mapping[self]
+
+
+class SearchAgentInputSchema(InputSchema):
     """Base input schema for literature search agents."""
 
-    query: str = Field(..., description="Research query to search for")
-    category: str = Field(default="science", description="Search category")
-    max_results: int = Field(
-        default=20,
-        description="Maximum number of results to return",
+    query: str = Field(..., description="Query to search for. Can be question or subject/topic of interest.")
+    search_mode: SearchMode = Field(
+        default=SearchMode.MEDIUM,
+        description="Search mode determining depth and breadth of search",
     )
-    queries: list[str] | None = Field(
-        default_factory=lambda: [],
-        description="List of additional queries to refine search",
-    )
+    additional_context: str | None = Field(default=None, description="Additional context for the search agent")
 
 
-class SearchAgentOutputSchema(SearchToolOutputSchema):
+class SearchAgentOutputSchema(OutputSchema):
     """Base output schema for literature search agents."""
 
-    results: List[SearchResultItem] = Field(..., description="List of search results")
-    category: str = Field(..., description="Search category")
+    answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
+    report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
+    results: list[SearchResultItem] = Field(..., description="List of search results")
     iterations_performed: int = Field(
         default=1,
         description="Number of search iterations performed",
+    )
+    extra: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Extra metadata and synthesis information",
     )
 
 
@@ -61,6 +82,15 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
     output_schema = SearchAgentOutputSchema
     config_schema = SearchAgentConfig
 
+    def __init__(
+        self,
+        answer_agent: QuestionAnsweringAgent | None = None,
+        config: SearchAgentConfig | None = None,
+        debug: bool = False,
+    ):
+        super().__init__(config=config, debug=debug)
+        self.answer_agent = answer_agent or QuestionAnsweringAgent()
+
     async def get_response_async(
         self,
         *args,
@@ -79,6 +109,58 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
+    async def _generate_answer(
+        self,
+        query: str,
+        search_results: List[SearchResultItem],
+        additional_context: str | None = None,
+        **kwargs,
+    ) -> QuestionAnsweringAgentOutputSchema:
+        """
+        Generate a concise shortform answer from search results.
+
+        Subclasses must implement this method to provide custom answer
+        generation logic (e.g., using an LLM).
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Additional keyword arguments (e.g., additional_context)
+
+        Returns:
+            A concise shortform answer to the query
+        """
+        return await self.answer_agent.arun(
+            self.answer_agent.input_schema(
+                query=query,
+                search_results=search_results,
+                additional_context=additional_context,
+            ),
+        )
+
+    @abstractmethod
+    async def _generate_report(
+        self,
+        query: str,
+        results: List[SearchResultItem],
+        **kwargs,
+    ) -> str:
+        """
+        Generate a detailed research report from search results.
+
+        Subclasses must implement this method to provide custom report
+        generation logic (e.g., using an LLM or synthesis agent).
+
+        Args:
+            query: The original research query
+            results: List of search results
+            **kwargs: Additional keyword arguments (e.g., additional_context, research_report)
+
+        Returns:
+            A detailed research report
+        """
+        raise NotImplementedError("Subclasses must implement _generate_report()")
+
 
 class LitSearchAgentInputSchema(SearchAgentInputSchema):
     """Base input schema for literature search agents."""
@@ -89,13 +171,9 @@ class LitSearchAgentInputSchema(SearchAgentInputSchema):
 class LitSearchAgentOutputSchema(SearchAgentOutputSchema):
     """Base output schema for literature search agents."""
 
-    report: str = Field(
-        default="",
+    report: str | None = Field(
+        default=None,
         description="Synthesized research report from the literature search",
-    )
-    extra: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Extra metadata and synthesis information",
     )
 
 

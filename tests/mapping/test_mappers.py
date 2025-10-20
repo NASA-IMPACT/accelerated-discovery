@@ -395,6 +395,8 @@ class TestRealAgentMappings:
 
         # Create realistic LitAgent output
         lit_output = LitSearchAgentOutputSchema(
+            answer="Recent research shows advances in solar cell efficiency.",
+            report="Detailed research report on solar cell technologies.",
             results=[
                 SearchResultItem(
                     url="https://example.com/solar-paper",
@@ -403,7 +405,6 @@ class TestRealAgentMappings:
                     query="solar cell technologies",
                 ),
             ],
-            category="science",
         )
 
         result = await mapper.arun(
@@ -434,14 +435,8 @@ class TestRealAgentMappings:
         # Should have high confidence for direct field mapping
         assert result.mapping_confidence > 0.8
         assert result.used_strategy == "DirectFieldMapper"
-        assert (
-            result.mapped_model.query
-            == "What is the efficiency of perovskite solar cells?"
-        )
-        assert (
-            result.mapped_model.content
-            == "Recent studies show perovskite solar cells achieve 25% efficiency..."
-        )
+        assert result.mapped_model.query == "What is the efficiency of perovskite solar cells?"
+        assert result.mapped_model.content == "Recent studies show perovskite solar cells achieve 25% efficiency..."
 
     @pytest.mark.asyncio
     async def test_full_agent_pipeline_mapping(self):
@@ -464,6 +459,8 @@ class TestRealAgentMappings:
         # Step 2: LitAgent output -> ExtractionAgent input
 
         lit_output = LitSearchAgentOutputSchema(
+            answer="Solar cell efficiency has reached 47.1%.",
+            report="Research report on solar cell efficiency improvements.",
             results=[
                 SearchResultItem(
                     url="https://example.com/research_paper.pdf",
@@ -472,7 +469,6 @@ class TestRealAgentMappings:
                     query="solar cell efficiency",
                 ),
             ],
-            category="science",
         )
 
         extraction_result = await mapper.arun(
@@ -659,8 +655,9 @@ class TestConfigurationScenarios:
 
         # Should use semantic mapping for similar field names
         source = LitSearchAgentOutputSchema(
+            answer="",  # Empty for simplicity
+            report="",  # Empty for simplicity
             results=[],  # Empty results for simplicity
-            category="science",
         )
 
         result = await mapper.arun(
