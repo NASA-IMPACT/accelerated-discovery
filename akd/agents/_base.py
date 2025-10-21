@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from abc import abstractmethod
 from typing import Any, cast
 
@@ -11,12 +12,18 @@ from langchain_openai import ChatOpenAI
 from litellm import acompletion, get_model_info
 from litellm.utils import trim_messages
 from loguru import logger
-from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    Field,
+    create_model,
+    field_validator,
+    model_validator,
+)
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
-from akd.utils import get_model_fields
 
 
 class BaseAgentConfig(BaseConfig):
@@ -40,6 +47,20 @@ class BaseAgentConfig(BaseConfig):
         default=False,
         description="Whether to include input schema field information in system prompt",
     )
+
+    @field_validator("input_hints", mode="before")
+    @classmethod
+    def warn_input_hints_deprecated(cls, v):
+        """Emit deprecation warning when input_hints is explicitly set."""
+        # Only warn if a non-default value is being set
+        if v is not None and v is not False:
+            warnings.warn(
+                "The 'input_hints' parameter is deprecated and will be removed in a future version. "
+                "Please use 'io_hints' instead, which is now available in the base BaseConfig class.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        return v
 
     # Token management
     max_tokens: int = Field(
@@ -118,25 +139,6 @@ class BaseAgent[
         pass
 
     @property
-    def _input_schema_info(self) -> str:
-        """
-        Extract field names and descriptions from input schema.
-
-        Returns:
-            str: Formatted string with field information, empty if no input schema.
-        """
-        if not hasattr(self, "input_schema") or not self.input_schema:
-            return ""
-
-        fields = get_model_fields(self.input_schema, skip_no_description=True)
-        if not fields:
-            return ""
-
-        return "\n".join(
-            [f"- **{field['name']}**: {field['description']}" for field in fields],
-        )
-
-    @property
     def _system_prompt(self) -> str:
         """
         Enhanced system prompt with optional input hints.
@@ -153,12 +155,6 @@ class BaseAgent[
         # Add agent description if available
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
-
-        # Add input schema hints if available
-        input_info = self._input_schema_info
-        if input_info:
-            content += f"\n\nINPUT FIELD DESCRIPTIONS:\n{input_info}"
-
         return content
 
     @abstractmethod
