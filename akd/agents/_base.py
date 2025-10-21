@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from abc import abstractmethod
 from typing import Any, cast
 
@@ -48,20 +47,6 @@ class BaseAgentConfig(BaseConfig):
         description="Whether to include input schema field information in system prompt",
     )
 
-    @field_validator("input_hints", mode="before")
-    @classmethod
-    def warn_input_hints_deprecated(cls, v):
-        """Emit deprecation warning when input_hints is explicitly set."""
-        # Only warn if a non-default value is being set
-        if v is not None and v is not False:
-            warnings.warn(
-                "The 'input_hints' parameter is deprecated and will be removed in a future version. "
-                "Please use 'io_hints' instead, which is now available in the base BaseConfig class.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        return v
-
     # Token management
     max_tokens: int = Field(
         default=CONFIG.model_config_settings.max_tokens,
@@ -98,6 +83,19 @@ class BaseAgentConfig(BaseConfig):
                 f"max_tokens ({self.max_tokens}) exceeds model '{self.model_name}' capacity ({model_limit} tokens)",
             )
         return self
+
+    @field_validator("input_hints", mode="before")
+    @classmethod
+    def warn_input_hints_deprecated(cls, v):
+        """Emit deprecation warning when input_hints is explicitly set."""
+        # Only warn if a non-default value is being set
+        if v is not None:
+            logger.warning(
+                "The 'input_hints' parameter is deprecated and will be removed in a future version. "
+                "Please use 'io_hints' instead, which is now available in the base BaseConfig class."
+                "Setting input_hints doesn't have any effect.",
+            )
+        return v
 
 
 class BaseAgent[
