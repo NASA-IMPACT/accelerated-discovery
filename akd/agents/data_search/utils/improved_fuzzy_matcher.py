@@ -53,7 +53,7 @@ def _extract_names_from_json(json_path: Union[str, Path]) -> List[str]:
         json_path: Path to the CMR JSON file
 
     Returns:
-        List of extracted names (short_name values)
+        List of extracted names (both short_name and long_name values)
     """
     json_path = Path(json_path)
     if not json_path.exists():
@@ -67,27 +67,28 @@ def _extract_names_from_json(json_path: Union[str, Path]) -> List[str]:
 
     names = set()
 
-    def extract_short_names(obj):
-        """Recursively extract short_name values from nested JSON structure."""
+    def extract_names(obj):
+        """Recursively extract short_name and long_name values from nested JSON structure."""
         if isinstance(obj, dict):
+            # Extract value field if present
+            if "value" in obj:
+                name = obj["value"]
+                if name and name != "NOT APPLICABLE":
+                    names.add(name)
+
+            # Traverse all subfields, including short_name and long_name
             for key, value in obj.items():
-                if key == "short_name" and isinstance(value, list):
-                    # Extract the "value" field from each short_name item
+                if key in ["short_name", "long_name"] and isinstance(value, list):
                     for item in value:
-                        if isinstance(item, dict) and "value" in item:
-                            name = item["value"]
-                            if name and name != "NOT APPLICABLE":
-                                names.add(name)
-                        elif isinstance(item, str) and item != "NOT APPLICABLE":
-                            # Handle cases where short_name is directly a string
-                            names.add(item)
-                else:
-                    extract_short_names(value)
+                        extract_names(item)
+                elif isinstance(value, (list, dict)):
+                    extract_names(value)
+
         elif isinstance(obj, list):
             for item in obj:
-                extract_short_names(item)
+                extract_names(item)
 
-    extract_short_names(data)
+    extract_names(data)
     return sorted(list(names))
 
 
