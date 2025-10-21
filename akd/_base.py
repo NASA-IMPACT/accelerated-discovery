@@ -5,7 +5,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Type, cast
 
 from loguru import logger
-from pydantic import BaseModel, ValidationError, create_model
+from pydantic import BaseModel, Field, ValidationError, create_model
 
 from akd.errors import SchemaValidationError
 from akd.utils import AsyncRunMixin, LangchainToolMixin, get_model_fields
@@ -22,7 +22,15 @@ class BaseConfig(BaseModel):
     }
 
     description: str | None = None
-    debug: bool = False  # Debug mode flag
+    io_hints: bool = Field(
+        default=True,
+        description="Whether to include input/output field hints in the agent/tool description. "
+        "This replaces the deprecated 'input_hints' parameter in BaseAgentConfig.",
+    )
+    debug: bool = Field(
+        default=False,
+        description="Whether to enable debug mode",
+    )
 
 
 class IOSchema(BaseModel):
@@ -159,13 +167,14 @@ class AbstractBase[
 
         self.description = (getattr(self, "description", None) or self.__class__.__doc__ or "").strip()
 
-        # Append input field hints to description if available
-        _in_schema = self._input_schema_info
-        if _in_schema:
-            self.description += f"\n\nINPUT FIELD DESCRIPTIONS:\n{_in_schema}"
-        _out_schema = self._output_schema_info
-        if _out_schema:
-            self.description += f"\n\nOUTPUT FIELD DESCRIPTIONS:\n{_out_schema}"
+        # Add input/output schema info to description if io_hints is True
+        if getattr(self, "io_hints", True):
+            _in_schema = self._input_schema_info
+            if _in_schema:
+                self.description += f"\n\nINPUT FIELD DESCRIPTIONS:\n{_in_schema}"
+            _out_schema = self._output_schema_info
+            if _out_schema:
+                self.description += f"\n\nOUTPUT FIELD DESCRIPTIONS:\n{_out_schema}"
 
     def __set_attrs_from_config(self):
         if self.config is None:
