@@ -4,7 +4,7 @@ import asyncio
 import os
 from typing import List, Literal, Optional
 
-import aiohttp
+import httpx
 from loguru import logger
 from pydantic import Field
 from pydantic.networks import HttpUrl
@@ -142,22 +142,22 @@ class SearxNGSearchTool(SearchTool):
 
     async def _fetch_search_results(
         self,
-        session: aiohttp.ClientSession,
+        client: httpx.AsyncClient,
         query: str,
-        category: Optional[str] = None,
+        category: str | None = None,
         page_num: int = 1,
-    ) -> List[dict]:
+    ) -> list[SearchResultItem]:
         """
         Fetches search results for a single query asynchronously.
 
         Args:
-            session (aiohttp.ClientSession): The aiohttp session to use for the request.
-            query (str): The search query.
-            category (Optional[str]): The category of the search query.
-            page_num (int): The page number to fetch.
+            client: The httpx async client to use for the request.
+            query: The search query.
+            category: The category of the search query.
+            page_num: The page number to fetch.
 
         Returns:
-            List[dict]: A list of search result dictionaries.
+            List of SearchResultItem objects.
 
         Raises:
             Exception: If the request to SearxNG fails.
@@ -180,98 +180,133 @@ class SearxNGSearchTool(SearchTool):
             )
 
         try:
-            async with session.get(
+            response = await client.get(
                 f"{self.base_url}/search",
                 params=query_params,
-            ) as response:
-                if response.status != 200:
-                    logger.error(
-                        f"HTTP Error fetching SearxNG results for query '{query}': {response.status} {response.reason}",
-                    )
-                    if self.debug:
-                        logger.debug(f"Request URL: {response.url}")
-                        logger.debug(f"Request Params: {query_params}")
-                    raise Exception(
-                        f"Failed to fetch search results for query '{query}': {response.status} {response.reason}",
-                    )
-                data = await response.json()
-                results = data.get("results", [])
+            )
 
-                # Add the query to each result
-                for result in results:
-                    result["query"] = query
+            if response.status_code != 200:
+                logger.error(
+                    f"HTTP Error fetching SearxNG results for query '{query}': {response.status_code} {response.reason_phrase}",
+                )
+                if self.debug:
+                    logger.debug(f"Request URL: {response.url}")
+                    logger.debug(f"Request Params: {query_params}")
+                raise Exception(
+                    f"Failed to fetch search results for query '{query}': {response.status_code} {response.reason_phrase}",
+                )
 
-                return results
+            data = response.json()
+            raw_results = data.get("results", [])
+
+            # Convert to SearchResultItem objects
+            search_results = []
+            for result in raw_results:
+                # Handle DOI normalization
+                doi = result.get("doi")
+                if doi:
+                    if isinstance(doi, list):
+                        doi = doi[0] if doi else None
+                    elif not isinstance(doi, str):
+                        doi = str(doi)
+                    result["doi"] = doi
+
+                search_results.append(
+                    SearchResultItem(
+                        url=result.pop("url", None),
+                        title=result.pop("title", "Untitled"),
+                        content=result.pop("content", ""),
+                        query=query,
+                        pdf_url=result.pop("pdf_url", None),
+                        category=result.pop("category", None),
+                        doi=result.pop("doi", None),
+                        published_date=result.pop("publishedDate", None),
+                        engine=result.pop("engine", None),
+                        tags=result.pop("tags", None),
+                        authors=result.pop("authors", None),
+                        score=result.pop("score", None),
+                        extra=result,  # Everything else goes in extra
+                    ),
+                )
+
+            return search_results
         except Exception as e:
             logger.error(f"Failed to fetch SearxNG results for query '{query}': {e}")
             raise
 
-    async def _process_results(
+    def _process_results(
         self,
-        results: List[dict],
-    ) -> List[dict]:
-        _n_orig = len(results)
-        results = filter(lambda r: r.get("score", 0) >= self.score_cutoff, results)
+        results: list[SearchResultItem],
+    ) -> list[SearchResultItem]:
+        """
+        Process and filter SearxNG search results.
+
+        Applies score cutoff filtering, strict engine filtering,
+        deduplication by URL, and sorting by score.
+
+        Args:
+            results: List of search result items to process.
+
+        Returns:
+            Processed and filtered list of search result items.
+        """
+        n_orig = len(results)
+
+        # Filter by score cutoff
+        filtered_results = [r for r in results if (r.score or 0) >= self.score_cutoff]
 
         # Apply strict engine filtering if enabled
         if self.strict and self.engines:
-            results = list(
-                filter(
-                    lambda r: any(
-                        self.engine_names_match(engine, r.get("engine", ""))
-                        for engine in self.engines
-                    ),
-                    results,
-                ),
-            )
+            filtered_results = [
+                r
+                for r in filtered_results
+                if any(self.engine_names_match(engine, r.engine or "") for engine in self.engines)
+            ]
             if self.debug:
                 logger.debug(
-                    f"Filtered {(_n_orig - len(results))} results based on strict engine filtering.",
+                    f"Filtered {n_orig - len(filtered_results)} results based on strict engine filtering.",
                 )
 
+        # Sort by score (descending)
         sorted_results = sorted(
-            results,
-            key=lambda x: x.get("score", 0),
+            filtered_results,
+            key=lambda x: x.score or 0,
             reverse=True,
         )
-        # Remove duplicates while preserving order
+
+        # Remove duplicates by URL while preserving order
         seen_urls = set()
         unique_results = []
         for result in sorted_results:
-            if "content" not in result or "title" not in result or "url" not in result:
+            # Skip results missing required fields
+            if not result.url or not result.title:
                 continue
-            if result["url"] not in seen_urls:
+            url_str = str(result.url)
+            if url_str not in seen_urls:
                 unique_results.append(result)
-                seen_urls.add(result["url"])
-            if "doi" in result:
-                if isinstance(result["doi"], list):
-                    result["doi"] = result["doi"][0]
-                elif not isinstance(result["doi"], str):
-                    result["doi"] = str(result["doi"])
+                seen_urls.add(url_str)
+
         return unique_results
 
     async def _fetch_search_results_paginated(
         self,
-        session: aiohttp.ClientSession,
+        client: httpx.AsyncClient,
         query: str,
-        category: Optional[str],
+        category: str | None,
         target_results: int,
-    ) -> List[dict]:
+    ) -> list[SearchResultItem]:
         """
         Fetches search results for a single query across multiple pages
         to reach the target number of results.
 
         Args:
-            session (aiohttp.ClientSession):
-                The aiohttp session to use for the request.
-            query (str):
-                The search query.
-            category (Optional[str]):
-                The category of the search query.
-            target_results (int): The target number of results to fetch.
+            client: The httpx async client to use for the request.
+            query: The search query.
+            category: The category of the search query.
+            target_results: The target number of results to fetch.
 
         Returns:
-            List[dict]: A list of search result dictionaries.
+            List of SearchResultItem objects.
         """
         all_results = []
         current_page = 1
@@ -282,7 +317,7 @@ class SearxNGSearchTool(SearchTool):
                     logger.debug(f"Fetching page {current_page} for query: {query}")
 
                 results = await self._fetch_search_results(
-                    session,
+                    client,
                     query,
                     category,
                     current_page,
@@ -294,7 +329,7 @@ class SearxNGSearchTool(SearchTool):
 
                 # Add and process so that the final list will be better
                 all_results.extend(results)
-                all_results = await self._process_results(all_results)
+                all_results = self._process_results(all_results)
                 current_page += 1
 
                 # Add a short delay to avoid hammering the SearxNG instance
@@ -313,88 +348,34 @@ class SearxNGSearchTool(SearchTool):
 
         return all_results
 
-    async def _arun(
+    async def _arun_single_query(
         self,
-        params: SearxNGSearchToolInputSchema,
-        max_results: Optional[int] = None,
-        **kwargs,
-    ) -> SearxNGSearchToolOutputSchema:
+        client: httpx.AsyncClient,
+        query: str,
+        category: str | None,
+        max_results: int,
+    ) -> list[SearchResultItem]:
         """
-        Runs the SearxNGTool asynchronously with the given parameters.
+        Fetch search results for a single query from SearxNG.
+
+        This method wraps the existing pagination logic to fetch results
+        for one query. Results are already SearchResultItem objects.
 
         Args:
-            params (SearxNGSearchToolInputSchema):
-                The input parameters for the tool, adhering to the input schema.
-            max_results (Optional[int]):
-                The maximum number of search results to return.
+            client: The httpx async client for making HTTP requests.
+            query: The search query string.
+            category: Optional category filter for the search.
+            max_results: Maximum number of results to fetch for this query.
 
         Returns:
-            SearxNGSearchToolOutputSchema:
-                The output of the tool, adhering to the output schema.
-
-        Raises:
-            ValueError: If the base URL is not provided.
-            Exception: If the request to SearxNG fails.
+            List of SearchResultItem objects for this query.
         """
-        max_results = max_results or params.max_results or self.max_results
-        multiplier = 1.5
-        target_results_per_query = min(
-            int((max_results * multiplier) / len(params.queries)),
-            self.max_pages * self.results_per_page,  # Don't exceed max possible results
-        )
-        # Log all queries being sent to SearxNG
-        if self.debug:
-            logger.info(f"🔍 SearxNG SEARCH QUERIES ({len(params.queries)} total):")
-            for i, query in enumerate(params.queries, 1):
-                logger.info(f"  {i}. '{query}'")
-            logger.info(f"🎯 Target results per query: {target_results_per_query}")
-            logger.info(f"📂 Category: {params.category}")
-            logger.info(f"🔧 Engines: {self.engines}")
-
-        async with aiohttp.ClientSession() as session:
-            tasks = [
-                self._fetch_search_results_paginated(
-                    session,
-                    query,
-                    params.category,
-                    target_results_per_query,
-                )
-                for query in params.queries
-            ]
-            results = await asyncio.gather(*tasks)
-
-        # Process final time
-        # No need to process title here
-        # because already done during pagination
-        filtered_results = await self._process_results(
-            [item for sublist in results for item in sublist],
-        )
-        filtered_results = filtered_results[:max_results]
-
-        if self.debug:
-            logger.debug(filtered_results)
-
-        results = [
-            SearchResultItem(
-                url=result.pop("url", None),
-                pdf_url=result.pop("pdf_url", None) or None,
-                title=result.pop("title", None)
-                or "Untitled",  # Ensure title is never None
-                content=result.pop("content", None),
-                query=result.pop("query", None)
-                or "Unknown query",  # Ensure query is never None
-                category=result.pop("category", None),
-                doi=result.pop("doi", None),
-                published_date=result.pop("publishedDate", None),
-                engine=result.pop("engine", None),
-                tags=result.pop("tags", None),
-                extra=result,  # Remaining keys in result
-            )
-            for result in filtered_results
-        ]
-        return SearxNGSearchToolOutputSchema(
-            results=results,
-            category=params.category,
+        # Use existing pagination logic (returns SearchResultItem objects)
+        return await self._fetch_search_results_paginated(
+            client,
+            query,
+            category,
+            max_results,
         )
 
     @staticmethod

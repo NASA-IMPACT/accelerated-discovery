@@ -85,12 +85,6 @@ class SerperSearchToolConfig(SearchToolConfig):
         le=10,
         description="Maximum number of pages to fetch per query. Defaults to 1 to limit credit usage.",
     )
-    result_multiplier: float = Field(
-        default=float(os.getenv("SERPER_RESULT_MULTIPLIER", "1.0")),
-        gt=0.0,
-        le=3.0,
-        description="Multiplier for over-fetching results to compensate for filtering (e.g., 1.5 fetches 50% extra). Use 1.0 to fetch exactly what's requested and save credits.",
-    )
 
     pre_authenticate: bool = Field(
         default=False,
@@ -236,7 +230,7 @@ class SerperSearchTool(SearchTool):
         query: str,
         category: str | None = None,
         page: int = 1,
-    ) -> tuple[list[dict], dict]:
+    ) -> tuple[list[SearchResultItem], dict]:
         """
         Fetches search results from Serper API for a single query.
 
@@ -247,7 +241,7 @@ class SerperSearchTool(SearchTool):
             page: Page number (1-indexed)
 
         Returns:
-            Tuple of (list of search result dictionaries, metadata dict containing extra fields)
+            Tuple of (list of SearchResultItem objects, metadata dict containing extra fields)
 
         Raises:
             Exception: If the API request fails
@@ -304,14 +298,28 @@ class SerperSearchTool(SearchTool):
             result_key = self._result_key_map.get(serper_category, "organic")
 
             # Extract results using the appropriate key
-            results = data.get(result_key, [])
+            raw_results = data.get(result_key, [])
 
-            # Add query and category to each result for consistency with SearxNG
-            for result in results:
-                result["query"] = query
-                if category:
-                    result["category"] = category
-                result["page"] = page
+            # Convert to SearchResultItem objects using pop pattern
+            search_results = []
+            for result in raw_results:
+                # Calculate score for this result (before popping fields used in calculation)
+                score = result.get("score") or self._calculate_score(result, len(search_results))
+
+                search_results.append(
+                    SearchResultItem(
+                        url=result.pop("link", None),
+                        title=result.pop("title", "Untitled"),
+                        content=result.pop("snippet", ""),
+                        query=query,
+                        pdf_url=result.pop("pdfUrl", None),
+                        category=category,
+                        published_date=result.pop("date", None),
+                        engine="serper",
+                        score=result.pop("score", score),  # Pop score or use calculated
+                        extra={**result, "page": page},  # Everything else + page goes in extra
+                    ),
+                )
 
             # Extract additional metadata fields for the extra field
             # Include everything except the results themselves
@@ -322,7 +330,7 @@ class SerperSearchTool(SearchTool):
             if self.debug and metadata:
                 logger.debug(f"Captured metadata fields: {list(metadata.keys())}")
 
-            return results, metadata
+            return search_results, metadata
 
         except httpx.RequestError as e:
             logger.error(f"Network error fetching Serper results for query '{query}': {e}")
@@ -362,10 +370,10 @@ class SerperSearchTool(SearchTool):
 
         return min(base_score + bonus, 1.0)
 
-    async def _process_results(
+    def _process_results(
         self,
-        results: list[dict],
-    ) -> list[dict]:
+        results: list[SearchResultItem],
+    ) -> list[SearchResultItem]:
         """
         Process and filter search results.
 
@@ -374,39 +382,37 @@ class SerperSearchTool(SearchTool):
         - Sorts by score (descending)
 
         Args:
-            results: Raw results from Serper API
+            results: Search result items from Serper API
 
         Returns:
             Processed and filtered results
         """
-        # Add scores if not present
-        for i, result in enumerate(results):
-            result["score"] = result.get("score", self._calculate_score(result, i))
-
         # Filter by score cutoff
         n_orig = len(results)
-        results = [r for r in results if r.get("score", 0) >= self.score_cutoff]
+        filtered_results = [r for r in results if (r.score or 0) >= self.score_cutoff]
 
-        if self.debug and n_orig > len(results):
+        if self.debug and n_orig > len(filtered_results):
             logger.debug(
-                f"Filtered {n_orig - len(results)} results based on score cutoff {self.score_cutoff}",
+                f"Filtered {n_orig - len(filtered_results)} results based on score cutoff {self.score_cutoff}",
             )
 
         # Sort by score (descending)
         sorted_results = sorted(
-            results,
-            key=lambda x: x.get("score", 0),
+            filtered_results,
+            key=lambda x: x.score or 0,
             reverse=True,
         )
 
-        # Remove duplicates while preserving order
+        # Remove duplicates by URL while preserving order
         seen_urls = set()
         unique_results = []
         for result in sorted_results:
-            url = result.get("link")
-            if url and url not in seen_urls:
+            if not result.url:
+                continue
+            url_str = str(result.url)
+            if url_str not in seen_urls:
                 unique_results.append(result)
-                seen_urls.add(url)
+                seen_urls.add(url_str)
 
         return unique_results
 
@@ -416,7 +422,7 @@ class SerperSearchTool(SearchTool):
         query: str,
         category: str | None,
         target_results: int,
-    ) -> tuple[list[dict], dict]:
+    ) -> tuple[list[SearchResultItem], dict]:
         """
         Fetches search results across multiple pages to reach target number.
 
@@ -427,7 +433,7 @@ class SerperSearchTool(SearchTool):
             target_results: Target number of results to fetch
 
         Returns:
-            Tuple of (list of search result dictionaries, aggregated metadata dict)
+            Tuple of (list of SearchResultItem objects, aggregated metadata dict)
         """
         all_results = []
         all_page_metadata = []  # Collect metadata from each page
@@ -455,7 +461,7 @@ class SerperSearchTool(SearchTool):
                     break
 
                 all_results.extend(results)
-                all_results = await self._process_results(all_results)
+                all_results = self._process_results(all_results)
 
                 # Collect metadata from each page for proper merging
                 if metadata:
@@ -529,17 +535,46 @@ class SerperSearchTool(SearchTool):
 
         return merged_metadata
 
+    async def _arun_single_query(
+        self,
+        client: httpx.AsyncClient,
+        query: str,
+        category: str | None,
+        max_results: int,
+    ) -> list[SearchResultItem]:
+        """
+        Fetch search results for a single query from Serper API.
+
+        Args:
+            client: The httpx async client for making HTTP requests.
+            query: The search query string.
+            category: Optional category filter for the search.
+            max_results: Maximum number of results to fetch for this query.
+
+        Returns:
+            List of SearchResultItem objects for this query.
+        """
+        # Fetch results with metadata (metadata not used in this method)
+        results, _ = await self._fetch_serper_results_paginated(
+            client,
+            query,
+            category,
+            max_results,
+        )
+
+        return results
+
     async def _arun(
         self,
         params: SerperSearchToolInputSchema,
         max_results: int | None = None,
-        **kwargs,
+        **kwargs,  # noqa: ARG002
     ) -> SerperSearchToolOutputSchema:
         """
-        Runs the SerperSearchTool asynchronously with the given parameters.
+        Override base _arun to preserve Serper-specific metadata handling.
 
-        This method implements the same interface as SearxNGSearchTool for
-        drop-in compatibility.
+        Serper returns valuable metadata (credits used, related searches, etc.)
+        that we want to preserve and merge across queries.
 
         Args:
             params: Input parameters with queries, category, and max_results
@@ -547,86 +582,69 @@ class SerperSearchTool(SearchTool):
             **kwargs: Additional keyword arguments
 
         Returns:
-            SerperSearchToolOutputSchema with search results
+            SerperSearchToolOutputSchema with search results and metadata
 
         Raises:
             ValueError: If API key is missing
             Exception: If API requests fail
         """
+        from akd.utils import reciprocal_rank_fusion
+
         max_results = max_results or params.max_results or self.max_results
         category = params.category or self.category
-
-        # Calculate target results per query (with configurable multiplier for filtering)
-        target_results_per_query = min(
-            int((max_results * self.result_multiplier) / len(params.queries)),
-            self.max_pages * self.num_per_page,  # Don't exceed max possible results
-        )
 
         # Log queries being sent to Serper
         if self.debug:
             logger.info(f"🔍 SERPER SEARCH QUERIES ({len(params.queries)} total):")
             for i, query in enumerate(params.queries, 1):
                 logger.info(f"  {i}. '{query}'")
-            logger.info(
-                f"🎯 Target results per query: {target_results_per_query} (multiplier: {self.result_multiplier}x)",
-            )
+            logger.info(f"🎯 Target results per query: {max_results} (full RRF)")
             logger.info(f"📂 Category: {category}")
             logger.info(f"🔬 Search type: {self._get_search_endpoint(category)}")
 
         async with httpx.AsyncClient() as client:
+            # Fetch results AND metadata for each query
             tasks = [
                 self._fetch_serper_results_paginated(
                     client,
                     query,
                     category,
-                    target_results_per_query,
+                    max_results,
                 )
                 for query in params.queries
             ]
             results_with_metadata = await asyncio.gather(*tasks)
 
         # Separate results and metadata
-        all_results = []
+        all_results_per_query = []
         all_metadata = []
         for results, metadata in results_with_metadata:
-            all_results.append(results)
+            # Results are already SearchResultItem objects
+            all_results_per_query.append(results)
             if metadata:
                 all_metadata.append(metadata)
 
-        # Flatten and process final results
-        flat_results = [item for sublist in all_results for item in sublist]
-        filtered_results = await self._process_results(flat_results)
-        filtered_results = filtered_results[:max_results]
+        # Apply RRF fusion
+        fused_results = reciprocal_rank_fusion(
+            *all_results_per_query,
+            key="url",
+            normalize=True,
+        )
+
+        # Trim to max_results
+        final_results = fused_results[:max_results]
 
         if self.debug:
-            logger.debug(f"Returning {len(filtered_results)} total results")
+            logger.debug(f"Returning {len(final_results)} total results after RRF")
 
         # Merge metadata from all queries
         merged_metadata = self._merge_metadata(all_metadata)
-
-        # Transform to SearchResultItem format
-        search_results = [
-            SearchResultItem(
-                url=result.pop("link", None),
-                title=result.pop("title", "Untitled"),
-                content=result.pop("snippet", ""),
-                query=result.pop("query", "Unknown query"),
-                pdf_url=result.pop("pdfUrl", None),
-                category=result.pop("category", None),
-                published_date=result.pop("date", None),
-                engine="serper",
-                score=result.pop("score", 0.0),
-                extra=result,  # Any remaining fields
-            )
-            for result in filtered_results
-        ]
-
         merged_metadata["total_pages_fetched"] = (
-            max([r.extra.get("page", 1) for r in search_results]) if search_results else 0
+            max([r.extra.get("page", 1) for r in final_results]) if final_results else 0
         )
 
         return SerperSearchToolOutputSchema(
-            results=search_results,
+            results=final_results,
             category=params.category,
             extra=merged_metadata,
         )

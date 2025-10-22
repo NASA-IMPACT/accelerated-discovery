@@ -5,7 +5,7 @@ import os
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import urljoin
 
-import aiohttp
+import httpx
 from loguru import logger
 from pydantic import SecretStr, field_validator
 from pydantic.fields import Field
@@ -74,9 +74,9 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
         gt=0,
         le=50,
     )
-    external_id: Optional[
-        Literal["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]
-    ] = Field(default="DOI")
+    external_id: Optional[Literal["DOI", "ARXIV", "PMID", "ACL", "MAG", "CorpusId", "PMCID", "URL"]] = Field(
+        default="DOI",
+    )
     debug: bool = False
 
     # Rate limiting configuration
@@ -156,7 +156,7 @@ class SemanticScholarSearchTool(
 
     async def _fetch_search_page(
         self,
-        session: aiohttp.ClientSession,
+        client: httpx.AsyncClient,
         query: str,
         offset: int,
         limit: int,
@@ -165,7 +165,7 @@ class SemanticScholarSearchTool(
         Fetches a single page of search results from Semantic Scholar.
 
         Args:
-            session: The aiohttp session.
+            client: The httpx async client.
             query: The search query.
             offset: The starting offset for results.
             limit: The number of results to fetch for this page.
@@ -197,31 +197,31 @@ class SemanticScholarSearchTool(
             # Apply rate limiting before making the request
             await self.rate_limiter.acquire()
 
-            async with session.get(
+            response = await client.get(
                 search_url,
                 params=params,
                 headers=headers,
-            ) as response:
-                response.raise_for_status()  # Raise exception for 4xx or 5xx errors
-                data = await response.json()
-                if self.debug:
-                    logger.debug(data)
-                    logger.debug(f"API Response Status: {response.status}")
-                    # Avoid logging full data if it's too large or sensitive
-                    logger.debug(
-                        f"Received {len(data.get('data', []))} items. Total: {data.get('total')}, Offset: {data.get('offset')}, Next: {data.get('next')}",
-                    )
-                return data
-        except aiohttp.ClientResponseError as e:
+            )
+            response.raise_for_status()  # Raise exception for 4xx or 5xx errors
+            data = response.json()
+            if self.debug:
+                logger.debug(data)
+                logger.debug(f"API Response Status: {response.status_code}")
+                # Avoid logging full data if it's too large or sensitive
+                logger.debug(
+                    f"Received {len(data.get('data', []))} items. Total: {data.get('total')}, Offset: {data.get('offset')}, Next: {data.get('next')}",
+                )
+            return data
+        except httpx.HTTPStatusError as e:
             logger.error(
-                f"HTTP Error fetching Semantic Scholar for query '{query}': {e.status} {e.message}",
+                f"HTTP Error fetching Semantic Scholar for query '{query}': {e.response.status_code} {e.response.reason_phrase}",
             )
             # Log request details that caused the error
-            logger.error(f"Request URL: {response.url}")
+            logger.error(f"Request URL: {e.request.url}")
             logger.error(f"Request Params: {params}")
-            logger.error(f"Response Headers: {response.headers}")
+            logger.error(f"Response Headers: {e.response.headers}")
             try:
-                error_body = await response.text()
+                error_body = e.response.text
                 logger.error(
                     f"Response Body: {error_body[:500]}",
                 )  # Log part of the body
@@ -284,21 +284,20 @@ class SemanticScholarSearchTool(
 
     async def _fetch_paper_by_external_id(
         self,
-        session: aiohttp.ClientSession,
+        client: httpx.AsyncClient,
         query: str,
         external_id: str = "DOI",
     ) -> list[PaperDataItem]:
         """
-        Fetches a single page of search results from Semantic Scholar.
+        Fetches a paper by external ID from Semantic Scholar.
 
         Args:
-            session: The aiohttp session.
-            query: The search query.
-            offset: The starting offset for results.
-            limit: The number of results to fetch for this page.
+            client: The httpx async client.
+            query: The search query (external ID value).
+            external_id: The type of external ID (DOI, ARXIV, etc.).
 
         Returns:
-            The JSON response dictionary from the API or None if an error occurs.
+            List containing the paper data item, or empty list if error occurs.
         """
         search_url = urljoin(
             str(self.config.base_url),
@@ -324,32 +323,32 @@ class SemanticScholarSearchTool(
             # Apply rate limiting before making the request
             await self.rate_limiter.acquire()
 
-            async with session.get(
+            response = await client.get(
                 search_url,
                 params=params,
                 headers=headers,
-            ) as response:
-                response.raise_for_status()  # Raise exception for 4xx or 5xx errors
-                data = await response.json()
-                if self.debug:
-                    logger.debug(data)
-                    logger.debug(f"API Response Status: {response.status}")
-                    # Avoid logging full data if it's too large or sensitive
-                    logger.debug(
-                        f"Received {len(data.get('data', []))} items. Total: {data.get('total')}, Offset: {data.get('offset')}, Next: {data.get('next')}",
-                    )
-                return [self._parse_paper(item=data, external_id=query)]
+            )
+            response.raise_for_status()  # Raise exception for 4xx or 5xx errors
+            data = response.json()
+            if self.debug:
+                logger.debug(data)
+                logger.debug(f"API Response Status: {response.status_code}")
+                # Avoid logging full data if it's too large or sensitive
+                logger.debug(
+                    f"Received {len(data.get('data', []))} items. Total: {data.get('total')}, Offset: {data.get('offset')}, Next: {data.get('next')}",
+                )
+            return [self._parse_paper(item=data, external_id=query)]
 
-        except aiohttp.ClientResponseError as e:
+        except httpx.HTTPStatusError as e:
             logger.error(
-                f"HTTP Error fetching Semantic Scholar for query '{query}': {e.status} {e.message}",
+                f"HTTP Error fetching Semantic Scholar for query '{query}': {e.response.status_code} {e.response.reason_phrase}",
             )
             # Log request details that caused the error
-            logger.error(f"Request URL: {response.url}")
+            logger.error(f"Request URL: {e.request.url}")
             logger.error(f"Request Params: {params}")
-            logger.error(f"Response Headers: {response.headers}")
+            logger.error(f"Response Headers: {e.response.headers}")
             try:
-                error_body = await response.text()
+                error_body = e.response.text
                 logger.error(
                     f"Response Body: {error_body[:500]}",
                 )  # Log part of the body
@@ -370,31 +369,18 @@ class SemanticScholarSearchTool(
         category: Optional[str],
     ) -> Optional[SearchResultItem]:
         """Parses a single item from the Semantic Scholar API response."""
-        if (
-            not item
-            or not item.get("paperId")
-            or not item.get("title")
-            or not item.get("url")
-        ):
+        if not item or not item.get("paperId") or not item.get("title") or not item.get("url"):
             return None  # Skip incomplete results
 
         external_ids = item.get("externalIds") or {}
         doi = external_ids.get("DOI")  # All papers do not have a DOI
 
         # Extract author names if requested and available
-        authors = [
-            author.get("name")
-            for author in item.pop("authors", [])
-            if author.get("name")
-        ]
+        authors = [author.get("name") for author in item.pop("authors", []) if author.get("name")]
 
         # Basic PDF URL check (often requires specific field request like 'openAccessPdf')
         pdf_url = None
-        if (
-            "openAccessPdf" in item
-            and item["openAccessPdf"]
-            and isinstance(item["openAccessPdf"], dict)
-        ):
+        if "openAccessPdf" in item and item["openAccessPdf"] and isinstance(item["openAccessPdf"], dict):
             pdf_url = item["openAccessPdf"].get("url") or None
 
         return SearchResultItem(
@@ -413,7 +399,7 @@ class SemanticScholarSearchTool(
 
     async def _fetch_search_results_paginated(
         self,
-        session: aiohttp.ClientSession,
+        client: httpx.AsyncClient,
         query: str,
         category: Optional[str],
         target_results_for_query: int,  # How many results to aim for *this specific query* before deduplication
@@ -434,8 +420,7 @@ class SemanticScholarSearchTool(
             if len(all_parsed_results) >= target_results_for_query:
                 if self.debug:
                     logger.debug(
-                        f"Query '{query}': Reached estimated target {target_results_for_query}, "
-                        f"stopping pagination.",
+                        f"Query '{query}': Reached estimated target {target_results_for_query}, stopping pagination.",
                     )
                 break
 
@@ -455,7 +440,7 @@ class SemanticScholarSearchTool(
             limit = max(limit, 1)  # Ensure limit is at least 1
 
             data = await self._fetch_search_page(
-                session,
+                client,
                 query,
                 offset=current_offset,
                 limit=limit,
@@ -565,14 +550,15 @@ class SemanticScholarSearchTool(
 
         Args:
             params: Input parameters including queries and category.
+            **kwargs: Additional keyword arguments including 'external_id'.
 
         Returns:
             List of PaperDataItem objects.
         """
-        async with aiohttp.ClientSession() as session:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             tasks = [
                 self._fetch_paper_by_external_id(
-                    session,
+                    client,
                     query,
                     kwargs.get("external_id", self.config.external_id),
                 )
@@ -582,70 +568,36 @@ class SemanticScholarSearchTool(
         results = [item for sublist in results_per_query for item in sublist]
         return results
 
-    async def _arun(
+    async def _arun_single_query(
         self,
-        params: SemanticScholarSearchToolInputSchema,
-        max_results: Optional[int] = None,
-        **kwargs,
-    ) -> SemanticScholarSearchToolOutputSchema:
+        client: httpx.AsyncClient,
+        query: str,
+        category: str | None,
+        max_results: int,
+    ) -> list[SearchResultItem]:
         """
-        Runs the SemanticScholarSearchTool asynchronously.
+        Fetch search results for a single query from Semantic Scholar.
+
+        This method wraps the existing pagination logic to fetch results
+        for one query. Results are already deduplicated per-query by paper_id
+        in _fetch_search_results_paginated.
 
         Args:
-            params: Input parameters including queries and category.
-            max_results: Override for the maximum number of final results.
+            client: The httpx async client for making HTTP requests.
+            query: The search query string.
+            category: Optional category filter for the search.
+            max_results: Maximum number of results to fetch for this query.
 
         Returns:
-            Output schema containing the list of search results.
+            List of SearchResultItem objects for this query.
         """
-        # Determine the final max_results limit
-        final_max_results = max_results or params.max_results or self.config.max_results
-
-        # Calculate a *target* number of results per query to aim for during pagination.
-        # Aim slightly higher than needed initially to account for deduplication across queries.
-        # Ensure it doesn't request impossible amounts per query based on page limits.
-        target_per_query = (
-            final_max_results  # Start by aiming for the final count per query
-        )
-        if len(params.queries) > 1:
-            # Fetch slightly more if multiple queries to allow for cross-query deduplication buffer
-            target_per_query = int(final_max_results / len(params.queries) * 1.2) + 2
-
-        max_possible_per_query = (
-            self.config.max_pages_per_query * self.config.results_per_page
-        )
-        target_results_per_query = min(target_per_query, max_possible_per_query)
-        target_results_per_query = max(target_results_per_query, 1)  # Ensure at least 1
-
-        if self.debug:
-            logger.debug(
-                "Running Semantic Scholar Search: ",
-                f"final_max_results={final_max_results}, "
-                f"target_per_query={target_results_per_query}, "
-                f"num_queries={len(params.queries)}",
-            )
-
-        async with aiohttp.ClientSession() as session:
-            tasks = [
-                self._fetch_search_results_paginated(
-                    session,
-                    query,
-                    params.category,
-                    target_results_per_query,
-                )
-                for query in params.queries
-            ]
-            results_per_query = await asyncio.gather(*tasks)
-
-        all_raw_results = [item for sublist in results_per_query for item in sublist]
-
-        # Final processing: deduplicate across queries and trim to max_results
-        final_results = await self._process_final_results(
-            all_raw_results,
-            final_max_results,
+        # Use existing pagination logic to fetch results
+        # (already handles per-query deduplication by paper_id)
+        results = await self._fetch_search_results_paginated(
+            client,
+            query,
+            category,
+            max_results,
         )
 
-        return SemanticScholarSearchToolOutputSchema(
-            results=final_results,
-            category=params.category,  # Pass through the requested category
-        )
+        return results
