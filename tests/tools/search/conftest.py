@@ -114,26 +114,78 @@ def mock_searxng_malformed_response() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_search_result_items() -> list[SearchResultItem]:
-    """Sample SearchResultItem objects for testing."""
+    """
+    Comprehensive SearchResultItem test data covering various scenarios:
+    - Different scores (high, medium, low)
+    - Different engines (google, arxiv, bing, google_scholar)
+    - Duplicates (same URL)
+    - Missing fields (empty title/content, None URL)
+    - DOI handling
+    """
     return [
+        # High score, google engine
         SearchResultItem(
-            url="https://example.com/ml-intro",
-            title="Introduction to Machine Learning",
-            content="Machine learning is a subset of artificial intelligence...",
-            query="machine learning",
-            category="science",
-            doi="10.1000/test123",
-            published_date="2023-01-15",
+            title="High Score",
+            content="test content",
+            url="http://test1.com",
+            score=0.9,
             engine="google",
+            query="test",
+            doi="10.1000/test123",
         ),
+        # Medium score, arxiv engine
         SearchResultItem(
-            url="https://example.com/dl-fundamentals",
-            title="Deep Learning Fundamentals",
-            content="Deep learning is a machine learning technique...",
-            query="deep learning",
-            category="science",
-            published_date="2023-02-10",
+            title="Medium Score",
+            content="test content",
+            url="http://test2.com",
+            score=0.3,
             engine="arxiv",
+            query="test",
+        ),
+        # Low score, google engine (below default 0.25 cutoff)
+        SearchResultItem(
+            title="Low Score",
+            content="test content",
+            url="http://test3.com",
+            score=0.1,
+            engine="google",
+            query="test",
+        ),
+        # Bing engine (for engine filtering tests)
+        SearchResultItem(
+            title="Bing Result",
+            content="test content",
+            url="http://test4.com",
+            score=0.7,
+            engine="bing",
+            query="test",
+        ),
+        # Duplicate URL (same as test1.com)
+        SearchResultItem(
+            title="Duplicate URL",
+            content="test content",
+            url="http://test1.com",
+            score=0.6,
+            engine="google_scholar",
+            query="test",
+        ),
+        # Missing title (empty string)
+        SearchResultItem(
+            title="",
+            content="test content",
+            url="http://test5.com",
+            score=0.8,
+            engine="arxiv",
+            query="test",
+        ),
+        # Missing content (empty string)
+        SearchResultItem(
+            title="No Content",
+            content="",
+            url="http://test6.com",
+            score=0.7,
+            engine="google",
+            query="test",
         ),
     ]
 
