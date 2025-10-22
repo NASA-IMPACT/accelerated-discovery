@@ -27,6 +27,10 @@ class MockSearchTool(SearchTool):
         super().__init__(config=None, debug=False)
         self.mock_results = mock_results or []
 
+    async def _arun_single_query(self, client, query, category, max_results):
+        """Barebone implementation of abstract method - not used in pipeline tests."""
+        return []
+
     async def _arun(self, params, **kwargs):
         return SearchToolOutputSchema(
             results=self.mock_results,
@@ -582,8 +586,5 @@ class TestIntegration:
         assert "Abstract: This paper discusses..." in enhanced_result.content
         assert "Full paper content from PDF..." in enhanced_result.content
         assert enhanced_result.extra["full_text_scraped"] is True
-        assert (
-            str(enhanced_result.extra["scraped_url"])
-            == "http://arxiv.org/pdf/1234.5678.pdf"
-        )
+        assert str(enhanced_result.extra["scraped_url"]) == "http://arxiv.org/pdf/1234.5678.pdf"
         assert enhanced_result.extra["resolver_used"] == ["MockResolver"]

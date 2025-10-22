@@ -115,8 +115,8 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
     @abstractmethod
     async def _arun_single_query(
         self,
-        client: httpx.AsyncClient,
         query: str,
+        client: httpx.AsyncClient,
         category: str | None,
         max_results: int,
     ) -> list[SearchResultItem]:
@@ -168,8 +168,8 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
             # Fetch max_results for EACH query in parallel
             tasks = [
                 self._arun_single_query(
-                    client,
                     query,
+                    client,
                     params.category,
                     final_max_results,
                 )

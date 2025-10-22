@@ -515,6 +515,13 @@ class SearchPipeline(SearchTool):
 
             return enhanced_result
 
+    async def _arun_single_query(
+        self,
+        *args,
+        **kwargs,
+    ) -> list[SearchResultItem]:
+        pass
+
     async def _arun(
         self,
         params: SearchToolInputSchema,

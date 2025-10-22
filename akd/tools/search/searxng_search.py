@@ -350,8 +350,8 @@ class SearxNGSearchTool(SearchTool):
 
     async def _arun_single_query(
         self,
-        client: httpx.AsyncClient,
         query: str,
+        client: httpx.AsyncClient,
         category: str | None,
         max_results: int,
     ) -> list[SearchResultItem]:
