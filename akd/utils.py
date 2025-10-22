@@ -1,15 +1,20 @@
 import asyncio
 import time
 from abc import abstractmethod
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import dateparser
 import gdown
+import numpy as np
 import requests
 from loguru import logger
 from pydantic import BaseModel, HttpUrl
+
+if TYPE_CHECKING:
+    from akd.structures import SearchResultItem
 
 try:
     from langchain_core.tools.structured import StructuredTool
@@ -296,3 +301,76 @@ def parse_date(date_input: str | int | None) -> datetime | None:
         parsed_date = dateparser.parse(date_input)
 
     return parsed_date
+
+
+def reciprocal_rank_fusion(
+    *results: list["SearchResultItem"],
+    k: int = 60,
+    key: str = "url",
+    normalize: bool = True,
+) -> list["SearchResultItem"]:
+    """
+    Fuse multiple ranked lists using Reciprocal Rank Fusion (RRF).
+
+    Formula: RRF_score(item) = Σ(1 / (k + rank)) across all lists containing item
+
+    Args:
+        results: Variable number of ranked result lists (one per query).
+        k: RRF constant (default 60, standard value from literature).
+        key: Attribute name to use as deduplication key (default "url").
+        normalize: If True, apply min-max normalization to scores [0.1, 1.0] (default True).
+                  Raw RRF scores are always preserved in item.extra["rrf_score"].
+
+    Returns:
+        Fused list sorted by RRF score (descending).
+
+    Examples:
+        >>> results_q1 = [item_a, item_b, item_c]
+        >>> results_q2 = [item_b, item_d, item_a]
+        >>> fused = reciprocal_rank_fusion(results_q1, results_q2)
+        # item_b and item_a appear in both, so they get boosted
+    """
+    # Return empty if no results
+    if not results:
+        return []
+
+    rrf_map = defaultdict(float)
+    item_map = {}
+
+    # Calculate RRF scores
+    for rank_list in results:
+        for rank, item in enumerate(rank_list, 1):
+            identifier = getattr(item, key, None)
+            if identifier:
+                rrf_map[identifier] += 1.0 / (rank + k)
+                if identifier not in item_map:
+                    item_map[identifier] = item.model_copy()  # Copy to avoid mutation
+
+    # Build results with RRF scores
+    fused_results = []
+    for identifier, rrf_score in sorted(rrf_map.items(), key=lambda x: x[1], reverse=True):
+        item = item_map[identifier]
+        item.score = rrf_score
+        item.extra = item.extra or {}
+        item.extra["rrf_score"] = rrf_score
+        fused_results.append(item)
+
+    if not fused_results:
+        return []
+
+    # Normalize scores if requested
+    if normalize:
+        scores = np.array([item.score for item in fused_results])
+        score_range = scores.max() - scores.min()
+
+        if score_range > 0:
+            # Scale to [0.1, 1.0] range to avoid 0.0 scores
+            normalized_scores = 0.1 + 0.9 * (scores - scores.min()) / score_range
+        else:
+            # All scores are the same
+            normalized_scores = np.ones_like(scores)
+
+        for item, norm_score in zip(fused_results, normalized_scores):
+            item.score = float(norm_score)
+
+    return fused_results
