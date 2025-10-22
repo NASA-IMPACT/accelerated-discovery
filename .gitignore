@@ -19,6 +19,7 @@ data/
 models/
 documents/
 akd/mapping/llm_generated_mappings.json
+llm_generated_mappings.json
 
 __marimo__/
 .DS_Store
