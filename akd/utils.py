@@ -334,10 +334,6 @@ def reciprocal_rank_fusion(
     if not results:
         return []
 
-    # Just return single result set if only one provided
-    if len(results) == 1:
-        return results[0]
-
     rrf_map = defaultdict(float)
     item_map = {}
 
@@ -358,6 +354,9 @@ def reciprocal_rank_fusion(
         item.extra = item.extra or {}
         item.extra["rrf_score"] = rrf_score
         fused_results.append(item)
+
+    if not fused_results:
+        return []
 
     # Normalize scores if requested
     if normalize:
