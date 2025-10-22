@@ -292,7 +292,6 @@ def sample_serper_config():
         hl="en",
         autocorrect=True,
         max_pages=5,
-        result_multiplier=1.0,
         pre_authenticate=False,
         debug=False,
     )
