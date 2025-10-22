@@ -4,7 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate
 # Outline prompts
 # =============================================================
 
-initial_outline_inst = """Write an outline for a Wikipedia page.
+_initial_outline_inst = """Write an outline for a Wikipedia page.
 
 Here is the format of your writing:
     1. Use "#" Title" to indicate section title, "##" Title" to indicate subsection title, "###" Title" to indicate subsubsection title, and so on.
@@ -13,7 +13,7 @@ Here is the format of your writing:
 
 DRAFT_OUTLINE_PROMPT = ChatPromptTemplate.from_messages(
     [
-        ("system", initial_outline_inst),
+        ("system", _initial_outline_inst),
         (
             "user",
             "Topic you want to write: {topic}\nWrite the Wikipedia page outline:\n",
@@ -22,7 +22,7 @@ DRAFT_OUTLINE_PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
-outline_from_sketch_inst = """Given a rough sketch of what an outline should look like, write an outline for a Wikipedia page.
+_outline_from_sketch_inst = """Given a rough sketch of what an outline should look like, write an outline for a Wikipedia page.
 
 Here is the format of your writing:
     1. Use "#" Title" to indicate section title, "##" Title" to indicate subsection title, "###" Title" to indicate subsubsection title, and so on.
@@ -31,7 +31,7 @@ Here is the format of your writing:
 
 OUTLINE_FROM_SKETCH_PROMPT = ChatPromptTemplate.from_messages(
     [
-        ("system", outline_from_sketch_inst),
+        ("system", _outline_from_sketch_inst),
         (
             "user",
             "Topic you want to write: {topic}\nHere's the rough outline: {outline_sketch}\nWrite the Wikipedia page outline:\n",
