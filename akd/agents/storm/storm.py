@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Literal, Optional
+from typing import Literal
 
 from langchain_community.vectorstores import InMemoryVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -9,7 +9,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
 from loguru import logger
-from pydantic import AliasChoices, AnyUrl, Field
+from pydantic import AliasChoices, AnyUrl, ConfigDict, Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
@@ -39,7 +39,7 @@ class StormInputSchema(InputSchema):
         validation_alias=AliasChoices("topic", "query"),
         description="The topic to create the article for.",
     )
-    outline_sketch: str = Field(
+    outline_sketch: str | None = Field(
         default=None,
         description="Rough sketch of the article's outline.",
     )
@@ -77,11 +77,13 @@ class StormOutputSchema(OutputSchema):
 class StormAgentConfig(BaseAgentConfig):
     """Configuration for Storm Agent"""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     long_context_llm: str = Field(
         default="gpt-4o-mini",
         description="Model used for longer context based operations",
     )
-    aspect_search_config: Optional[object] = Field(
+    aspect_search_config: AspectSearchConfig | None = Field(
         default_factory=AspectSearchConfig,
         description="Aspect search configuration",
     )
@@ -89,7 +91,7 @@ class StormAgentConfig(BaseAgentConfig):
         default="ibm-granite/granite-embedding-small-english-r2",
         description="Embedding model to index referenced documents.",
     )
-    in_memory_vector_store: Optional[object] = Field(
+    in_memory_vector_store: InMemoryVectorStore | None = Field(
         default_factory=lambda: InMemoryVectorStore,
         description="Default vector store used for in-memory operations",
     )
@@ -101,15 +103,15 @@ class StormAgentConfig(BaseAgentConfig):
         default=3,
         description="Maximum number of attempts to make before giving up, including the first",
     )
-    default_headers: dict = Field(
+    default_headers: dict | None = Field(
         default=None,
         description="Additional headers for the model",
     )
-    long_context_base_url: AnyUrl = Field(
+    long_context_base_url: AnyUrl | None = Field(
         default=None,
         description="Base URL for model.",
     )
-    long_context_default_headers: dict = Field(
+    long_context_default_headers: dict | None = Field(
         default=None,
         description="Additional headers for the model",
     )
