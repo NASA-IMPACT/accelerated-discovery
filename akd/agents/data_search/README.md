@@ -211,13 +211,53 @@ uv run examples/demo_loader.py captured_data/search_*.json --timing
 
 ## Configuration
 
-The agent uses configuration from `akd/configs/data_search_config.py`:
+The agent has two levels of configuration:
 
-- **MCP Endpoint**: CMR Model Context Protocol server URL
-- **Search Limits**: Page sizes, result counts, timeouts
-- **Parallelism**: Concurrent search execution settings
+**Workflow Limits** (`constants.py`):
+- Controls parallelism: topics, decompositions, approaches, search variations
+- Single source of truth for performance tuning
+- See [Performance Tuning](#performance-tuning) below
+
+**Runtime Behavior** (`config.py` files):
+- MCP endpoint URLs
+- Search limits (page sizes, result counts, timeouts)
+- Model selections (gpt-5-mini, gpt-5-nano)
+- Feature flags (e.g., `include_keyword_only_approach`)
 
 See [DATA_FLOW.md](DATA_FLOW.md) for complete configuration reference.
+
+## Performance Tuning
+
+All workflow limits are centralized in `akd/agents/data_search/constants.py` for easy performance tuning:
+
+```python
+# Universal limits (all handlers)
+MAX_TOPICS = 3                      # Research question → functional topics
+MIN_TOPICS = 1
+MAX_DECOMPOSITIONS_PER_TOPIC = 3    # Topic → observable phenomena
+MIN_DECOMPOSITIONS_PER_TOPIC = 1
+
+# CMR handler limits
+CMR_MAX_LLM_APPROACHES = 4          # LLM-generated approaches (before keyword-only)
+CMR_MIN_LLM_APPROACHES = 1
+CMR_MAX_TOTAL_APPROACHES_WITH_KEYWORD = 5  # After keyword-only injection (4 + 1)
+CMR_MAX_SEARCH_VARIATIONS_PER_APPROACH = 3 # Keyword variations per approach
+CMR_MIN_SEARCH_VARIATIONS_PER_APPROACH = 0
+```
+
+**How it works**:
+1. Edit values in `constants.py`
+2. Changes automatically propagate to:
+   - LLM prompts (via Instructor schema constraints)
+   - Pydantic validation (min_items/max_items)
+   - Calculated limits (e.g., max searchable queries = 5 × 3 = 15)
+
+**Tuning recommendations**:
+- **Faster execution**: Reduce MAX_TOPICS and MAX_DECOMPOSITIONS_PER_TOPIC
+- **Broader coverage**: Increase CMR_MAX_LLM_APPROACHES and CMR_MAX_SEARCH_VARIATIONS_PER_APPROACH
+- **API cost optimization**: Lower all max values, use `single_path_mode=True`
+
+See "Workflow Limits & Performance Tuning" section in [DATA_FLOW.md](DATA_FLOW.md) for complete details.
 
 ## Troubleshooting
 

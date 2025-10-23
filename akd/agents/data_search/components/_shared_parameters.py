@@ -13,6 +13,10 @@ from typing import Generic, List, TypeVar
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from ..constants import (
+    CMR_MAX_SEARCH_VARIATIONS_PER_APPROACH,
+    CMR_MIN_SEARCH_VARIATIONS_PER_APPROACH,
+)
 from ..utils.prompt_loader import load_and_format_prompt
 from ._base import BaseDataSearchComponent, TInput, TOutput
 from ._base_parameters import (
@@ -29,9 +33,9 @@ class SearchVariations(BaseModel):
     """Search variations for a single query approach."""
 
     search_strings: List[str] = Field(
-        description="List of search strings for separate searches (0-3 strings). Empty string means no additional search string needed (use known parameters only).",
-        min_items=0,
-        max_items=3,
+        description="List of search strings for separate searches. Empty string means no additional search string needed (use known parameters only).",
+        min_items=CMR_MIN_SEARCH_VARIATIONS_PER_APPROACH,
+        max_items=CMR_MAX_SEARCH_VARIATIONS_PER_APPROACH,
         default_factory=list,
     )
     reasoning: str = Field(

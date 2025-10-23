@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
 
+from ..constants import MAX_TOPICS, MIN_TOPICS
 from ..utils.prompt_loader import load_and_format_prompt
 from ._base import BaseDataSearchComponent
 
@@ -31,9 +32,9 @@ class TopicSplittingOutput(BaseModel):
 
     topics: List[Topic] = Field(
         ...,
-        description="List of functional topics identified in the research question (1-2 topics)",
-        min_items=1,
-        max_items=2,
+        description="List of functional topics identified in the research question",
+        min_items=MIN_TOPICS,
+        max_items=MAX_TOPICS,
     )
 
 

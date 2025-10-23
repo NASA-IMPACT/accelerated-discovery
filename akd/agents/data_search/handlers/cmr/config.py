@@ -66,6 +66,12 @@ class CMRHandlerConfig(DataSearchToolConfig):
         description="Enable parallel searches",
     )
 
+    # Query approach configuration
+    include_keyword_only_approach: bool = Field(
+        default=True,
+        description="Add keyword-only approach (no instrument/platform) based on first LLM approach to catch collections with incomplete metadata",
+    )
+
     # Component model configuration
     known_parameters_model: str = Field(
         default="gpt-5-mini",

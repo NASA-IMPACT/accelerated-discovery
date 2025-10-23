@@ -1,7 +1,7 @@
 """CMR-specific schemas for data search components."""
 
 import warnings
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -18,11 +18,16 @@ from akd.agents.data_search.components._base_ranking import (
     BaseFinalRankingOutput,
     FinalRankedItem,
 )
-from akd.agents.data_search.components._shared_parameters import SearchVariations
 from akd.agents.data_search.components.scientific_decomposition import (
     ScientificDecomposition,
 )
 from akd.agents.data_search.components.topic_splitting import Topic
+from akd.agents.data_search.constants import (
+    CMR_MAX_LLM_APPROACHES,
+    CMR_MAX_SEARCH_VARIATIONS_PER_APPROACH,
+    CMR_MAX_SEARCHABLE_QUERIES,
+    CMR_MIN_LLM_APPROACHES,
+)
 
 # Suppress Pydantic warning about property objects not being JSON serializable
 # These are runtime-only aliases and don't need to be in the JSON schema
@@ -118,9 +123,9 @@ class CMRKnownParametersOutput(BaseKnownParametersOutput[CMRQueryApproach]):
 
     query_approaches: List[CMRQueryApproach] = Field(
         ...,
-        description="List of CMR query approaches using known parameters (1-4 approaches, only create what's needed)",
-        min_items=1,
-        max_items=4,
+        description="List of CMR query approaches using known parameters (LLM generates these before keyword-only injection)",
+        min_items=CMR_MIN_LLM_APPROACHES,
+        max_items=CMR_MAX_LLM_APPROACHES,
     )
     reasoning: str = Field(
         ...,
@@ -226,23 +231,32 @@ class CMRSearchableQuery(BaseModel):
 class CMRSearchableParametersOutput(BaseSearchableParametersOutput[CMRSearchableQuery]):
     """CMR-specific output from searchable parameters component."""
 
-    # Calculate max searchable queries from actual schema constraints
-    # metadata[0] = MinLen, metadata[1] = MaxLen
-    MAX_SEARCHABLE_QUERIES: ClassVar[int] = (
-        CMRKnownParametersOutput.model_fields["query_approaches"].metadata[1].max_length
-        * SearchVariations.model_fields["search_strings"].metadata[1].max_length
-    )
-
     searchable_queries: List[CMRSearchableQuery] = Field(
         ...,
         description="Complete CMR queries with known + searchable parameters (expanded from approaches)",
         min_items=1,
-        max_items=MAX_SEARCHABLE_QUERIES,
+        max_items=CMR_MAX_SEARCHABLE_QUERIES,  # Absolute maximum (with keyword-only enabled)
     )
     keyword_strategy: str = Field(
         ...,
         description="Explanation of keyword selection strategy",
     )
+
+    def get_actual_max_queries(self) -> int:
+        """
+        Calculate the actual maximum queries based on the number of approaches used.
+
+        This accounts for whether keyword-only approach was included or not.
+        Returns the expected maximum: num_approaches * max_variations_per_approach.
+        """
+        if not self.searchable_queries:
+            return 0
+
+        # Count unique approach indices to determine how many approaches were actually used
+        unique_approach_indices = set(q.approach_index for q in self.searchable_queries)
+        num_approaches = len(unique_approach_indices)
+
+        return num_approaches * CMR_MAX_SEARCH_VARIATIONS_PER_APPROACH
 
 
 class CMRSearchableParametersInputSchema(InputSchema):
