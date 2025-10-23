@@ -55,7 +55,6 @@ class TestSearxNGFunctionalAPI:
 
             return tool.output_schema(
                 results=results,
-                category=params.category,
             )
 
         with patch.object(tool, "_arun", mock_arun):
@@ -69,7 +68,6 @@ class TestSearxNGFunctionalAPI:
 
             assert isinstance(result.results, list)
             assert len(result.results) > 0
-            assert result.category == "science"
 
             # Check that results have required fields
             for item in result.results:
@@ -113,7 +111,6 @@ class TestSearxNGFunctionalAPI:
 
             return tool.output_schema(
                 results=all_results[: max_results or params.max_results],
-                category=params.category,
             )
 
         with patch.object(tool, "_arun", mock_arun):
@@ -126,7 +123,6 @@ class TestSearxNGFunctionalAPI:
             result = await tool._arun(input_params)
 
             assert isinstance(result.results, list)
-            assert result.category == "science"
 
             # Should have results from multiple queries
             queries_found = {item.query for item in result.results}
@@ -144,7 +140,6 @@ class TestSearxNGFunctionalAPI:
         async def mock_arun(params, max_results=None, **kwargs):
             return tool.output_schema(
                 results=[],
-                category=params.category,
             )
 
         with patch.object(tool, "_arun", mock_arun):

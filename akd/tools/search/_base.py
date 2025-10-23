@@ -34,6 +34,10 @@ class SearchToolConfig(BaseToolConfig):
         10,
         description="Maximum number of search results to return.",
     )
+    timeout: int = Field(
+        30,
+        description="Timeout in seconds for search requests.",
+    )
 
 
 class SearchToolInputSchema(InputSchema):
@@ -60,10 +64,6 @@ class SearchToolOutputSchema(OutputSchema):
     results: list[SearchResultItem] = Field(
         ...,
         description="List of search result items",
-    )
-    category: str | None = Field(
-        None,
-        description="The category of the search results",
     )
     extra: dict | None = Field(
         default_factory=dict,
@@ -217,6 +217,5 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
 
         return self.output_schema(
             results=final_results,
-            category=params.category,
             extra=merged_extra,
         )

@@ -592,7 +592,7 @@ class SemanticScholarSearchTool(SearchTool):
         category = kwargs.get("category")
 
         # Create client per query (search I/O dominates client creation overhead)
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             results = await self._fetch_search_results_paginated(
                 client,
                 query,
@@ -602,5 +602,4 @@ class SemanticScholarSearchTool(SearchTool):
 
         return self.output_schema(
             results=results,
-            category=category,
         )

@@ -34,7 +34,6 @@ class MockSearchTool(SearchTool):
     async def _arun(self, params, **kwargs):
         return SearchToolOutputSchema(
             results=self.mock_results,
-            category="test",
         )
 
 
@@ -408,7 +407,6 @@ class TestSearchPipeline:
         result = await pipeline._arun(params)
 
         assert len(result.results) == 0
-        assert result.category == "test"
 
     @pytest.mark.asyncio
     async def test_arun_sequential_processing(self, sample_search_results):

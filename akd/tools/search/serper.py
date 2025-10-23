@@ -558,7 +558,7 @@ class SerperSearchTool(SearchTool):
         category = kwargs.get("category")
 
         # Create client per query
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             results, metadata = await self._fetch_serper_results_paginated(
                 client,
                 query,
@@ -568,7 +568,6 @@ class SerperSearchTool(SearchTool):
 
         return self.output_schema(
             results=results,
-            category=category,
             extra=metadata,
         )
 

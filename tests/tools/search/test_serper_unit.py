@@ -167,12 +167,10 @@ class TestSerperSearchToolSchemas:
 
         output = SerperSearchToolOutputSchema(
             results=sample_results,
-            category="science",
             extra={"credits": 1, "relatedSearches": ["test1", "test2"]},
         )
 
         assert len(output.results) == 2
-        assert output.category == "science"
         assert output.extra["credits"] == 1
         assert all(isinstance(item, SearchResultItem) for item in output.results)
 
@@ -645,7 +643,6 @@ class TestEndToEndBlackbox:
             # Verify output schema
             assert isinstance(result, SerperSearchToolOutputSchema)
             assert len(result.results) <= 3
-            assert result.category == "science"
 
             # Verify search results
             for item in result.results:
@@ -685,7 +682,6 @@ class TestEndToEndBlackbox:
             # Verify output schema
             assert isinstance(result, SerperSearchToolOutputSchema)
             assert len(result.results) <= 3
-            assert result.category == "general"
 
             # Verify search results
             for item in result.results:

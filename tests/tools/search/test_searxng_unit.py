@@ -124,11 +124,9 @@ class TestSearxNGSearchToolSchemas:
         """Test output schema validation."""
         output = SearxNGSearchToolOutputSchema(
             results=sample_search_result_items,
-            category="science",
         )
 
         assert len(output.results) > 0  # Should have multiple test items
-        assert output.category == "science"
         assert all(isinstance(item, SearchResultItem) for item in output.results)
 
 

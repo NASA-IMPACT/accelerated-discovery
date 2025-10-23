@@ -621,5 +621,4 @@ class SearchPipeline(SearchTool):
         # Return enhanced results
         return SearchToolOutputSchema(
             results=enhanced_results,
-            category=search_results.category,
         )
