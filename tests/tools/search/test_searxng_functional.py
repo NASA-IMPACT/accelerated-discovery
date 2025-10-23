@@ -435,12 +435,9 @@ class TestSearxNGResultProcessing:
         """Test deduplication of results across multiple queries."""
         tool = SearxNGSearchTool(config=sample_searxng_config)
 
-        # Mock to return duplicate results for different queries
+        # Mock to return duplicate results for different queries (already SearchResultItem objects)
         async def mock_fetch_search_results(session, query, category=None, page_num=1):
-            results = duplicate_results_response["results"].copy()
-            for result in results:
-                result["query"] = query
-            return results
+            return duplicate_results_response
 
         with patch.object(tool, "_fetch_search_results", mock_fetch_search_results):
             input_params = SearxNGSearchToolInputSchema(
@@ -510,33 +507,36 @@ class TestSearxNGResultProcessing:
 
             result = await tool._arun(input_params)
 
-            # When mocking _fetch_search_results_paginated, we bypass _process_results
-            # So all 3 results come through (no score filtering)
-            assert len(result.results) == 3
-            # Verify the low score item is present since we bypassed filtering
-            assert any("below" in str(item.url).lower() for item in result.results)
+            # With the refactored code, _arun_single_query now calls _process_results
+            # which applies score cutoff filtering (default 0.25)
+            # So the item with score 0.1 should be filtered out
+            assert len(result.results) == 2
+            # Verify the low score item is NOT present (filtered by score cutoff)
+            assert not any("below" in str(item.url).lower() for item in result.results)
+            # Verify high and above-cutoff items are present
+            urls = [str(item.url) for item in result.results]
+            assert any("high" in url.lower() for url in urls)
+            assert any("above" in url.lower() for url in urls)
 
     @pytest.mark.asyncio
     async def test_max_results_limiting(self, sample_searxng_config):
         """Test that results are limited by max_results parameter."""
         tool = SearxNGSearchTool(config=sample_searxng_config)
 
-        # Response with many results
+        # Response with many results (as SearchResultItem objects)
         many_results = [
-            {
-                "title": f"Result {i}",
-                "content": f"Content {i}",
-                "url": f"http://test{i}.com",
-                "score": 0.9 - i * 0.05,
-            }
+            SearchResultItem(
+                title=f"Result {i}",
+                content=f"Content {i}",
+                url=f"http://test{i}.com",
+                query="test query",
+                score=0.9 - i * 0.05,
+            )
             for i in range(20)  # 20 results
         ]
 
         async def mock_fetch_search_results(session, query, category=None, page_num=1):
-            results = many_results.copy()
-            for result in results:
-                result["query"] = query
-            return results
+            return many_results
 
         with patch.object(tool, "_fetch_search_results", mock_fetch_search_results):
             input_params = SearxNGSearchToolInputSchema(
@@ -605,12 +605,9 @@ class TestSearxNGErrorRecovery:
         """Test handling of malformed API responses."""
         tool = SearxNGSearchTool(config=sample_searxng_config)
 
-        # Mock to return malformed results
+        # Mock to return malformed results (already SearchResultItem objects from fixture)
         async def mock_fetch_search_results(session, query, category=None, page_num=1):
-            results = mock_searxng_malformed_response["results"].copy()
-            for result in results:
-                result["query"] = query
-            return results
+            return mock_searxng_malformed_response
 
         with patch.object(tool, "_fetch_search_results", mock_fetch_search_results):
             input_params = SearxNGSearchToolInputSchema(

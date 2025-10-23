@@ -5,7 +5,6 @@ from abc import abstractmethod
 from enum import Enum
 from typing import Literal
 
-import httpx
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
@@ -116,26 +115,48 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
     async def _arun_single_query(
         self,
         query: str,
-        client: httpx.AsyncClient,
-        category: str | None,
         max_results: int,
-    ) -> list[SearchResultItem]:
+        **kwargs,
+    ) -> SearchToolOutputSchema:
         """
         Fetch search results for a single query.
 
         Subclasses must implement this method to define their specific
-        search behavior (e.g., SearxNG, Serper, Semantic Scholar).
+        search behavior (e.g., SearxNG, Serper, Semantic Scholar, vector stores).
 
         Args:
-            client: The httpx async client for making HTTP requests.
             query: The search query string.
-            category: Optional category filter for the search.
             max_results: Maximum number of results to fetch for this query.
+            **kwargs: Implementation-specific parameters such as:
+                - category (str | None): Optional category filter for the search
+                - client: HTTP client for web-based search tools
+                - index: Vector index for local search tools
+                - Any other tool-specific parameters
 
         Returns:
-            List of SearchResultItem objects for this query.
+            SearchToolOutputSchema with results and any metadata for this query.
         """
         pass
+
+    def _merge_extra_metadata(self, all_extra: list[dict]) -> dict:
+        """
+        Merge extra metadata from multiple query results.
+
+        Default implementation merges all dicts using dictionary unpacking.
+        Later values override earlier ones for conflicting keys.
+        Subclasses can override for custom merging logic (e.g., summing credits).
+
+        Args:
+            all_extra: List of extra metadata dicts from each query result.
+
+        Returns:
+            Merged metadata dictionary.
+        """
+        merged = {}
+        for extra in all_extra:
+            if extra:
+                merged = {**merged, **extra}
+        return merged
 
     async def _arun(
         self,
@@ -149,13 +170,14 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         This method:
         1. Fetches max_results for EACH query (not divided)
         2. Applies RRF to aggregate and rank results across all queries
-        3. Trims final results to max_results
-        4. Returns unified, ranked results
+        3. Merges metadata from all queries
+        4. Trims final results to max_results
+        5. Returns unified, ranked results
 
         Args:
             params: Input parameters including queries and category.
             max_results: Override for maximum results to return.
-            **kwargs: Additional keyword arguments.
+            **kwargs: Additional keyword arguments passed to _arun_single_query.
 
         Returns:
             SearchToolOutputSchema with fused and ranked results.
@@ -163,19 +185,22 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         # Determine final max_results limit
         final_max_results = max_results or params.max_results or self.max_results
 
-        # Create HTTP client
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Fetch max_results for EACH query in parallel
-            tasks = [
-                self._arun_single_query(
-                    query,
-                    client,
-                    params.category,
-                    final_max_results,
-                )
-                for query in params.queries
-            ]
-            results_per_query = await asyncio.gather(*tasks)
+        # Fetch max_results for EACH query in parallel
+        # Each query execution handles its own resources (HTTP client, etc.)
+        tasks = [
+            self._arun_single_query(
+                query,
+                final_max_results,
+                category=params.category,
+                **kwargs,
+            )
+            for query in params.queries
+        ]
+        outputs = await asyncio.gather(*tasks)
+
+        # Extract results and metadata from each output
+        results_per_query = [output.results for output in outputs]
+        all_extra = [output.extra or {} for output in outputs]
 
         # Apply Reciprocal Rank Fusion to aggregate results
         fused_results = reciprocal_rank_fusion(
@@ -187,7 +212,11 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         # Trim to max_results
         final_results = fused_results[:final_max_results]
 
+        # Merge metadata from all queries
+        merged_extra = self._merge_extra_metadata(all_extra)
+
         return self.output_schema(
             results=final_results,
             category=params.category,
+            extra=merged_extra,
         )

@@ -538,113 +538,52 @@ class SerperSearchTool(SearchTool):
     async def _arun_single_query(
         self,
         query: str,
-        client: httpx.AsyncClient,
-        category: str | None,
         max_results: int,
-    ) -> list[SearchResultItem]:
+        **kwargs,
+    ) -> SerperSearchToolOutputSchema:
         """
         Fetch search results for a single query from Serper API.
 
+        This method creates its own HTTP client and fetches results with metadata.
+
         Args:
-            client: The httpx async client for making HTTP requests.
             query: The search query string.
-            category: Optional category filter for the search.
             max_results: Maximum number of results to fetch for this query.
+            **kwargs: Additional parameters including:
+                - category (str | None): Optional category filter for the search
 
         Returns:
-            List of SearchResultItem objects for this query.
+            SerperSearchToolOutputSchema with results and metadata for this query.
         """
-        # Fetch results with metadata (metadata not used in this method)
-        results, _ = await self._fetch_serper_results_paginated(
-            client,
-            query,
-            category,
-            max_results,
+        category = kwargs.get("category")
+
+        # Create client per query
+        async with httpx.AsyncClient() as client:
+            results, metadata = await self._fetch_serper_results_paginated(
+                client,
+                query,
+                category,
+                max_results,
+            )
+
+        return self.output_schema(
+            results=results,
+            category=category,
+            extra=metadata,
         )
 
-        return results
-
-    async def _arun(
-        self,
-        params: SerperSearchToolInputSchema,
-        max_results: int | None = None,
-        **kwargs,  # noqa: ARG002
-    ) -> SerperSearchToolOutputSchema:
+    def _merge_extra_metadata(self, all_extra: list[dict]) -> dict:
         """
-        Override base _arun to preserve Serper-specific metadata handling.
+        Override base merge to handle Serper-specific metadata merging.
 
-        Serper returns valuable metadata (credits used, related searches, etc.)
-        that we want to preserve and merge across queries.
+        Serper metadata includes credits that should be summed, and lists
+        like relatedSearches that should be extended.
 
         Args:
-            params: Input parameters with queries, category, and max_results
-            max_results: Override for maximum results to return
-            **kwargs: Additional keyword arguments
+            all_extra: List of extra metadata dicts from each query result.
 
         Returns:
-            SerperSearchToolOutputSchema with search results and metadata
-
-        Raises:
-            ValueError: If API key is missing
-            Exception: If API requests fail
+            Merged metadata dictionary with proper credit summing and list aggregation.
         """
-        from akd.utils import reciprocal_rank_fusion
-
-        max_results = max_results or params.max_results or self.max_results
-        category = params.category or self.category
-
-        # Log queries being sent to Serper
-        if self.debug:
-            logger.info(f"🔍 SERPER SEARCH QUERIES ({len(params.queries)} total):")
-            for i, query in enumerate(params.queries, 1):
-                logger.info(f"  {i}. '{query}'")
-            logger.info(f"🎯 Target results per query: {max_results} (full RRF)")
-            logger.info(f"📂 Category: {category}")
-            logger.info(f"🔬 Search type: {self._get_search_endpoint(category)}")
-
-        async with httpx.AsyncClient() as client:
-            # Fetch results AND metadata for each query
-            tasks = [
-                self._fetch_serper_results_paginated(
-                    client,
-                    query,
-                    category,
-                    max_results,
-                )
-                for query in params.queries
-            ]
-            results_with_metadata = await asyncio.gather(*tasks)
-
-        # Separate results and metadata
-        all_results_per_query = []
-        all_metadata = []
-        for results, metadata in results_with_metadata:
-            # Results are already SearchResultItem objects
-            all_results_per_query.append(results)
-            if metadata:
-                all_metadata.append(metadata)
-
-        # Apply RRF fusion
-        fused_results = reciprocal_rank_fusion(
-            *all_results_per_query,
-            key="url",
-            normalize=True,
-        )
-
-        # Trim to max_results
-        final_results = fused_results[:max_results]
-
-        if self.debug:
-            logger.debug(f"Returning {len(final_results)} total results after RRF")
-
-        # Merge metadata from all queries
-        merged_metadata = self._merge_metadata(all_metadata)
-        merged_metadata["total_pages_fetched"] = (
-            max([r.extra.get("page", 1) for r in final_results]) if final_results else 0
-        )
-
-        return SerperSearchToolOutputSchema(
-            results=final_results,
-            category=params.category,
-            extra=merged_metadata,
-        )
+        # Use existing _merge_metadata method for proper Serper handling
+        return self._merge_metadata(all_extra)

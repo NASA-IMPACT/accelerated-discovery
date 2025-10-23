@@ -12,10 +12,14 @@ from pydantic.fields import Field
 from pydantic.networks import HttpUrl
 
 from akd.structures import PaperDataItem, SearchResultItem
-from akd.tools._base import BaseTool
 from akd.utils import RateLimiter
 
-from ._base import SearchToolConfig, SearchToolInputSchema, SearchToolOutputSchema
+from ._base import (
+    SearchTool,
+    SearchToolConfig,
+    SearchToolInputSchema,
+    SearchToolOutputSchema,
+)
 
 
 class SemanticScholarSearchToolInputSchema(SearchToolInputSchema):
@@ -100,12 +104,7 @@ class SemanticScholarSearchToolConfig(SearchToolConfig):
         return v
 
 
-class SemanticScholarSearchTool(
-    BaseTool[
-        SemanticScholarSearchToolInputSchema,
-        SemanticScholarSearchToolOutputSchema,
-    ],
-):
+class SemanticScholarSearchTool(SearchTool):
     """
     Tool for performing searches on Semantic Scholar based on provided queries.
     """

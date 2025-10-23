@@ -351,31 +351,39 @@ class SearxNGSearchTool(SearchTool):
     async def _arun_single_query(
         self,
         query: str,
-        client: httpx.AsyncClient,
-        category: str | None,
         max_results: int,
-    ) -> list[SearchResultItem]:
+        **kwargs,
+    ) -> SearxNGSearchToolOutputSchema:
         """
         Fetch search results for a single query from SearxNG.
 
-        This method wraps the existing pagination logic to fetch results
-        for one query. Results are already SearchResultItem objects.
+        This method creates its own HTTP client and uses the existing
+        pagination logic to fetch results. Each query execution is independent.
 
         Args:
-            client: The httpx async client for making HTTP requests.
             query: The search query string.
-            category: Optional category filter for the search.
             max_results: Maximum number of results to fetch for this query.
+            **kwargs: Additional parameters including:
+                - category (str | None): Optional category filter for the search
 
         Returns:
-            List of SearchResultItem objects for this query.
+            SearxNGSearchToolOutputSchema with results and metadata for this query.
         """
-        # Use existing pagination logic (returns SearchResultItem objects)
-        return await self._fetch_search_results_paginated(
-            client,
-            query,
-            category,
-            max_results,
+        category = kwargs.get("category")
+
+        # Create client per query (search I/O dominates client creation overhead)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            results = await self._fetch_search_results_paginated(
+                client,
+                query,
+                category,
+                max_results,
+            )
+
+        results = self._process_results(results)
+        return self.output_schema(
+            results=results,
+            category=category,
         )
 
     @staticmethod
