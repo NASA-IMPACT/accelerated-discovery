@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from akd.structures import SearchResultItem
-from akd.tools.search.searxng_search import (
+from akd.tools.search.searxng import (
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
     SearxNGSearchToolInputSchema,

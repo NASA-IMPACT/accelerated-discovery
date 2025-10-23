@@ -11,10 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from akd.structures import SearchResultItem
-from akd.tools.search.searxng_search import (
-    SearxNGSearchTool,
-    SearxNGSearchToolInputSchema,
-)
+from akd.tools.search.searxng import SearxNGSearchTool, SearxNGSearchToolInputSchema
 
 
 class TestSearxNGFunctionalAPI:

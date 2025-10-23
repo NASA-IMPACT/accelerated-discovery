@@ -35,7 +35,7 @@ from ._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
-from .searxng_search import SearxNGSearchTool
+from .searxng import SearxNGSearchTool
 
 
 class SearchPipelineScrapingMode(str, Enum):

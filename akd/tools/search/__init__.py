@@ -11,13 +11,13 @@ from ._base import (
     SearchToolOutputSchema,
 )
 from .pipeline import SearchPipeline, SearchPipelineConfig, SearchPipelineScrapingMode
-from .searxng_search import (
+from .searxng import (
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
     SearxNGSearchToolInputSchema,
     SearxNGSearchToolOutputSchema,
 )
-from .semantic_scholar_search import (
+from .semantic_scholar import (
     SemanticScholarSearchTool,
     SemanticScholarSearchToolConfig,
     SemanticScholarSearchToolInputSchema,

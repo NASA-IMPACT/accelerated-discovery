@@ -8,7 +8,7 @@ without making actual HTTP requests.
 import pytest
 
 from akd.structures import SearchResultItem
-from akd.tools.search.searxng_search import (
+from akd.tools.search.searxng import (
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
     SearxNGSearchToolInputSchema,

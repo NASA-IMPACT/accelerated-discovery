@@ -33,7 +33,7 @@ from akd.agents.relevancy import (
 from akd.structures import SearchResultItem
 from akd.tools.search import SearchTool
 from akd.tools.search.pipeline import SearchPipeline
-from akd.tools.search.searxng_search import SearxNGSearchTool
+from akd.tools.search.searxng import SearxNGSearchTool
 
 from ._base import (
     LitBaseAgent,

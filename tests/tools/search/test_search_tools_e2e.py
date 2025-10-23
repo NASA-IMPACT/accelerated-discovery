@@ -11,7 +11,7 @@ import pytest
 
 from akd.structures import SearchResultItem
 from akd.tools.search import SearchToolOutputSchema
-from akd.tools.search.searxng_search import SearxNGSearchToolInputSchema
+from akd.tools.search.searxng import SearxNGSearchToolInputSchema
 from akd.tools.search.serper import SerperSearchToolInputSchema
 
 # ============================================================================
@@ -162,7 +162,7 @@ class TestSearxNGSearchToolE2E:
         query,
     ):
         """Test arun() with different science queries."""
-        from akd.tools.search.searxng_search import SearxNGSearchTool
+        from akd.tools.search.searxng import SearxNGSearchTool
 
         tool = SearxNGSearchTool(config=sample_searxng_config)
 
@@ -211,7 +211,7 @@ class TestSearxNGSearchToolE2E:
         max_results,
     ):
         """Test that arun() respects max_results parameter."""
-        from akd.tools.search.searxng_search import SearxNGSearchTool
+        from akd.tools.search.searxng import SearxNGSearchTool
 
         tool = SearxNGSearchTool(config=sample_searxng_config)
 
@@ -245,7 +245,7 @@ class TestSearxNGSearchToolE2E:
         sample_searxng_config,
     ):
         """Test arun() handles empty results gracefully."""
-        from akd.tools.search.searxng_search import SearxNGSearchTool
+        from akd.tools.search.searxng import SearxNGSearchTool
 
         tool = SearxNGSearchTool(config=sample_searxng_config)
 

@@ -29,8 +29,8 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessor,
     LinkRelevancyAssessorConfig,
 )
+from akd.tools.search import SearxNGSearchTool
 from akd.tools.search._base import QueryFocusStrategy
-from akd.tools.search.searxng_search import SearxNGSearchTool
 
 from ._base import (
     LitBaseAgent,
