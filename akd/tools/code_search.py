@@ -1,33 +1,36 @@
 from __future__ import annotations
 
-import os
-from typing import Literal, Optional, Literal
-import requests
-import json
-import time
 import asyncio
+import json
+import os
+import time
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
+import requests
 from loguru import logger
-from pydantic import ValidationError, computed_field, Field
-from pydantic.networks import HttpUrl
+from pydantic import Field, ValidationError, computed_field
 from scipy.spatial.distance import cdist
 from tenacity import retry, stop_after_attempt
 
 from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
-from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.misc import Embedder, HttpUrlAdapter, OpenAIEmbedder
+from akd.tools.reranker import (
+    CrossEncoderRerankerTool,
+    RerankerToolConfig,
+    RerankerToolInputSchema,
+)
 from akd.tools.search import (
+    SearchTool,
+    SearchToolConfig,
     SearchToolInputSchema,
     SearchToolOutputSchema,
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
 )
 from akd.utils import get_akd_root, google_drive_downloader
-from akd.tools.reranker import CrossEncoderRerankerTool, RerankerToolConfig
-from akd.tools.reranker import RerankerToolInputSchema
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
@@ -49,13 +52,13 @@ class CodeSearchToolOutputSchema(SearchToolOutputSchema):
     pass
 
 
-class CodeSearchToolConfig(BaseToolConfig):
+class CodeSearchToolConfig(SearchToolConfig):
     """Configuration for the code search tool."""
 
     pass
 
 
-class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSchema]):
+class CodeSearchTool(SearchTool):
     """
     Abstract base class for all code search tools.
     """
@@ -158,6 +161,9 @@ class CodeSearchTool(BaseTool[CodeSearchToolInputSchema, CodeSearchToolOutputSch
             # If sorting fails (mixed types), return as is
             return results
 
+    async def _arun_single_query(self, *args, **kwargs) -> CodeSearchToolOutputSchema:
+        raise NotImplementedError()
+
 
 class CombinedCodeSearchToolConfig(CodeSearchToolConfig):
     """
@@ -205,13 +211,19 @@ class CombinedCodeSearchTool(CodeSearchTool):
             raise ValueError(f"Invalid reranker tool: {config.reranker_tool}")
 
     async def _rerank_query(
-        self, query: str, all_results: list[SearchResultItem], top_k_per_query: int
+        self,
+        query: str,
+        all_results: list[SearchResultItem],
+        top_k_per_query: int,
     ) -> list[SearchResultItem]:
         """Rerank results for a single query."""
         query_results = [result for result in all_results if result.query == query]
         reranked_results = await self.reranker_tool.arun(RerankerToolInputSchema(query=query, results=query_results))
         reranked_results = reranked_results.results
         return reranked_results[:top_k_per_query]
+
+    async def _arun_single_query(self, *args, **kwargs):
+        pass
 
     async def _arun(
         self,
@@ -234,11 +246,11 @@ class CombinedCodeSearchTool(CodeSearchTool):
 
         top_k_per_query = params.top_k // len(params.queries)
         reranked_results = await asyncio.gather(
-            *[self._rerank_query(query, all_results, top_k_per_query) for query in params.queries]
+            *[self._rerank_query(query, all_results, top_k_per_query) for query in params.queries],
         )
         final_results = [result for query_results in reranked_results for result in query_results]
 
-        return self.output_schema(results=final_results, category="technology")
+        return self.output_schema(results=final_results)
 
 
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
@@ -247,9 +259,7 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     data_file: str = str(
-        get_akd_root()
-        / "docs"
-        / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v5.csv")
+        get_akd_root() / "docs" / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v5.csv"),
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
@@ -294,15 +304,11 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             logger.info("Loading data and embedding model...")
             self.repo_data = pd.read_csv(self.config.data_file)
 
-            missing = [
-                c
-                for c in self.config.context_columns
-                if c not in self.repo_data.columns
-            ]
+            missing = [c for c in self.config.context_columns if c not in self.repo_data.columns]
             if missing:
                 raise ValueError(
                     f"Missing columns in {self.config.data_file}: {missing}. "
-                    f"Available columns: {list(self.repo_data.columns)}"
+                    f"Available columns: {list(self.repo_data.columns)}",
                 )
 
             if self.config.embedder_type == "sentence-transformers":
@@ -312,7 +318,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
             if self.config.embeddings_column not in self.repo_data.columns:
                 logger.warning(
-                    f"No embeddings found in column '{self.config.embeddings_column}'. Generating them now..."
+                    f"No embeddings found in column '{self.config.embeddings_column}'. Generating them now...",
                 )
                 self.generate_embeddings(
                     force_regenerate=False,
@@ -371,16 +377,15 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         df_str = (
             self.repo_data[columns]
             .applymap(
-                lambda v: " ".join(map(str, v))
-                if isinstance(v, (list, tuple))
-                else ("" if v is None else str(v))
+                lambda v: " ".join(map(str, v)) if isinstance(v, (list, tuple)) else ("" if v is None else str(v)),
             )
             .fillna("")
         )
 
         # Concatenate across columns for each row
         texts = df_str.apply(
-            lambda row: " ".join(part for part in row if part), axis=1
+            lambda row: " ".join(part for part in row if part),
+            axis=1,
         ).tolist()
 
         if self.debug:
@@ -408,7 +413,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             return
 
         logger.info(
-            f"Generating embeddings for {len(self.repo_data)} texts in batches of {batch_size} using {self.config.embedder_type}..."
+            f"Generating embeddings for {len(self.repo_data)} texts in batches of {batch_size} using {self.config.embedder_type}...",
         )
 
         # Get texts to embed
@@ -497,9 +502,10 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
 
         return results.reset_index(drop=True).to_dict("records")
 
-    async def _arun(
+    async def _arun_single_query(
         self,
-        params: CodeSearchToolInputSchema,
+        query: str,
+        max_results: int,
         **kwargs,
     ) -> CodeSearchToolOutputSchema:
         """
@@ -507,24 +513,23 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         """
 
         all_results_data = []
-        for query in params.queries:
-            if self.debug:
-                logger.debug(
-                    f"Searching for query: '{query}' with top_k={params.top_k}",
-                )
+        if self.debug:
+            logger.debug(
+                f"Searching for query: '{query}' with top_k={max_results}",
+            )
 
-            try:
-                results = self.find_repo(
-                    query=query,
-                    top_k=params.top_k,
-                    remove_embedding_column=self.config.remove_embedding_column,
-                )
-                if results:
-                    for result in results:
-                        result["query"] = query
-                    all_results_data.extend(results)
-            except Exception as e:
-                logger.error(f"Error during search for query '{query}': {e}")
+        try:
+            results = self.find_repo(
+                query=query,
+                top_k=max_results,
+                remove_embedding_column=self.config.remove_embedding_column,
+            )
+            if results:
+                for result in results:
+                    result["query"] = query
+                all_results_data.extend(results)
+        except Exception as e:
+            logger.error(f"Error during search for query '{query}': {e}")
 
         formatted_results = [
             SearchResultItem(
@@ -537,7 +542,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             for result in all_results_data
         ]
         try:
-            deduped = self._deduplicate_results(formatted_results, key="url")
+            deduped: list[SearchResultItem] = self._deduplicate_results(formatted_results, key="url")
         except Exception as e:
             logger.error(f"Error deduplicating results: {e}")
 
@@ -549,7 +554,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         except Exception as e:
             logger.error(f"Error sorting repo list by score: {e}")
 
-        return self.output_schema(results=sorted_results, category="technology")
+        return self.output_schema(results=sorted_results)
 
 
 class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
@@ -586,39 +591,6 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
 
         super().__init__(config, debug)
 
-    @classmethod
-    def from_params(
-        cls,
-        base_url: Optional[HttpUrl] = None,
-        max_results: int = 10,
-        # engines parameter is omitted as it's hardcoded
-        max_pages: int = 5,
-        results_per_page: int = 10,
-        score_cutoff: float = 0.1,
-        debug: bool = False,
-    ) -> "GitHubCodeSearchTool":
-        """
-        Creates a GitHubSearchTool instance from individual parameters,
-        enforcing the 'github' engine.
-        """
-
-        base_url = base_url or HttpUrlAdapter.validate_python(
-            os.getenv("SEARXNG_BASE_URL", "http://localhost:8080"),
-        )
-        config = SearxNGSearchToolConfig(
-            base_url=base_url,
-            max_results=max_results,
-            # Enforce the specific engine for this tool
-            engines=["github"],
-            max_pages=max_pages,
-            results_per_page=results_per_page,
-            score_cutoff=score_cutoff,
-            debug=debug,
-            title="GitHub Search",
-            description="Performs a targeted search on GitHub.",
-        )
-        return cls(config, debug)
-
     async def _arun(
         self,
         params: CodeSearchToolInputSchema,
@@ -653,7 +625,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
             )
 
         # Call the parent's _arun method with the modified parameters
-        output = await super()._arun(params=params, max_results=max_results, **kwargs)
+        output = await super().arun(params=params, max_results=max_results, **kwargs)
 
         try:
             deduped = self._deduplicate_results(output.results, key="url")
@@ -715,9 +687,10 @@ class SDECodeSearchTool(CodeSearchTool):
             logger.debug(f"Response: {response.json()}")
         return response.json()["documents"]
 
-    async def _arun(
+    async def _arun_single_query(
         self,
-        params: CodeSearchToolInputSchema,
+        query: str,
+        max_results: int,
         **kwargs,
     ) -> CodeSearchToolOutputSchema:
         """
@@ -725,27 +698,26 @@ class SDECodeSearchTool(CodeSearchTool):
         """
 
         all_results_data = []
-        for query in params.queries:
-            query_results = []
-            if self.debug:
-                logger.debug(f"Searching for query: '{query}' with top_k={params.max_results}")
+        query_results = []
+        if self.debug:
+            logger.debug(f"Searching for query: '{query}' with top_k={max_results}")
 
-            try:
-                for page in range(self.max_pages):
-                    try:
-                        results = self.sde_search(page=page, query=query)
-                        if results:
-                            for result in results:
-                                result["query"] = query
-                            query_results.extend(results)
-                        else:
-                            break
-                    except Exception as e:
-                        logger.error(f"Error during search for query '{query}' on page {page}: {e}")
-                        continue  # continue to the next page
-                all_results_data.extend(query_results[: params.top_k])
-            except Exception as e:
-                logger.error(f"Error during search for query '{query}': {e}")
+        try:
+            for page in range(self.max_pages):
+                try:
+                    results = self.sde_search(page=page, query=query)
+                    if results:
+                        for result in results:
+                            result["query"] = query
+                        query_results.extend(results)
+                    else:
+                        break
+                except Exception as e:
+                    logger.error(f"Error during search for query '{query}' on page {page}: {e}")
+                    continue  # continue to the next page
+            all_results_data.extend(query_results[:max_results])
+        except Exception as e:
+            logger.error(f"Error during search for query '{query}': {e}")
 
         formatted_results = [
             SearchResultItem(
@@ -769,4 +741,4 @@ class SDECodeSearchTool(CodeSearchTool):
             )
         except Exception as e:
             logger.error(f"Error sorting repo list by score: {e}")
-        return self.output_schema(results=sorted_results, category="technology")
+        return self.output_schema(results=sorted_results)
