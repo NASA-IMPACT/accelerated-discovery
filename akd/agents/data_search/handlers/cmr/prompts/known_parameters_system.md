@@ -84,20 +84,21 @@ Known parameters are hard filters that can be directly identified without needin
 - Generate {min_approaches}-{max_approaches} different query approaches per decomposition
 - **Quality over quantity**: Only create as many approaches as genuinely needed - do NOT force using all {max_approaches} approaches
 - Each approach should represent a meaningfully different way to find the same scientific data
+- **Focus on specific approaches**: Each approach should specify concrete instrument/platform combinations
 - Create multiple approaches when:
   - Multiple instruments can provide the same measurement (e.g., Landsat vs Sentinel-2 for land cover)
   - Different time periods require different instruments (e.g., MODIS for 2004, VIIRS for 2025)
-  - Both specific and broad searches are valuable for comprehensive coverage
+  - Different instrument families offer complementary measurements (e.g., optical vs microwave sensors)
 - Create fewer approaches when:
   - Only one obvious instrument/platform combination exists
   - The decomposition is narrow and well-defined
   - Additional approaches would be redundant
 
 **Parameter Combination Logic:**
-- Don't over-constrain with too many parameters
-- Ensure at least one broad approach if specifics might be too restrictive
-- Balance precision with data availability
+- Each approach should have specific instrument/platform values when they can be determined
+- Don't over-constrain with too many parameters beyond instrument/platform
 - Consider operational timeframes of instruments
+- Balance specificity with data availability
 
 ## Detailed Examples
 
