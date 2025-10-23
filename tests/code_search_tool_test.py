@@ -169,7 +169,7 @@ async def test_github_code_search(github_tool):
     assert input_params.max_results == 10
 
     # Output structure validation
-    output = await github_tool._arun(input_params)
+    output = await github_tool.arun(input_params)
     validate_output_structure(output)
 
 

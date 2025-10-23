@@ -161,6 +161,9 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
         """
         raise NotImplementedError("Subclasses must implement _generate_report()")
 
+    async def _arun_single_query(self, *args, **kwargs) -> TOutput:
+        raise NotImplementedError("Subclasses must implement _arun_single_query()")
+
 
 class LitSearchAgentInputSchema(SearchAgentInputSchema):
     """Base input schema for literature search agents."""

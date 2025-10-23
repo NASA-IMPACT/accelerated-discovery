@@ -222,9 +222,6 @@ class CombinedCodeSearchTool(CodeSearchTool):
         reranked_results = reranked_results.results
         return reranked_results[:top_k_per_query]
 
-    async def _arun_single_query(self, *args, **kwargs):
-        pass
-
     async def _arun(
         self,
         params: CodeSearchToolInputSchema,
@@ -244,7 +241,7 @@ class CombinedCodeSearchTool(CodeSearchTool):
             except Exception as e:
                 logger.error(f"Error running tool {tool.__class__.__name__}: {e}")
 
-        top_k_per_query = params.top_k // len(params.queries)
+        top_k_per_query = params.top_k
         reranked_results = await asyncio.gather(
             *[self._rerank_query(query, all_results, top_k_per_query) for query in params.queries],
         )
@@ -591,53 +588,52 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
 
         super().__init__(config, debug)
 
-    async def _arun(
+    async def _arun_single_query(
         self,
-        params: CodeSearchToolInputSchema,
-        max_results: Optional[int] = None,
+        query: str,
+        max_results: int,
         **kwargs,
     ) -> CodeSearchToolOutputSchema:
         """
-        Runs the search tool, forcing the search category to 'technology'.
+        Fetch search results for a single query from GitHub via SearxNG.
 
-        This method intercepts the input parameters, sets the category,
-        and then calls the parent class's `_arun` method to perform the
-        actual search.
+        This implements the abstract method from SearchTool base class.
+        It forces category to 'technology', delegates to SearxNG, and applies post-processing.
 
         Args:
-            params (SearxNGSearchToolInputSchema):
-                The input parameters for the tool. The 'category' field
-                will be ignored and overridden.
-            max_results (Optional[int]):
-                The maximum number of search results to return.
+            query: The search query string.
+            max_results: Maximum number of results to fetch for this query.
+            **kwargs: Additional parameters.
 
         Returns:
-            SearxNGSearchToolOutputSchema:
-                The output of the tool, adhering to the output schema.
+            CodeSearchToolOutputSchema with deduplicated and sorted results.
         """
-
-        # Hardcode the category to 'technology' for every call
-        params.category = "technology"
+        # Force category to 'technology' for GitHub searches
+        kwargs["category"] = "technology"
 
         if self.debug:
             logger.debug(
-                f"GitHubSearchTool: Forcing category to '{params.category}' and engines to {self.config.engines}",
+                f"GitHubSearchTool: Searching for '{query}' with category=technology",
             )
 
-        # Call the parent's _arun method with the modified parameters
-        output = await super().arun(params=params, max_results=max_results, **kwargs)
+        # Call SearxNGSearchTool's _arun_single_query
+        output = await SearxNGSearchTool._arun_single_query(self, query, max_results, **kwargs)
 
+        # Post-process results: deduplicate and sort
         try:
             deduped = self._deduplicate_results(output.results, key="url")
         except Exception as e:
             logger.error(f"Error deduplicating results: {e}")
+            deduped = output.results
 
         try:
             sorted_results = self._sort_results(deduped, sort_by="score")
         except Exception as e:
             logger.error(f"Error sorting repo list by score: {e}")
+            sorted_results = deduped
 
-        return self.output_schema(results=sorted_results, category="technology")
+        # Convert output to CodeSearchToolOutputSchema
+        return self.output_schema(results=sorted_results, extra=output.extra or {})
 
 
 class SDECodeSearchToolConfig(CodeSearchToolConfig):
