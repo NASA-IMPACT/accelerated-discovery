@@ -5,11 +5,18 @@ from abc import abstractmethod
 from enum import Enum
 from typing import Literal
 
+from loguru import logger
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
+from akd.tools.reranker import (
+    RerankerTool,
+    RerankerToolConfig,
+    RerankerType,
+    create_reranker,
+)
 from akd.utils import reciprocal_rank_fusion
 
 
@@ -37,6 +44,20 @@ class SearchToolConfig(BaseToolConfig):
     timeout: int = Field(
         30,
         description="Timeout in seconds for search requests.",
+    )
+    reranker_type: RerankerType = Field(
+        default="none",
+        description=(
+            "Type of reranker to use for per-query result reranking before RRF fusion. "
+            "Options: 'cross_encoder' (semantic reranking), 'identity'/'no_op' (pass-through), "
+            "'none'/'nope' (no reranking, returns original results)."
+        ),
+    )
+    reranker_config: RerankerToolConfig | None = Field(
+        default=None,
+        description=(
+            "Optional custom configuration for the reranker tool. If None, uses default RerankerToolConfig settings."
+        ),
     )
 
 
@@ -87,11 +108,29 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         input_schema (SearchToolInputSchema): The schema for the input data.
         output_schema (SearchToolOutputSchema): The schema for the output data.
         config_schema (SearchToolConfig): Configuration schema for the tool.
+        reranker (RerankerTool): Reranker instance for per-query result reranking.
     """
 
     input_schema = SearchToolInputSchema
     output_schema = SearchToolOutputSchema
     config_schema = SearchToolConfig
+
+    def _post_init(self) -> None:
+        """
+        Post-initialization hook to set up the reranker.
+
+        Creates a reranker instance based on config.reranker_type using
+        the factory pattern. This allows per-query reranking before RRF fusion.
+        """
+        super()._post_init()
+
+        # Initialize reranker using factory
+        # Attributes are already set from config by parent's _post_init
+        self.reranker: RerankerTool = create_reranker(
+            reranker_type=self.reranker_type,  # type: ignore
+            config=self.reranker_config,  # type: ignore
+            debug=self.debug,
+        )
 
     def _process_results(
         self,
@@ -138,6 +177,26 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         """
         pass
 
+    async def _rerank(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
+        """
+        Rerank search results for a single query.
+
+        Args:
+            query: The search query used to obtain the results.
+            results: List of search results to rerank.
+
+        Returns:
+            Reranked list of search results.
+        """
+        if not results:
+            return results
+
+        if self.debug:
+            logger.debug(f"Reranking {len(results)} results for query: {query} | Reranker type: {self.reranker}")  # type: ignore
+        reranker_input = self.reranker.input_schema(query=query, results=results)
+        reranked_output = await self.reranker._arun(reranker_input)
+        return reranked_output.results
+
     def _merge_extra_metadata(self, all_extra: list[dict]) -> dict:
         """
         Merge extra metadata from multiple query results.
@@ -165,14 +224,15 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         **kwargs,  # noqa: ARG002
     ) -> SearchToolOutputSchema:
         """
-        Runs the search tool using Reciprocal Rank Fusion (RRF) pattern.
+        Runs the search tool using Reciprocal Rank Fusion (RRF) pattern with optional reranking.
 
         This method:
         1. Fetches max_results for EACH query (not divided)
-        2. Applies RRF to aggregate and rank results across all queries
-        3. Merges metadata from all queries
-        4. Trims final results to max_results
-        5. Returns unified, ranked results
+        2. Reranks each query's results independently (if reranker is configured)
+        3. Applies RRF to aggregate and rank results across all queries
+        4. Merges metadata from all queries
+        5. Trims final results to max_results
+        6. Returns unified, ranked results
 
         Args:
             params: Input parameters including queries and category.
@@ -206,9 +266,15 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         results_per_query = [output.results for output in outputs]
         all_extra = [output.extra or {} for output in outputs]
 
-        # Apply Reciprocal Rank Fusion to aggregate results
+        # Per-query reranking before RRF fusion
+        # Rerank each query's results independently for better relevance
+        reranked_results_per_query = [
+            await self._rerank(query, results) for query, results in zip(params.queries, results_per_query)
+        ]
+
+        # Apply Reciprocal Rank Fusion to aggregate reranked results
         fused_results = reciprocal_rank_fusion(
-            *results_per_query,
+            *reranked_results_per_query,
             key="url",
             normalize=True,
         )

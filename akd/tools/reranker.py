@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from typing import Literal
 
 import numpy as np
 from loguru import logger
@@ -10,6 +11,9 @@ from sentence_transformers import CrossEncoder
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
+
+# Reranker type options for factory function
+RerankerType = Literal["cross_encoder", "identity", "no_op", "nope", "none"]
 
 
 class RerankerToolConfig(BaseToolConfig):
@@ -128,6 +132,12 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
 
         return RerankerToolOutputSchema(query=params.query, results=ranked_results)
 
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__} | (model_name={self.config.model_name}, deduplication={self.config.deduplication}, sort_key={self.config.sort_key})"  # type: ignore
+
+    def __repr__(self) -> str:
+        return str(self)
+
 
 class CrossEncoderRerankerTool(RerankerTool):
     """
@@ -155,3 +165,86 @@ class CrossEncoderRerankerTool(RerankerTool):
 
         # sort results
         return await self._sort_results(results, sort_key=self.config.sort_key)
+
+
+class NoOpRerankerTool(RerankerTool):
+    async def _rerank_results(self, query: str, results: list[SearchResultItem]) -> list[SearchResultItem]:
+        return results
+
+    def __str__(self) -> str:
+        return self.__class__.__name__
+
+
+def create_reranker(
+    reranker_type: RerankerType,
+    config: RerankerToolConfig | None = None,
+    debug: bool = False,
+) -> RerankerTool:
+    """
+    Factory function to create reranker instances by type.
+
+    This function provides a clean way to instantiate different reranker
+    implementations without hardcoded if/elif chains. New reranker types
+    can be added by implementing the RerankerTool class and adding a
+    branch here.
+
+    Args:
+        reranker_type: Type of reranker to create. Options:
+            - "cross_encoder": CrossEncoderRerankerTool using cross-encoder models
+            - "identity": NoOpRerankerTool (pass-through, returns results unchanged)
+            - "no_op": NoOpRerankerTool (pass-through, returns results unchanged)
+            - "nope": NoOpRerankerTool (pass-through, returns results unchanged)
+            - "none": NoOpRerankerTool (pass-through, returns results unchanged)
+        config: Optional reranker configuration. If None, uses default config.
+        debug: Enable debug mode for logging.
+
+    Returns:
+        RerankerTool instance (never None - uses NoOpRerankerTool as default)
+
+    Raises:
+        ValueError: If reranker_type is not recognized.
+
+    Example:
+        >>> # Create cross-encoder reranker
+        >>> reranker = create_reranker("cross_encoder")
+        >>>
+        >>> # Create with custom config
+        >>> config = RerankerToolConfig(model_name="custom-model")
+        >>> reranker = create_reranker("cross_encoder", config=config)
+        >>>
+        >>> # No reranking - returns NoOpRerankerTool
+        >>> reranker = create_reranker("none")
+        >>> reranker = create_reranker("nope")
+        >>>
+        >>> # Identity/pass-through (for testing)
+        >>> reranker = create_reranker("identity")
+    """
+    # Cross-encoder reranking
+    if reranker_type == "cross_encoder":
+        return CrossEncoderRerankerTool(config=config, debug=debug)
+
+    # No-op/identity reranking - pass-through that returns original results
+    if reranker_type in ("identity", "no_op", "nope", "none"):
+        return NoOpRerankerTool(config=config, debug=debug)
+
+    # Unknown type
+    raise ValueError(
+        f"Unknown reranker type: '{reranker_type}'. Supported types: cross_encoder, identity, no_op, none, nope",
+    )
+
+
+# Export public API
+__all__ = [
+    # Type definitions
+    "RerankerType",
+    # Config and schemas
+    "RerankerToolConfig",
+    "RerankerToolInputSchema",
+    "RerankerToolOutputSchema",
+    # Base and implementations
+    "RerankerTool",
+    "CrossEncoderRerankerTool",
+    "NoOpRerankerTool",
+    # Factory
+    "create_reranker",
+]
