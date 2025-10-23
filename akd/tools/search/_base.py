@@ -185,6 +185,10 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         # Determine final max_results limit
         final_max_results = max_results or params.max_results or self.max_results
 
+        # Extract remaining fields from params to pass through
+        remaining_fields = params.model_dump(exclude={"queries", "max_results", "category"})
+        merged_kwargs = {**remaining_fields, **kwargs}
+
         # Fetch max_results for EACH query in parallel
         # Each query execution handles its own resources (HTTP client, etc.)
         tasks = [
@@ -192,7 +196,7 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
                 query,
                 final_max_results,
                 category=params.category,
-                **kwargs,
+                **merged_kwargs,
             )
             for query in params.queries
         ]
