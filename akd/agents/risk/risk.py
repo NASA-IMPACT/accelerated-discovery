@@ -66,11 +66,7 @@ class RiskAgentInputSchema(InputSchema):
                 raise ValueError(
                     f"risk_weights keys {sorted(extra)} are not in risk_ids {sorted(self.risk_ids)}",
                 )
-            nonpos = {
-                k: v
-                for k, v in self.risk_weights.items()
-                if not (isinstance(v, (int, float)) and v > 0)
-            }
+            nonpos = {k: v for k, v in self.risk_weights.items() if not (isinstance(v, (int, float)) and v > 0)}
             if nonpos:
                 raise ValueError(
                     f"risk_weights must be positive numbers; got {nonpos}",
@@ -148,6 +144,10 @@ class RiskAgentConfig(BaseAgentConfig):
             get_akd_root() / "akd/agents/risk/science_lit_risks.yaml",
         ),
         description="Path to source Science Risks yaml file.",
+    )
+    io_hints: bool = Field(
+        default=False,
+        description="Overriding this to suppress error in json schema converion of DAG metric.",
     )
 
 
@@ -288,9 +288,7 @@ class RiskAgent(
 
                 node = TaskNode(
                     output_label=f"{risk_id}_{i + 1}",
-                    instructions=(
-                        f"{criterion.description}\nAnswer strictly with True or False."
-                    ),
+                    instructions=(f"{criterion.description}\nAnswer strictly with True or False."),
                     evaluation_params=[
                         LLMTestCaseParams.INPUT,
                         LLMTestCaseParams.ACTUAL_OUTPUT,
@@ -318,8 +316,7 @@ class RiskAgent(
             m_required = (m_total + 1) // 2  # ceil
             # Borderline = exactly one below required (only meaningful if m_total > 0)
             borderline_expr = (
-                "True if the count of True among the MEDIUM set equals "
-                f"{max(m_required - 1, 0)}; otherwise False."
+                f"True if the count of True among the MEDIUM set equals {max(m_required - 1, 0)}; otherwise False."
                 if m_total > 0
                 else "False"
             )
