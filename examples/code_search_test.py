@@ -14,8 +14,8 @@ from akd.agents.search import (
 from akd.tools.search import SearxNGSearchToolConfig
 from akd.tools.search.code_search import (
     CodeSearchToolInputSchema,
-    CombinedCodeSearchTool,
-    CombinedCodeSearchToolConfig,
+    CompositeCodeSearchTool,
+    CompositeCodeSearchToolConfig,
     GitHubCodeSearchTool,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
@@ -95,8 +95,8 @@ async def combined_code_search_test():
     """An async function to run the tool."""
 
     print("Initializing the tool...")
-    cfg = CombinedCodeSearchToolConfig()
-    tool = CombinedCodeSearchTool(config=cfg)
+    cfg = CompositeCodeSearchToolConfig()
+    tool = CompositeCodeSearchTool(config=cfg)
 
     search_input = CodeSearchToolInputSchema(
         queries=["landslide nepal"],
