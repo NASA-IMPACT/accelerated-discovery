@@ -18,7 +18,9 @@ from akd.agents.search import (
     LitSearchAgentInputSchema,
     SearchMode,
 )
-from akd.tools.code_search import (
+from akd.tools.misc import Embedder
+from akd.tools.search import SearxNGSearchToolConfig
+from akd.tools.search.code_search import (
     CodeSearchToolInputSchema,
     GitHubCodeSearchTool,
     LocalRepoCodeSearchTool,
@@ -26,8 +28,6 @@ from akd.tools.code_search import (
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
 )
-from akd.tools.misc import Embedder
-from akd.tools.search import SearxNGSearchToolConfig
 from akd.utils import google_drive_downloader
 
 """Validate the output structure"""

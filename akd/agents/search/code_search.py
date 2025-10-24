@@ -9,7 +9,8 @@ from pydantic import Field
 from akd.agents.query import FollowUpQueryAgent, QueryAgent
 from akd.agents.relevancy import MultiRubricRelevancyAgent
 from akd.configs.code_prompts import CODE_QUERY_PROMPT, CODE_RELEVANCY_PROMPT
-from akd.tools.code_search import (
+from akd.tools.reranker import RerankerToolConfig
+from akd.tools.search.code_search import (
     CodeSearchTool,
     CombinedCodeSearchTool,
     CombinedCodeSearchToolConfig,
@@ -179,10 +180,12 @@ class CodeSearchAgent(ControlledSearchAgent):
             logger.error("[CodeSearchAgent] No search tools could be initialized (local and SDE both unavailable).")
             raise ValueError("No search tools available")
 
-        # Create combined tool
+        # Create combined tool with correct field names
         combined_config = CombinedCodeSearchToolConfig(
-            reranker_tool=self.config.reranker_tool,
-            cross_encoder_model_name=self.config.cross_encoder_model_name,
+            reranker_type=self.config.reranker_tool,
+            reranker_config=RerankerToolConfig(
+                model_name=self.config.cross_encoder_model_name,
+            ),
         )
 
         return CombinedCodeSearchTool(config=combined_config, tools=tools)
