@@ -17,17 +17,16 @@ from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
 from akd.tools.misc import Embedder, HttpUrlAdapter, OpenAIEmbedder
 from akd.tools.reranker import RerankerToolConfig, RerankerType
-from akd.tools.search import (
-    CompositeSearchTool,
-    CompositeSearchToolConfig,
+from akd.utils import get_akd_root, google_drive_downloader
+
+from ._base import (
     SearchTool,
     SearchToolConfig,
     SearchToolInputSchema,
     SearchToolOutputSchema,
-    SearxNGSearchTool,
-    SearxNGSearchToolConfig,
 )
-from akd.utils import get_akd_root, google_drive_downloader
+from .composite import CompositeSearchTool, CompositeSearchToolConfig
+from .searxng import SearxNGSearchTool, SearxNGSearchToolConfig
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
