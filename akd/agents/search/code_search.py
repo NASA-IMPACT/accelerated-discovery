@@ -9,7 +9,7 @@ from pydantic import Field
 from akd.agents.query import FollowUpQueryAgent, QueryAgent
 from akd.agents.relevancy import MultiRubricRelevancyAgent
 from akd.configs.code_prompts import CODE_QUERY_PROMPT, CODE_RELEVANCY_PROMPT
-from akd.tools.reranker import RerankerToolConfig
+from akd.tools.reranker import RerankerToolConfig, RerankerType
 from akd.tools.search.code_search import (
     CodeSearchTool,
     CombinedCodeSearchTool,
@@ -30,13 +30,15 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
 
     # Model configurations
     subagent_model: str = Field(default="gpt-4o-mini", description="Model for query and relevancy agents")
-    reranker_tool: str = Field(
-        default="cross-encoder",
-        description="The tool to use for reranking the combined results.",
+    reranker_type: RerankerType = Field(
+        default="cross_encoder",
+        description="The type of reranker to use for combining results from multiple search tools.",
     )
-    cross_encoder_model_name: str = Field(
-        default="cross-encoder/ms-marco-MiniLM-L12-v2",
-        description="The model to use with the cross-encoder tool for reranking the combined results.",
+    reranker_config: RerankerToolConfig = Field(
+        default_factory=lambda: RerankerToolConfig(
+            model_name="cross-encoder/ms-marco-MiniLM-L12-v2",
+        ),
+        description="Configuration for the reranker tool.",
     )
 
     # Local search configuration
@@ -182,10 +184,8 @@ class CodeSearchAgent(ControlledSearchAgent):
 
         # Create combined tool with correct field names
         combined_config = CombinedCodeSearchToolConfig(
-            reranker_type=self.config.reranker_tool,
-            reranker_config=RerankerToolConfig(
-                model_name=self.config.cross_encoder_model_name,
-            ),
+            reranker_type=self.config.reranker_type,
+            reranker_config=self.config.reranker_config,
         )
 
         return CombinedCodeSearchTool(config=combined_config, tools=tools)
