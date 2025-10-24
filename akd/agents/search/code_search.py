@@ -12,8 +12,8 @@ from akd.configs.code_prompts import CODE_QUERY_PROMPT, CODE_RELEVANCY_PROMPT
 from akd.tools.reranker import RerankerToolConfig, RerankerType
 from akd.tools.search.code_search import (
     CodeSearchTool,
-    CombinedCodeSearchTool,
-    CombinedCodeSearchToolConfig,
+    CompositeCodeSearchTool,
+    CompositeCodeSearchToolConfig,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
     SDECodeSearchTool,
@@ -162,7 +162,7 @@ class CodeSearchAgent(ControlledSearchAgent):
                 logger.warning(f"[CodeSearchAgent] SDECodeSearchTool unavailable; continuing without it. Reason: {e}")
             return None
 
-    def _setup_search_tool(self) -> CombinedCodeSearchTool:
+    def _setup_search_tool(self) -> CompositeCodeSearchTool:
         """Setup the combined search tool with local and SDE components."""
 
         tools = []
@@ -183,12 +183,12 @@ class CodeSearchAgent(ControlledSearchAgent):
             raise ValueError("No search tools available")
 
         # Create combined tool with correct field names
-        combined_config = CombinedCodeSearchToolConfig(
+        combined_config = CompositeCodeSearchToolConfig(
             reranker_type=self.config.reranker_type,
             reranker_config=self.config.reranker_config,
         )
 
-        return CombinedCodeSearchTool(config=combined_config, tools=tools)
+        return CompositeCodeSearchTool(config=combined_config, tools=tools)
 
     def _setup_query_agent(self) -> QueryAgent:
         """Setup query agent with code-specific prompt."""

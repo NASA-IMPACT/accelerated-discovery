@@ -161,7 +161,7 @@ class CodeSearchTool(SearchTool):
         raise NotImplementedError()
 
 
-class CombinedCodeSearchToolConfig(CompositeSearchToolConfig):
+class CompositeCodeSearchToolConfig(CompositeSearchToolConfig):
     """
     Configuration for the combined code search tool.
 
@@ -186,7 +186,7 @@ class CombinedCodeSearchToolConfig(CompositeSearchToolConfig):
     )
 
 
-class CombinedCodeSearchTool(CompositeSearchTool):
+class CompositeCodeSearchTool(CompositeSearchTool):
     """
     Tool for performing combined code search using multiple sub-tools.
 
@@ -196,11 +196,11 @@ class CombinedCodeSearchTool(CompositeSearchTool):
 
     input_schema = CodeSearchToolInputSchema
     output_schema = CodeSearchToolOutputSchema
-    config_schema = CombinedCodeSearchToolConfig
+    config_schema = CompositeCodeSearchToolConfig
 
     def __init__(
         self,
-        config: CombinedCodeSearchToolConfig | None = None,
+        config: CompositeCodeSearchToolConfig | None = None,
         tools: Optional[list[CodeSearchTool]] = None,
         debug: bool = False,
     ):

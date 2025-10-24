@@ -47,7 +47,7 @@ class CompositeSearchTool(SearchTool):
     - flatten_rerank_rrf: Flatten results, rerank globally with cross-encoder, then apply RRF
 
     Example:
-        >>> class CombinedCodeSearchTool(CompositeSearchTool):
+        >>> class CompositeCodeSearchTool(CompositeSearchTool):
         >>>     def __init__(self, config=None, debug=False):
         >>>         super().__init__(
         >>>             LocalRepoCodeSearchTool(debug=debug),
