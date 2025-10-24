@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import time
@@ -17,12 +16,10 @@ from tenacity import retry, stop_after_attempt
 from akd.errors import SchemaValidationError
 from akd.structures import SearchResultItem
 from akd.tools.misc import Embedder, HttpUrlAdapter, OpenAIEmbedder
-from akd.tools.reranker import (
-    CrossEncoderRerankerTool,
-    RerankerToolConfig,
-    RerankerToolInputSchema,
-)
+from akd.tools.reranker import RerankerToolConfig, RerankerType
 from akd.tools.search import (
+    CompositeSearchTool,
+    CompositeSearchToolConfig,
     SearchTool,
     SearchToolConfig,
     SearchToolInputSchema,
@@ -165,24 +162,37 @@ class CodeSearchTool(SearchTool):
         raise NotImplementedError()
 
 
-class CombinedCodeSearchToolConfig(CodeSearchToolConfig):
+class CombinedCodeSearchToolConfig(CompositeSearchToolConfig):
     """
     Configuration for the combined code search tool.
+
+    Inherits fusion_strategy from CompositeSearchToolConfig.
+    Default uses flatten_rerank_rrf with cross-encoder for optimal semantic ranking.
     """
 
-    reranker_tool: str = Field(
-        "cross-encoder",
-        description="The tool to use for reranking the combined results.",
+    # Override defaults for code search use case
+    fusion_strategy: Literal["direct_rrf_blackbox", "flatten_rerank_rrf"] = Field(
+        default="flatten_rerank_rrf",
+        description="Fusion strategy for combining code search results from multiple tools.",
     )
-    cross_encoder_model_name: str = Field(
-        "cross-encoder/ms-marco-MiniLM-L12-v2",
-        description="The model to use with the cross-encoder tool for reranking the combined results.",
+    reranker_type: RerankerType = Field(
+        default="cross_encoder",
+        description="Type of reranker to use for combining results from multiple search tools.",
+    )
+    reranker_config: RerankerToolConfig | None = Field(
+        default_factory=lambda: RerankerToolConfig(
+            model_name="cross-encoder/ms-marco-MiniLM-L12-v2",
+        ),
+        description="Configuration for the reranker tool.",
     )
 
 
-class CombinedCodeSearchTool(CodeSearchTool):
+class CombinedCodeSearchTool(CompositeSearchTool):
     """
-    Tool for performing combined code search using multiple sub-tools and CrossEncoder reranking.
+    Tool for performing combined code search using multiple sub-tools.
+
+    Combines results from LocalRepo, GitHub, and SDE code search tools using
+    configurable fusion strategies (direct RRF or flatten+rerank+RRF).
     """
 
     input_schema = CodeSearchToolInputSchema
@@ -195,59 +205,23 @@ class CombinedCodeSearchTool(CodeSearchTool):
         tools: Optional[list[CodeSearchTool]] = None,
         debug: bool = False,
     ):
-        super().__init__(config, debug)
-        self.tools = tools or [
+        """
+        Initialize combined code search tool.
+
+        Args:
+            config: Configuration for the tool.
+            tools: Optional list of search tools to combine. Defaults to LocalRepo, GitHub, and SDE.
+            debug: Enable debug logging.
+        """
+        # Initialize default tools if not provided
+        search_tools = tools or [
             LocalRepoCodeSearchTool(debug=debug),
             GitHubCodeSearchTool(debug=debug),
             SDECodeSearchTool(debug=debug),
         ]
-        # initialize reranker tool
-        if config.reranker_tool == "cross-encoder":
-            self.reranker_tool = CrossEncoderRerankerTool(
-                config=RerankerToolConfig(model_name=config.cross_encoder_model_name),
-                debug=debug,
-            )
-        else:
-            raise ValueError(f"Invalid reranker tool: {config.reranker_tool}")
 
-    async def _rerank_query(
-        self,
-        query: str,
-        all_results: list[SearchResultItem],
-        top_k_per_query: int,
-    ) -> list[SearchResultItem]:
-        """Rerank results for a single query."""
-        query_results = [result for result in all_results if result.query == query]
-        reranked_results = await self.reranker_tool.arun(RerankerToolInputSchema(query=query, results=query_results))
-        reranked_results = reranked_results.results
-        return reranked_results[:top_k_per_query]
-
-    async def _arun(
-        self,
-        params: CodeSearchToolInputSchema,
-        **kwargs,
-    ) -> CodeSearchToolOutputSchema:
-        """Run the combined code search tool and aggregate results from all tools."""
-        all_results: list[SearchResultItem] = []
-
-        for tool in self.tools:
-            try:
-                if self.debug:
-                    logger.debug(f"Running tool: {tool.__class__.__name__}")
-                result = await tool._arun(params)
-                for res in result.results:
-                    res.extra["tool"] = tool.__class__.__name__
-                all_results.extend(result.results)
-            except Exception as e:
-                logger.error(f"Error running tool {tool.__class__.__name__}: {e}")
-
-        top_k_per_query = params.top_k
-        reranked_results = await asyncio.gather(
-            *[self._rerank_query(query, all_results, top_k_per_query) for query in params.queries],
-        )
-        final_results = [result for query_results in reranked_results for result in query_results]
-
-        return self.output_schema(results=final_results)
+        # Initialize composite search tool with all tools
+        super().__init__(*search_tools, config=config, debug=debug)
 
 
 class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):

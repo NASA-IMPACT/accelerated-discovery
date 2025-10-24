@@ -10,6 +10,7 @@ from ._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
+from .composite import CompositeSearchTool, CompositeSearchToolConfig
 from .pipeline import SearchPipeline, SearchPipelineConfig, SearchPipelineScrapingMode
 from .searxng import (
     SearxNGSearchTool,
@@ -39,6 +40,9 @@ __all__ = [
     "SearchToolInputSchema",
     "SearchToolOutputSchema",
     "QueryFocusStrategy",
+    # Composite
+    "CompositeSearchTool",
+    "CompositeSearchToolConfig",
     # SearxNG
     "SearxNGSearchTool",
     "SearxNGSearchToolInputSchema",
