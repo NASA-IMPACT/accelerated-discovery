@@ -41,7 +41,7 @@ class UnpaywallResolver(BaseArticleResolver):
                 return True
         return False
 
-    def _extract_doi_from_url(self, url: str) -> Optional[str]:
+    def _extract_doi_from_url(self, url: str) -> str | None:
         """Extract DOI from URL using pattern matching."""
         doi_patterns = [
             r'10\.\d{4,}/[^\s"<>#]+',  # Standard DOI format
@@ -54,6 +54,82 @@ class UnpaywallResolver(BaseArticleResolver):
                 # Return the full DOI or the captured group
                 return match.group(1) if match.groups() else match.group(0)
         return None
+
+    def _get_best_oa_location(self, unpaywall_data: dict) -> dict:
+        """
+        Get the best open access location from Unpaywall data with cascading fallback.
+
+        Strategy:
+        1. Check best_oa_location for url_for_pdf
+        2. If no PDF in best_oa_location, check if it has a valid host URL
+        3. Fall back to oa_locations list and find first location with url_for_pdf
+        4. If still no PDF, find first valid location in oa_locations list
+
+        Args:
+            unpaywall_data: Raw JSON response from Unpaywall API
+
+        Returns:
+            Dictionary with 'url', 'pdf_url', and 'location_info' if found, empty dict otherwise
+        """
+        # Try best_oa_location first
+        best_oa_location = unpaywall_data.get("best_oa_location")
+
+        # Priority 1: best_oa_location with PDF URL
+        if best_oa_location and best_oa_location.get("url_for_pdf"):
+            if self.debug:
+                logger.debug(
+                    f"Found PDF in best_oa_location: {best_oa_location['url_for_pdf']}",
+                )
+            return {
+                "url": best_oa_location["url_for_pdf"],
+                "pdf_url": best_oa_location["url_for_pdf"],
+                "location_info": best_oa_location,
+            }
+
+        # Priority 2: best_oa_location with host URL (publisher/repository)
+        if best_oa_location and best_oa_location.get("host_type") in [
+            "publisher",
+            "repository",
+        ]:
+            oa_url = best_oa_location.get("url")
+            if oa_url:
+                if self.debug:
+                    logger.debug(f"Found host URL in best_oa_location: {oa_url}")
+                return {
+                    "url": oa_url,
+                    "pdf_url": best_oa_location.get("url_for_pdf"),  # May be None
+                    "location_info": best_oa_location,
+                }
+
+        # Priority 3: Check oa_locations list for PDF URL
+        oa_locations = unpaywall_data.get("oa_locations", [])
+        for location in oa_locations:
+            if location.get("url_for_pdf"):
+                if self.debug:
+                    logger.debug(f"Found PDF in oa_locations: {location['url_for_pdf']}")
+                return {
+                    "url": location["url_for_pdf"],
+                    "pdf_url": location["url_for_pdf"],
+                    "location_info": location,
+                }
+
+        # Priority 4: Check oa_locations list for any valid host URL
+        for location in oa_locations:
+            if location.get("host_type") in ["publisher", "repository"]:
+                oa_url = location.get("url")
+                if oa_url:
+                    if self.debug:
+                        logger.debug(f"Found host URL in oa_locations: {oa_url}")
+                    return {
+                        "url": oa_url,
+                        "pdf_url": location.get("url_for_pdf"),  # May be None
+                        "location_info": location,
+                    }
+
+        # No valid OA location found - return empty dict
+        if self.debug:
+            logger.debug("No valid OA location found in Unpaywall data")
+        return {}
 
     def _populate_metadata(
         self,
@@ -166,59 +242,42 @@ class UnpaywallResolver(BaseArticleResolver):
 
                 data = response.json()
 
-                # Check if paper is open access and has a PDF URL
+                # Build result starting from input params
+                result = ResolverOutputSchema(**params.model_dump())
+                result.doi = doi
+                result.resolvers.append(self.__class__.__name__)
+
+                # Populate metadata fields from Unpaywall API response (always do this)
+                self._populate_metadata(result, data)
+
+                # Try to find OA location if paper is open access
                 if data.get("is_oa", False):
-                    best_oa_location = data.get("best_oa_location")
-                    if best_oa_location and best_oa_location.get("url_for_pdf"):
-                        pdf_url = best_oa_location["url_for_pdf"]
+                    oa_location = self._get_best_oa_location(data)
+
+                    if oa_location:
+                        # Update URL and pdf_url if we found an OA location
+                        result.url = HttpUrl(oa_location["url"])
+                        result.extra["is_url_resolved"] = True
+
+                        if oa_location.get("pdf_url"):
+                            result.pdf_url = HttpUrl(oa_location["pdf_url"])
+
                         if self.debug:
                             logger.debug(
-                                f"Found open access PDF via Unpaywall: {pdf_url}",
+                                f"Resolved DOI {doi} to OA location: {result.url} (PDF: {result.pdf_url or 'N/A'})",
                             )
+                    else:
+                        if self.debug:
+                            logger.debug(
+                                f"DOI {doi} is OA but no valid location found. Returning metadata only.",
+                            )
+                else:
+                    if self.debug:
+                        logger.debug(
+                            f"DOI {doi} is not open access. Returning metadata only.",
+                        )
 
-                        # Return ResolverOutputSchema with resolved URL and preserved metadata
-                        result = ResolverOutputSchema(**params.model_dump())
-                        result.doi = doi
-                        result.extra["is_url_resolved"] = True
-                        result.url = HttpUrl(pdf_url)
-                        result.pdf_url = HttpUrl(pdf_url)  # Set pdf_url field
-                        result.resolvers.append(self.__class__.__name__)
-
-                        # Populate metadata fields from Unpaywall API response
-                        self._populate_metadata(result, data)
-
-                        return result
-
-                    # Fallback to host URL if no direct PDF
-                    if best_oa_location and best_oa_location.get("host_type") in [
-                        "publisher",
-                        "repository",
-                    ]:
-                        oa_url = best_oa_location.get("url")
-                        if oa_url:
-                            if self.debug:
-                                logger.debug(
-                                    f"Found open access version via Unpaywall: {oa_url}",
-                                )
-
-                            # Return ResolverOutputSchema with resolved URL and preserved metadata
-                            result = ResolverOutputSchema(**params.model_dump())
-                            result.doi = doi
-                            result.extra["is_url_resolved"] = True
-                            result.url = HttpUrl(oa_url)
-                            # Try to set pdf_url if available in best_oa_location
-                            if best_oa_location.get("url_for_pdf"):
-                                result.pdf_url = HttpUrl(best_oa_location["url_for_pdf"])
-                            result.resolvers.append(self.__class__.__name__)
-
-                            # Populate metadata fields from Unpaywall API response
-                            self._populate_metadata(result, data)
-
-                            return result
-
-                if self.debug:
-                    logger.debug(f"No open access version found for DOI: {doi}")
-                return None
+                return result
 
         except Exception as e:
             if self.debug:
