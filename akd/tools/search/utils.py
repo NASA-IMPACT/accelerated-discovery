@@ -1,88 +1,32 @@
 """
-Deduplication utilities for search results.
+Utilities for search results: normalization, resolution, and deduplication.
 
-Simple cascaded deduplication: DOI → Title → URL
-Keeps first occurrence.
+- SearchResultItemNormalizer: Resolves and normalizes SearchResultItems using resolvers
+- deduplicate_results: Simple cascaded deduplication (DOI → Title → URL)
 """
 
 from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from loguru import logger
 from pydantic import AnyUrl
 
-if TYPE_CHECKING:
-    from akd.structures import SearchResultItem
-
+from akd.structures import SearchResultItem
+from akd.tools.resolvers.specialized import DOIResolver
 
 # =============================================================================
 # Normalization Utilities
 # =============================================================================
 
 
-def extract_doi_from_url(url: str | AnyUrl | None) -> str | None:
-    """
-    Extract DOI from a URL if it contains one.
-
-    Examples:
-        >>> extract_doi_from_url("https://doi.org/10.1234/example")
-        '10.1234/example'
-        >>> extract_doi_from_url("https://www.nature.com/articles/10.1038/s41586-021-03819-2")
-        '10.1038/s41586-021-03819-2'
-        >>> extract_doi_from_url("https://arxiv.org/abs/1234.5678")
-        None
-    """
-    if not url:
-        return None
-
-    url_str = str(url).lower()
-
-    # Check if URL contains doi.org or dx.doi.org
-    if "doi.org/" in url_str:
-        # Extract DOI after doi.org/
-        match = re.search(r"doi\.org/(10\.\S+)", url_str)
-        if match:
-            return match.group(1)
-
-    # Check for DOI pattern in URL path (e.g., nature.com, science.org)
-    # DOI pattern: 10.xxxx/yyyy...
-    match = re.search(r"(10\.\d{4,}/[^\s&?]+)", url_str)
-    if match:
-        return match.group(1)
-
-    return None
-
-
-def normalize_doi(doi: str | None) -> str | None:
-    """
-    Normalize DOI for comparison.
-
-    Examples:
-        >>> normalize_doi("10.1234/example")
-        '10.1234/example'
-        >>> normalize_doi("https://doi.org/10.1234/example")
-        '10.1234/example'
-        >>> normalize_doi("DOI:10.1234/example")
-        '10.1234/example'
-    """
-    if not doi:
-        return None
-
-    doi = doi.lower().strip()
-    doi = re.sub(r"^doi:\s*", "", doi)
-    doi = re.sub(r"^https?://doi\.org/", "", doi)
-    doi = re.sub(r"^https?://dx\.doi\.org/", "", doi)
-
-    return doi if doi else None
-
-
 def get_doi(result: "SearchResultItem") -> str | None:
     """
     Get DOI from result, checking both result.doi field and result.url.
+
+    Uses DOIResolver static methods for extraction and normalization.
 
     Args:
         result: SearchResultItem to extract DOI from.
@@ -98,7 +42,9 @@ def get_doi(result: "SearchResultItem") -> str | None:
         >>> get_doi(result2)
         '10.5678/test'
     """
-    return normalize_doi(result.doi) or normalize_doi(extract_doi_from_url(result.url))
+    return DOIResolver.normalize_doi(result.doi) or DOIResolver.normalize_doi(
+        DOIResolver.extract_doi_from_url(result.url),
+    )
 
 
 def normalize_title(title: str | None) -> str | None:
@@ -272,8 +218,6 @@ def deduplicate_results(
 __all__ = [
     "deduplicate_results",
     "get_doi",
-    "extract_doi_from_url",
-    "normalize_doi",
     "normalize_title",
     "normalize_url",
 ]
