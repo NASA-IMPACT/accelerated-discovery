@@ -6,7 +6,6 @@ and the composite ResearchArticleResolver with various scenarios including
 mocked HTTP requests and error handling.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -166,7 +165,7 @@ class TestDOIResolver:
         ]
 
         for doi in valid_dois:
-            assert resolver._validate_doi_format(doi) is True
+            assert resolver.validate_doi_format(doi) is True
 
     def test_validate_doi_format_invalid(self, resolver):
         """Test DOI format validation with invalid DOIs."""
@@ -181,7 +180,7 @@ class TestDOIResolver:
         ]
 
         for doi in invalid_dois:
-            assert resolver._validate_doi_format(doi) is False
+            assert resolver.validate_doi_format(doi) is False
 
     @pytest.mark.asyncio
     async def test_resolve_with_valid_doi(self, resolver):
@@ -487,7 +486,6 @@ class TestResearchArticleResolver:
             assert str(result.url) == "https://arxiv.org/pdf/2411.08181.pdf"
             assert "ArxivResolver" in result.resolvers
 
-
     @pytest.mark.asyncio
     async def test_pdf_resolver_wins_when_arxiv_unavailable(
         self,
@@ -549,9 +547,7 @@ class TestResearchArticleResolver:
             result = await composite_resolver.arun(input_schema)
 
             # Identity resolver should be used as fallback
-            assert (
-                str(result.url) == "https://example.com/"
-            )  # HttpUrl normalizes
+            assert str(result.url) == "https://example.com/"  # HttpUrl normalizes
             assert "IdentityResolver" in result.resolvers
 
     @pytest.mark.asyncio
@@ -649,9 +645,7 @@ class TestHTTPValidation:
             )
 
             result = await resolver_with_validation.arun(input_schema)
-            assert (
-                str(result.url) == "https://example.com/"
-            )  # HttpUrl normalizes
+            assert str(result.url) == "https://example.com/"  # HttpUrl normalizes
 
     @pytest.mark.asyncio
     async def test_validation_failure_4xx(self, resolver_with_validation):
@@ -702,4 +696,3 @@ class TestHTTPValidation:
         # No mocking needed - validation should be skipped
         result = await resolver_without_validation.arun(input_schema)
         assert str(result.url) == "https://example.com/"  # HttpUrl normalizes
-
