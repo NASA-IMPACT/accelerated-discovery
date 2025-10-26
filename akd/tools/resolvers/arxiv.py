@@ -33,8 +33,12 @@ class ArxivResolver(BaseArticleResolver):
 
             result = ResolverOutputSchema(**params.model_dump())
             result.extra["is_url_resolved"] = True
+            result.extra["url_source"] = self.__class__.__name__
+            result.extra["url_type"] = "pdf"
             result.url = pdf_url
+            result.pdf_url = pdf_url  # Also set pdf_url field
             result.doi = doi
+            result.extra["arxiv_id"] = paper_id
             result.resolvers.append(self.__class__.__name__)
             return result
         except RuntimeError:

@@ -155,6 +155,8 @@ class DOIResolver(BaseArticleResolver):
         result = ResolverOutputSchema(**params.model_dump())
         result.doi = doi  # Ensure DOI is populated
         result.extra["is_url_resolved"] = True
+        result.extra["url_source"] = self.__class__.__name__
+        result.extra["url_type"] = "doi_redirect"
         result.url = HttpUrl(f"https://doi.org/{doi}")
         result.resolvers.append(self.__class__.__name__)
 

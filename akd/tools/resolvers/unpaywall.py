@@ -21,6 +21,11 @@ class UnpaywallResolverConfig(ArticleResolverConfig):
         description="Email address required for Unpaywall API access",
     )
 
+    validate_resolved_url: bool = Field(
+        default=False,
+        description="Disable URL validation - OA URLs often blocked by bot detection, let scraper handle failures",
+    )
+
 
 class UnpaywallResolver(BaseArticleResolver):
     """Resolver for finding open access versions via Unpaywall API."""
@@ -255,16 +260,30 @@ class UnpaywallResolver(BaseArticleResolver):
                     oa_location = self._get_best_oa_location(data)
 
                     if oa_location:
-                        # Update URL and pdf_url if we found an OA location
+                        # Set URL to best OA location (PDF or host URL)
                         result.url = HttpUrl(oa_location["url"])
                         result.extra["is_url_resolved"] = True
+                        result.extra["url_source"] = self.__class__.__name__
 
+                        # Set pdf_url if this is a PDF
                         if oa_location.get("pdf_url"):
                             result.pdf_url = HttpUrl(oa_location["pdf_url"])
+                            result.extra["url_type"] = "pdf"
+                        else:
+                            result.extra["url_type"] = "oa_host"
+
+                        # Store location info for reference
+                        if oa_location.get("location_info"):
+                            result.extra["oa_location_info"] = {
+                                "host_type": oa_location["location_info"].get("host_type"),
+                                "license": oa_location["location_info"].get("license"),
+                                "version": oa_location["location_info"].get("version"),
+                            }
 
                         if self.debug:
                             logger.debug(
-                                f"Resolved DOI {doi} to OA location: {result.url} (PDF: {result.pdf_url or 'N/A'})",
+                                f"Resolved DOI {doi} to OA location: {result.url} "
+                                f"(Type: {result.extra['url_type']}, PDF: {result.pdf_url or 'N/A'})",
                             )
                     else:
                         if self.debug:

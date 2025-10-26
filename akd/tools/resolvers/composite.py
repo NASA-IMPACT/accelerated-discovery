@@ -26,58 +26,148 @@ class ResearchArticleResolver(BaseArticleResolver):
         return result
 
     async def _arun(
-    self,
-    params: ResolverInputSchema,
-    **kwargs,
+        self,
+        params: ResolverInputSchema,
+        **kwargs,  # noqa: ARG002
     ) -> ResolverOutputSchema:
         """
-        Run resolvers sequentially.
-        Stop only when BOTH are satisfied:
-          1) URL is transformed (different from params.url, or any URL if original was None)
-          2) DOI is present
+        Run all resolvers and merge their contributions to create complete, consistent metadata.
 
-        Once the URL is transformed, do NOT replace it again.
+        Strategy:
+        1. All resolvers run (no early stopping) to maximize metadata collection
+        2. For each field (url, doi, title, authors, etc.): fill if missing, don't overwrite
+        3. Track URLs by quality type (PDF, OA, DOI) for smart selection
+        4. Select best URL for crawling based on content accessibility
+        5. Store alternative URLs and track data sources
+
+        Goal: Produce fully enriched SearchResultItem with best available data from all sources.
         """
-        result = resolver_input = ResolverOutputSchema(**params.model_dump())
+        result = ResolverOutputSchema(**params.model_dump())
 
-        is_url_resolved = False
-        is_doi_resolved = bool(getattr(params, "doi", None) and params.doi != 'None') 
+        # Track URLs by quality/type for smart selection
+        urls = {
+            "pdf": None,  # Best: Direct PDF access
+            "oa_host": None,  # Good: OA HTML with full text
+            "doi": None,  # Reliable: DOI redirect (always resolves)
+            "original": params.url,  # Fallback: Original search result
+        }
+
+        # Track which resolver provided each field (for debugging/transparency)
+        field_sources = {}
 
         for resolver in self.resolvers:
             resolver_name = resolver.__class__.__name__
             try:
                 if self.debug:
-                    logger.debug(f"Trying resolver={resolver_name} for url={resolver_input.url}")
-                
-                
-                result = await resolver.arun(resolver_input)
+                    logger.debug(f"Running resolver={resolver_name}")
 
-                if not result:
+                # Pass cumulative result so resolvers can build on each other
+                enriched = await resolver.arun(result)
+
+                if not enriched:
+                    if self.debug:
+                        logger.debug(f"  {resolver_name} returned None, skipping")
                     continue
 
+                # COLLECT URLs BY TYPE/QUALITY
+                url_source = enriched.extra.get("url_source")
+                url_type = enriched.extra.get("url_type")
 
-                # TODO:: this will call most of the resolvers: doi until resolved by crossref, so we should do something about this
+                if url_source == "UnpaywallResolver":
+                    if url_type == "pdf":
+                        urls["pdf"] = enriched.url
+                    elif url_type == "oa_host":
+                        urls["oa_host"] = enriched.url
 
-                if "is_url_resolved" in result.extra:
-                    is_url_resolved = result.extra["is_url_resolved"]
+                elif url_source == "DOIResolver":
+                    urls["doi"] = enriched.url
 
-                is_doi_resolved = bool(getattr(result, "doi", None) and result.doi != 'None')
+                elif url_source == "ArxivResolver" and enriched.pdf_url:
+                    urls["pdf"] = enriched.pdf_url
 
-                resolver_input = result
+                # MERGE METADATA FIELDS (fill missing, preserve existing)
+                metadata_fields = ["doi", "title", "authors", "published_date", "category", "tags"]
 
-                if is_url_resolved and is_doi_resolved:
-                    if self.debug:
-                        logger.debug(
-                            f"Stopping after {resolver_name}: "
-                            f"Transformed URL={params.url} to {result.url}, "
-                            f"Transformed DOI={params.doi} to {result.doi}",
-                        )
-                    break
+                for field in metadata_fields:
+                    current_value = getattr(result, field)
+                    new_value = getattr(enriched, field)
+
+                    # Fill if missing
+                    if not current_value and new_value:
+                        setattr(result, field, new_value)
+                        field_sources[field] = resolver_name
+                        if self.debug:
+                            logger.debug(f"  Filled '{field}' from {resolver_name}")
+
+                # Handle pdf_url specially (keep best one)
+                if enriched.pdf_url and not result.pdf_url:
+                    result.pdf_url = enriched.pdf_url
+                    field_sources["pdf_url"] = resolver_name
+
+                # Merge extra metadata (accumulate, don't replace)
+                for key, value in enriched.extra.items():
+                    # Always update these tracking fields
+                    if key in ["is_url_resolved", "url_source", "url_type"]:
+                        result.extra[key] = value
+                    # For other fields, only add if not present (preserve earlier data)
+                    elif key not in result.extra:
+                        result.extra[key] = value
+
+                # Track all resolvers that contributed
+                for res_name in enriched.resolvers:
+                    if res_name not in result.resolvers:
+                        result.resolvers.append(res_name)
+
+                # Update cumulative result for next resolver
+                result = enriched
 
             except Exception as e:
                 if self.debug:
-                    logger.error(f"Error using resolver={resolver_name}: {e}")
+                    logger.error(f"Error in resolver={resolver_name}: {e}")
                 continue
 
+        # SMART URL SELECTION FOR CRAWLING
+        # Priority: PDF > OA Host > DOI > Original
+        # Rationale: PDF has full content, OA has full HTML, DOI always resolves, Original uncertain
+        selected_url = None
+        selection_reason = None
 
-        return result 
+        if urls["pdf"]:
+            selected_url = urls["pdf"]
+            selection_reason = "pdf_direct_access"
+            result.pdf_url = urls["pdf"]  # Ensure pdf_url field is set
+        elif urls["oa_host"]:
+            selected_url = urls["oa_host"]
+            selection_reason = "oa_host_full_text"
+        elif urls["doi"]:
+            selected_url = urls["doi"]
+            selection_reason = "doi_fallback_reliable"
+        else:
+            selected_url = urls["original"]
+            selection_reason = "original_search_result"
+
+        # Set the selected URL as primary
+        result.url = selected_url
+        result.extra["url_selection_reason"] = selection_reason
+
+        # Store alternative URLs for downstream fallback attempts
+        alternative_urls = {k: str(v) for k, v in urls.items() if v and str(v) != str(selected_url)}
+        if alternative_urls:
+            result.extra["alternative_urls"] = alternative_urls
+
+        # Store field sources for transparency
+        result.extra["field_sources"] = field_sources
+
+        if self.debug:
+            logger.debug(
+                f"Composite resolver complete: "
+                f"url={selected_url} (reason: {selection_reason}), "
+                f"doi={result.doi}, "
+                f"title={'✓' if result.title else '✗'}, "
+                f"authors={len(result.authors or [])}, "
+                f"pdf_url={'✓' if result.pdf_url else '✗'}",
+            )
+            if alternative_urls:
+                logger.debug(f"Alternative URLs: {list(alternative_urls.keys())}")
+
+        return result

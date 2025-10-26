@@ -1,7 +1,6 @@
 import os
 from typing import Literal, Optional, Union
 
-import aiohttp
 import httpx
 from loguru import logger
 from pydantic import Field, HttpUrl, field_validator
@@ -41,7 +40,8 @@ class CrossRefDoiResolverOutputSchema(CrossRefDoiResolverInputSchema, ResolverOu
     Output schema for CrossRef DOI resolver.
     Inherits from ResolverOutputSchema to ensure compatibility with search results.
     """
-    pass 
+
+    pass
 
 
 class CrossRefDoiResolverConfig(ArticleResolverConfig):
@@ -82,11 +82,9 @@ class CrossRefDoiResolverConfig(ArticleResolverConfig):
         description="Strategy for selecting which authors to prioritize when capping",
     )
 
-    title_fuzzy_method: Literal["token_set", "token_sort", "ratio", "partial_ratio"] = (
-        Field(
-            default="ratio",
-            description="Fuzzy score method for titles - ratio is more strict than token_set",
-        )
+    title_fuzzy_method: Literal["token_set", "token_sort", "ratio", "partial_ratio"] = Field(
+        default="ratio",
+        description="Fuzzy score method for titles - ratio is more strict than token_set",
     )
 
     max_candidates: int = Field(
@@ -150,13 +148,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         """
         Extract authors from search result. Utility function to be used if needed.
         """
-        return (
-            result.extra.get("authors")
-            if result.extra.get("authors")
-            else result.authors
-            if result.authors
-            else []
-        )
+        return result.extra.get("authors") if result.extra.get("authors") else result.authors if result.authors else []
 
     def normalize_title(self, title: str) -> str:
         """Normalize title for comparison by removing common variations"""
@@ -270,9 +262,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
 
         # Score combines both match percentage and average similarity
         match_percentage = (matched_count / len(input_authors_norm)) * 100
-        avg_similarity = (
-            total_score / len(input_authors_norm) if input_authors_norm else 0
-        )
+        avg_similarity = total_score / len(input_authors_norm) if input_authors_norm else 0
 
         # Weighted combination: 70% based on threshold matches, 30% on average similarity
         final_score = (match_percentage * 0.7) + (avg_similarity * 0.3)
@@ -311,9 +301,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         best_match = None
         best_score = 0
 
-        for item in items[
-            : self.max_candidates
-        ]:  # Limit to first max_candidates results
+        for item in items[: self.max_candidates]:  # Limit to first max_candidates results
             result_title = item.get("title", [""])[0]
             if not result_title:
                 if self.debug:
@@ -351,9 +339,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
 
             # If we have input authors, require a reasonable author match
             # If no input authors, rely solely on title match
-            min_author_score = (
-                50.0 if input_authors else 0.0
-            )  # Require at least 50% author match if authors provided
+            min_author_score = 50.0 if input_authors else 0.0  # Require at least 50% author match if authors provided
 
             if author_score < min_author_score:
                 if self.debug:
@@ -381,7 +367,7 @@ class CrossRefDoiResolver(BaseArticleResolver):
         params: CrossRefDoiResolverInputSchema,
     ) -> Optional[CrossRefDoiResolverOutputSchema]:
         # if doi is already present, return it
-        if getattr(params, "doi", None) and params.doi != 'None':
+        if getattr(params, "doi", None) and params.doi != "None":
             if self.debug:
                 logger.debug(f"DOI already present: {params.doi}")
             return CrossRefDoiResolverOutputSchema(**params.model_dump())
@@ -450,6 +436,39 @@ class CrossRefDoiResolver(BaseArticleResolver):
                 result = CrossRefDoiResolverOutputSchema(**params.model_dump())
                 result.doi = doi
                 result.resolvers.append(self.__class__.__name__)
+
+                # Enrich metadata from CrossRef if we found a match
+                if best_match:
+                    # Fill title if missing
+                    if not result.title and best_match.get("title"):
+                        result.title = best_match["title"][0]
+
+                    # Fill authors if missing
+                    if not result.authors and best_match.get("author"):
+                        result.authors = self.build_author_names(best_match["author"])
+
+                    # Fill published_date if missing
+                    if not result.published_date and best_match.get("published"):
+                        # CrossRef uses date-parts format
+                        date_parts = best_match["published"].get("date-parts", [[]])[0]
+                        if len(date_parts) >= 1:
+                            year = date_parts[0]
+                            month = date_parts[1] if len(date_parts) >= 2 else 1
+                            day = date_parts[2] if len(date_parts) >= 3 else 1
+                            result.published_date = f"{year:04d}-{month:02d}-{day:02d}"
+
+                    # Store CrossRef metadata in extra
+                    result.extra["crossref_match_score"] = best_score
+                    result.extra["metadata_source"] = self.__class__.__name__
+
+                    # Store additional CrossRef metadata
+                    if best_match.get("container-title"):
+                        result.extra["journal_name"] = best_match["container-title"][0]
+                    if best_match.get("publisher"):
+                        result.extra["publisher"] = best_match["publisher"]
+                    if best_match.get("type"):
+                        result.extra["publication_type"] = best_match["type"]
+
                 return result
 
         except Exception as e:
