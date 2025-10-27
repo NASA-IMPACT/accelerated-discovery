@@ -203,7 +203,7 @@ jobs:
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: pr-branch-coverage-report
