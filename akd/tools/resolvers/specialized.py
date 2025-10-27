@@ -25,6 +25,8 @@ class PDFUrlResolver(BaseArticleResolver):
             result = ResolverOutputSchema(**params.model_dump())
 
             result.extra["is_url_resolved"] = True
+            result.extra["url_source"] = self.__class__.__name__
+            result.extra["url_type"] = "pdf"
             result.url = params.pdf_url
             result.resolvers.append(self.__class__.__name__)
             return result

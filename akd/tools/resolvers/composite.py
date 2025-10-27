@@ -85,6 +85,9 @@ class CompositeResolver(BaseArticleResolver):
                 elif url_source == "ArxivResolver" and enriched.pdf_url:
                     urls["pdf"] = enriched.pdf_url
 
+                elif url_source == "PDFUrlResolver" and url_type == "pdf":
+                    urls["pdf"] = enriched.url
+
                 # MERGE METADATA FIELDS (fill missing, preserve existing)
                 metadata_fields = ["doi", "title", "authors", "published_date", "category", "tags"]
 
