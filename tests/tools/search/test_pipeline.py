@@ -4,7 +4,7 @@ from unittest.mock import PropertyMock, patch
 import pytest
 
 from akd.structures import SearchResultItem
-from akd.tools.resolvers import ResearchArticleResolver
+from akd.tools.resolvers import CompositeResolver
 from akd.tools.resolvers._base import ResolverInputSchema, ResolverOutputSchema
 from akd.tools.scrapers._base import ScraperToolInputSchema, ScraperToolOutputSchema
 from akd.tools.scrapers.composite import CompositeScraper
@@ -520,7 +520,7 @@ class TestSearchPipeline:
         resolver = pipeline._default_research_article_resolver
 
         # Should return a ResearchArticleResolver instance
-        assert isinstance(resolver, ResearchArticleResolver)
+        assert isinstance(resolver, CompositeResolver)
 
     def test_default_scraper(self):
         """Test default scraper creation"""

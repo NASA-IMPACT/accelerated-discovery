@@ -14,10 +14,10 @@ import pytest
 from akd.tools.resolvers import (
     ArticleResolverConfig,
     ArxivResolver,
+    CompositeResolver,
     DOIResolver,
     IdentityResolver,
     PDFUrlResolver,
-    ResearchArticleResolver,
     ResolverInputSchema,
     ResolverOutputSchema,
 )
@@ -436,7 +436,7 @@ class TestResearchArticleResolver:
         identity_resolver,
     ):
         """Create composite resolver with all sub-resolvers (realistic order)."""
-        return ResearchArticleResolver(
+        return CompositeResolver(
             arxiv_resolver,
             pdf_resolver,
             doi_resolver,
@@ -452,7 +452,7 @@ class TestResearchArticleResolver:
         identity_resolver,
     ):
         """Create composite resolver matching original user request."""
-        return ResearchArticleResolver(
+        return CompositeResolver(
             pdf_resolver,
             doi_resolver,
             identity_resolver,
@@ -565,7 +565,7 @@ class TestResearchArticleResolver:
             "arun",
             side_effect=Exception("PDF resolver failed"),
         ):
-            composite_resolver = ResearchArticleResolver(
+            composite_resolver = CompositeResolver(
                 failing_pdf_resolver,
                 doi_resolver,
                 identity_resolver,

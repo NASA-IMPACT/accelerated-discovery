@@ -28,14 +28,6 @@ from .crossref_doi import (
 )
 from .identity import IdentityResolver
 
-# Normalizer
-from .normalizer import (
-    SearchResultItemNormalizer,
-    SearchResultNormalizerConfig,
-    SearchResultNormalizerInputSchema,
-    SearchResultNormalizerOutputSchema,
-)
-
 # Specialized resolvers
 from .specialized import DOIResolver, PDFUrlResolver
 from .unpaywall import UnpaywallResolver, UnpaywallResolverConfig
@@ -62,9 +54,4 @@ __all__ = [
     "CrossRefDoiResolverOutputSchema",
     # Composite resolver
     "CompositeResolver",
-    # Normalizer
-    "SearchResultItemNormalizer",
-    "SearchResultNormalizerConfig",
-    "SearchResultNormalizerInputSchema",
-    "SearchResultNormalizerOutputSchema",
 ]
