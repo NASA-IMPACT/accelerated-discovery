@@ -1,12 +1,14 @@
 """
 Utilities for search results: normalization, resolution, and deduplication.
 
-- SearchResultItemNormalizer: Resolves and normalizes SearchResultItems using resolvers
+- normalize_results: Normalize and enrich search results using resolvers
 - deduplicate_results: Simple cascaded deduplication (DOI → Title → URL)
+- get_doi, normalize_title, normalize_url: Individual field normalizers
 """
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections import defaultdict
 from urllib.parse import urlparse
@@ -15,11 +17,77 @@ from loguru import logger
 from pydantic import AnyUrl
 
 from akd.structures import SearchResultItem
+from akd.tools.resolvers._base import BaseArticleResolver
 from akd.tools.resolvers.specialized import DOIResolver
 
 # =============================================================================
 # Normalization Utilities
 # =============================================================================
+
+
+async def normalize_results(
+    results: list[SearchResultItem],
+    resolver: BaseArticleResolver,
+    debug: bool = False,
+) -> list[SearchResultItem]:
+    """
+    Normalize search results in parallel using a resolver.
+
+    This function enriches search results with:
+    - DOI resolution and normalization
+    - Open access URL finding
+    - PDF URL extraction
+    - Metadata enrichment (authors, publication dates, etc.)
+
+    Args:
+        results: List of search results to normalize
+        resolver: Resolver instance to use for normalization
+        debug: Enable debug logging
+
+    Returns:
+        Normalized search results with enriched metadata
+
+    Examples:
+        >>> from akd.tools.resolvers.composite import CompositeResolver
+        >>> resolver = CompositeResolver(debug=True)
+        >>> normalized = await normalize_results(search_results, resolver, debug=True)
+    """
+    if not results or not resolver:
+        return results
+
+    if debug:
+        logger.debug(
+            f"Normalizing {len(results)} results using {resolver.__class__.__name__}",
+        )
+
+    async def _normalize_single(result: SearchResultItem) -> SearchResultItem:
+        """Normalize a single search result item."""
+        try:
+            resolver_input = resolver.input_schema(**result.model_dump())
+            normalized = await resolver.arun(resolver_input)
+
+            # Convert ResolverOutputSchema back to SearchResultItem
+            normalized_dict = normalized.model_dump(
+                include=set(SearchResultItem.model_fields.keys()),
+            )
+            search_result = SearchResultItem(**normalized_dict)
+
+            # Store resolver chain info in extra for downstream processing
+            search_result.extra["resolvers"] = getattr(normalized, "resolvers", [])
+
+            return search_result
+        except Exception as e:
+            if debug:
+                logger.warning(f"Normalization failed for {result.title}: {e}")
+            return result  # Return original on failure (graceful degradation)
+
+    # Normalize all results in parallel
+    normalized_results = await asyncio.gather(
+        *[_normalize_single(result) for result in results],
+        return_exceptions=False,
+    )
+
+    return list(normalized_results)
 
 
 def get_doi(result: "SearchResultItem") -> str | None:
@@ -216,6 +284,7 @@ def deduplicate_results(
 
 
 __all__ = [
+    "normalize_results",
     "deduplicate_results",
     "get_doi",
     "normalize_title",

@@ -17,6 +17,9 @@ from akd.tools.reranker import (
     RerankerType,
     create_reranker,
 )
+from akd.tools.resolvers._base import BaseArticleResolver
+from akd.tools.resolvers.composite import CompositeResolver
+from akd.tools.search.utils import normalize_results
 from akd.utils import reciprocal_rank_fusion
 
 
@@ -64,6 +67,14 @@ class SearchToolConfig(BaseToolConfig):
         description=(
             "List of attribute names for RRF deduplication (cascaded OR logic). "
             "Matches if ANY key matches. Priority order: doi > title > url."
+        ),
+    )
+    result_normalization: bool = Field(
+        default=False,
+        description=(
+            "Enable automatic normalization of results after each query. "
+            "Results are enriched with DOI resolution, URL normalization, and metadata. "
+            "Uses CompositeResolver with default chain if no custom resolver provided."
         ),
     )
 
@@ -116,11 +127,33 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         output_schema (SearchToolOutputSchema): The schema for the output data.
         config_schema (SearchToolConfig): Configuration schema for the tool.
         reranker (RerankerTool): Reranker instance for per-query result reranking.
+        resolver (BaseArticleResolver | None): Optional resolver for result normalization.
     """
 
     input_schema = SearchToolInputSchema
     output_schema = SearchToolOutputSchema
     config_schema = SearchToolConfig
+
+    def __init__(
+        self,
+        config: SearchToolConfig | None = None,
+        resolver: BaseArticleResolver | None = None,
+        debug: bool = False,
+        **kwargs,
+    ) -> None:
+        """
+        Initialize SearchTool with optional resolver for result normalization.
+
+        Args:
+            config: Search tool configuration
+            resolver: Optional resolver for result normalization (used if result_normalization=True).
+                     If None and normalization is enabled, uses CompositeResolver with default chain.
+            debug: Enable debug logging
+            **kwargs: Additional keyword arguments passed to BaseTool
+        """
+
+        super().__init__(config, debug, **kwargs)
+        self.resolver = resolver or CompositeResolver(debug=debug)
 
     def _post_init(self) -> None:
         """
@@ -204,6 +237,27 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         reranked_output = await self.reranker._arun(reranker_input)
         return reranked_output.results
 
+    async def _normalize_results(
+        self,
+        results: list[SearchResultItem],
+    ) -> list[SearchResultItem]:
+        """
+        Normalize search results in parallel using configured resolver.
+
+        This is a thin wrapper around the normalize_results utility function
+        that checks config flags before delegating to the utility.
+
+        Args:
+            results: List of search results to normalize
+
+        Returns:
+            Normalized search results with enriched metadata
+        """
+        if not self.result_normalization or not self.resolver:  # type: ignore
+            return results
+
+        return await normalize_results(results=results, resolver=self.resolver, debug=self.debug)
+
     def _merge_extra_metadata(self, all_extra: list[dict]) -> dict:
         """
         Merge extra metadata from multiple query results.
@@ -231,15 +285,16 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         **kwargs,  # noqa: ARG002
     ) -> SearchToolOutputSchema:
         """
-        Runs the search tool using Reciprocal Rank Fusion (RRF) pattern with optional reranking.
+        Runs the search tool using Reciprocal Rank Fusion (RRF) pattern with optional reranking and normalization.
 
         This method:
         1. Fetches max_results for EACH query (not divided)
         2. Reranks each query's results independently (if reranker is configured)
-        3. Applies RRF to aggregate and rank results across all queries
-        4. Merges metadata from all queries
-        5. Trims final results to max_results
-        6. Returns unified, ranked results
+        3. Normalizes each query's results to enrich metadata (if result_normalization=True)
+        4. Applies RRF to aggregate and rank results across all queries
+        5. Merges metadata from all queries
+        6. Trims final results to max_results
+        7. Returns unified, ranked results
 
         Args:
             params: Input parameters including queries and category.
@@ -279,11 +334,18 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
             await self._rerank(query, results) for query, results in zip(params.queries, results_per_query)
         ]
 
-        # Apply Reciprocal Rank Fusion to aggregate reranked results
+        # Per-query normalization (if enabled)
+        # Normalize each query's results to enrich with DOI, OA URLs, and metadata
+        normalized_results_per_query = [
+            await self._normalize_results(results) for results in reranked_results_per_query
+        ]
+
+        # Apply Reciprocal Rank Fusion to aggregate normalized results
         fused_results = reciprocal_rank_fusion(
-            *reranked_results_per_query,
+            *normalized_results_per_query,
             keys=self.config.rrf_keys,
             normalize=True,
+            debug=self.debug,
         )
 
         # Trim to max_results

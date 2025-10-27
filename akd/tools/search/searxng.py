@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 import httpx
 from loguru import logger
@@ -86,59 +86,7 @@ class SearxNGSearchTool(SearchTool):
 
     input_schema = SearxNGSearchToolInputSchema
     output_schema = SearxNGSearchToolOutputSchema
-
     config_schema = SearxNGSearchToolConfig
-
-    def __init__(
-        self,
-        config: SearxNGSearchToolConfig | None = None,
-        debug: bool = False,
-    ):
-        """
-        Initializes the SearxNGTool.
-
-        Args:
-            config (SearxNGSearchToolConfig):
-                Configuration for the tool, including
-                    - base URL
-                    - max results,
-                    - engines,
-                    - max pages,
-                    - results per page,
-                    - score cutoff,
-                    - and optional title and description overrides.
-        """
-        config = config or SearxNGSearchToolConfig()
-        super().__init__(config, debug)
-
-    @classmethod
-    def from_params(
-        cls,
-        base_url: Optional[HttpUrl] = None,
-        max_results: int = 10,
-        engines: Optional[List[str]] = None,
-        max_pages: int = 5,
-        results_per_page: int = 10,
-        score_cutoff: float = 0.25,
-        strict: bool = True,
-        debug: bool = False,
-    ) -> SearxNGSearchTool:
-        base_url = base_url or os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
-        engines = engines or os.getenv(
-            "SEARXNG_ENGINES",
-            "google,arxiv,google_scholar",
-        ).split(",")
-        config = SearxNGSearchToolConfig(
-            base_url=base_url,
-            max_results=max_results,
-            engines=engines,
-            max_pages=max_pages,
-            results_per_page=results_per_page,
-            score_cutoff=score_cutoff,
-            strict=strict,
-            debug=debug,
-        )
-        return cls(config, debug)
 
     async def _fetch_search_results(
         self,

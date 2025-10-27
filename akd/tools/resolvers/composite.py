@@ -1,7 +1,14 @@
+from __future__ import annotations
+
 from loguru import logger
 from pydantic import HttpUrl
 
 from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
+from .ads import ADSResolver
+from .arxiv import ArxivResolver
+from .crossref_doi import CrossRefDoiResolver
+from .specialized import DOIResolver, PDFUrlResolver
+from .unpaywall import UnpaywallResolver
 
 
 class CompositeResolver(BaseArticleResolver):
@@ -11,13 +18,53 @@ class CompositeResolver(BaseArticleResolver):
     the next one is tried until a successful resolution is found.
     """
 
-    def __init__(self, *resolvers: BaseArticleResolver, debug: bool = False) -> None:
+    def __init__(
+        self,
+        *resolvers: BaseArticleResolver,
+        debug: bool = False,
+    ) -> None:
+        """
+        Initialize CompositeResolver with a chain of resolvers.
+
+        If no resolvers are provided, uses a default chain optimized for scientific literature:
+        1. CrossRef - finds DOI from title when missing
+        2. DOI normalization - cleans up DOI format
+        3. ArXiv - creates DOI for arXiv papers, converts to PDF
+        4. ADS - extracts DOI from ADS pages
+        5. DOI normalization (again) - ensures final DOI is canonical
+        6. Unpaywall - uses the DOI to find OA versions
+        7. PDF fallback - passes through existing PDF URLs
+
+        Args:
+            *resolvers: Variable number of resolver instances to chain together.
+                       If empty, uses default scientific resolver chain.
+            debug: Enable debug logging
+        """
         super().__init__(debug=debug)
-        self.resolvers = resolvers
+
+        # Use default resolver chain if none provided
+        self.resolvers = resolvers or (
+            CrossRefDoiResolver(debug=debug),  # 1. DOI from title
+            DOIResolver(debug=debug),  # 2. Normalize DOI
+            ArxivResolver(debug=debug),  # 3. ArXiv DOI + PDF
+            ADSResolver(debug=debug),  # 4. ADS DOI/PDF
+            DOIResolver(debug=debug),  # 5. Re-normalize DOI
+            UnpaywallResolver(debug=debug),  # 6. OA versions
+            PDFUrlResolver(debug=debug),  # 7. PDF fallback
+        )
 
     def validate_url(self, url: HttpUrl | str) -> bool:
         """Composite resolver accepts any URL that at least one sub-resolver accepts"""
         return True
+
+    def __str__(self) -> str:
+        """String representation showing resolver chain."""
+        resolver_names = [r.__class__.__name__ for r in self.resolvers]
+        return f"CompositeResolver({len(self.resolvers)} resolvers: {' → '.join(resolver_names)})"
+
+    def __repr__(self) -> str:
+        """Detailed representation for debugging."""
+        return self.__str__()
 
     async def resolve(self, params: ResolverInputSchema) -> ResolverOutputSchema | None:
         """This method is not used in composite resolver - see _arun instead"""
