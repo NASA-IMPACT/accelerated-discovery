@@ -114,6 +114,7 @@ def basic_config():
         scraping_mode=SearchPipelineScrapingMode.ALWAYS_ON,
         scraping_timeout=5,
         fail_on_scraping_errors=False,
+        debug=True,
     )
 
 

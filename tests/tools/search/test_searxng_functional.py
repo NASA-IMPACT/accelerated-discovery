@@ -216,6 +216,7 @@ class TestSearxNGPagination:
         config = sample_searxng_config
         config.max_pages = 3
         config.results_per_page = 2
+        config.result_normalization = False  # Disable normalization to prevent test URLs from colliding
         tool = SearxNGSearchTool(config=config)
 
         # Combined results that would come from multiple pages (as SearchResultItem objects)

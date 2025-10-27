@@ -305,7 +305,10 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         if not self.deduplication:
             return results
 
-        return deduplicate_results(results, keys=self.deduplication_keys, debug=self.debug)
+        # return first list. RRemember the return type of the utility function is
+        # list[list[SearchResultItem]], but we're passing a single list.
+        # variadic argument
+        return deduplicate_results(results, keys=self.deduplication_keys, debug=self.debug)[0]
 
     async def _arun(
         self,
@@ -357,7 +360,7 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         results_per_query = [output.results for output in outputs]
 
         # deduplicateion per query results
-        results_per_query = [self._deduplicate_results(results)[0] for results in results_per_query]
+        results_per_query = [self._deduplicate_results(results) for results in results_per_query]
 
         all_extra = [output.extra or {} for output in outputs]
 
