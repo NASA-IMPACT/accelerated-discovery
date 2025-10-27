@@ -51,7 +51,15 @@ class CodeSearchToolOutputSchema(SearchToolOutputSchema):
 class CodeSearchToolConfig(SearchToolConfig):
     """Configuration for the code search tool."""
 
-    pass
+    # disabled for code search
+    result_normalization: bool = Field(
+        default=False,
+        description=(
+            "Enable automatic normalization of results after each query. "
+            "Results are enriched with DOI resolution, URL normalization, and metadata. "
+            "Uses CompositeResolver with default chain if no custom resolver provided."
+        ),
+    )
 
 
 class CodeSearchTool(SearchTool):

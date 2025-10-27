@@ -70,7 +70,7 @@ class SearchToolConfig(BaseToolConfig):
         ),
     )
     result_normalization: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Enable automatic normalization of results after each query. "
             "Results are enriched with DOI resolution, URL normalization, and metadata. "
