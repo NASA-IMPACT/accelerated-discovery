@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from enum import Enum
-from typing import Optional
 
 from loguru import logger
 from pydantic import Field
@@ -179,7 +178,7 @@ class SearchPipeline(SearchTool):
     async def _resolve_essential_metadata(
         self,
         result: SearchResultItem,
-    ) -> Optional[ResolverOutputSchema]:
+    ) -> ResolverOutputSchema:
         """
         Resolve the open access URL for a search result.
 
@@ -189,6 +188,10 @@ class SearchPipeline(SearchTool):
         Returns:
             Resolved open access URL or None if resolution fails
         """
+        extra = result.extra or {}
+        # If Already resolved by upstream search tool, skip resolution
+        if extra.get("resolvers", []) or extra.get("is_url_resolved", False):
+            return ResolverOutputSchema(**result.model_dump())
         try:
             # Try to resolve from the main URL first
             resolver_output = await self.resolver.arun(
