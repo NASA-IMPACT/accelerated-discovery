@@ -59,6 +59,13 @@ class SearchToolConfig(BaseToolConfig):
             "Optional custom configuration for the reranker tool. If None, uses default RerankerToolConfig settings."
         ),
     )
+    rrf_keys: list[str] = Field(
+        default_factory=lambda: ["doi", "title", "url"],
+        description=(
+            "List of attribute names for RRF deduplication (cascaded OR logic). "
+            "Matches if ANY key matches. Priority order: doi > title > url."
+        ),
+    )
 
 
 class SearchToolInputSchema(InputSchema):
@@ -275,7 +282,7 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         # Apply Reciprocal Rank Fusion to aggregate reranked results
         fused_results = reciprocal_rank_fusion(
             *reranked_results_per_query,
-            key="url",
+            keys=self.config.rrf_keys,
             normalize=True,
         )
 

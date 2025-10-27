@@ -100,7 +100,7 @@ class CompositeSearchTool(SearchTool):
         # Apply RRF fusion across all tools (treats tools as blackbox rankers)
         fused_results = reciprocal_rank_fusion(
             *results_per_tool,
-            key="url",
+            keys=self.config.rrf_keys,
             normalize=True,
         )
 
@@ -142,7 +142,7 @@ class CompositeSearchTool(SearchTool):
         # Apply RRF fusion across reranked queries
         fused_results = reciprocal_rank_fusion(
             *reranked_results_per_query,
-            key="url",
+            keys=self.config.rrf_keys,
             normalize=True,
         )
 

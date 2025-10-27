@@ -306,18 +306,22 @@ def parse_date(date_input: str | int | None) -> datetime | None:
 def reciprocal_rank_fusion(
     *results: list["SearchResultItem"],
     k: int = 60,
-    key: str = "url",
+    keys: list[str] | str | None = None,
     normalize: bool = True,
+    debug: bool = False,
 ) -> list["SearchResultItem"]:
     """
-    Fuse multiple ranked lists using Reciprocal Rank Fusion (RRF).
+    Fuse multiple ranked lists using Reciprocal Rank Fusion (RRF) with multi-key matching.
 
     Formula: RRF_score(item) = Σ(1 / (k + rank)) across all lists containing item
 
     Args:
         results: Variable number of ranked result lists (one per query).
         k: RRF constant (default 60, standard value from literature).
-        key: Attribute name to use as deduplication key (default "url").
+        keys: List of attribute names for deduplication (cascaded OR logic).
+              Default: ["doi", "title", "url"] - matches if ANY key matches.
+              Assumes fields are already normalized by resolvers.
+              Can also pass single string for backward compatibility.
         normalize: If True, apply min-max normalization to scores [0.1, 1.0] (default True).
                   Raw RRF scores are always preserved in item.extra["rrf_score"].
 
@@ -329,30 +333,81 @@ def reciprocal_rank_fusion(
         >>> results_q2 = [item_b, item_d, item_a]
         >>> fused = reciprocal_rank_fusion(results_q1, results_q2)
         # item_b and item_a appear in both, so they get boosted
+
+        # Same paper, different URLs - merged by DOI:
+        >>> item1 = SearchResultItem(doi="10.1234/example", url="https://arxiv.org/abs/123")
+        >>> item2 = SearchResultItem(doi="10.1234/example", url="https://doi.org/10.1234/example")
+        # Result: Merged into 1 item with combined RRF score
     """
+    # Handle default and backward compatibility
+    keys = keys or ["doi", "title", "url"]
+    if isinstance(keys, str):
+        keys = [keys]
+
     # Return empty if no results
     if not results:
         return []
 
-    rrf_map = defaultdict(float)
-    item_map = {}
+    # Track: identifier -> cumulative RRF score
+    # Track: identifier -> SearchResultItem
+    # Track: identifier -> set of all (key, value) identifiers for this item
+    identifier_to_score = defaultdict(float)
+    identifier_to_item = {}
+    identifier_groups = defaultdict(set)
 
-    # Calculate RRF scores
+    # Calculate RRF scores with multi-key matching
     for rank_list in results:
         for rank, item in enumerate(rank_list, 1):
-            identifier = getattr(item, key, None)
-            if identifier:
-                rrf_map[identifier] += 1.0 / (rank + k)
-                if identifier not in item_map:
-                    item_map[identifier] = item.model_copy()  # Copy to avoid mutation
+            # Collect all non-None identifiers for this item
+            item_identifiers = set()
+            for key in keys:
+                value = getattr(item, key, None)
+                if value:
+                    item_identifiers.add((key, str(value)))
+
+            if not item_identifiers:
+                continue  # Skip items with no valid identifiers
+
+            # Pick canonical identifier (prefer first key in priority order)
+            canonical = None
+            for key in keys:
+                for item_key, item_val in item_identifiers:
+                    if item_key == key:
+                        canonical = (item_key, item_val)
+                        break
+                if canonical:
+                    break
+
+            if not canonical:
+                canonical = next(iter(item_identifiers))
+
+            # Check if any identifier matches existing groups
+            matched_canonical = None
+            for existing_canonical, group in identifier_groups.items():
+                if item_identifiers & group:  # Set intersection - shared identifier?
+                    matched_canonical = existing_canonical
+                    break
+
+            if matched_canonical:
+                # Merge with existing item - accumulate RRF score
+                identifier_to_score[matched_canonical] += 1.0 / (rank + k)
+                # Merge all identifiers into the group
+                identifier_groups[matched_canonical].update(item_identifiers)
+            else:
+                # New item - create new group
+                identifier_to_score[canonical] += 1.0 / (rank + k)
+                identifier_to_item[canonical] = item.model_copy()
+                identifier_groups[canonical] = item_identifiers
 
     # Build results with RRF scores
     fused_results = []
-    for identifier, rrf_score in sorted(rrf_map.items(), key=lambda x: x[1], reverse=True):
-        item = item_map[identifier]
+    for identifier, rrf_score in sorted(identifier_to_score.items(), key=lambda x: x[1], reverse=True):
+        item = identifier_to_item[identifier]
         item.score = rrf_score
         item.extra = item.extra or {}
         item.extra["rrf_score"] = rrf_score
+        # Track which keys were used for matching (useful for debugging)
+        item.extra["rrf_matched_keys"] = list(set(k for k, _ in identifier_groups[identifier]))
         fused_results.append(item)
 
     if not fused_results:
