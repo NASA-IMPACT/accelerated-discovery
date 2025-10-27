@@ -17,7 +17,7 @@ class UnpaywallResolverConfig(ArticleResolverConfig):
     """Configuration for UnpaywallResolver."""
 
     email: str = Field(
-        default="user@institution.edu",
+        default="akd@uah.edu",
         description="Email address required for Unpaywall API access",
     )
 
