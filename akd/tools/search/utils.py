@@ -288,9 +288,56 @@ def deduplicate_results(
     return deduplicated_lists
 
 
+def sort_results(
+    results: list[SearchResultItem],
+    sort_by: str = "score",
+    debug: bool = False,
+) -> list[SearchResultItem]:
+    """
+    Sort results by the specified key. First checks for the key directly in the dict,
+    then checks in the 'extra' field if it exists. Returns unsorted if key not found.
+    """
+
+    def __get_sort_key(result):
+        """
+        Gets the sorting key from the result object, checking the direct
+        attribute first, then the 'extra' dictionary.
+        """
+
+        # 1. Try to get the attribute directly from the object.
+        # We use a default of `None` to distinguish "doesn't exist"
+        # from a valid "falsy" value like 0, False, or [].
+        if (value := getattr(result, sort_by, None)) is not None:
+            return value
+
+        # 2. If not found (or was None), check the 'extra' attribute.
+        # Safely get 'extra', defaulting to an empty dict if it's None or missing.
+        extra = getattr(result, "extra", None)
+
+        # 3. If 'extra' is a dict, try to .get() the key.
+        # .get() safely returns None if the key doesn't exist.
+        if isinstance(extra, dict):
+            if (value := extra.get(sort_by)) is not None:
+                return value
+
+        # 4. If not found in either place, return the default sorting value.
+        return float("-inf")
+
+    try:
+        # Sort in descending order (highest score first)
+        # Change reverse=False if you want ascending order
+        return sorted(results, key=__get_sort_key, reverse=True)
+    except TypeError:
+        # If sorting fails (mixed types), return as is
+        if debug:
+            logger.warning(f"Sorting by {sort_by} failed due to mixed types.")
+        return results
+
+
 __all__ = [
-    "normalize_results",
     "deduplicate_results",
+    "normalize_results",
+    "sort_results",
     "get_doi",
     "normalize_title",
     "normalize_url",

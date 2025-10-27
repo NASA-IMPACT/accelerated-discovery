@@ -4,13 +4,13 @@ from abc import abstractmethod
 from typing import Literal
 
 import numpy as np
-from loguru import logger
 from pydantic.fields import Field
 from sentence_transformers import CrossEncoder
 
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
+from akd.tools.search.utils import deduplicate_results, sort_results
 
 # Reranker type options for factory function
 RerankerType = Literal["cross_encoder", "identity", "no_op", "nope", "none"]
@@ -68,16 +68,12 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
         """
         Deduplicate results based on a list of keys.
         """
-        seen = set()
-        deduped = []
-        for result in results:
-            for key in deduplication_keys:
-                val = str(getattr(result, key, ""))
-                if val and val not in seen:
-                    seen.add(val)
-                    deduped.append(result)
-                    break
-        return deduped
+        deduped = deduplicate_results(
+            results,
+            keys=deduplication_keys,
+            debug=self.debug,
+        )
+        return deduped[0]
 
     async def _sort_results(
         self,
@@ -88,29 +84,11 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
         Sort results by the specified key. First checks for the key directly in the dict,
         then checks in the 'extra' field if it exists. Returns unsorted if key not found.
         """
-
-        def __get_sort_key(result):
-            # First check if sort_by key exists directly in the dict
-            if sort_key in result:
-                return result[sort_key]
-
-            # Then check if 'extra' field exists and contains the sort_by key
-            if result.extra and isinstance(result.extra, dict) and sort_key in result.extra:
-                return result.extra[sort_key]
-
-            # If key not found anywhere, return a default value that will sort last
-            # Using float('inf') for numerical sorting or empty string for string sorting
-            if self.debug:
-                logger.warning(f"Sort key {sort_key} not found in results")
-            return float("-inf")
-
-        try:
-            # Sort in descending order (highest score first)
-            # Change reverse=False if you want ascending order
-            return sorted(results, key=__get_sort_key, reverse=True)
-        except TypeError:
-            # If sorting fails (mixed types), return as is
-            return results
+        return sort_results(
+            results,
+            sort_by=sort_key,
+            debug=self.debug,
+        )
 
     # abstract method to be implemented by the subclass
     @abstractmethod

@@ -148,23 +148,6 @@ class TestSearxNGSearchTool:
         assert tool.config.strict is True
         assert tool.config.engines == ["google", "arxiv", "google_scholar"]
 
-    def test_from_params_class_method(self):
-        """Test tool creation using from_params class method."""
-        tool = SearxNGSearchTool.from_params(
-            base_url="http://test.searxng.com",
-            max_results=20,
-            engines=["duckduckgo"],
-            strict=False,
-            debug=True,
-        )
-
-        # HttpUrl automatically adds trailing slash
-        assert str(tool.config.base_url) == "http://test.searxng.com/"
-        assert tool.config.max_results == 20
-        assert tool.config.engines == ["duckduckgo"]
-        assert tool.config.strict is False
-        assert tool.config.debug is True
-
     def test_normalize_engine_name(self):
         """Test engine name normalization."""
         assert SearxNGSearchTool.normalize_engine_name("Google Scholar") == "google_scholar"

@@ -27,7 +27,6 @@ from ._base import (
 )
 from .composite import CompositeSearchTool, CompositeSearchToolConfig
 from .searxng import SearxNGSearchTool, SearxNGSearchToolConfig
-from .utils import deduplicate_results
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
@@ -62,8 +61,8 @@ class CodeSearchToolConfig(SearchToolConfig):
         ),
     )
 
-    dedup_keys: list[str] = Field(
-        default_factory=lambda: ["url"],
+    deduplication_keys: list[str] = Field(
+        default_factory=lambda: ["url"],  # default to url for code search
     )
 
 
@@ -122,19 +121,6 @@ class CodeSearchTool(SearchTool):
             )
         return output
 
-    def _deduplicate_results(
-        self,
-        results: list[SearchResultItem],
-        keys: list[str] | str = "url",
-    ) -> list[SearchResultItem]:
-        """
-        Deduplicate results based on a unique key (default is URL).
-        """
-
-        # list[list[SearchResultItem]]
-        deduped = deduplicate_results(results, keys=keys, debug=self.debug)
-        return deduped[0]
-
     def _sort_results(
         self,
         results: list[SearchResultItem],
@@ -146,16 +132,28 @@ class CodeSearchTool(SearchTool):
         """
 
         def __get_sort_key(result):
-            # First check if sort_by key exists directly in the dict
-            if sort_by in result:
-                return result[sort_by]
+            """
+            Gets the sorting key from the result object, checking the direct
+            attribute first, then the 'extra' dictionary.
+            """
 
-            # Then check if 'extra' field exists and contains the sort_by key
-            if result.extra and isinstance(result.extra, dict) and sort_by in result.extra:
-                return result.extra[sort_by]
+            # 1. Try to get the attribute directly from the object.
+            # We use a default of `None` to distinguish "doesn't exist"
+            # from a valid "falsy" value like 0, False, or [].
+            if (value := getattr(result, sort_by, None)) is not None:
+                return value
 
-            # If key not found anywhere, return a default value that will sort last
-            # Using float('inf') for numerical sorting or empty string for string sorting
+            # 2. If not found (or was None), check the 'extra' attribute.
+            # Safely get 'extra', defaulting to an empty dict if it's None or missing.
+            extra = getattr(result, "extra", None)
+
+            # 3. If 'extra' is a dict, try to .get() the key.
+            # .get() safely returns None if the key doesn't exist.
+            if isinstance(extra, dict):
+                if (value := extra.get(sort_by)) is not None:
+                    return value
+
+            # 4. If not found in either place, return the default sorting value.
             return float("-inf")
 
         try:
@@ -517,21 +515,14 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 content=result.pop("text", ""),
                 query=result.pop("query", ""),
                 extra=result,
-            )
+            )  # type: ignore
             for result in all_results_data
         ]
-        try:
-            deduped: list[SearchResultItem] = self._deduplicate_results(formatted_results, keys=self.dedup_keys)
-        except Exception as e:
-            logger.error(f"Error deduplicating results: {e}")
 
-        try:
-            sorted_results = self._sort_results(
-                deduped,
-                sort_by="score",
-            )
-        except Exception as e:
-            logger.error(f"Error sorting repo list by score: {e}")
+        sorted_results = self._sort_results(
+            formatted_results,
+            sort_by="score",
+        )
 
         return self.output_schema(results=sorted_results)
 
@@ -601,18 +592,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
         # Call SearxNGSearchTool's _arun_single_query
         output = await SearxNGSearchTool._arun_single_query(self, query, max_results, **kwargs)
 
-        # Post-process results: deduplicate and sort
-        try:
-            deduped = self._deduplicate_results(output.results, keys=self.dedup_keys)
-        except Exception as e:
-            logger.error(f"Error deduplicating results: {e}")
-            deduped = output.results
-
-        try:
-            sorted_results = self._sort_results(deduped, sort_by="score")
-        except Exception as e:
-            logger.error(f"Error sorting repo list by score: {e}")
-            sorted_results = deduped
+        sorted_results = self._sort_results(output.results, sort_by="score")
 
         # Convert output to CodeSearchToolOutputSchema
         return self.output_schema(results=sorted_results, extra=output.extra or {})
@@ -704,19 +684,12 @@ class SDECodeSearchTool(CodeSearchTool):
                 content=result.pop("full_text", ""),
                 query=result.pop("query", ""),
                 extra=result,
-            )
+            )  # type: ignore
             for result in all_results_data
         ]
-        try:
-            deduped = self._deduplicate_results(formatted_results, keys=self.dedup_keys)
-        except Exception as e:
-            logger.error(f"Error deduplicating results: {e}")
 
-        try:
-            sorted_results = self._sort_results(
-                deduped,
-                sort_by="score",
-            )
-        except Exception as e:
-            logger.error(f"Error sorting repo list by score: {e}")
+        sorted_results = self._sort_results(
+            formatted_results,
+            sort_by="score",
+        )
         return self.output_schema(results=sorted_results)

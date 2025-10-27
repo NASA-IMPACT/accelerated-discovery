@@ -19,7 +19,7 @@ from akd.tools.reranker import (
 )
 from akd.tools.resolvers._base import BaseArticleResolver
 from akd.tools.resolvers.composite import CompositeResolver
-from akd.tools.search.utils import normalize_results
+from akd.tools.search.utils import deduplicate_results, normalize_results
 from akd.utils import reciprocal_rank_fusion
 
 
@@ -75,6 +75,17 @@ class SearchToolConfig(BaseToolConfig):
             "Enable automatic normalization of results after each query. "
             "Results are enriched with DOI resolution, URL normalization, and metadata. "
             "Uses CompositeResolver with default chain if no custom resolver provided."
+        ),
+    )
+    deduplication: bool = Field(
+        default=True,
+        description="Enable deduplication of results per query",
+    )
+    deduplication_keys: list[str] = Field(
+        default_factory=lambda: ["doi", "title", "url"],
+        description=(
+            "List of attribute names for deduplication within each query's results "
+            "(cascaded OR logic). Matches if ANY key matches. Priority order: doi > title > url."
         ),
     )
 
@@ -278,6 +289,24 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
                 merged = {**merged, **extra}
         return merged
 
+    def _deduplicate_results(self, results: list[SearchResultItem]) -> list[SearchResultItem]:
+        """
+        Deduplicate search results based on configured keys.
+
+        This is a thin wrapper around the deduplicate_results utility function
+        that checks config flags before delegating to the utility.
+
+        Args:
+            results: List of search results to deduplicate
+
+        Returns:
+            Deduplicated search results
+        """
+        if not self.deduplication:
+            return results
+
+        return deduplicate_results(results, keys=self.deduplication_keys, debug=self.debug)
+
     async def _arun(
         self,
         params: SearchToolInputSchema,
@@ -326,6 +355,10 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
 
         # Extract results and metadata from each output
         results_per_query = [output.results for output in outputs]
+
+        # deduplicateion per query results
+        results_per_query = [self._deduplicate_results(results)[0] for results in results_per_query]
+
         all_extra = [output.extra or {} for output in outputs]
 
         # Per-query reranking before RRF fusion
