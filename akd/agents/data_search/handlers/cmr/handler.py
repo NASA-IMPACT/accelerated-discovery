@@ -284,6 +284,7 @@ class CMRHandler(BaseHandler):
         # Step 3: Query Execution
         (
             approach_collections,
+            approach_collections_by_query,
             query_execution_logs,
         ) = await self._execute_searchable_queries(
             queries_to_execute,
@@ -296,6 +297,7 @@ class CMRHandler(BaseHandler):
         # because searchable queries are tagged with indices from approaches_to_use
         ranked_collections = await self._rank_collections(
             approach_collections,
+            approach_collections_by_query,
             original_query,
             topic,
             decomposition,
@@ -418,7 +420,11 @@ class CMRHandler(BaseHandler):
         self,
         searchable_queries: List[CMRSearchableQuery],
         params: DataSearchAgentInputSchema,
-    ) -> tuple[Dict[int, List[Dict[str, Any]]], List[Dict[str, Any]]]:
+    ) -> tuple[
+        Dict[int, List[Dict[str, Any]]],
+        Dict[int, List[List[Dict[str, Any]]]],
+        List[Dict[str, Any]],
+    ]:
         """
         Execute searchable queries in parallel and return collections grouped by approach.
 
@@ -427,8 +433,9 @@ class CMRHandler(BaseHandler):
             params: Search parameters
 
         Returns:
-            Tuple of (approach_collections, execution_logs)
-            - approach_collections: Dictionary mapping approach_index to list of collections
+            Tuple of (approach_collections, approach_collections_by_query, execution_logs)
+            - approach_collections: Dictionary mapping approach_index to flat list of collections
+            - approach_collections_by_query: Dictionary mapping approach_index to list of query result lists
             - execution_logs: List of execution metadata for each query
         """
         # Create parallel tasks for all queries across all approaches
@@ -441,7 +448,8 @@ class CMRHandler(BaseHandler):
         results = await asyncio.gather(*query_tasks, return_exceptions=True)
 
         # Group results by approach and collect execution logs
-        approach_collections = {}  # approach_index -> [collections]
+        approach_collections = {}  # approach_index -> [all collections flattened]
+        approach_collections_by_query = {}  # approach_index -> [[query0], [query1], ...]
         execution_logs = []
 
         for result in results:
@@ -452,9 +460,15 @@ class CMRHandler(BaseHandler):
             approach_idx = result["approach_idx"]
             collections = result["collections"]
 
+            # Track flat list (for normal flow)
             if approach_idx not in approach_collections:
                 approach_collections[approach_idx] = []
             approach_collections[approach_idx].extend(collections)
+
+            # Track grouped list (for fallback round-robin)
+            if approach_idx not in approach_collections_by_query:
+                approach_collections_by_query[approach_idx] = []
+            approach_collections_by_query[approach_idx].append(collections)
 
             # Collect execution metadata
             execution_logs.append(
@@ -464,7 +478,7 @@ class CMRHandler(BaseHandler):
                 },
             )
 
-        return approach_collections, execution_logs
+        return approach_collections, approach_collections_by_query, execution_logs
 
     def _augment_queries_with_execution_metadata(
         self,
@@ -513,35 +527,90 @@ class CMRHandler(BaseHandler):
 
         return augmented, total_cmr
 
-    def _deduplicate_approach_collections(
+    def _round_robin_select(
         self,
-        approach_collections: Dict[int, List[Dict[str, Any]]],
-    ) -> Dict[int, List[Dict[str, Any]]]:
+        grouped_lists: List[List[Dict[str, Any]]],
+        max_items: int,
+    ) -> List[Dict[str, Any]]:
         """
-        Deduplicate collections within each approach, preserving first occurrence.
-        If a collection appears in multiple approaches, keep it only in the first.
+        Select items round-robin from grouped lists.
+
+        Takes first item from each group, then second from each, etc.
+
+        Args:
+            grouped_lists: List of lists (e.g., [[query0_colls], [query1_colls], [query2_colls]])
+            max_items: Maximum items to select
+
+        Returns:
+            Round-robin selected items
+
+        Example:
+            Input: [[A1, A2, A3], [B1, B2], [C1, C2, C3]], max_items=7
+            Output: [A1, B1, C1, A2, B2, C2, A3]
         """
-        global_seen_ids = set()  # Track across all approaches
-        deduplicated_by_approach = {}
+        result = []
+        max_depth = max(len(group) for group in grouped_lists) if grouped_lists else 0
 
-        # Process approaches in order (0, 1, 2, ...)
-        for approach_idx in sorted(approach_collections.keys()):
-            collections = approach_collections[approach_idx]
-            deduplicated = []
+        for depth in range(max_depth):
+            for group in grouped_lists:
+                if len(result) >= max_items:
+                    return result
+                if depth < len(group):
+                    result.append(group[depth])
 
-            for collection in collections:
-                concept_id = collection.get("concept_id")
-                if concept_id and concept_id not in global_seen_ids:
-                    global_seen_ids.add(concept_id)
-                    deduplicated.append(collection)
+        return result
 
-            deduplicated_by_approach[approach_idx] = deduplicated
+    def _deduplicate_approach_collections_grouped(
+        self,
+        approach_collections_by_query: Dict[int, List[List[Dict[str, Any]]]],
+    ) -> Dict[int, List[List[Dict[str, Any]]]]:
+        """
+        Deduplicate collections within each approach, preserving query grouping.
 
-        return deduplicated_by_approach
+        Global dedup: If collection appears in multiple approaches, keep only in first.
+        Within-approach dedup: If collection appears in multiple queries, keep only in first query.
+
+        Args:
+            approach_collections_by_query: {approach_idx: [[query0_colls], [query1_colls], ...]}
+
+        Returns:
+            Deduplicated structure with same format
+        """
+        global_seen_ids = set()
+        deduplicated = {}
+
+        for approach_idx in sorted(approach_collections_by_query.keys()):
+            query_groups = approach_collections_by_query[approach_idx]
+            deduplicated_groups = []
+            approach_seen_ids = set()
+
+            for query_collections in query_groups:
+                deduplicated_query = []
+
+                for collection in query_collections:
+                    concept_id = collection.get("concept_id")
+
+                    # Skip if seen globally or within this approach
+                    if (
+                        concept_id
+                        and concept_id not in global_seen_ids
+                        and concept_id not in approach_seen_ids
+                    ):
+                        global_seen_ids.add(concept_id)
+                        approach_seen_ids.add(concept_id)
+                        deduplicated_query.append(collection)
+
+                # Keep empty lists to preserve query indices
+                deduplicated_groups.append(deduplicated_query)
+
+            deduplicated[approach_idx] = deduplicated_groups
+
+        return deduplicated
 
     async def _filter_and_rank_by_approach(
         self,
         approach_collections: Dict[int, List[Dict[str, Any]]],
+        approach_collections_by_query: Dict[int, List[List[Dict[str, Any]]]],
         original_query: str,
         topic: Topic,
         decomp: ScientificDecomposition,
@@ -550,6 +619,9 @@ class CMRHandler(BaseHandler):
     ) -> Dict[int, List[Dict[str, Any]]]:
         """
         Filter and rank collections within each approach in parallel.
+
+        If LLM filtering fails for an approach, falls back to round-robin selection
+        from query results to ensure no data is lost.
         """
         if not approach_collections:
             print("DEBUG: No approach_collections to filter")
@@ -632,6 +704,19 @@ class CMRHandler(BaseHandler):
                 print(
                     f"DEBUG: Approach {approach_idx} filtering FAILED with exception: {result}",
                 )
+                print(f"DEBUG: Using round-robin fallback for approach {approach_idx}")
+
+                # Get query-grouped collections for this approach
+                query_groups = approach_collections_by_query.get(approach_idx, [])
+                fallback = self._round_robin_select(
+                    query_groups,
+                    max_items=self.config.max_collections_per_approach,
+                )
+                filtered_by_approach[approach_idx] = fallback
+
+                print(
+                    f"DEBUG: Fallback selected {len(fallback)} collections via round-robin from {len(query_groups)} queries",
+                )
                 continue
 
             print(f"DEBUG: Approach {approach_idx} result type: {type(result)}")
@@ -676,6 +761,7 @@ class CMRHandler(BaseHandler):
     async def _rank_collections(
         self,
         approach_collections: Dict[int, List[Dict[str, Any]]],
+        approach_collections_by_query: Dict[int, List[List[Dict[str, Any]]]],
         original_query: str,
         topic: Topic,
         decomp: ScientificDecomposition,
@@ -686,9 +772,9 @@ class CMRHandler(BaseHandler):
         Rank collections using approach-aware pipeline.
 
         Pipeline:
-        1. Per-approach deduplication
-        2. Per-approach filtering and ranking (parallel)
-        3. Final cross-approach ranking
+        1. Per-approach deduplication (preserving query grouping)
+        2. Per-approach filtering and ranking (parallel, with round-robin fallback)
+        3. Final cross-approach ranking (with round-robin fallback)
         """
         print(
             f"DEBUG: _rank_collections called with {len(approach_collections)} approaches",
@@ -697,15 +783,26 @@ class CMRHandler(BaseHandler):
             print("DEBUG: No approach_collections, returning empty list")
             return []
 
-        # Stage 1: Per-approach deduplication
-        deduplicated = self._deduplicate_approach_collections(approach_collections)
-        print(
-            f"DEBUG: After deduplication: {sum(len(c) for c in deduplicated.values())} total collections",
+        # Stage 1: Per-approach deduplication (preserving query grouping)
+        deduplicated_grouped = self._deduplicate_approach_collections_grouped(
+            approach_collections_by_query,
         )
 
-        # Stage 2: Per-approach filtering and ranking (parallel)
+        # Flatten grouped structure for normal filtering flow
+        deduplicated_flat = {}
+        for approach_idx, query_groups in deduplicated_grouped.items():
+            deduplicated_flat[approach_idx] = []
+            for query_colls in query_groups:
+                deduplicated_flat[approach_idx].extend(query_colls)
+
+        print(
+            f"DEBUG: After deduplication: {sum(len(c) for c in deduplicated_flat.values())} total collections",
+        )
+
+        # Stage 2: Per-approach filtering and ranking (parallel, with fallback)
         filtered_by_approach = await self._filter_and_rank_by_approach(
-            deduplicated,
+            deduplicated_flat,
+            deduplicated_grouped,
             original_query,
             topic,
             decomp,
@@ -768,9 +865,21 @@ class CMRHandler(BaseHandler):
 
         except Exception as e:
             print(f"DEBUG: Final ranking FAILED with exception: {e}")
-            # Fallback: return up to final_collection_count
-            fallback = all_filtered[: self.config.final_collection_count]
-            print(f"DEBUG: Returning fallback of {len(fallback)} collections")
+            print("DEBUG: Using round-robin fallback across approaches")
+
+            # Build list of approach results in sorted order
+            approach_lists = [
+                filtered_by_approach[idx] for idx in sorted(filtered_by_approach.keys())
+            ]
+
+            fallback = self._round_robin_select(
+                approach_lists,
+                max_items=self.config.final_collection_count,
+            )
+
+            print(
+                f"DEBUG: Fallback selected {len(fallback)} collections via round-robin from {len(approach_lists)} approaches",
+            )
             return fallback
 
     async def _search_granules_for_single_collection(

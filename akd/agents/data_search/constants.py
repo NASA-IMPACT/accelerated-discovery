@@ -25,7 +25,7 @@ MIN_DECOMPOSITIONS_PER_TOPIC = 1
 
 # Approach Generation (per decomposition)
 # - LLM generates this many approaches before keyword-only injection
-CMR_MAX_LLM_APPROACHES = 4
+CMR_MAX_LLM_APPROACHES = 3
 CMR_MIN_LLM_APPROACHES = 1
 
 # - Actual execution max after keyword-only injection (when enabled)
