@@ -27,6 +27,7 @@ from ._base import (
 )
 from .composite import CompositeSearchTool, CompositeSearchToolConfig
 from .searxng import SearxNGSearchTool, SearxNGSearchToolConfig
+from .utils import deduplicate_results
 
 
 class CodeSearchToolInputSchema(SearchToolInputSchema):
@@ -59,6 +60,10 @@ class CodeSearchToolConfig(SearchToolConfig):
             "Results are enriched with DOI resolution, URL normalization, and metadata. "
             "Uses CompositeResolver with default chain if no custom resolver provided."
         ),
+    )
+
+    dedup_keys: list[str] = Field(
+        default_factory=lambda: ["url"],
     )
 
 
@@ -120,19 +125,15 @@ class CodeSearchTool(SearchTool):
     def _deduplicate_results(
         self,
         results: list[SearchResultItem],
-        key: str = "url",
+        keys: list[str] | str = "url",
     ) -> list[SearchResultItem]:
         """
         Deduplicate results based on a unique key (default is URL).
         """
-        seen = set()
-        deduped = []
-        for result in results:
-            val = str(getattr(result, key, ""))
-            if val and val not in seen:
-                seen.add(val)
-                deduped.append(result)
-        return deduped
+
+        # list[list[SearchResultItem]]
+        deduped = deduplicate_results(results, keys=keys, debug=self.debug)
+        return deduped[0]
 
     def _sort_results(
         self,
@@ -520,7 +521,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             for result in all_results_data
         ]
         try:
-            deduped: list[SearchResultItem] = self._deduplicate_results(formatted_results, key="url")
+            deduped: list[SearchResultItem] = self._deduplicate_results(formatted_results, keys=self.dedup_keys)
         except Exception as e:
             logger.error(f"Error deduplicating results: {e}")
 
@@ -602,7 +603,7 @@ class GitHubCodeSearchTool(CodeSearchTool, SearxNGSearchTool):
 
         # Post-process results: deduplicate and sort
         try:
-            deduped = self._deduplicate_results(output.results, key="url")
+            deduped = self._deduplicate_results(output.results, keys=self.dedup_keys)
         except Exception as e:
             logger.error(f"Error deduplicating results: {e}")
             deduped = output.results
@@ -707,7 +708,7 @@ class SDECodeSearchTool(CodeSearchTool):
             for result in all_results_data
         ]
         try:
-            deduped = self._deduplicate_results(formatted_results, key="url")
+            deduped = self._deduplicate_results(formatted_results, keys=self.dedup_keys)
         except Exception as e:
             logger.error(f"Error deduplicating results: {e}")
 

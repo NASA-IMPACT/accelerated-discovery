@@ -163,6 +163,7 @@ def normalize_url(url: str | AnyUrl | None) -> str | None:
 
 def deduplicate_results(
     *results: list["SearchResultItem"],
+    keys: list[str] | str | None = "url",
     debug: bool = False,
 ) -> list[list["SearchResultItem"]]:
     """
@@ -171,11 +172,13 @@ def deduplicate_results(
     Strategy (keeps first occurrence):
     1. Tag each result with source_id to track which list it came from
     2. Flatten all results
-    3. Apply cascaded deduplication: DOI → Title → URL
+    3. Apply cascaded deduplication using specified keys in priority order
     4. Group results back by source_id to restore list[list[...]] structure
 
     Args:
         *results: Variable number of result lists from different tools/sources.
+        keys: List of attribute names for cascaded deduplication in priority order.
+              Default: ["doi", "title", "url"]. Checks each key in order until match found.
         debug: Enable debug logging.
 
     Returns:
@@ -184,15 +187,14 @@ def deduplicate_results(
         Each result will have extra["dedup_source_id"] added.
 
     Examples:
-        >>> tool1_results = [result_a, result_b]
-        >>> tool2_results = [result_b_duplicate, result_c]
-        >>> deduped_lists = deduplicate_results(tool1_results, tool2_results, debug=True)
-        >>> len(deduped_lists)  # Still 2 lists
-        2
-        >>> len(deduped_lists[0])  # tool1 still has 2 results
-        2
-        >>> len(deduped_lists[1])  # tool2 now has 1 result (b removed as duplicate)
-        1
+        >>> # Default: DOI → Title → URL
+        >>> deduped = deduplicate_results(tool1_results, tool2_results, debug=True)
+
+        >>> # Custom: Title → URL only
+        >>> deduped = deduplicate_results(tool1_results, tool2_results, keys=["title", "url"])
+
+        >>> # DOI only
+        >>> deduped = deduplicate_results(tool1_results, tool2_results, keys=["doi"])
     """
     if not results:
         return []
@@ -210,50 +212,53 @@ def deduplicate_results(
     if not all_results:
         return [[] for _ in results]
 
-    # Step 2: Deduplicate using cascaded matching (DOI → Title → URL)
-    seen_dois = set()
-    seen_titles = set()
-    seen_urls = set()
+    # Use default keys if not provided
+    if isinstance(keys, str):
+        keys = [keys]
+    dedup_keys = keys or ["doi", "title", "url"]
+
+    # Map keys to their normalization functions
+    key_normalizers = {
+        "doi": lambda r: get_doi(r),
+        "title": lambda r: normalize_title(r.title) if r.title else None,
+        "url": lambda r: normalize_url(r.url) if r.url else None,
+    }
+
+    # Step 2: Deduplicate using cascaded matching based on keys
+    seen_values: dict[str, set[str]] = {key: set() for key in dedup_keys}
     deduplicated = []
 
     for result in all_results:
         is_duplicate = False
         source_id = result.extra.get("dedup_source_id", "unknown")
 
-        # Check 1: DOI match (from both result.doi and result.url)
-        doi = get_doi(result)
-        if doi:
-            if doi in seen_dois:
+        # Check each key in priority order (cascaded matching)
+        for key in dedup_keys:
+            if is_duplicate:
+                break  # Already found duplicate, stop checking
+
+            # Get normalizer for this key
+            normalizer = key_normalizers.get(key)
+            if not normalizer:
+                if debug:
+                    logger.warning(f"Unknown deduplication key: {key}, skipping")
+                continue
+
+            # Get normalized value for this key
+            normalized_value = normalizer(result)
+            if not normalized_value:
+                continue  # Skip if value is None/empty
+
+            # Check if we've seen this value before
+            if normalized_value in seen_values[key]:
                 is_duplicate = True
                 if debug:
+                    preview = normalized_value[:50] if len(normalized_value) > 50 else normalized_value
                     logger.debug(
-                        f"Duplicate by DOI: {doi} | "
-                        f"source={source_id}, title={result.title[:50] if result.title else 'N/A'}...",
+                        f"Duplicate by {key}: {preview}... | source={source_id}",
                     )
             else:
-                seen_dois.add(doi)
-
-        # Check 2: Title match (only if not already matched by DOI)
-        if not is_duplicate and result.title:
-            norm_title = normalize_title(result.title)
-            if norm_title:
-                if norm_title in seen_titles:
-                    is_duplicate = True
-                    if debug:
-                        logger.debug(f"Duplicate by title: {norm_title[:50]}... | source={source_id}")
-                else:
-                    seen_titles.add(norm_title)
-
-        # Check 3: URL match (fallback)
-        if not is_duplicate and result.url:
-            norm_url = normalize_url(result.url)
-            if norm_url:
-                if norm_url in seen_urls:
-                    is_duplicate = True
-                    if debug:
-                        logger.debug(f"Duplicate by URL: {norm_url} | source={source_id}")
-                else:
-                    seen_urls.add(norm_url)
+                seen_values[key].add(normalized_value)
 
         # Keep first occurrence
         if not is_duplicate:
