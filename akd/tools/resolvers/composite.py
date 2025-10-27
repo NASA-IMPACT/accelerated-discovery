@@ -4,7 +4,7 @@ from pydantic import HttpUrl
 from ._base import BaseArticleResolver, ResolverInputSchema, ResolverOutputSchema
 
 
-class ResearchArticleResolver(BaseArticleResolver):
+class CompositeResolver(BaseArticleResolver):
     """
     Composite resolver that tries multiple resolvers in sequence.
     This allows for a waterfall approach where if one resolver fails,

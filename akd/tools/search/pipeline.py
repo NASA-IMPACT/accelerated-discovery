@@ -16,10 +16,10 @@ from akd.tools.resolvers import (
     ADSResolver,
     ArxivResolver,
     BaseArticleResolver,
+    CompositeResolver,
     CrossRefDoiResolver,
     DOIResolver,
     PDFUrlResolver,
-    ResearchArticleResolver,
 )
 from akd.tools.resolvers._base import ResolverOutputSchema
 from akd.tools.resolvers.unpaywall import UnpaywallResolver
@@ -156,8 +156,8 @@ class SearchPipeline(SearchTool):
             )
 
     @property
-    def _default_research_article_resolver(self) -> ResearchArticleResolver:
-        return ResearchArticleResolver(
+    def _default_research_article_resolver(self) -> CompositeResolver:
+        return CompositeResolver(
             PDFUrlResolver(debug=self.debug),
             ArxivResolver(debug=self.debug),
             ADSResolver(debug=self.debug),

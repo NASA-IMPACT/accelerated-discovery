@@ -66,7 +66,7 @@ class SearchResultItemNormalizer(
         resolver: Article resolver injected via __init__
 
     Usage:
-        >>> from akd.tools.resolvers.composite import ResearchArticleResolver
+        >>> from akd.tools.resolvers.composite import CompositeResolver
         >>> from akd.tools.resolvers.specialized import DOIResolver
         >>> from akd.tools.resolvers.arxiv import ArxivResolver
         >>>
