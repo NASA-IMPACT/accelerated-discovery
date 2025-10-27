@@ -125,11 +125,11 @@ class TestReciprocalRankFusion:
         ]
 
         # Using URL key - should get 2 items (different URLs)
-        fused_url = reciprocal_rank_fusion(results_1, results_2, key="url")
+        fused_url = reciprocal_rank_fusion(results_1, results_2, keys="url")
         assert len(fused_url) == 2
 
         # Using DOI key - should get 1 item (same DOI, deduplicated)
-        fused_doi = reciprocal_rank_fusion(results_1, results_2, key="doi")
+        fused_doi = reciprocal_rank_fusion(results_1, results_2, keys="doi")
         assert len(fused_doi) == 1
 
     def test_original_items_not_mutated(self):

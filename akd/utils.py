@@ -388,16 +388,36 @@ def reciprocal_rank_fusion(
                     matched_canonical = existing_canonical
                     break
 
+            increment = 1.0 / (rank + k)
             if matched_canonical:
                 # Merge with existing item - accumulate RRF score
-                identifier_to_score[matched_canonical] += 1.0 / (rank + k)
-                # Merge all identifiers into the group
+                identifier_to_score[matched_canonical] += increment
+
+                if debug:
+                    # Show which keys matched (BEFORE updating the group!)
+                    shared = item_identifiers & identifier_groups[matched_canonical]
+                    matched_keys = [k for k, _ in shared]
+                    canonical_key, canonical_val = matched_canonical
+                    logger.debug(
+                        f"[RRF] MERGED: rank={rank} matched via {matched_keys} | "
+                        f"primary_key={canonical_key} value='{canonical_val[:40]}...' | +score={increment:.6f}",
+                    )
+
+                # Merge all identifiers into the group (AFTER logging!)
                 identifier_groups[matched_canonical].update(item_identifiers)
             else:
                 # New item - create new group
-                identifier_to_score[canonical] += 1.0 / (rank + k)
+                identifier_to_score[canonical] += increment
                 identifier_to_item[canonical] = item.model_copy()
                 identifier_groups[canonical] = item_identifiers
+                if debug:
+                    available_keys = [k for k, _ in item_identifiers]
+                    canonical_key, canonical_val = canonical
+                    logger.debug(
+                        f"[RRF] NEW: rank={rank} | "
+                        f"primary_key={canonical_key} value='{canonical_val[:40]}...' | "
+                        f"available_keys={available_keys}",
+                    )
 
     # Build results with RRF scores
     fused_results = []
