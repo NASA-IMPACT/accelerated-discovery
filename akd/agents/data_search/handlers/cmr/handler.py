@@ -295,7 +295,7 @@ class CMRHandler(BaseHandler):
         # Step 4: Collection Ranking & Filtering
         # IMPORTANT: Pass approaches_to_use (includes keyword-only) not the original approaches
         # because searchable queries are tagged with indices from approaches_to_use
-        ranked_collections = await self._rank_collections(
+        ranked_collections, ranking_metadata = await self._rank_collections(
             approach_collections,
             approach_collections_by_query,
             original_query,
@@ -334,6 +334,9 @@ class CMRHandler(BaseHandler):
             total_results_from_cmr=total_cmr,
             total_results_after_filtering=len(ranked_collections),
             enum_corrections=all_corrections,  # Instrument/platform corrections metadata
+            ranking_fallbacks=ranking_metadata
+            if ranking_metadata
+            else None,  # Fallback metadata
             note=None,
         )
 
@@ -616,16 +619,21 @@ class CMRHandler(BaseHandler):
         decomp: ScientificDecomposition,
         query_approaches: List[Any],
         run_id: str = None,
-    ) -> Dict[int, List[Dict[str, Any]]]:
+    ) -> tuple[Dict[int, List[Dict[str, Any]]], List[Dict[str, Any]]]:
         """
         Filter and rank collections within each approach in parallel.
 
         If LLM filtering fails for an approach, falls back to round-robin selection
         from query results to ensure no data is lost.
+
+        Returns:
+            Tuple of (filtered_by_approach, approach_fallbacks)
+            - filtered_by_approach: Collections selected per approach
+            - approach_fallbacks: List of fallback metadata for failed approaches
         """
         if not approach_collections:
             print("DEBUG: No approach_collections to filter")
-            return {}
+            return {}, []
 
         print(f"DEBUG: Filtering {len(approach_collections)} approaches")
         for idx, colls in approach_collections.items():
@@ -698,6 +706,7 @@ class CMRHandler(BaseHandler):
 
         # Map results back to collections
         filtered_by_approach = {}
+        approach_fallbacks = []  # Track fallback metadata
 
         for (approach_idx, collections, _), result in zip(filtering_tasks, results):
             if isinstance(result, Exception):
@@ -713,6 +722,18 @@ class CMRHandler(BaseHandler):
                     max_items=self.config.max_collections_per_approach,
                 )
                 filtered_by_approach[approach_idx] = fallback
+
+                # Log fallback metadata
+                approach_fallbacks.append(
+                    {
+                        "approach_index": approach_idx,
+                        "exception_type": type(result).__name__,
+                        "exception_message": str(result),
+                        "collections_before_fallback": len(collections),
+                        "collections_returned": len(fallback),
+                        "fallback_method": "round_robin_from_queries",
+                    },
+                )
 
                 print(
                     f"DEBUG: Fallback selected {len(fallback)} collections via round-robin from {len(query_groups)} queries",
@@ -756,7 +777,7 @@ class CMRHandler(BaseHandler):
         for idx, colls in filtered_by_approach.items():
             print(f"DEBUG:   Approach {idx}: {len(colls)} collections after filtering")
 
-        return filtered_by_approach
+        return filtered_by_approach, approach_fallbacks
 
     async def _rank_collections(
         self,
@@ -767,7 +788,7 @@ class CMRHandler(BaseHandler):
         decomp: ScientificDecomposition,
         query_approaches: List[Any] = None,
         run_id: str = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
         Rank collections using approach-aware pipeline.
 
@@ -775,13 +796,18 @@ class CMRHandler(BaseHandler):
         1. Per-approach deduplication (preserving query grouping)
         2. Per-approach filtering and ranking (parallel, with round-robin fallback)
         3. Final cross-approach ranking (with round-robin fallback)
+
+        Returns:
+            Tuple of (ranked_collections, ranking_metadata)
+            - ranked_collections: Final ranked list of collections
+            - ranking_metadata: Dictionary with fallback information for both stages
         """
         print(
             f"DEBUG: _rank_collections called with {len(approach_collections)} approaches",
         )
         if not approach_collections:
             print("DEBUG: No approach_collections, returning empty list")
-            return []
+            return [], {}
 
         # Stage 1: Per-approach deduplication (preserving query grouping)
         deduplicated_grouped = self._deduplicate_approach_collections_grouped(
@@ -800,7 +826,10 @@ class CMRHandler(BaseHandler):
         )
 
         # Stage 2: Per-approach filtering and ranking (parallel, with fallback)
-        filtered_by_approach = await self._filter_and_rank_by_approach(
+        (
+            filtered_by_approach,
+            approach_fallbacks,
+        ) = await self._filter_and_rank_by_approach(
             deduplicated_flat,
             deduplicated_grouped,
             original_query,
@@ -821,10 +850,18 @@ class CMRHandler(BaseHandler):
 
         if not all_filtered:
             print("DEBUG: No collections passed filtering, returning empty list")
-            return []
+            # Build metadata even when empty
+            ranking_metadata = {
+                "approach_filtering": approach_fallbacks,
+                "final_ranking": {"used": False},
+            }
+            return [], ranking_metadata
 
         # Get CMR prompts directory
         cmr_prompts_dir = Path(__file__).parent / "prompts"
+
+        # Initialize final ranking fallback tracker
+        final_fallback = None
 
         # Stage 3: Final cross-approach ranking
         final_input = CMRFinalCollectionRankingInputSchema(
@@ -861,7 +898,13 @@ class CMRHandler(BaseHandler):
             ]
 
             print(f"DEBUG: Final ranking returned {len(final_ranked)} collections")
-            return final_ranked
+
+            # Build metadata (no final ranking fallback used)
+            ranking_metadata = {
+                "approach_filtering": approach_fallbacks,
+                "final_ranking": {"used": False},
+            }
+            return final_ranked, ranking_metadata
 
         except Exception as e:
             print(f"DEBUG: Final ranking FAILED with exception: {e}")
@@ -880,7 +923,23 @@ class CMRHandler(BaseHandler):
             print(
                 f"DEBUG: Fallback selected {len(fallback)} collections via round-robin from {len(approach_lists)} approaches",
             )
-            return fallback
+
+            # Log final ranking fallback
+            final_fallback = {
+                "used": True,
+                "exception_type": type(e).__name__,
+                "exception_message": str(e),
+                "collections_before_fallback": len(all_filtered),
+                "collections_returned": len(fallback),
+                "fallback_method": "round_robin_from_approaches",
+            }
+
+            # Build metadata (with final ranking fallback)
+            ranking_metadata = {
+                "approach_filtering": approach_fallbacks,
+                "final_ranking": final_fallback,
+            }
+            return fallback, ranking_metadata
 
     async def _search_granules_for_single_collection(
         self,

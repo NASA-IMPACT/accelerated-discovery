@@ -70,6 +70,11 @@ Examples:
         help="Enable debug logging",
     )
 
+    parser.add_argument(
+        "--output-subdir",
+        help="Subdirectory within captured_data/ for organizing runs (e.g., 'run_20251028_103045')",
+    )
+
     # Model configuration
     parser.add_argument(
         "--model",
@@ -142,6 +147,7 @@ Examples:
         debug=args.debug,
         single_path_mode=args.single_path,
         auto_save=not args.no_save,
+        output_subdir=args.output_subdir,
         capture_metadata=not args.no_metadata,
         # Universal component models with fallback to --model
         topic_splitting_model=args.topic_model or args.model,
@@ -203,7 +209,10 @@ Examples:
         if not args.no_save and result.search_metadata.get("search_id"):
             from akd.agents.data_search.utils.metadata import build_output_filename
 
-            output_file = build_output_filename(result.search_metadata["search_id"])
+            output_file = build_output_filename(
+                result.search_metadata["search_id"],
+                args.output_subdir,
+            )
             print(f"💾 Saved to: {output_file}")
 
     except Exception as e:

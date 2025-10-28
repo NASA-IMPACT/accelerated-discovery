@@ -22,6 +22,9 @@ from ._base import (
     DataSearchAgentInputSchema,
     DataSearchAgentOutputSchema,
     DecompositionResult,
+    SearchSummary,
+    SummaryCollection,
+    SummaryTopic,
     TopicResult,
 )
 from .components import (
@@ -230,6 +233,71 @@ class DataSearchAgent(BaseDataSearchAgent):
             note=f"Error processing with {route.repository}: {error_message}",
         )
 
+    def _build_summary(
+        self,
+        original_query: str,
+        topic_results: list[TopicResult],
+    ) -> SearchSummary:
+        """
+        Build condensed summary from topic results.
+
+        Args:
+            original_query: The original research question
+            topic_results: Full topic results with all data
+
+        Returns:
+            SearchSummary with titles and top 5 collections per decomposition
+        """
+        summary_topics = []
+
+        for topic_result in topic_results:
+            # Extract topic title
+            topic_title = topic_result.topic.get("title", "Unknown Topic")
+
+            # Build decomposition summaries
+            summary_decomps = []
+            for decomp_result in topic_result.decomposition_results:
+                # Extract decomposition title
+                decomp_title = decomp_result.decomposition.get(
+                    "title",
+                    "Unknown Decomposition",
+                )
+
+                # Extract top 5 collections as (concept_id, title) tuples
+                collection_tuples = []
+                for collection in decomp_result.data_results[:5]:  # Take first 5
+                    # Collection concept_id and title
+                    concept_id = collection.get("concept_id", "unknown")
+                    title = collection.get(
+                        "entry_title",
+                        collection.get("title", "Untitled"),
+                    )
+                    collection_tuples.append((concept_id, title))
+
+                # Create decomposition summary
+                summary_decomps.append(
+                    SummaryCollection(
+                        title=decomp_title,
+                        collections=collection_tuples,
+                        total_collections=decomp_result.total_results_after_filtering,
+                    ),
+                )
+
+            # Create topic summary
+            summary_topics.append(
+                SummaryTopic(
+                    title=topic_title,
+                    decompositions=summary_decomps,
+                    total_decompositions=len(topic_result.decomposition_results),
+                ),
+            )
+
+        return SearchSummary(
+            original_query=original_query,
+            topics=summary_topics,
+            total_topics=len(topic_results),
+        )
+
     async def _arun(
         self,
         params: DataSearchAgentInputSchema,
@@ -330,19 +398,26 @@ class DataSearchAgent(BaseDataSearchAgent):
                 "workflow_version": "multi-repo-v1",
             }
 
+            # Build condensed summary
+            summary = self._build_summary(original_query, final_topic_results)
+
             # Create response
             final_response = DataSearchAgentOutputSchema(
                 topics=final_topic_results,
                 search_metadata=search_metadata,
                 total_cmr_results=total_cmr_all,
                 total_filtered_results=total_filtered_all,
+                summary=summary,
             )
 
             # Auto-save if configured
             if self.config.auto_save:
                 from .utils.metadata import build_output_filename, save_with_metadata
 
-                output_file = build_output_filename(search_id)
+                output_file = build_output_filename(
+                    search_id,
+                    self.config.output_subdir,
+                )
                 save_with_metadata(final_response, self.config, output_file)
                 if self.config.debug:
                     print(f"Results auto-saved to {output_file}")
