@@ -51,6 +51,15 @@ class CodeSearchToolOutputSchema(SearchToolOutputSchema):
 class CodeSearchToolConfig(SearchToolConfig):
     """Configuration for the code search tool."""
 
+    # only use "url" for code search
+    rrf_keys: list[str] = Field(
+        default_factory=lambda: ["url"],
+        description=(
+            "List of attribute names for RRF deduplication (cascaded OR logic). "
+            "Matches if ANY key matches. Priority order: doi > title > url."
+        ),
+    )
+
     # disabled for code search
     result_normalization: bool = Field(
         default=False,
@@ -193,7 +202,7 @@ class CompositeCodeSearchToolConfig(CompositeSearchToolConfig):
     )
 
 
-class CompositeCodeSearchTool(CompositeSearchTool):
+class CompositeCodeSearchTool(CodeSearchTool, CompositeSearchTool):
     """
     Tool for performing combined code search using multiple sub-tools.
 

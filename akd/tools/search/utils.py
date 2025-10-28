@@ -123,15 +123,12 @@ def normalize_title(title: str | None) -> str | None:
         >>> normalize_title("Deep Learning: A Survey")
         'deep learning a survey'
     """
-    if not title:
-        return None
-
+    title = title or ""
     normalized = title.lower()
     normalized = re.sub(r"[^\w\s]", " ", normalized)  # Remove punctuation
     normalized = re.sub(r"\s+", " ", normalized)  # Collapse spaces
     normalized = normalized.strip()
-
-    return normalized if normalized else None
+    return normalized
 
 
 def normalize_url(url: str | AnyUrl | None) -> str | None:

@@ -245,7 +245,7 @@ class SearchTool(BaseTool[SearchToolInputSchema, SearchToolOutputSchema]):
         if self.debug:
             logger.debug(f"Reranking {len(results)} results for query: {query} | Reranker type: {self.reranker}")  # type: ignore
         reranker_input = self.reranker.input_schema(query=query, results=results)
-        reranked_output = await self.reranker._arun(reranker_input)
+        reranked_output = await self.reranker.arun(reranker_input)
         return reranked_output.results
 
     async def _normalize_results(

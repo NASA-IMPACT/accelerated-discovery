@@ -4,7 +4,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 import dateparser
 import gdown
@@ -307,11 +307,12 @@ def reciprocal_rank_fusion(
     *results: list["SearchResultItem"],
     k: int = 60,
     keys: list[str] | str | None = None,
+    value_normalizers: dict[str, Callable] | None = None,
     normalize: bool = True,
     debug: bool = False,
 ) -> list["SearchResultItem"]:
     """
-    Fuse multiple ranked lists using Reciprocal Rank Fusion (RRF) with multi-key matching.
+    Fuse multiple ranked lists using Reciprocal Rank Fusion (RRF) with multi-key matching and value normalization.
 
     Formula: RRF_score(item) = Σ(1 / (k + rank)) across all lists containing item
 
@@ -320,24 +321,44 @@ def reciprocal_rank_fusion(
         k: RRF constant (default 60, standard value from literature).
         keys: List of attribute names for deduplication (cascaded OR logic).
               Default: ["doi", "title", "url"] - matches if ANY key matches.
-              Assumes fields are already normalized by resolvers.
               Can also pass single string for backward compatibility.
+        value_normalizers: Optional dict mapping key names to normalizer functions.
+              Each function takes a SearchResultItem and returns a normalized string or None.
+              Default normalizers: doi (extract from URL), title (lowercase, no punctuation), url (no protocol/www).
+              Pass empty dict {} to disable normalization.
+              Example: {"url": lambda item: my_custom_normalizer(item.url)}
         normalize: If True, apply min-max normalization to scores [0.1, 1.0] (default True).
                   Raw RRF scores are always preserved in item.extra["rrf_score"].
+        debug: Enable debug logging showing matched keys and values.
 
     Returns:
-        Fused list sorted by RRF score (descending).
+        Fused list sorted by RRF score (descending). Original item values are preserved.
+
+    Notes:
+        - Normalization is applied ONLY for matching/deduplication, not for output values
+        - Items with URLs "https://github.com/foo" and "https://www.github.com/foo/" will match
+        - Items with titles "Deep Learning: A Survey" and "deep learning a survey" will match
+        - The first encountered item's original values are kept in the output
 
     Examples:
+        >>> # Default normalization (recommended)
         >>> results_q1 = [item_a, item_b, item_c]
         >>> results_q2 = [item_b, item_d, item_a]
         >>> fused = reciprocal_rank_fusion(results_q1, results_q2)
         # item_b and item_a appear in both, so they get boosted
 
-        # Same paper, different URLs - merged by DOI:
-        >>> item1 = SearchResultItem(doi="10.1234/example", url="https://arxiv.org/abs/123")
-        >>> item2 = SearchResultItem(doi="10.1234/example", url="https://doi.org/10.1234/example")
-        # Result: Merged into 1 item with combined RRF score
+        >>> # URL normalization matches different URL formats
+        >>> item1 = SearchResultItem(url="https://github.com/foo/bar")
+        >>> item2 = SearchResultItem(url="https://www.github.com/foo/bar/")
+        >>> fused = reciprocal_rank_fusion([item1], [item2], keys=["url"])
+        # Result: 1 item (matched via normalized URL), original URL preserved
+
+        >>> # Custom normalizer
+        >>> custom = {"url": lambda item: item.url.lower().strip()}
+        >>> fused = reciprocal_rank_fusion(results_q1, results_q2, value_normalizers=custom)
+
+        >>> # Disable normalization
+        >>> fused = reciprocal_rank_fusion(results_q1, results_q2, value_normalizers={})
     """
     # Handle default and backward compatibility
     keys = keys or ["doi", "title", "url"]
@@ -355,13 +376,28 @@ def reciprocal_rank_fusion(
     identifier_to_item = {}
     identifier_groups = defaultdict(set)
 
+    # Import normalizer functions (avoid circular import at module level)
+    from akd.tools.search.utils import get_doi, normalize_title, normalize_url
+
+    # Use provided normalizers or defaults
+    value_normalizers = value_normalizers or {
+        "doi": lambda item: get_doi(item),
+        "title": lambda item: normalize_title(item.title) if item.title else None,
+        "url": lambda item: normalize_url(item.url) if item.url else None,
+    }
+
     # Calculate RRF scores with multi-key matching
     for rank_list in results:
         for rank, item in enumerate(rank_list, 1):
-            # Collect all non-None identifiers for this item
+            # Collect all non-None identifiers for this item (using normalized values)
             item_identifiers = set()
             for key in keys:
-                value = getattr(item, key, None)
+                # Apply normalizer if available, otherwise use original value
+                if key in value_normalizers:
+                    value = value_normalizers[key](item)
+                else:
+                    value = getattr(item, key, None)
+
                 if value:
                     item_identifiers.add((key, str(value)))
 
