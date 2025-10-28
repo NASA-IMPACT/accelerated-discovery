@@ -11,6 +11,7 @@ from loguru import logger
 from akd.agents._base import BaseAgent
 from akd.agents.risk import (
     RiskAgent,
+    RiskAgentConfig,
     RiskAgentInputSchema,
     RiskAgentOutputSchema,
     RiskReportAgent,
@@ -96,7 +97,15 @@ def add_guardrails(
                 self.output_fields = output_fields or self.guardrails_config.output_fields
 
                 # RiskAgent
-                self._risk_agent = RiskAgent() if risk_ids else None
+                self._risk_agent = (
+                    RiskAgent(
+                        RiskAgentConfig(
+                            agent_description=cls.description,
+                        ),
+                    )
+                    if risk_ids
+                    else None
+                )
                 self._risk_ids = risk_ids or []
                 self._risk_weights = risk_weights
                 self._risk_input_extractor = input_extractor
