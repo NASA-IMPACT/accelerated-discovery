@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 import yaml
 from loguru import logger
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents import LiteLLMInstructorBaseAgent
@@ -45,18 +45,31 @@ class RiskReportAgentConfig(BaseAgentConfig):
     """Configuration for the RiskReportAgent."""
 
     system_prompt: str = RISK_REPORT_SYSTEM_PROMPT
-    risk_yaml_path: Optional[str] = Field(
-        default_factory=lambda: str(
-            get_akd_root() / "akd/agents/risk/risk_atlas_data.yaml",
-        ),
-        description="Path to source Risk Atlas yaml file.",
+    risk_yaml_paths: List[str] = Field(
+        default_factory=lambda: [
+            str(
+                get_akd_root() / "akd/agents/risk/risk_atlas_data.yaml",
+            ),
+            str(
+                get_akd_root() / "akd/agents/risk/science_lit_risks.yaml",
+            ),
+        ],
+        description="List of yaml files defining risks. "
+        "Each file must contain a `risks` key with `id` and `description` fields.",
     )
-    science_risk_yaml_path: Optional[str] = Field(
-        default_factory=lambda: str(
-            get_akd_root() / "akd/agents/risk/science_lit_risks.yaml",
-        ),
-        description="Path to source Science Risks yaml file.",
+    agent_description: Optional[str] = Field(
+        default=None,
+        description="Description of agent being evaluated - used as behavioral context.",
     )
+
+    @model_validator(mode="after")
+    def _inject_agent_description(self) -> "RiskReportAgentConfig":
+        """Dynamically enrich the system prompt if a description is provided."""
+        if self.agent_description:
+            self.system_prompt = (
+                RISK_REPORT_SYSTEM_PROMPT + "\n\nAgent Behavioral Context:\n" + self.agent_description.strip() + "\n"
+            )
+        return self
 
 
 class RiskReportAgent(
@@ -81,20 +94,18 @@ class RiskReportAgent(
         config = config or RiskReportAgentConfig()
         super().__init__(config=config, debug=debug)
         self._risk_map = self.load_risks_from_yaml(
-            config.risk_yaml_path,
-            config.science_risk_yaml_path,
+            config.risk_yaml_paths,
         )
         logger.info("Risk report agent created.")
 
     @staticmethod
-    def load_risks_from_yaml(atlas_path: str, science_risk_path: str) -> Dict[str, str]:
+    def load_risks_from_yaml(yaml_paths: List[str]) -> Dict[str, str]:
         """
         Load risks from YAML file and return a dict of {risk_id: description}
         """
 
-        risk_def_paths = (atlas_path, science_risk_path)
-        risk_def_dicts: List[Dict[str, List[Dict]]] = []
-        for risk_def_path in risk_def_paths:
+        risk_def_dicts = []
+        for risk_def_path in yaml_paths:
             with open(risk_def_path, "r", encoding="utf-8") as f:
                 risk_def_dicts.append(yaml.safe_load(f))
 
@@ -105,8 +116,14 @@ class RiskReportAgent(
             for risk in data.get("risks", []):
                 risk_id = risk.get("id")
                 risk_description = risk.get("description")
+                risk_concern = risk.get("concern")
+                risk_isPartOf = risk.get("isPartOf")
                 if risk_id and risk_description:
-                    merged_risks[risk_id] = risk_description
+                    merged_risks[risk_id] = {
+                        "description": risk_description,
+                        "concern": risk_concern,
+                        "isPartOf": risk_isPartOf,
+                    }
 
         return merged_risks
 

@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Optional, Self
+from typing import Dict, List, Optional, Self, Union
 
 import yaml
 from deepeval.metrics import DAGMetric
@@ -111,7 +111,7 @@ class RiskAgentOutputSchema(OutputSchema):
         ...,
         description="A mapping of risk IDs to sructured evaluation criteria.",
     )
-    dag_metric: DAGMetric = Field(
+    dag_metric: Union[DAGMetric, None] = Field(
         ...,
         description="A DeepEval DAG metric constructed from the risk criteria.",
     )
@@ -287,9 +287,12 @@ class RiskAgent(
         self,
         criteria_by_risk: dict[str, list[Criterion]],
         risk_weights: Optional[Dict[str, float]] = None,
-    ) -> DAGMetric:
+    ) -> Union[DAGMetric, None]:
         root_nodes: List[TaskNode] = []
         final_risk_nodes: List[TaskNode] = []
+
+        if criteria_by_risk == {}:
+            return None
 
         for risk_id, criteria in criteria_by_risk.items():
             child_nodes = []
@@ -508,10 +511,13 @@ Conversation:
             criteria_by_risk[risk_id] = response.criteria
 
         dag_metric = self.build_dag_from_criteria(
-            criteria_by_risk,
+            {risk: criteria for risk, criteria in criteria_by_risk.items() if len(criteria) > 0},
             risk_weights=risk_weights,
         )
-        logger.info("DAG metric created.")
+        if dag_metric:
+            logger.info("DAG metric created.")
+        else:
+            logger.info("No DAG metric created as no relevant potential risks found.")
 
         return RiskAgentOutputSchema(
             criteria_by_risk=criteria_by_risk,

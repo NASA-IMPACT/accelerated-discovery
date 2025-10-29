@@ -473,44 +473,60 @@ def add_guardrails(
                         ra_result: RiskAgentOutputSchema = await self._risk_agent.arun(ra_input)
 
                         # Run DAG metric
-                        flattened_input = "\n".join(
+                        behaviour_context = (
+                            f"Agent Behavioral Context:\n"
+                            f"{self._risk_agent.agent_description or 'No description provided'}\n\n"
+                        )
+
+                        flattened_input = behaviour_context + "\n".join(
                             [f"User: {i}\nModel: {o}" for i, o in zip(inputs[:-1], outputs[:-1])]
                             + [f"User: {inputs[-1]}"],
                         )
+
                         test_case = LLMTestCase(
                             input=flattened_input,
                             actual_output=outputs[-1],
                         )
-                        ra_result.dag_metric.measure(test_case)
+                        if ra_result.dag_metric:
+                            ra_result.dag_metric.measure(test_case)
 
-                        if ra_result.dag_metric.score != 1.0:
-                            risk_report_agent = RiskReportAgent()
+                            dag_score = ra_result.dag_metric.score
 
-                            risky_content = "\n".join(
-                                [f"User: {i}\nModel: {o}" for i, o in zip(inputs, outputs)],
-                            )
+                            if ra_result.dag_metric.score != 1.0:
+                                risk_report_agent = RiskReportAgent(
+                                    RiskAgentConfig(
+                                        agent_description=self._risk_agent.agent_description,
+                                    ),
+                                )
 
-                            failed_criteria = self._extract_high_importance_criteria(
-                                ra_result.dag_metric._verbose_steps,
-                            )
+                                risky_content = "\n".join(
+                                    [f"User: {i}\nModel: {o}" for i, o in zip(inputs, outputs)],
+                                )
 
-                            risk_report_response = await risk_report_agent.arun(
-                                RiskReportAgentInputSchema(
-                                    risky_content=risky_content,
-                                    failed_criteria=failed_criteria,
-                                ),
-                            )
+                                failed_criteria = self._extract_high_importance_criteria(
+                                    ra_result.dag_metric._verbose_steps,
+                                )
 
-                            risk_report = risk_report_response.risk_report
+                                risk_report_response = await risk_report_agent.arun(
+                                    RiskReportAgentInputSchema(
+                                        risky_content=risky_content,
+                                        failed_criteria=failed_criteria,
+                                    ),
+                                )
+
+                                risk_report = risk_report_response.risk_report
+                            else:
+                                risk_report = None
                         else:
                             risk_report = None
+                            dag_score = None
 
                         object.__setattr__(
                             response,
                             "risk_summary",
                             {
                                 "risk_report": risk_report,
-                                "risk_score": ra_result.dag_metric.score,
+                                "risk_score": dag_score,
                             },
                         )
                     except Exception as e:
