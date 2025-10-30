@@ -1,50 +1,41 @@
-"""PDS4 handler stub - not yet implemented."""
+"""PDS4 handler for NASA Planetary Data System."""
 
-from pydantic import BaseModel
-
-from .._base import BaseHandler
-
-
-class PDS4HandlerConfig(BaseModel):
-    """Configuration for PDS4 handler (stub)."""
-
-    pass
-
-
-class PDS4Handler(BaseHandler):
-    """
-    Stub handler for PDS4 repository.
-
-    This is a placeholder that returns "not implemented" responses.
-    """
-
-    def __init__(self, config: PDS4HandlerConfig | None = None, debug: bool = False):
-        """Initialize PDS4 handler stub."""
-        self.config = config or PDS4HandlerConfig()
-        self.debug = debug
-
-    async def process_decomposition(
-        self,
-        original_query: str,
-        topic: dict,
-        decomposition: dict,
-    ) -> dict:
-        """
-        Process a single scientific decomposition (stub).
-
-        Returns:
-            Stub response indicating PDS4 is not yet implemented
-        """
-        return {
-            "status": "not_implemented",
-            "message": "PDS4 handler is not yet implemented",
-            "data_results": [],
-            "total_results_from_cmr": 0,
-            "total_results_after_filtering": 0,
-        }
-
+from .components import (
+    PDS4FinalCollectionRankingComponent,
+    PDS4ParameterExtractionComponent,
+    PDS4StrategyCollectionFilteringComponent,
+)
+from .config import PDS4HandlerConfig
+from .handler import PDS4Handler
+from .schemas import (
+    PDS4FinalCollectionRankingInputSchema,
+    PDS4FinalCollectionRankingOutput,
+    PDS4InstrumentType,
+    PDS4ParameterExtractionInputSchema,
+    PDS4ParameterExtractionOutput,
+    PDS4StrategyCollectionFilteringInputSchema,
+    PDS4StrategyCollectionFilteringOutput,
+    PDS4TargetType,
+    PDS4ToolStrategy,
+)
 
 __all__ = [
+    # Handler and config
     "PDS4Handler",
     "PDS4HandlerConfig",
+    # Components
+    "PDS4ParameterExtractionComponent",
+    "PDS4StrategyCollectionFilteringComponent",
+    "PDS4FinalCollectionRankingComponent",
+    # Schemas
+    "PDS4ToolStrategy",
+    "PDS4ParameterExtractionInputSchema",
+    "PDS4ParameterExtractionOutput",
+    "PDS4StrategyCollectionFilteringInputSchema",
+    "PDS4StrategyCollectionFilteringOutput",
+    "PDS4FinalCollectionRankingInputSchema",
+    "PDS4FinalCollectionRankingOutput",
+    # Enums
+    "PDS4TargetType",
+    "PDS4InstrumentType",
 ]
