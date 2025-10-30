@@ -146,6 +146,19 @@ class DataSearchAgent(BaseDataSearchAgent):
         """
         return self._get_handler(NASARepositoryEnum.CMR)
 
+    def get_pds4_handler(self):
+        """
+        Get the PDS4 handler for direct access to PDS4-specific components.
+
+        This is useful for testing and debugging workflows that need to access
+        individual PDS4 components (parameter_extraction_component,
+        investigation_search_tool, target_search_tool, collection_search_tool, bundle_search_tool).
+
+        Returns:
+            PDS4Handler instance with access to PDS4-specific components
+        """
+        return self._get_handler(NASARepositoryEnum.PDS4)
+
     @property
     def scientific_decomposition_component(self):
         """
