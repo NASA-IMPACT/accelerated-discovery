@@ -153,17 +153,19 @@ def save_with_metadata(
     if agent_config.capture_metadata:
         output_data["execution_metadata"]["git_info"] = capture_git_info()
 
-        # Capture prompts from universal + CMR handler directories
+        # Capture prompts from universal + CMR + PDS4 handler directories
         from pathlib import Path
 
         # Get component prompts directory
         base_dir = Path(__file__).parent.parent
         component_prompts_dir = base_dir / "components" / "prompts"
         cmr_prompts_dir = base_dir / "handlers" / "cmr" / "prompts"
+        pds4_prompts_dir = base_dir / "handlers" / "pds4" / "prompts"
 
         output_data["prompts"] = capture_prompts(
             component_prompts_dir,
             cmr_prompts_dir,
+            pds4_prompts_dir,
         )
 
     # Ensure output directory exists
