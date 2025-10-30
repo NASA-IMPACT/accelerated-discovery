@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
 from akd.agents.data_search._base import DataSearchAgentInputSchema
-from akd.agents.data_search.handlers import CMRHandlerConfig
+from akd.agents.data_search.handlers import CMRHandlerConfig, PDS4HandlerConfig
 from akd.configs.data_search_config import get_config
 
 # Load environment variables
@@ -113,6 +113,22 @@ Examples:
         help="Model for CMR final ranking (overrides --model)",
     )
 
+    # PDS4 component model overrides
+    parser.add_argument(
+        "--pds4-param-model",
+        help="Model for PDS4 parameter extraction (overrides --model)",
+    )
+
+    parser.add_argument(
+        "--pds4-filtering-model",
+        help="Model for PDS4 strategy filtering (overrides --model)",
+    )
+
+    parser.add_argument(
+        "--pds4-ranking-model",
+        help="Model for PDS4 final ranking (overrides --model)",
+    )
+
     args = parser.parse_args()
 
     # Load base configuration
@@ -137,6 +153,26 @@ Examples:
         final_ranking_model=args.cmr_ranking_model or args.model,
     )
 
+    # Build PDS4 handler configuration
+    pds4_config = PDS4HandlerConfig(
+        # Uses default mcp_endpoint from PDS4HandlerConfig
+        bundle_search_page_size=20,
+        collection_search_page_size=20,
+        context_search_page_size=10,
+        collections_per_strategy=5,
+        max_collections_per_strategy=5,
+        final_collection_count=25,
+        min_collection_relevance_score=0.3,
+        context_search_timeout=20.0,
+        collection_search_timeout=30.0,
+        bundle_search_timeout=25.0,
+        enable_parallel_search=True,
+        # Per-component models with fallback to --model
+        parameter_extraction_model=args.pds4_param_model or args.model,
+        strategy_filtering_model=args.pds4_filtering_model or args.model,
+        final_ranking_model=args.pds4_ranking_model or args.model,
+    )
+
     # Build agent configuration
     agent_config = DataSearchAgentConfig(
         debug=args.debug,
@@ -149,6 +185,7 @@ Examples:
         repository_routing_model=args.routing_model or args.model,
         # Handler-specific configurations
         cmr=cmr_config,
+        pds4=pds4_config,
     )
 
     # Create agent and run
@@ -183,6 +220,18 @@ Examples:
             print(f"   • Approach filtering: {args.cmr_filtering_model}")
         if args.cmr_ranking_model:
             print(f"   • Final ranking: {args.cmr_ranking_model}")
+    if (
+        args.pds4_param_model
+        or args.pds4_filtering_model
+        or args.pds4_ranking_model
+    ):
+        print("   PDS4 component overrides:")
+        if args.pds4_param_model:
+            print(f"   • Parameter extraction: {args.pds4_param_model}")
+        if args.pds4_filtering_model:
+            print(f"   • Strategy filtering: {args.pds4_filtering_model}")
+        if args.pds4_ranking_model:
+            print(f"   • Final ranking: {args.pds4_ranking_model}")
     print()
 
     try:
