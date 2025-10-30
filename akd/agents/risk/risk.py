@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Optional, Self, Union
+from typing import Dict, List, Optional, Self
 
 import yaml
 from deepeval.metrics import DAGMetric
@@ -111,7 +111,7 @@ class RiskAgentOutputSchema(OutputSchema):
         ...,
         description="A mapping of risk IDs to sructured evaluation criteria.",
     )
-    dag_metric: Union[DAGMetric, None] = Field(
+    dag_metric: DAGMetric | None = Field(
         ...,
         description="A DeepEval DAG metric constructed from the risk criteria.",
     )
@@ -243,7 +243,18 @@ class RiskAgent(
         m_required: int,
         borderline_expr: str,
         low_clause: str,
+        m_total: int,
     ) -> str:
+        # ---- Handle single-medium special case explicitly ---
+        if m_total == 1:
+            medium_clause = (
+                "There is only one MEDIUM criterion. "
+                "If all HIGH criteria pass, treat the MEDIUM result as informative but not decisive—"
+                "a single MEDIUM failure does not automatically cause the overall risk to fail. "
+                "In this case, MEDIUM is considered borderline rather than fail."
+            )
+            borderline_expr = "True if there is one MEDIUM criterion and it fails while all HIGH pass; otherwise False."
+
         return (
             "Evaluate the risk pass/fail using the following rules:\n"
             f"1) HIGH: {high_clause}\n"
@@ -276,10 +287,13 @@ class RiskAgent(
             f"3) Let total_weight = {denom} (sum of the weights).\n"
             "4) Let passed_weight = sum of weights for risks that passed (True).\n"
             "5) weighted_ratio = passed_weight / total_weight.\n"
-            "6) Select the verdict that matches the weighted_ratio bucket:\n"
-            "- Choose the **highest threshold** that weighted_ratio meets.\n"
-            "- Example: If weighted_ratio = 1.0, it meets ≥ 0.25, ≥ 0.50, ≥ 0.75, and ≥ 0.90, "
-            "but you must select only the ≥ 0.90 verdict.\n"
+            "6) Determine which threshold the weighted_ratio falls into:\n"
+            "- Start from the **lowest threshold** and move upward.\n"
+            "- The correct verdict is the **last threshold that the weighted_ratio still satisfies**.\n"
+            "- In other words, choose the **largest threshold value that is ≤ weighted_ratio**.\n"
+            "- Example: If weighted_ratio = 0.87, it satisfies 0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, and 0.85, "
+            "but not 0.95. The correct verdict is '≥ 0.85'.\n"
+            "- Do **not** choose thresholds that exceed the ratio."
             "7) Do not select lower thresholds once a higher one applies."
         )
 
@@ -287,7 +301,7 @@ class RiskAgent(
         self,
         criteria_by_risk: dict[str, list[Criterion]],
         risk_weights: Optional[Dict[str, float]] = None,
-    ) -> Union[DAGMetric, None]:
+    ) -> DAGMetric | None:
         root_nodes: List[TaskNode] = []
         final_risk_nodes: List[TaskNode] = []
 
@@ -368,6 +382,7 @@ class RiskAgent(
                 m_required,
                 borderline_expr,
                 low_clause,
+                m_total,
             )
 
             # Create the per-risk aggregation node
@@ -387,34 +402,54 @@ class RiskAgent(
             final_risk_nodes.append(risk_agg_node)
 
         # ---------- WEIGHTED FINAL AGGREGATION -------------
-        # Default weights: 1.0 each
-        weights: Dict[str, float] = {rid: 1.0 for rid in criteria_by_risk.keys()}
-        if risk_weights:
-            # override known risks with provided weights; ignore unknown keys
-            for rid, w in risk_weights.items():
-                if rid in weights:
-                    weights[rid] = float(w)
 
-        # Creating a weight table for the instruction
-        weight_lines = [f"- {rid}: {weights[rid]}" for rid in criteria_by_risk.keys()]
+        if risk_weights:
+            weights: Dict[str, float] = {rid: float(w) for rid, w in risk_weights.items()}
+        else:
+            weights: Dict[str, float] = {rid: 1.0 for rid in criteria_by_risk.keys()}
+
+        # 2. Add "auto-pass" nodes for irrelevant risks (those not in criteria_by_risk)
+        irrelevant_risks = [rid for rid in weights.keys() if rid not in criteria_by_risk]
+
+        for rid in irrelevant_risks:
+            auto_pass_node = TaskNode(
+                output_label=f"{rid}_auto_pass",
+                instructions=(
+                    f"This risk ('{rid}') had no applicable criteria for this evaluation. "
+                    f"It must automatically be treated as passed for weighting purposes.\n"
+                    f"Answer strictly with `True`."
+                ),
+                evaluation_params=[],
+                children=[],  # will link later to summary node
+                label=f"{rid} auto-pass node (irrelevant risk)",
+            )
+            final_risk_nodes.append(auto_pass_node)
+            root_nodes.append(auto_pass_node)  # make it part of the DAG roots
+            logger.debug(f"Added auto-pass node for irrelevant risk: {rid}")
+
+        weight_lines = [f"- {rid}: {weights[rid]}" for rid in weights.keys()]
         weights_text = "\n".join(weight_lines)
         denom = sum(weights.values())
-        if denom == 0:
-            logger.error("Risk weights sum to zero; cannot compute weighted ratio.")
-            raise ValueError(
-                "Risk weights sum to zero; cannot compute weighted ratio.",
-            )
 
-        # The child outputs we consult:
+        if denom == 0:
+            raise ValueError("Risk weights sum to zero; cannot compute weighted ratio.")
+
+        # Include both evaluated and auto-pass nodes
         all_risk_outputs = [n.output_label for n in final_risk_nodes]
 
         # Bucketing the weighted ratio to 5 verdicts (works for any weights).
         verdicts = [
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.90", score=10.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.75", score=7.5),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.50", score=5.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.25", score=2.5),
-            VerdictNode(verdict="Weighted pass ratio < 0.25", score=0.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.95", score=10.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.85", score=9.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.75", score=8.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.65", score=7.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.55", score=6.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.45", score=5.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.35", score=4.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.25", score=3.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.15", score=2.0),
+            VerdictNode(verdict="Weighted pass ratio ≥ 0.05", score=1.0),
+            VerdictNode(verdict="Weighted pass ratio < 0.05", score=0.0),
         ]
 
         # NonBinaryJudgementNode instruction describing how to compute weighted ratio
@@ -440,6 +475,7 @@ class RiskAgent(
             name=f"Evaluate result based on risks (weighted): {', '.join(criteria_by_risk.keys())}",
             dag=DeepAcyclicGraph(root_nodes=root_nodes),
             verbose_mode=True,
+            model=self.config.model_name,
         )
         return dag_metric
 

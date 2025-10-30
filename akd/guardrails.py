@@ -371,7 +371,7 @@ def add_guardrails(
 
                     # Only include high importance
                     importance_match = importance_pattern.search(block)
-                    if not importance_match or importance_match.group(1).lower() != "high":
+                    if not importance_match or importance_match.group(1).lower() not in ["high", "medium"]:
                         continue
 
                     # Find all verdict matches
