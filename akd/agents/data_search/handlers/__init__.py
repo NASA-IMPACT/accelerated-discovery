@@ -31,7 +31,7 @@ HANDLERS: dict = {
 # Handler status tracking - determines which handlers are available for routing
 HANDLER_STATUS: dict = {
     NASARepositoryEnum.CMR: HandlerStatus.IMPLEMENTED,
-    NASARepositoryEnum.PDS4: HandlerStatus.STUB,
+    NASARepositoryEnum.PDS4: HandlerStatus.IMPLEMENTED,
 }
 
 
