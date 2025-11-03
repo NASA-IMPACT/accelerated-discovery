@@ -1,8 +1,8 @@
 from typing import Optional
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
 import httpx
+from bs4 import BeautifulSoup
 from loguru import logger
 from pydantic import HttpUrl
 
@@ -39,7 +39,10 @@ class ADSResolver(BaseArticleResolver):
         except RuntimeError:
             return None
         try:
-            async with self.session or httpx.AsyncClient(timeout=self.validation_timeout, headers=self.headers) as client:
+            async with self.session or httpx.AsyncClient(
+                timeout=self.validation_timeout,
+                headers=self.headers,
+            ) as client:
                 # Fetch the ADS page
                 response = await client.get(url)
                 if response.status_code != 200:
@@ -58,7 +61,15 @@ class ADSResolver(BaseArticleResolver):
                     result.doi = doi
                     result.resolvers.append(self.__class__.__name__)
                     result.extra["is_url_resolved"] = True
+                    result.extra["url_source"] = self.__class__.__name__
+                    result.extra["url_type"] = "doi_redirect"
                     result.url = HttpUrl(f"https://doi.org/{doi}")
+
+                    # Extract metadata from ADS page
+                    title_tag = soup.find("meta", {"name": "citation_title"})
+                    if title_tag and not result.title:
+                        result.title = title_tag["content"]
+
                     return result
 
                 # Look for the bibcode in meta tags
@@ -71,10 +82,19 @@ class ADSResolver(BaseArticleResolver):
                     pdf_response = await client.head(pdf_url)
                     if pdf_response.status_code == 200:
                         result = ResolverOutputSchema(**params.model_dump())
-                        
                         result.resolvers.append(self.__class__.__name__)
                         result.extra["is_url_resolved"] = True
+                        result.extra["url_source"] = self.__class__.__name__
+                        result.extra["url_type"] = "pdf"
                         result.url = HttpUrl(pdf_url)
+                        result.pdf_url = HttpUrl(pdf_url)  # Also set pdf_url field
+                        result.extra["ads_bibcode"] = bibcode
+
+                        # Extract metadata from ADS page
+                        title_tag = soup.find("meta", {"name": "citation_title"})
+                        if title_tag and not result.title:
+                            result.title = title_tag["content"]
+
                         return result
 
                 # If no DOI or direct PDF found, look for other PDF links
@@ -88,7 +108,11 @@ class ADSResolver(BaseArticleResolver):
                     # Return the first PDF link, making it an absolute URL if needed
                     result = ResolverOutputSchema(**params.model_dump())
                     result.extra["is_url_resolved"] = True
-                    result.url = HttpUrl(urljoin(url, pdf_links[0]))
+                    result.extra["url_source"] = self.__class__.__name__
+                    result.extra["url_type"] = "pdf"
+                    pdf_url = HttpUrl(urljoin(url, pdf_links[0]))
+                    result.url = pdf_url
+                    result.pdf_url = pdf_url  # Also set pdf_url field
                     result.resolvers.append(self.__class__.__name__)
                     return result
 

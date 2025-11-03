@@ -4,7 +4,7 @@ from unittest.mock import PropertyMock, patch
 import pytest
 
 from akd.structures import SearchResultItem
-from akd.tools.resolvers import ResearchArticleResolver
+from akd.tools.resolvers import CompositeResolver
 from akd.tools.resolvers._base import ResolverInputSchema, ResolverOutputSchema
 from akd.tools.scrapers._base import ScraperToolInputSchema, ScraperToolOutputSchema
 from akd.tools.scrapers.composite import CompositeScraper
@@ -27,10 +27,13 @@ class MockSearchTool(SearchTool):
         super().__init__(config=None, debug=False)
         self.mock_results = mock_results or []
 
+    async def _arun_single_query(self, client, query, category, max_results):
+        """Barebone implementation of abstract method - not used in pipeline tests."""
+        return []
+
     async def _arun(self, params, **kwargs):
         return SearchToolOutputSchema(
             results=self.mock_results,
-            category="test",
         )
 
 
@@ -111,6 +114,7 @@ def basic_config():
         scraping_mode=SearchPipelineScrapingMode.ALWAYS_ON,
         scraping_timeout=5,
         fail_on_scraping_errors=False,
+        debug=True,
     )
 
 
@@ -404,7 +408,6 @@ class TestSearchPipeline:
         result = await pipeline._arun(params)
 
         assert len(result.results) == 0
-        assert result.category == "test"
 
     @pytest.mark.asyncio
     async def test_arun_sequential_processing(self, sample_search_results):
@@ -518,7 +521,7 @@ class TestSearchPipeline:
         resolver = pipeline._default_research_article_resolver
 
         # Should return a ResearchArticleResolver instance
-        assert isinstance(resolver, ResearchArticleResolver)
+        assert isinstance(resolver, CompositeResolver)
 
     def test_default_scraper(self):
         """Test default scraper creation"""
@@ -582,8 +585,5 @@ class TestIntegration:
         assert "Abstract: This paper discusses..." in enhanced_result.content
         assert "Full paper content from PDF..." in enhanced_result.content
         assert enhanced_result.extra["full_text_scraped"] is True
-        assert (
-            str(enhanced_result.extra["scraped_url"])
-            == "http://arxiv.org/pdf/1234.5678.pdf"
-        )
+        assert str(enhanced_result.extra["scraped_url"]) == "http://arxiv.org/pdf/1234.5678.pdf"
         assert enhanced_result.extra["resolver_used"] == ["MockResolver"]

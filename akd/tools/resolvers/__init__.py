@@ -19,7 +19,7 @@ from .ads import ADSResolver
 from .arxiv import ArxivResolver
 
 # Composite resolver
-from .composite import ResearchArticleResolver
+from .composite import CompositeResolver
 from .crossref_doi import (
     CrossRefDoiResolver,
     CrossRefDoiResolverConfig,
@@ -53,5 +53,5 @@ __all__ = [
     "CrossRefDoiResolverInputSchema",
     "CrossRefDoiResolverOutputSchema",
     # Composite resolver
-    "ResearchArticleResolver",
+    "CompositeResolver",
 ]

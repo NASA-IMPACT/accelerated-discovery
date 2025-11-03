@@ -179,8 +179,20 @@ class AbstractBase[
     def __set_attrs_from_config(self):
         if self.config is None:
             return
-        for attr, value in self.config.model_dump().items():
-            setattr(self, attr, value)
+        # Iterate over model fields directly to preserve nested Pydantic models
+        # Using model_dump() would convert nested BaseModel instances to dicts
+        # Access model_fields from the class to avoid deprecation warning
+        for field_name in type(self.config).model_fields.keys():
+            value = getattr(self.config, field_name)
+            setattr(self, field_name, value)
+
+        # Also copy computed fields (properties decorated with @computed_field)
+        # These are in model_computed_fields, not model_fields
+        # Pydantic 2.x supports model_computed_fields
+        if hasattr(type(self.config), "model_computed_fields"):
+            for field_name in type(self.config).model_computed_fields.keys():
+                value = getattr(self.config, field_name)
+                setattr(self, field_name, value)
 
     @property
     def _input_schema_info(self) -> str:

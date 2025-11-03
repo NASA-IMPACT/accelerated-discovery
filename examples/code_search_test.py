@@ -1,23 +1,27 @@
-import sys
 import os
+import sys
 
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
+
+from akd.agents.search import (
+    CodeSearchAgent,
+    CodeSearchAgentConfig,
+    LitSearchAgentInputSchema,
+)
 from akd.tools.search import SearxNGSearchToolConfig
-from akd.tools.code_search import (
+from akd.tools.search.code_search import (
     CodeSearchToolInputSchema,
+    CompositeCodeSearchTool,
+    CompositeCodeSearchToolConfig,
+    GitHubCodeSearchTool,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
-    GitHubCodeSearchTool,
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
-    CombinedCodeSearchTool,
-    CombinedCodeSearchToolConfig,
 )
-from akd.agents.search import LitSearchAgentInputSchema
-from akd.agents.search import CodeSearchAgent, CodeSearchAgentConfig
 
 
 # Local Code Search Tool
@@ -49,7 +53,8 @@ async def github_search_test():
     tool = GitHubCodeSearchTool(config=cfg)
 
     search_input = CodeSearchToolInputSchema(
-        queries=["landslide nepal"], max_results=10
+        queries=["landslide nepal"],
+        max_results=10,
     )
 
     print("Running the search...")
@@ -71,7 +76,8 @@ async def sde_search_test():
     tool = SDECodeSearchTool(config=cfg)
 
     search_input = CodeSearchToolInputSchema(
-        queries=["Weather Prediction"], max_results=5
+        queries=["Weather Prediction"],
+        max_results=5,
     )
 
     print("Running the search...")
@@ -89,11 +95,12 @@ async def combined_code_search_test():
     """An async function to run the tool."""
 
     print("Initializing the tool...")
-    cfg = CombinedCodeSearchToolConfig()
-    tool = CombinedCodeSearchTool(config=cfg)
+    cfg = CompositeCodeSearchToolConfig()
+    tool = CompositeCodeSearchTool(config=cfg)
 
     search_input = CodeSearchToolInputSchema(
-        queries=["landslide nepal"], max_results=10
+        queries=["landslide nepal"],
+        max_results=10,
     )
 
     print("Running the search...")

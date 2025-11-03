@@ -252,7 +252,7 @@ class TestRateLimiterIntegration:
     @pytest.mark.asyncio
     async def test_semantic_scholar_integration(self):
         """Test RateLimiter works with SemanticScholarSearchTool pattern."""
-        from akd.tools.search.semantic_scholar_search import (
+        from akd.tools.search.semantic_scholar import (
             SemanticScholarSearchTool,
             SemanticScholarSearchToolConfig,
         )

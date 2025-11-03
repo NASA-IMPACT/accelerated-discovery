@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from enum import Enum
-from typing import Optional
 
 from loguru import logger
 from pydantic import Field
@@ -16,10 +15,10 @@ from akd.tools.resolvers import (
     ADSResolver,
     ArxivResolver,
     BaseArticleResolver,
+    CompositeResolver,
     CrossRefDoiResolver,
     DOIResolver,
     PDFUrlResolver,
-    ResearchArticleResolver,
 )
 from akd.tools.resolvers._base import ResolverOutputSchema
 from akd.tools.resolvers.unpaywall import UnpaywallResolver
@@ -35,7 +34,7 @@ from ._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
-from .searxng_search import SearxNGSearchTool
+from .searxng import SearxNGSearchTool
 
 
 class SearchPipelineScrapingMode(str, Enum):
@@ -156,8 +155,8 @@ class SearchPipeline(SearchTool):
             )
 
     @property
-    def _default_research_article_resolver(self) -> ResearchArticleResolver:
-        return ResearchArticleResolver(
+    def _default_research_article_resolver(self) -> CompositeResolver:
+        return CompositeResolver(
             PDFUrlResolver(debug=self.debug),
             ArxivResolver(debug=self.debug),
             ADSResolver(debug=self.debug),
@@ -179,7 +178,7 @@ class SearchPipeline(SearchTool):
     async def _resolve_essential_metadata(
         self,
         result: SearchResultItem,
-    ) -> Optional[ResolverOutputSchema]:
+    ) -> ResolverOutputSchema:
         """
         Resolve the open access URL for a search result.
 
@@ -189,6 +188,10 @@ class SearchPipeline(SearchTool):
         Returns:
             Resolved open access URL or None if resolution fails
         """
+        extra = result.extra or {}
+        # If Already resolved by upstream search tool, skip resolution
+        if extra.get("resolvers", []) or extra.get("is_url_resolved", False):
+            return ResolverOutputSchema(**result.model_dump())
         try:
             # Try to resolve from the main URL first
             resolver_output = await self.resolver.arun(
@@ -515,6 +518,13 @@ class SearchPipeline(SearchTool):
 
             return enhanced_result
 
+    async def _arun_single_query(
+        self,
+        *args,
+        **kwargs,
+    ) -> list[SearchResultItem]:
+        pass
+
     async def _arun(
         self,
         params: SearchToolInputSchema,
@@ -614,5 +624,4 @@ class SearchPipeline(SearchTool):
         # Return enhanced results
         return SearchToolOutputSchema(
             results=enhanced_results,
-            category=search_results.category,
         )

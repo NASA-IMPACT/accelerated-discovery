@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResultItem
-from akd.tools.search._base import SearchTool
 
 from .answer import QuestionAnsweringAgent, QuestionAnsweringAgentOutputSchema
 
@@ -74,7 +73,6 @@ class SearchAgentConfig(BaseAgentConfig):
 
 class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSchema](
     BaseAgent[TInput, TOutput],
-    SearchTool,
 ):
     """Base agent for performing literature searches using a search tool."""
 

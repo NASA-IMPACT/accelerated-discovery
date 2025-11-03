@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from akd.structures import SearchResultItem
-from akd.tools.search.searxng_search import (
+from akd.tools.search.searxng import (
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
     SearxNGSearchToolInputSchema,
@@ -91,49 +91,116 @@ def mock_searxng_empty_response() -> dict[str, Any]:
 
 
 @pytest.fixture
-def mock_searxng_malformed_response() -> dict[str, Any]:
-    """Mock malformed SearxNG API response for error testing."""
-    return {
-        "results": [
-            {
-                "title": "Article with Missing Fields",
-                # Missing required fields like 'url', 'content'
-                "engine": "google",
-                "score": 0.8,
-            },
-            {
-                # Missing title
-                "content": "Content without title",
-                "url": "https://example.com/no-title",
-                "engine": "arxiv",
-                "score": 0.7,
-            },
-        ],
-    }
+def mock_searxng_malformed_response() -> list[SearchResultItem]:
+    """Mock malformed SearxNG API response for error testing (as SearchResultItem objects with empty/missing fields that will be filtered)."""
+    # Note: URL and title are required fields, but _process_results filters out items with falsy url/title
+    # So we create items and manually set url/title to None after creation to simulate malformed responses
+    items = [
+        SearchResultItem(
+            title="temp",
+            url="http://temp.com",
+            content="Has content but will have None URL",
+            query="",
+            engine="google",
+            score=0.8,
+        ),
+        SearchResultItem(
+            title="temp",
+            url="https://example.com/no-title",
+            content="Content without title",
+            query="",
+            engine="arxiv",
+            score=0.7,
+        ),
+        SearchResultItem(
+            title="Valid Article",
+            content="This one should pass through",
+            url="https://example.com/valid",
+            query="",
+            engine="google",
+            score=0.9,
+        ),
+    ]
+    # Manually set to None to simulate malformed data (bypassing Pydantic validation)
+    items[0].url = None  # Missing URL - should be filtered out
+    items[1].title = None  # Missing title - should be filtered out
+    return items
 
 
 @pytest.fixture
 def sample_search_result_items() -> list[SearchResultItem]:
-    """Sample SearchResultItem objects for testing."""
+    """
+    Comprehensive SearchResultItem test data covering various scenarios:
+    - Different scores (high, medium, low)
+    - Different engines (google, arxiv, bing, google_scholar)
+    - Duplicates (same URL)
+    - Missing fields (empty title/content, None URL)
+    - DOI handling
+    """
     return [
+        # High score, google engine
         SearchResultItem(
-            url="https://example.com/ml-intro",
-            title="Introduction to Machine Learning",
-            content="Machine learning is a subset of artificial intelligence...",
-            query="machine learning",
-            category="science",
-            doi="10.1000/test123",
-            published_date="2023-01-15",
+            title="High Score",
+            content="test content",
+            url="http://test1.com",
+            score=0.9,
             engine="google",
+            query="test",
+            doi="10.1000/test123",
         ),
+        # Medium score, arxiv engine
         SearchResultItem(
-            url="https://example.com/dl-fundamentals",
-            title="Deep Learning Fundamentals",
-            content="Deep learning is a machine learning technique...",
-            query="deep learning",
-            category="science",
-            published_date="2023-02-10",
+            title="Medium Score",
+            content="test content",
+            url="http://test2.com",
+            score=0.3,
             engine="arxiv",
+            query="test",
+        ),
+        # Low score, google engine (below default 0.25 cutoff)
+        SearchResultItem(
+            title="Low Score",
+            content="test content",
+            url="http://test3.com",
+            score=0.1,
+            engine="google",
+            query="test",
+        ),
+        # Bing engine (for engine filtering tests)
+        SearchResultItem(
+            title="Bing Result",
+            content="test content",
+            url="http://test4.com",
+            score=0.7,
+            engine="bing",
+            query="test",
+        ),
+        # Duplicate URL (same as test1.com)
+        SearchResultItem(
+            title="Duplicate URL",
+            content="test content",
+            url="http://test1.com",
+            score=0.6,
+            engine="google_scholar",
+            query="test",
+        ),
+        # Missing title (empty string)
+        SearchResultItem(
+            title="",
+            content="test content",
+            url="http://test5.com",
+            score=0.8,
+            engine="arxiv",
+            query="test",
+        ),
+        # Missing content (empty string)
+        SearchResultItem(
+            title="No Content",
+            content="",
+            url="http://test6.com",
+            score=0.7,
+            engine="google",
+            query="test",
         ),
     ]
 
@@ -189,33 +256,34 @@ def mock_network_error_session():
 
 
 @pytest.fixture
-def duplicate_results_response() -> Dict[str, Any]:
-    """Mock response with duplicate URLs for deduplication testing."""
-    return {
-        "results": [
-            {
-                "title": "Original Article",
-                "content": "This is the original article...",
-                "url": "https://example.com/article",
-                "engine": "google",
-                "score": 0.95,
-            },
-            {
-                "title": "Duplicate Article",
-                "content": "This is a duplicate of the same article...",
-                "url": "https://example.com/article",  # Same URL
-                "engine": "arxiv",
-                "score": 0.85,
-            },
-            {
-                "title": "Another Article",
-                "content": "This is a different article...",
-                "url": "https://example.com/different",
-                "engine": "google_scholar",
-                "score": 0.80,
-            },
-        ],
-    }
+def duplicate_results_response() -> list[SearchResultItem]:
+    """Mock response with duplicate URLs for deduplication testing (as SearchResultItem objects)."""
+    return [
+        SearchResultItem(
+            title="Original Article",
+            content="This is the original article...",
+            url="https://example.com/article",
+            query="",
+            engine="google",
+            score=0.95,
+        ),
+        SearchResultItem(
+            title="Duplicate Article",
+            content="This is a duplicate of the same article...",
+            url="https://example.com/article",  # Same URL
+            query="",
+            engine="arxiv",
+            score=0.85,
+        ),
+        SearchResultItem(
+            title="Another Article",
+            content="This is a different article...",
+            url="https://example.com/different",
+            query="",
+            engine="google_scholar",
+            score=0.80,
+        ),
+    ]
 
 
 # ==================== Serper Tool Fixtures ====================
@@ -240,7 +308,6 @@ def sample_serper_config():
         hl="en",
         autocorrect=True,
         max_pages=5,
-        result_multiplier=1.0,
         pre_authenticate=False,
         debug=False,
     )

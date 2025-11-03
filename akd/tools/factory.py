@@ -9,8 +9,8 @@ from .resolvers import (
     ArticleResolverConfig,
     ArxivResolver,
     BaseArticleResolver,
+    CompositeResolver,
     IdentityResolver,
-    ResearchArticleResolver,
 )
 from .scrapers import ScraperToolBase, ScraperToolConfig
 from .scrapers.composite import CompositeScraper
@@ -44,7 +44,7 @@ def create_default_article_resolver(
     config: Optional[ArticleResolverConfig] = None,
 ) -> BaseArticleResolver:
     config = config or ArticleResolverConfig()
-    return ResearchArticleResolver(
+    return CompositeResolver(
         ADSResolver(config),
         ArxivResolver(config),
         IdentityResolver(config),

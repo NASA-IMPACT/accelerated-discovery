@@ -10,14 +10,28 @@ from ._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
+from .code_search import (
+    CodeSearchTool,
+    CodeSearchToolConfig,
+    CodeSearchToolInputSchema,
+    CodeSearchToolOutputSchema,
+    CompositeCodeSearchTool,
+    CompositeCodeSearchToolConfig,
+    GitHubCodeSearchTool,
+    LocalRepoCodeSearchTool,
+    LocalRepoCodeSearchToolConfig,
+    SDECodeSearchTool,
+    SDECodeSearchToolConfig,
+)
+from .composite import CompositeSearchTool, CompositeSearchToolConfig
 from .pipeline import SearchPipeline, SearchPipelineConfig, SearchPipelineScrapingMode
-from .searxng_search import (
+from .searxng import (
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
     SearxNGSearchToolInputSchema,
     SearxNGSearchToolOutputSchema,
 )
-from .semantic_scholar_search import (
+from .semantic_scholar import (
     SemanticScholarSearchTool,
     SemanticScholarSearchToolConfig,
     SemanticScholarSearchToolInputSchema,
@@ -39,6 +53,9 @@ __all__ = [
     "SearchToolInputSchema",
     "SearchToolOutputSchema",
     "QueryFocusStrategy",
+    # Composite
+    "CompositeSearchTool",
+    "CompositeSearchToolConfig",
     # SearxNG
     "SearxNGSearchTool",
     "SearxNGSearchToolInputSchema",
@@ -58,4 +75,16 @@ __all__ = [
     "SearchPipeline",
     "SearchPipelineConfig",
     "SearchPipelineScrapingMode",
+    # Code Search
+    "CodeSearchTool",
+    "CodeSearchToolConfig",
+    "CodeSearchToolInputSchema",
+    "CodeSearchToolOutputSchema",
+    "CompositeCodeSearchTool",
+    "CompositeCodeSearchToolConfig",
+    "LocalRepoCodeSearchTool",
+    "LocalRepoCodeSearchToolConfig",
+    "GitHubCodeSearchTool",
+    "SDECodeSearchTool",
+    "SDECodeSearchToolConfig",
 ]
