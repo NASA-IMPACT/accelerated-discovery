@@ -12,7 +12,14 @@ from typing import Any, List, Optional
 from loguru import logger
 from pydantic import Field
 
-from akd.agents.query import FollowUpQueryAgent, QueryAgent
+from akd.agents.query import (
+    FollowUpQueryAgent,
+    FollowUpQueryAgentInputSchema,
+    FollowUpQueryAgentOutputSchema,
+    QueryAgent,
+    QueryAgentInputSchema,
+    QueryAgentOutputSchema,
+)
 from akd.agents.relevancy import (
     ContentDepthLabel,
     EvidenceQualityLabel,
@@ -30,7 +37,7 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessorConfig,
 )
 from akd.tools.search import SearxNGSearchTool
-from akd.tools.search._base import QueryFocusStrategy
+from akd.tools.search._base import QueryFocusStrategy, SearchToolInputSchema
 
 from ._base import (
     LitBaseAgent,
@@ -501,8 +508,6 @@ class ControlledSearchAgent(LitBaseAgent):
             focus_guidance = self._create_rubric_focus_guidance(rubric_focus)
             query_instruction += f"\n\nFOCUS AREAS NEEDED: {focus_guidance}"
 
-        from akd.agents.query import QueryAgentInputSchema, QueryAgentOutputSchema
-
         res = QueryAgentOutputSchema(queries=queries)
         try:
             res = await self.query_agent.arun(
@@ -542,11 +547,6 @@ class ControlledSearchAgent(LitBaseAgent):
             if rubric_focus:
                 focus_guidance = self._create_rubric_focus_guidance(rubric_focus)
                 enhanced_content += f"\n\nFOCUS AREAS NEEDED: {focus_guidance}"
-
-            from akd.agents.query import (
-                FollowUpQueryAgentInputSchema,
-                FollowUpQueryAgentOutputSchema,
-            )
 
             followup_input = FollowUpQueryAgentInputSchema(
                 original_queries=original_queries,
@@ -807,8 +807,6 @@ class ControlledSearchAgent(LitBaseAgent):
             logger.debug(
                 f"Generated queries (iteration {iteration}): {current_queries}",
             )
-
-            from akd.tools.search._base import SearchToolInputSchema
 
             search_input = SearchToolInputSchema(
                 queries=current_queries,
