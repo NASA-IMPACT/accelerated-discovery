@@ -5,7 +5,7 @@ import networkx as nx
 from langchain_openai import ChatOpenAI
 from loguru import logger
 from networkx.readwrite import json_graph
-from pydantic.fields import Field
+from pydantic.fields import Field, computed_field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
@@ -51,6 +51,11 @@ class GapOutputSchema(OutputSchema):
         description="Answers for each node selected from the graph.",
     )
     graph: dict | None = Field(default=None, description="Graph created from the ingested papers.")
+
+    @computed_field
+    def response(self) -> str:
+        """Returns the gap output as the response."""
+        return self.output
 
 
 class GapAgentConfig(BaseAgentConfig):
