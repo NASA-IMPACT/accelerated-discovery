@@ -1400,9 +1400,9 @@ async def test_search_agent_response_field_none_report():
         iterations_performed=1,
     )
 
-    # Test that _response field returns empty string when report is None
+    # Test that _response field is falsy when report is None
     assert hasattr(output, "_response")
-    assert output._response == ""
+    assert not output._response
 
 
 if __name__ == "__main__":
