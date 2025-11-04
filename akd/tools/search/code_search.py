@@ -245,17 +245,17 @@ class LocalRepoCodeSearchToolConfig(CodeSearchToolConfig):
     """
 
     data_file: str = str(
-        get_akd_root() / "docs" / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v5.csv"),
+        get_akd_root() / "docs" / os.getenv("REPO_EMBEDDINGS_FILE", "repositories_with_embeddings_v6.csv"),
     )
     google_drive_file_id: str = os.getenv(
         "CODE_SEARCH_FILE_ID",
-        "19Oi2gAE5aGyp11mIxCXsaGp1PA08_Aw3",
+        "1XwH4N-HJeak4Pfp6r0Nhdz0d5tQD99jE",
     )
     embedder_type: Literal["sentence-transformers", "openai"] = "sentence-transformers"
     wait_time: int = 1
     embedding_model_name: str = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
     remove_embedding_column: bool = True
-    context_columns: list[str] = ["description", "reformulated_text", "key_topics"]
+    context_columns: list[str] = ["description", "reformulated_text", "key_topics", "relevant_content"]
     embeddings_column: str = "embeddings"
     debug: bool = False
 

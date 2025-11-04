@@ -40,7 +40,7 @@ async def local_repo_search_test():
     print("\n--- Search Results ---")
     for result in output.results:
         print(result.url)
-        print(result.content)
+        print(result.content[:100])
         print("-" * 100)
 
 
@@ -63,7 +63,7 @@ async def github_search_test():
     print("\n--- Search Results ---")
     for result in output.results:
         print(result.url)
-        print(result.content)
+        print(result.content[:100])
         print("-" * 100)
 
 
@@ -86,12 +86,12 @@ async def sde_search_test():
     print("\n--- Search Results ---")
     for result in output.results:
         print(result.url)
-        print(result.content)
+        print(result.content[:100])
         print("-" * 100)
 
 
 # Combined Code Search Tool
-async def combined_code_search_test():
+async def composite_code_search_test():
     """An async function to run the tool."""
 
     print("Initializing the tool...")
@@ -109,7 +109,7 @@ async def combined_code_search_test():
     print("\n--- Search Results ---")
     for result in output.results:
         print(result.url)
-        print(result.content)
+        print(result.content[:100])
         print(result.extra["tool"])
         print(result.extra["score"])
         print("-" * 100)
@@ -144,6 +144,6 @@ if __name__ == "__main__":
     print("Running SDE search test...")
     asyncio.run(sde_search_test())
     print("Running combined code search test...")
-    asyncio.run(combined_code_search_test())
+    asyncio.run(composite_code_search_test())
     print("Running code search agent test...")
     asyncio.run(code_search_agent_test())
