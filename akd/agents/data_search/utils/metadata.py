@@ -114,16 +114,19 @@ def generate_search_id(query: str, run_id: str) -> str:
     return f"{run_id}_{query_slug}"
 
 
-def build_output_filename(search_id: str) -> str:
+def build_output_filename(search_id: str, output_subdir: str | None = None) -> str:
     """
     Build output filename for auto-saved results.
 
     Args:
         search_id: Unique search ID
+        output_subdir: Optional subdirectory within captured_data/ for organizing runs
 
     Returns:
-        Path to output file in captured_data/ directory
+        Path to output file in captured_data/ directory (or subfolder if output_subdir provided)
     """
+    if output_subdir:
+        return f"captured_data/{output_subdir}/{search_id}.json"
     return f"captured_data/{search_id}.json"
 
 

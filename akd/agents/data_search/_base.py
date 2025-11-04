@@ -2,7 +2,7 @@
 Base classes and shared utilities for data search agents.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -120,9 +120,55 @@ class DecompositionResult(BaseModel):
         None,
         description="Metadata about instrument/platform enum corrections applied to query approaches",
     )
+    ranking_fallbacks: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Metadata about ranking/filtering fallback usage when LLM components fail",
+    )
     note: Optional[str] = Field(
         None,
         description="Additional information (external sources, errors, processing notes)",
+    )
+
+
+class SummaryCollection(BaseModel):
+    """Summary of a single decomposition's collections."""
+
+    title: str = Field(..., description="Decomposition title")
+    collections: List[Tuple[str, str]] = Field(
+        default_factory=list,
+        description="Top collections as (concept_id, title) tuples (up to 5)",
+    )
+    total_collections: int = Field(
+        default=0,
+        description="Total collections found for this decomposition",
+    )
+
+
+class SummaryTopic(BaseModel):
+    """Summary of a single topic's decompositions."""
+
+    title: str = Field(..., description="Topic title")
+    decompositions: List[SummaryCollection] = Field(
+        default_factory=list,
+        description="Decomposition summaries",
+    )
+    total_decompositions: int = Field(
+        default=0,
+        description="Total decompositions for this topic",
+    )
+
+
+class SearchSummary(BaseModel):
+    """Condensed summary of entire search."""
+
+    original_query: str = Field(..., description="The original research question")
+    topics: List[SummaryTopic] = Field(
+        default_factory=list,
+        description="Topic summaries",
+    )
+    total_topics: int = Field(
+        default=0,
+        description="Total topics processed",
     )
 
 
@@ -141,6 +187,10 @@ class DataSearchAgentOutputSchema(OutputSchema):
     total_filtered_results: int = Field(
         default=0,
         description="Total collections after filtering across all topics",
+    )
+    summary: Optional[SearchSummary] = Field(
+        None,
+        description="Condensed summary of search results",
     )
 
 
@@ -176,6 +226,10 @@ class BaseDataSearchConfig(BaseAgentConfig):
     auto_save: bool = Field(
         default=False,
         description="Automatically save results to captured_data/ directory on successful completion",
+    )
+    output_subdir: Optional[str] = Field(
+        default=None,
+        description="Optional subdirectory within captured_data/ for organizing evaluation runs",
     )
     capture_metadata: bool = Field(
         default=True,

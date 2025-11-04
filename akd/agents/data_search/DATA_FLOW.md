@@ -209,10 +209,10 @@ The data search agent addresses the fundamental challenge that **one single CMR 
 ### Why This Approach Works
 
 **Progressive Refinement**: The system breaks down complex queries into manageable pieces:
-- Natural language → Functional topics (1-6)
-- Topics → Observable phenomena (1-6 per topic)
-- Phenomena → Query approaches (1-5 per phenomenon)
-- Approaches → Search variations (0-5 per approach)
+- Natural language → Functional topics (1-3)
+- Topics → Observable phenomena (1-3 per topic)
+- Phenomena → Query approaches (1-4 from LLM + 1 keyword-only = 2-5 total per phenomenon)
+- Approaches → Search variations (0-3 per approach)
 
 **Diversity Through Parallelization**: Multiple independent paths explore different aspects of the question simultaneously, ensuring comprehensive coverage and preventing any single interpretation from dominating results.
 
@@ -789,6 +789,57 @@ This metadata is logged at:
 - **Decomposition level**: Array of corrections for all approaches
 - **Query level**: Specific corrections for each searchable query's approach
 
+**Step 4.6: Keyword-Only Approach Injection** (CMR-specific)
+**Component**: `CMRHandler._maybe_add_keyword_only_approach`
+**Location**: `akd/agents/data_search/handlers/cmr/handler.py:131`
+
+After enum validation, the CMR handler optionally adds a keyword-only approach to cast a wider net:
+
+**Process**:
+1. Clone first approach (most relevant from LLM)
+2. Remove `instrument` and `platform` filters (set to `None`)
+3. Prepend to approach list (keyword-only becomes `approaches[0]`)
+
+**Configuration**:
+```python
+cmr_config = CMRHandlerConfig(
+    include_keyword_only_approach=True,  # Default: enabled
+)
+```
+
+**Rationale**: The keyword-only approach finds collections with incomplete instrument/platform metadata while preserving all other filters (temporal, spatial, processing_level). This catches datasets that are scientifically relevant but have poor metadata tagging.
+
+**Input**: 1-4 LLM-generated approaches (after enum validation)
+
+**Output**: 2-5 total approaches (keyword-only + LLM approaches)
+
+**Example**:
+```python
+# LLM generates:
+approach_1 = {
+    "instrument": "MODIS",
+    "platform": "Terra",
+    "temporal": "2023-01-01,2023-12-31",
+    "bounding_box": "120,-60,180,60"
+}
+
+# Handler creates keyword-only variant:
+keyword_only = {
+    "instrument": None,      # ← Removed
+    "platform": None,        # ← Removed
+    "temporal": "2023-01-01,2023-12-31",  # ← Preserved
+    "bounding_box": "120,-60,180,60"      # ← Preserved
+}
+
+# Final approaches list:
+approaches = [keyword_only, approach_1, ...]  # 2-5 total
+```
+
+To disable this feature:
+```python
+cmr_config = CMRHandlerConfig(include_keyword_only_approach=False)
+```
+
 #### Step 5: Searchable Parameters Generation
 **Component**: `CMRSearchableParametersComponent` (CMR-specific wrapper)
 **Location**: `akd/agents/data_search/handlers/cmr/components.py`
@@ -798,7 +849,7 @@ This metadata is logged at:
 **Input**: Original query + topic + decomposition + query approaches
 
 **Process**:
-1. For each query approach, generates 0-5 search variations
+1. For each query approach, generates 0-3 search variations
 2. Each variation uses different keyword strategies (or no keywords)
 3. Creates multiple targeted CMR queries per approach
 4. **Key insight**: CMR uses AND logic, so fewer keywords = more results
@@ -850,7 +901,7 @@ for approach_idx, queries in approach_queries.items():
         approach_collections[approach_idx].extend(limited)
 ```
 
-**Output**: Up to 5 approaches × 5 queries/approach × 5 collections/query = max 125 collections grouped by approach
+**Output**: Up to 5 approaches (4 LLM + 1 keyword-only) × 3 queries/approach × 5 collections/query = max 75 collections grouped by approach
 
 **Stage 2: Per-Approach Deduplication**
 Location: `akd/agents/data_search/handlers/cmr_handler.py` (_deduplicate_approach_collections)
@@ -867,7 +918,7 @@ for approach_idx in sorted(approach_collections.keys()):
     deduplicated_by_approach[approach_idx] = deduplicated
 ```
 
-**Output**: Each approach has ≤25 deduplicated collections
+**Output**: Each approach has ≤15 deduplicated collections (3 queries × 5 collections max)
 
 **Stage 3: Per-Approach Filtering and Ranking (Parallel)**
 Location: `akd/agents/data_search/handlers/cmr/handler.py` (_filter_and_rank_by_approach)
@@ -1405,6 +1456,65 @@ uv run demo_capture.py --query "your query" --output timing_test.json
 uv run analyze_timing.py timing_test.json --report bottlenecks
 ```
 
+### Workflow Limits & Performance Tuning
+
+**Location**: `akd/agents/data_search/constants.py`
+
+All workflow limits are centralized in a single constants file for easy performance tuning:
+
+**Universal Limits** (apply to all handlers):
+```python
+MAX_TOPICS = 3                      # Maximum topics from splitting
+MIN_TOPICS = 1                      # Minimum topics required
+
+MAX_DECOMPOSITIONS_PER_TOPIC = 3    # Maximum decompositions per topic
+MIN_DECOMPOSITIONS_PER_TOPIC = 1    # Minimum decompositions required
+```
+
+**CMR Handler Limits**:
+```python
+CMR_MAX_LLM_APPROACHES = 4                    # Maximum approaches LLM generates (before keyword-only)
+CMR_MIN_LLM_APPROACHES = 1                    # Minimum approaches required
+CMR_MAX_TOTAL_APPROACHES_WITH_KEYWORD = 5     # Total after keyword-only injection (4 + 1)
+
+CMR_MAX_SEARCH_VARIATIONS_PER_APPROACH = 3    # Maximum search strings per approach
+CMR_MIN_SEARCH_VARIATIONS_PER_APPROACH = 0    # Minimum variations (0 = keyword-only approach allowed)
+
+CMR_MAX_SEARCHABLE_QUERIES = 15               # Calculated: 5 approaches × 3 variations
+```
+
+**Performance Tuning Process**:
+
+To change workflow performance, edit ONE file (`constants.py`) and all prompts/schemas auto-update:
+
+**Example: Increase max approaches from 4 to 6**
+```python
+# Edit constants.py
+CMR_MAX_LLM_APPROACHES = 6  # Changed from 4
+
+# Automatic effects:
+# - LLM prompts: "Generate 1-6 approaches" (was "1-4")
+# - Total approaches: 7 (6 LLM + 1 keyword-only)
+# - Max searchable queries: 21 (7 × 3, was 15)
+# - All schemas validate against new limits
+```
+
+**Example: Increase parallelism across all stages**
+```python
+# Edit constants.py
+MAX_TOPICS = 6                    # Up from 3
+MAX_DECOMPOSITIONS_PER_TOPIC = 6  # Up from 3
+CMR_MAX_LLM_APPROACHES = 6        # Up from 4
+
+# Result: Up to 6 × 6 × 7 = 252 parallel decomposition+approach paths
+```
+
+**Benefits**:
+- **Single source of truth**: One file controls all limits
+- **Automatic propagation**: Prompts, schemas, and calculations update immediately
+- **No code changes**: Tune performance without touching component logic
+- **Repository-specific**: PDS4 and other handlers can have different limits
+
 ## Input/Output Specifications
 
 ### Agent Input Schema
@@ -1681,6 +1791,7 @@ class CMRHandlerConfig(BaseModel):
     # Search behavior
     collection_search_page_size: int = 20
     granule_search_page_size: int = 50
+    include_keyword_only_approach: bool = True  # Add keyword-only variant (no instrument/platform)
 
     # Approach-aware ranking configuration
     collections_per_query: int = 5           # Top N from each CMR query
@@ -1734,10 +1845,10 @@ config = DataSearchAgentConfig(
 ```
 
 **Behavior**:
-- Topic Splitting: Generates 1-6 topics → Processes only `topics[0]`
-- Scientific Decomposition: Generates 1-6 decompositions → Processes only `decompositions[0]`
-- Known Parameters: Generates 1-5 approaches → Uses only `approaches[0]`
-- Searchable Parameters: Generates 0-5 queries → Executes only `queries[0]`
+- Topic Splitting: Generates 1-3 topics → Processes only `topics[0]`
+- Scientific Decomposition: Generates 1-3 decompositions → Processes only `decompositions[0]`
+- Known Parameters: Generates 1-4 approaches → Adds keyword-only → Total 2-5 → Uses only `approaches[0]`
+- Searchable Parameters: Generates 0-3 queries → Executes only `queries[0]`
 
 **Benefits**:
 - **Fast validation**: Dramatically reduced execution time for development/testing

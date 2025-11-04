@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from akd._base import InputSchema
 
+from ..constants import MAX_DECOMPOSITIONS_PER_TOPIC, MIN_DECOMPOSITIONS_PER_TOPIC
 from ..utils.prompt_loader import load_and_format_prompt
 from ._base import BaseDataSearchComponent
 from .topic_splitting import Topic
@@ -35,9 +36,9 @@ class ScientificDecompositionOutput(BaseModel):
 
     decompositions: List[ScientificDecomposition] = Field(
         ...,
-        description="List of scientific decompositions for the topic (1-2 decompositions)",
-        min_items=1,
-        max_items=2,
+        description="List of scientific decompositions for the topic",
+        min_items=MIN_DECOMPOSITIONS_PER_TOPIC,
+        max_items=MAX_DECOMPOSITIONS_PER_TOPIC,
     )
 
 
