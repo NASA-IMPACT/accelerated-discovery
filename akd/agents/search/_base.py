@@ -6,7 +6,7 @@ from abc import abstractmethod
 from enum import Enum
 from typing import Any, List
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
@@ -48,6 +48,8 @@ class SearchAgentInputSchema(InputSchema):
 class SearchAgentOutputSchema(OutputSchema):
     """Base output schema for literature search agents."""
 
+    __response_field__ = "report"
+
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
     report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
     results: list[SearchResultItem] = Field(..., description="List of search results")
@@ -59,11 +61,6 @@ class SearchAgentOutputSchema(OutputSchema):
         default_factory=dict,
         description="Extra metadata and synthesis information",
     )
-
-    @computed_field
-    def response(self) -> str:
-        """Get the main response from the agent."""
-        return self.report or ""
 
 
 class SearchAgentConfig(BaseAgentConfig):
