@@ -108,9 +108,9 @@ class DecompositionResult(BaseModel):
         default_factory=list,
         description="Data results from repository (collections for CMR, bundles for PDS4, etc.)",
     )
-    total_results_from_cmr: int = Field(
+    total_results_from_repository: int = Field(
         default=0,
-        description="Total collections returned by CMR across all queries (before dedup/filtering)",
+        description="Total results returned by repository (CMR/PDS4/etc) across all queries before dedup/filtering",
     )
     total_results_after_filtering: int = Field(
         default=0,
