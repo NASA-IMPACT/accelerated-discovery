@@ -190,6 +190,28 @@ class PDS4ToolStrategy(BaseModel):
         description="Max bundles to retrieve"
     )
 
+    # ---- Extracted URNs (populated during execution) ----
+
+    investigation_urn: Optional[str] = Field(
+        None,
+        description="Investigation URN extracted from context search (e.g., 'urn:nasa:pds:context:investigation:mission.msl')"
+    )
+
+    target_urn: Optional[str] = Field(
+        None,
+        description="Target URN extracted from context search (e.g., 'urn:nasa:pds:context:target:planet.mars')"
+    )
+
+    instrument_urn: Optional[str] = Field(
+        None,
+        description="Instrument URN extracted from context search (e.g., 'urn:nasa:pds:context:instrument:msl.chemcam')"
+    )
+
+    instrument_host_urn: Optional[str] = Field(
+        None,
+        description="Instrument host URN extracted from context search (e.g., 'urn:nasa:pds:context:instrument_host:spacecraft.msl')"
+    )
+
     def get_context_search_params(self) -> Dict[str, Any]:
         """
         Get parameters for context discovery tools.
