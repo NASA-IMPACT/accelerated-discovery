@@ -81,7 +81,7 @@ class PDS4TargetSearchTool(
         }
 
         # Call MCP server
-        result = await self._call_mcp_tool(
+        result = await self._make_http_request(
             tool_name="search_targets",
             arguments=arguments,
         )
