@@ -36,6 +36,13 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessor,
     LinkRelevancyAssessorConfig,
 )
+from akd.tools.reranker import (
+    RerankerTool,
+    RerankerToolConfig,
+    RerankerType,
+    create_reranker,
+    RerankerToolInputSchema,
+)
 from akd.tools.search import SearxNGSearchTool
 from akd.tools.search._base import QueryFocusStrategy, SearchToolInputSchema
 
@@ -120,6 +127,22 @@ class ControlledSearchAgentConfig(LitSearchAgentConfig):
         description="Relevancy score threshold to trigger full content fetching",
     )
 
+    # Reranker configuration
+    search_result_reranking: bool = Field(
+        default=False,
+        description="Enable reranking of search results.",
+    )
+    reranker_type: RerankerType = Field(
+        default="cross_encoder",
+        description="The type of reranker to use for combining results from multiple search tools.",
+    )
+    reranker_config: RerankerToolConfig = Field(
+        default_factory=lambda: RerankerToolConfig(
+            model_name="cross-encoder/ms-marco-MiniLM-L12-v2",
+        ),
+        description="Configuration for the reranker tool.",
+    )
+
 
 class ControlledSearchAgent(LitBaseAgent):
     """
@@ -154,6 +177,12 @@ class ControlledSearchAgent(LitBaseAgent):
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
         self.query_agent = query_agent or QueryAgent()
         self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
+
+        self.reranker: RerankerTool = create_reranker(
+            reranker_type=self.reranker_type,  # type: ignore
+            config=self.reranker_config,  # type: ignore
+            debug=self.debug,
+        )
 
         # Track rubric patterns for agentic learning
         self.rubric_history = []
@@ -849,6 +878,14 @@ class ControlledSearchAgent(LitBaseAgent):
                     )
 
             all_results.extend(current_results)
+
+            if self.config.search_result_reranking:
+                reranker_input = RerankerToolInputSchema(
+                    query=params.query,
+                    results=all_results,
+                )
+                reranked_results = await self.reranker.arun(reranker_input)
+                all_results = reranked_results.results
 
             # Update accumulated content after each iteration
             new_content = self._accumulate_content(current_results)
