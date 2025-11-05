@@ -331,7 +331,7 @@ class CMRHandler(BaseHandler):
             ),  # Use actual approaches (includes keyword-only)
             searchable_queries=augmented_queries,  # Now includes execution metadata
             data_results=ranked_collections,  # Collections for now
-            total_results_from_cmr=total_cmr,
+            total_results_from_repository=total_cmr,
             total_results_after_filtering=len(ranked_collections),
             enum_corrections=all_corrections,  # Instrument/platform corrections metadata
             ranking_fallbacks=ranking_metadata
