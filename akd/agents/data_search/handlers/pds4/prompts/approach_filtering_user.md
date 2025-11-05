@@ -7,15 +7,22 @@
 **Decomposition**: {decomposition_title}
 {decomposition_justification}
 
-## Search Approach
+## Search Strategy
 
-- **Investigation/Mission**: {approach_investigation}
-- **Target**: {approach_target}
-- **Target Type**: {approach_target_type}
-- **Instrument**: {approach_instrument}
-- **Instrument Host**: {approach_instrument_host}
-- **Instrument Type**: {approach_instrument_type}
-- **Temporal Range**: {approach_temporal_range}
+**Description**: {strategy_description}
+
+**Discovery Keywords:**
+- Investigation/Mission: {investigation}
+- Target: {target}
+- Instruments: {instruments}
+- Instrument Hosts: {instrument_hosts}
+- Temporal Period: {temporal}
+
+**Extracted Context URNs:**
+- Investigation: {investigation_urn}
+- Target: {target_urn}
+- Instrument: {instrument_urn}
+- Instrument Host: {instrument_host_urn}
 
 ## PDS4 Products to Review ({num_items} total)
 
