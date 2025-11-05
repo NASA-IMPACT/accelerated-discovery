@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "created_at": "2025-11-04T22:37:34.227191+00:00",
+  "updated_at": "2025-11-04T22:37:34.227234+00:00",
+  "agents": {
+    "eie_extraction": {
+      "agent_id": "eie_extraction",
+      "name": "Eie Extraction",
+      "description": "Agent for eie extraction",
+      "agent_class": "akd.agents.eie_agents.eie_extraction.ExtractAgent",
+      "enabled": true,
+      "input_schema": {
+        "fields": [
+          {
+            "name": "query",
+            "type": "string",
+            "description": "Query from the user.",
+            "required": true,
+            "default": null,
+            "items_type": null
+          }
+        ]
+      },
+      "output_schema": {
+        "fields": [
+          {
+            "name": "dataset_type",
+            "type": "string",
+            "description": "The dataset type extracted by the agent based on the query, e.g., methane, population, nitrogen dioxide.",
+            "required": false,
+            "default": "all",
+            "items_type": null
+          },
+          {
+            "name": "location",
+            "type": "string",
+            "description": "Human-readable location or place extracted by the agent based on the query.",
+            "required": false,
+            "default": "global",
+            "items_type": null
+          },
+          {
+            "name": "bbox",
+            "type": "string",
+            "description": "A GeoJSON string representing the bounding box coordinates of the location.",
+            "required": false,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "frequency",
+            "type": "string",
+            "description": "The periodicity or frequency of the dataset requested (e.g., daily, monthly, yearly, all).",
+            "required": false,
+            "default": "all",
+            "items_type": null
+          }
+        ]
+      },
+      "tags": [
+        "eie"
+      ],
+      "use_cases": [
+        "Agent for eie extraction"
+      ],
+      "dependencies": []
+    }
+  }
+}
