@@ -206,7 +206,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             query_approaches=[],
             searchable_queries=[],
             data_results=[],
-            total_results_from_cmr=0,
+            total_results_from_repository=0,
             total_results_after_filtering=0,
             note=f"Data available from {route.repository}. {route.rationale}",
         )
@@ -223,7 +223,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             query_approaches=[],
             searchable_queries=[],
             data_results=[],
-            total_results_from_cmr=0,
+            total_results_from_repository=0,
             total_results_after_filtering=0,
             note=f"{route.repository} handler implementation is in progress. {route.rationale}",
         )
@@ -241,7 +241,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             query_approaches=[],
             searchable_queries=[],
             data_results=[],
-            total_results_from_cmr=0,
+            total_results_from_repository=0,
             total_results_after_filtering=0,
             note=f"Error processing with {route.repository}: {error_message}",
         )
@@ -509,7 +509,7 @@ class DataSearchAgent(BaseDataSearchAgent):
                     query_approaches=[],
                     searchable_queries=[],
                     data_results=[],
-                    total_results_from_cmr=0,
+                    total_results_from_repository=0,
                     total_results_after_filtering=0,
                     note=f"Processing error: {str(result)}",
                 )
@@ -518,7 +518,7 @@ class DataSearchAgent(BaseDataSearchAgent):
                 final_results.append(result)
 
         # Aggregate statistics from decomposition results
-        total_cmr = sum(dr.total_results_from_cmr for dr in final_results)
+        total_cmr = sum(dr.total_results_from_repository for dr in final_results)
         total_filtered = sum(dr.total_results_after_filtering for dr in final_results)
 
         return TopicResult(
