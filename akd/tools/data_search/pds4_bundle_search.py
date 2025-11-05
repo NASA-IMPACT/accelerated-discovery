@@ -6,11 +6,12 @@ from typing import Optional
 
 from pydantic import Field
 
+from akd._base import OutputSchema
+
 from ._base import (
     BaseDataSearchTool,
     DataSearchToolConfig,
     DataSearchToolInputSchema,
-    DataSearchToolOutputSchema,
 )
 
 
@@ -35,10 +36,13 @@ class PDS4BundleSearchInputSchema(DataSearchToolInputSchema):
     )
 
 
-class PDS4BundleSearchOutputSchema(DataSearchToolOutputSchema):
+class PDS4BundleSearchOutputSchema(OutputSchema):
     """Output schema for PDS4 bundle search operations."""
 
     total_hits: int = Field(..., description="Total number of matching bundles")
+    query_time_ms: int = Field(default=0, description="Query execution time in milliseconds")
+    query: str = Field(default="", description="Query string used")
+    limit: int = Field(default=0, description="Maximum number of results requested")
     bundles: list = Field(..., description="List of found bundles")
     facets: dict = Field(default_factory=dict, description="Faceted metadata results")
 
@@ -94,9 +98,12 @@ class PDS4BundleSearchTool(
 
         # Return structured output
         return PDS4BundleSearchOutputSchema(
-            total_hits=result.get("total_hits", 0),
-            bundles=result.get("bundles", []),
-            facets=result.get("facets", {}),
+            total_hits=result.get("total_hits") or 0,
+            query_time_ms=result.get("query_time_ms") or 0,
+            query=result.get("query") or "",
+            limit=result.get("limit") or params.limit,
+            bundles=result.get("bundles") or [],
+            facets=result.get("facets") or {},
         )
 
     @classmethod

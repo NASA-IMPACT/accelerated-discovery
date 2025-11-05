@@ -6,11 +6,12 @@ from typing import Optional
 
 from pydantic import Field
 
+from akd._base import OutputSchema
+
 from ._base import (
     BaseDataSearchTool,
     DataSearchToolConfig,
     DataSearchToolInputSchema,
-    DataSearchToolOutputSchema,
 )
 
 
@@ -31,10 +32,13 @@ class PDS4TargetSearchInputSchema(DataSearchToolInputSchema):
     )
 
 
-class PDS4TargetSearchOutputSchema(DataSearchToolOutputSchema):
+class PDS4TargetSearchOutputSchema(OutputSchema):
     """Output schema for PDS4 target search operations."""
 
     total_hits: int = Field(..., description="Total number of matching targets")
+    query_time_ms: int = Field(default=0, description="Query execution time in milliseconds")
+    query: str = Field(default="", description="Query string used")
+    limit: int = Field(default=10, description="Maximum number of results requested")
     targets: list = Field(..., description="List of found targets")
 
 
@@ -88,8 +92,11 @@ class PDS4TargetSearchTool(
 
         # Return structured output
         return PDS4TargetSearchOutputSchema(
-            total_hits=result.get("total_hits", 0),
-            targets=result.get("targets", []),
+            total_hits=result.get("total_hits") or 0,
+            query_time_ms=result.get("query_time_ms") or 0,
+            query=result.get("query") or "",
+            limit=result.get("limit") or params.limit,
+            targets=result.get("targets") or [],
         )
 
     @classmethod
