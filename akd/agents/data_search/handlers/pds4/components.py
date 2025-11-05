@@ -87,15 +87,26 @@ class PDS4ParameterExtractionComponent(
                 f"Extracting PDS4 tool strategies for decomposition: '{decomposition.title}'",
             )
 
+        # Extract min/max approaches from output schema metadata
+        # metadata[0] = MinLen, metadata[1] = MaxLen
+        min_approaches = (
+            self.output_schema.model_fields["tool_strategies"].metadata[0].min_length
+        )
+        max_approaches = (
+            self.output_schema.model_fields["tool_strategies"].metadata[1].max_length
+        )
+
         # Format user prompt
         user_prompt = load_and_format_prompt(
             template_name=f"{self.template_name}_user",
             prompts_dir=self.prompts_dir,
             original_query=original_query,
             topic_title=topic.title,
-            topic_context=topic.context,
+            topic_context=topic.functional_context,
             decomposition_title=decomposition.title,
-            decomposition_justification=decomposition.justification,
+            decomposition_justification=decomposition.scientific_justification,
+            min_approaches=min_approaches,
+            max_approaches=max_approaches,
         )
 
         # Save prompt for debugging
@@ -113,6 +124,12 @@ class PDS4ParameterExtractionComponent(
             logger.debug(
                 f"Extracted {len(result.tool_strategies)} tool strategies: {result.reasoning}",
             )
+            if not result.tool_strategies:
+                logger.warning("⚠️ EMPTY tool_strategies returned by LLM - workflow will fail!")
+                logger.debug(f"Reasoning: {result.reasoning}")
+            else:
+                for idx, strat in enumerate(result.tool_strategies):
+                    logger.debug(f"  Strategy {idx}: {strat.strategy_description}")
 
         return result
 
@@ -212,8 +229,8 @@ class PDS4StrategyCollectionFilteringComponent(
             "target_context": params.target_context or "Not specified",
             "target_type": params.target_type or "Not specified",
             "mission_keywords": ", ".join(params.mission_keywords) if params.mission_keywords else "Not specified",
-            "investigation_urn": params.investigation_urn or "Not specified",
-            "target_urn": params.target_urn or "Not specified",
+            "investigation_urn": getattr(params, 'investigation_urn', None) or "Not specified",
+            "target_urn": getattr(params, 'target_urn', None) or "Not specified",
         }
 
 
