@@ -23,14 +23,14 @@ from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
 from .._base import BaseHandler
 from .components import (
+    PDS4ApproachCollectionFilteringComponent,
     PDS4FinalCollectionRankingComponent,
     PDS4ParameterExtractionComponent,
-    PDS4StrategyCollectionFilteringComponent,
 )
 from .config import PDS4HandlerConfig
 from .schemas import (
+    PDS4ApproachCollectionFilteringInputSchema,
     PDS4FinalCollectionRankingInputSchema,
-    PDS4StrategyCollectionFilteringInputSchema,
     PDS4ToolStrategy,
 )
 
@@ -249,7 +249,6 @@ class PDS4Handler(BaseHandler):
 
                 tool_input = self.target_search_tool.input_schema(
                     keywords=search_params["keywords"],
-                    target_type=strategy.target_type.value if strategy.target_type else "",
                     limit=self.config.context_search_page_size,
                 )
                 result = await self.target_search_tool.arun(tool_input)
@@ -322,7 +321,8 @@ class PDS4Handler(BaseHandler):
 
         try:
             # Step 1: Execute context searches if needed
-            if strategy.target_context == "investigation":
+            # Execute investigation search if strategy has investigation keywords
+            if strategy.investigation_keywords:
                 investigations = await self._execute_context_search(
                     strategy,
                     "investigation",
@@ -334,7 +334,8 @@ class PDS4Handler(BaseHandler):
                 execution_metadata["context_searches_executed"].append("investigation")
                 execution_metadata["urns_extracted"]["investigation"] = investigation_urns
 
-            elif strategy.target_context == "target":
+            # Execute target search if strategy has target keywords
+            if strategy.target_keywords:
                 targets = await self._execute_context_search(strategy, "target")
                 target_urns = self._extract_urns_from_context(targets, "target")
                 execution_metadata["context_searches_executed"].append("target")
@@ -569,18 +570,22 @@ class PDS4Handler(BaseHandler):
                     f"Creating filter input for strategy {strategy_idx} with {len(collections)} collections",
                 )
 
-            filter_input = PDS4StrategyCollectionFilteringInputSchema(
+            filter_input = PDS4ApproachCollectionFilteringInputSchema(
                 original_query=original_query,
                 topic_title=topic.title,
                 topic_context=topic.functional_context,
                 decomposition_title=decomp.title,
                 decomposition_justification=decomp.scientific_justification,
                 strategy_description=strategy.strategy_description,
-                target_context=strategy.target_context,
-                target_type=strategy.target_type.value if strategy.target_type else None,
-                mission_keywords=strategy.mission_keywords,
+                investigation_keywords=strategy.investigation_keywords,
+                target_keywords=strategy.target_keywords,
+                instrument_keywords=strategy.instrument_keywords,
+                instrument_host_keywords=strategy.instrument_host_keywords,
+                temporal_context=strategy.temporal_context,
                 investigation_urn=strategy.investigation_urn,
                 target_urn=strategy.target_urn,
+                instrument_urn=strategy.instrument_urn,
+                instrument_host_urn=strategy.instrument_host_urn,
                 data_items=collections,
                 max_items=self.config.max_collections_per_strategy,
             )
@@ -589,7 +594,7 @@ class PDS4Handler(BaseHandler):
             component_config = BaseAgentConfig(
                 model_name=self.config.strategy_filtering_model,
             )
-            filtering_component = PDS4StrategyCollectionFilteringComponent(
+            filtering_component = PDS4ApproachCollectionFilteringComponent(
                 config=component_config,
                 prompts_dir=self.pds4_prompts_dir,
                 run_id=run_id,

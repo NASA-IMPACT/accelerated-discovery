@@ -99,10 +99,10 @@ class PDS4ToolStrategy(BaseModel):
         PDS4ToolStrategy(
             strategy_index=0,
             strategy_description="Investigation-first: Search for Mars rover missions",
-            mission_keywords=["mars rover", "curiosity", "msl"],
-            target_context="Mars",
-            target_type=PDS4TargetType.PLANET,
+            investigation_keywords=["mars rover", "curiosity", "msl"],
+            target_keywords=["mars"],
             instrument_keywords=["spectrometer", "chemcam"],
+            instrument_host_keywords=["rover"],
             tool_sequence=["search_investigations", "search_targets", "search_collections"]
         )
     """
@@ -118,30 +118,26 @@ class PDS4ToolStrategy(BaseModel):
     )
 
     # ---- Context Parameters (PDS4-specific) ----
+    # These are keywords used in PDS4 MCP context searches
 
-    target_context: Optional[str] = Field(
-        None,
-        description="Target celestial body (e.g., 'Mars', 'Europa', 'Moon')"
-    )
-
-    target_type: Optional[PDS4TargetType] = Field(
-        None,
-        description="Target classification for filtering"
-    )
-
-    mission_keywords: List[str] = Field(
+    investigation_keywords: List[str] = Field(
         default_factory=list,
-        description="Keywords for investigation search (e.g., ['mars rover', 'curiosity'])"
+        description="Keywords for investigation/mission search (e.g., ['mars odyssey', 'curiosity'])"
+    )
+
+    target_keywords: List[str] = Field(
+        default_factory=list,
+        description="Keywords for target search (e.g., ['mars', 'europa', 'moon'])"
     )
 
     instrument_keywords: List[str] = Field(
         default_factory=list,
-        description="Instrument types or names (e.g., ['spectrometer', 'chemcam'])"
+        description="Keywords for instrument search (e.g., ['spectrometer', 'chemcam'])"
     )
 
-    platform_keywords: List[str] = Field(
+    instrument_host_keywords: List[str] = Field(
         default_factory=list,
-        description="Instrument host keywords (e.g., ['rover', 'orbiter'])"
+        description="Keywords for instrument host search (e.g., ['rover', 'orbiter'])"
     )
 
     # ---- Search Parameters ----
@@ -221,16 +217,15 @@ class PDS4ToolStrategy(BaseModel):
         """
         params = {}
 
-        if self.mission_keywords:
+        if self.investigation_keywords:
             params["investigation_params"] = {
-                "keywords": " ".join(self.mission_keywords),
+                "keywords": " ".join(self.investigation_keywords),
                 "limit": self.investigation_search_limit
             }
 
-        if self.target_context or self.target_type:
+        if self.target_keywords:
             params["target_params"] = {
-                "keywords": self.target_context or "",
-                "target_type": self.target_type.value if self.target_type else "",
+                "keywords": " ".join(self.target_keywords),
                 "limit": self.target_search_limit
             }
 
@@ -290,29 +285,41 @@ class PDS4ParameterExtractionOutput(BaseModel):
 
 
 # ============================================================================
-# Strategy Filtering Component Schemas
+# Approach Filtering Component Schemas
 # ============================================================================
 
-class PDS4StrategyCollectionFilteringInputSchema(BaseApproachFilteringInputSchema):
-    """PDS4-specific input schema for filtering collections within a single strategy."""
+class PDS4ApproachCollectionFilteringInputSchema(BaseApproachFilteringInputSchema):
+    """PDS4-specific input schema for filtering collections within a single approach."""
 
-    # Strategy-specific parameters
+    # Approach-specific parameters
     strategy_description: str = Field(
         ...,
-        description="Description of the tool strategy that generated these collections",
+        description="Description of the tool strategy/approach that generated these collections",
     )
-    target_context: Optional[str] = Field(
-        None,
-        description="Target context (mission/investigation) used in strategy",
-    )
-    target_type: Optional[str] = Field(
-        None,
-        description="Specific target type filter used",
-    )
-    mission_keywords: List[str] = Field(
+
+    # Keywords used in context searches
+    investigation_keywords: List[str] = Field(
         default_factory=list,
-        description="Mission/investigation keywords used in context search",
+        description="Investigation/mission keywords used in context search",
     )
+    target_keywords: List[str] = Field(
+        default_factory=list,
+        description="Target keywords used in context search",
+    )
+    instrument_keywords: List[str] = Field(
+        default_factory=list,
+        description="Instrument keywords used in context search",
+    )
+    instrument_host_keywords: List[str] = Field(
+        default_factory=list,
+        description="Instrument host keywords used in context search",
+    )
+    temporal_context: Optional[str] = Field(
+        None,
+        description="Temporal context/period for the search",
+    )
+
+    # URNs extracted from context searches
     investigation_urn: Optional[str] = Field(
         None,
         description="Investigation URN extracted from context search",
@@ -320,6 +327,14 @@ class PDS4StrategyCollectionFilteringInputSchema(BaseApproachFilteringInputSchem
     target_urn: Optional[str] = Field(
         None,
         description="Target URN extracted from context search",
+    )
+    instrument_urn: Optional[str] = Field(
+        None,
+        description="Instrument URN extracted from context search",
+    )
+    instrument_host_urn: Optional[str] = Field(
+        None,
+        description="Instrument host URN extracted from context search",
     )
 
     # Use base class fields (data_items, max_items) and provide PDS4-specific aliases
@@ -329,8 +344,8 @@ class PDS4StrategyCollectionFilteringInputSchema(BaseApproachFilteringInputSchem
         return self.data_items
 
 
-class PDS4StrategyCollectionFilteringOutput(BaseApproachFilteringOutput):
-    """PDS4-specific output schema for per-strategy filtering.
+class PDS4ApproachCollectionFilteringOutput(BaseApproachFilteringOutput):
+    """PDS4-specific output schema for per-approach filtering.
 
     Inherits selected_item_indexes and reasoning from base class.
     """

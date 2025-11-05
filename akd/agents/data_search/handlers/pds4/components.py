@@ -14,12 +14,12 @@ from akd.agents.data_search.components._shared_ranking import (
 from akd.agents.data_search.utils.prompt_loader import load_and_format_prompt
 
 from .schemas import (
+    PDS4ApproachCollectionFilteringInputSchema,
+    PDS4ApproachCollectionFilteringOutput,
     PDS4FinalCollectionRankingInputSchema,
     PDS4FinalCollectionRankingOutput,
     PDS4ParameterExtractionInputSchema,
     PDS4ParameterExtractionOutput,
-    PDS4StrategyCollectionFilteringInputSchema,
-    PDS4StrategyCollectionFilteringOutput,
 )
 
 
@@ -134,24 +134,24 @@ class PDS4ParameterExtractionComponent(
         return result
 
 
-class PDS4StrategyCollectionFilteringComponent(
+class PDS4ApproachCollectionFilteringComponent(
     SharedApproachFilteringComponent[
-        PDS4StrategyCollectionFilteringInputSchema,
-        PDS4StrategyCollectionFilteringOutput,
+        PDS4ApproachCollectionFilteringInputSchema,
+        PDS4ApproachCollectionFilteringOutput,
     ],
 ):
     """
-    PDS4-specific implementation of per-strategy collection filtering.
+    PDS4-specific implementation of per-approach collection filtering.
 
     Thin wrapper that sets PDS4 schemas and template name.
     All logic is in SharedApproachFilteringComponent.
     """
 
-    input_schema = PDS4StrategyCollectionFilteringInputSchema
-    output_schema = PDS4StrategyCollectionFilteringOutput
+    input_schema = PDS4ApproachCollectionFilteringInputSchema
+    output_schema = PDS4ApproachCollectionFilteringOutput
 
     # Base class configuration
-    template_name = "strategy_filtering"
+    template_name = "approach_filtering"
     default_temperature = 0.0  # Consistent filtering
     retry_enabled = False  # No retry for ranking components
 
@@ -162,7 +162,7 @@ class PDS4StrategyCollectionFilteringComponent(
         prompts_dir: Optional[Path] = None,
         run_id: Optional[str] = None,
     ):
-        """Initialize the PDS4 strategy collection filtering component."""
+        """Initialize the PDS4 approach collection filtering component."""
         super().__init__(
             config=config,
             debug=debug,
@@ -218,19 +218,23 @@ class PDS4StrategyCollectionFilteringComponent(
 
         return "\n".join(summary_parts)
 
-    def _extract_approach_context(self, params: PDS4StrategyCollectionFilteringInputSchema) -> Dict[str, Any]:
+    def _extract_approach_context(self, params: PDS4ApproachCollectionFilteringInputSchema) -> Dict[str, Any]:
         """
-        Extract strategy-specific context for prompt formatting.
+        Extract approach-specific context for prompt formatting.
 
-        PDS4 strategies include context type, keywords, and URN references.
+        PDS4 approaches include keywords and URN references from context searches.
         """
         return {
             "strategy_description": params.strategy_description,
-            "target_context": params.target_context or "Not specified",
-            "target_type": params.target_type or "Not specified",
-            "mission_keywords": ", ".join(params.mission_keywords) if params.mission_keywords else "Not specified",
-            "investigation_urn": getattr(params, 'investigation_urn', None) or "Not specified",
-            "target_urn": getattr(params, 'target_urn', None) or "Not specified",
+            "investigation": ", ".join(params.investigation_keywords) if params.investigation_keywords else "Not specified",
+            "target": ", ".join(params.target_keywords) if params.target_keywords else "Not specified",
+            "instruments": ", ".join(params.instrument_keywords) if params.instrument_keywords else "Not specified",
+            "instrument_hosts": ", ".join(params.instrument_host_keywords) if params.instrument_host_keywords else "Not specified",
+            "temporal": params.temporal_context or "Not specified",
+            "investigation_urn": params.investigation_urn or "Not specified",
+            "target_urn": params.target_urn or "Not specified",
+            "instrument_urn": params.instrument_urn or "Not specified",
+            "instrument_host_urn": params.instrument_host_urn or "Not specified",
         }
 
 
