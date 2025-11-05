@@ -64,11 +64,17 @@ class RiskReportAgentConfig(BaseAgentConfig):
 
     @model_validator(mode="after")
     def _inject_agent_description(self) -> "RiskReportAgentConfig":
-        """Dynamically enrich the system prompt if a description is provided."""
-        if self.agent_description:
-            self.system_prompt = (
-                RISK_REPORT_SYSTEM_PROMPT + "\n\nAgent Behavioral Context:\n" + self.agent_description.strip() + "\n"
-            )
+        """Dynamically insert the agent description into the system prompt."""
+        if "{agent_context_block}" not in self.system_prompt:
+            self.system_prompt = self.system_prompt + "\n\n{agent_context_block}"
+
+        agent_context_block = (
+            f"Agent Behavioral Context:\n{self.agent_description.strip()}\n" if self.agent_description else ""
+        )
+
+        self.system_prompt = self.system_prompt.format(
+            agent_context_block=agent_context_block,
+        )
         return self
 
 

@@ -5,6 +5,7 @@ import re
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional
 
+from deepeval.metrics import DAGMetric
 from deepeval.test_case import LLMTestCase
 from loguru import logger
 
@@ -371,7 +372,7 @@ def add_guardrails(
 
                     # Only include high importance
                     importance_match = importance_pattern.search(block)
-                    if not importance_match or importance_match.group(1).lower() not in ["high", "medium"]:
+                    if not importance_match or importance_match.group(1).lower() != "high":
                         continue
 
                     # Find all verdict matches
@@ -404,6 +405,120 @@ def add_guardrails(
                 }
 
                 return sorted_criteria
+
+            def _confirm_risk_score(self, dag_metric: DAGMetric, weights: dict[str, float]) -> float:
+                """
+                Deterministically recompute the weighted risk score from verbose DAG steps.
+                """
+                # ---------- Collect verdict buckets robustly (DFS over the DAG) ----------
+                verdict_nodes: list[tuple[float, float]] = []
+                seen: set[tuple[str, float]] = set()
+
+                threshold_re = re.compile(r"(?:≥|>=)\s*([0-9]*\.?[0-9]+)")
+
+                def dfs(node):
+                    if node is None:
+                        return
+                    # If this is a VerdictNode-like object (has 'verdict' text and a 'score'), capture it
+                    if hasattr(node, "verdict") and isinstance(getattr(node, "verdict"), str):
+                        verdict_text = node.verdict
+                        if "Weighted pass ratio" in verdict_text:
+                            m = threshold_re.search(verdict_text)
+                            if m:
+                                thr = float(m.group(1))
+                                key = (verdict_text, float(getattr(node, "score", 0.0)))
+                                if key not in seen:
+                                    verdict_nodes.append((thr, float(getattr(node, "score", 0.0))))
+                                    seen.add(key)
+                        # even if it's a verdict, still return; verdicts won't have useful children
+                        return
+                    # Recurse into children if present
+                    for child in getattr(node, "children", []) or []:
+                        dfs(child)
+
+                for root in dag_metric.dag.root_nodes:
+                    dfs(root)
+
+                # Sort buckets DESC by threshold (e.g., [(0.95, 10.0), ..., (0.00, 0.0)])
+                buckets = sorted(verdict_nodes, key=lambda x: x[0], reverse=True)
+
+                # ---------- Parse verbose steps for passes ----------
+                steps = dag_metric._verbose_steps
+                blob = "\n".join(steps)
+
+                # Level 1 aggregation nodes (Pass contributes; these are True/False)
+                level1_pattern = re.compile(
+                    r"Label:\s*([\w\-]+)\s+aggregation node.*?\n[\s\S]*?\n\s*([\w\-]+_importance_aware_pass):\s*(True|False)\s*$",
+                    re.DOTALL | re.MULTILINE,
+                )
+                # Level 0 auto-pass nodes (always pass)
+                autopass_pattern = re.compile(
+                    r"Label:\s*([\w\-]+)\s+auto-pass node.*?Answer strictly with\s*[`'\"]True[`'\"]\.\s*[\r\n]+([\w\-]+_auto_pass):\s*True\s*$",
+                    re.DOTALL | re.MULTILINE,
+                )
+
+                passed_risks: set[str] = set()
+
+                # Level 1: add risk_id if True
+                for m in level1_pattern.finditer(blob):
+                    risk_id = m.group(1)
+                    verdict = m.group(3).strip().lower()
+                    if verdict == "true" or verdict == "pass":
+                        passed_risks.add(risk_id)
+
+                # Level 0 auto-pass: always add risk_id
+                for m in autopass_pattern.finditer(blob):
+                    risk_id = m.group(1)
+                    passed_risks.add(risk_id)
+
+                # ---------- Compute ratio ----------
+                total_weight = sum(weights.values())
+                passed_weight = sum(weights.get(rid, 0.0) for rid in passed_risks)
+                weighted_ratio = (passed_weight / total_weight) if total_weight > 0 else 0.0
+
+                # ---------- Select bucket safely ----------
+                if not buckets:
+                    logger.error(
+                        "[RiskScoreCheck] No verdict buckets found! "
+                        f"weighted_ratio={weighted_ratio:.3f}, passed_risks={sorted(passed_risks)}",
+                    )
+                    return 0.0
+
+                selected_score = None
+                # iterate over well-formed (thr, score) pairs
+                for i, item in enumerate(buckets):
+                    if not isinstance(item, (list, tuple)) or len(item) < 2:
+                        logger.error(f"[RiskScoreCheck] Malformed bucket entry at index {i}: {item}")
+                        continue
+                    threshold, score_value = item
+                    if weighted_ratio >= threshold:
+                        selected_score = score_value
+                        break
+
+                # Fallback to the lowest bucket (smallest threshold) if none matched
+                if selected_score is None:
+                    lowest = min(buckets, key=lambda x: x[0])
+                    selected_score = lowest[1]
+
+                selected_score /= 10
+
+                # ------------ Compare to deepeval score (dag_metric.score) ----------
+                try:
+                    deepeval_score = float(getattr(dag_metric, "score"))
+                except Exception:
+                    deepeval_score = None
+
+                if deepeval_score is None or abs(selected_score - deepeval_score) > 1e-6:
+                    logger.warning(
+                        f"[RiskScoreCheck] Mismatch detected: DeepEval={deepeval_score}, recomputed={selected_score}, "
+                        f"weighted_ratio={weighted_ratio:.3f}, passed_risks={sorted(passed_risks)}",
+                    )
+                else:
+                    logger.debug(
+                        f"[RiskScoreCheck] Score verified: {selected_score} (weighted_ratio={weighted_ratio:.3f})",
+                    )
+
+                return selected_score
 
             async def _arun(self, params, **kwargs):
                 """Enhanced _arun with guardrails validation."""
@@ -490,7 +605,17 @@ def add_guardrails(
                         if ra_result.dag_metric:
                             ra_result.dag_metric.measure(test_case)
 
-                            dag_score = ra_result.dag_metric.score
+                            if self._risk_weights is None:
+                                risk_weights = {risk_id: 1 for risk_id in self._risk_ids}
+                            else:
+                                risk_weights = {
+                                    risk_id: self._risk_weights.get(risk_id, 1) for risk_id in self._risk_ids
+                                }
+
+                            dag_score = self._confirm_risk_score(
+                                ra_result.dag_metric,
+                                risk_weights,
+                            )
 
                             if ra_result.dag_metric.score != 1.0:
                                 risk_report_agent = RiskReportAgent(
@@ -519,7 +644,7 @@ def add_guardrails(
                                 risk_report = None
                         else:
                             risk_report = None
-                            dag_score = None
+                            dag_score = 1
 
                         object.__setattr__(
                             response,

@@ -156,11 +156,17 @@ class RiskAgentConfig(BaseAgentConfig):
 
     @model_validator(mode="after")
     def _inject_agent_description(self) -> "RiskAgentConfig":
-        """Dynamically enrich the system prompt if a description is provided."""
-        if self.agent_description:
-            self.system_prompt = (
-                RISK_SYSTEM_PROMPT + "\n\nAgent Behavioral Context:\n" + self.agent_description.strip() + "\n"
-            )
+        """Dynamically insert the agent description into the system prompt."""
+        if "{agent_context_block}" not in self.system_prompt:
+            self.system_prompt = self.system_prompt + "\n\n{agent_context_block}"
+
+        agent_context_block = (
+            f"Agent Behavioral Context:\n{self.agent_description.strip()}\n" if self.agent_description else ""
+        )
+
+        self.system_prompt = self.system_prompt.format(
+            agent_context_block=agent_context_block,
+        )
         return self
 
 
@@ -276,7 +282,21 @@ class RiskAgent(
         all_risk_outputs: List[str],
         weights_text: str,
         denom: float,
+        verdicts: List[VerdictNode],
     ) -> str:
+        thresholds = sorted(
+            [float(v.verdict.split("≥")[1].strip()) for v in verdicts],
+            reverse=True,
+        )
+
+        # Pick top three + next lower for the example
+        top3 = thresholds[:3]
+        example_lower = thresholds[3] if len(thresholds) > 3 else thresholds[-1]
+
+        # Choose example ratio slightly below lowest of top3
+        example_ratio = round(example_lower + (top3[-1] - example_lower) / 2 - 0.01, 2)
+        top3_str = ", ".join(f"{t:.2f}" for t in top3)
+
         return (
             "Compute a weighted pass ratio over risks using their pass/fail outputs and the provided weights.\n"
             "Steps:\n"
@@ -287,14 +307,19 @@ class RiskAgent(
             f"3) Let total_weight = {denom} (sum of the weights).\n"
             "4) Let passed_weight = sum of weights for risks that passed (True).\n"
             "5) weighted_ratio = passed_weight / total_weight.\n"
-            "6) Determine which threshold the weighted_ratio falls into:\n"
-            "- Start from the **lowest threshold** and move upward.\n"
-            "- The correct verdict is the **last threshold that the weighted_ratio still satisfies**.\n"
-            "- In other words, choose the **largest threshold value that is ≤ weighted_ratio**.\n"
-            "- Example: If weighted_ratio = 0.87, it satisfies 0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, and 0.85, "
-            "but not 0.95. The correct verdict is '≥ 0.85'.\n"
-            "- Do **not** choose thresholds that exceed the ratio."
-            "7) Do not select lower thresholds once a higher one applies."
+            "6) Determine the verdict bucket using the following logic:\n"
+            "   - Each verdict node defines a single threshold of the form 'Weighted pass ratio ≥ X'.\n"
+            "   - Compute weighted_ratio as above.\n"
+            "   - Start from the **highest threshold** (the largest X) and move **downward**.\n"
+            "   - The first threshold where weighted_ratio ≥ X is the correct one — stop there.\n"
+            "   - Do NOT select any higher thresholds that the ratio does not meet.\n"
+            "   - Return exactly that node's verdict text as the final verdict.\n"
+            "   - The associated score must be the numeric score linked to that node.\n"
+            "   - If weighted_ratio is below the lowest threshold, return the node that explicitly represents ratios below 0.05.\n"
+            f"   - Example: if weighted_ratio = {example_ratio:.2f}, the highest thresholds ({top3_str}) are not satisfied, "
+            f"but {example_lower:.2f} is; therefore, the correct verdict is 'Weighted pass ratio ≥ {example_lower:.2f}'.\n\n"
+            "The possible verdicts are given below:\n"
+            f"{chr(10).join(v.verdict for v in verdicts)}"
         )
 
     def build_dag_from_criteria(
@@ -437,19 +462,20 @@ class RiskAgent(
         # Include both evaluated and auto-pass nodes
         all_risk_outputs = [n.output_label for n in final_risk_nodes]
 
-        # Bucketing the weighted ratio to 5 verdicts (works for any weights).
+        # ----- Adaptive verdict generation based on number of risks ---
+        num_risks = len(risk_weights)
+
+        # For 7 risks 14 buckets is ok, so numner of buckets ~ num_risks + 4 for now (setting mininum of 5 buckets)
+        num_buckets = max(5, num_risks + 4)
+        step = 1.0 / (num_buckets - 1)
+
+        scores = [round(i * step * 10, 1) for i in range(0, num_buckets)]
+        thresholds = [round(i / 10 - step / 2, 2) for i in scores]
+        thresholds[0] = 0.0
+
         verdicts = [
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.95", score=10.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.85", score=9.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.75", score=8.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.65", score=7.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.55", score=6.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.45", score=5.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.35", score=4.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.25", score=3.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.15", score=2.0),
-            VerdictNode(verdict="Weighted pass ratio ≥ 0.05", score=1.0),
-            VerdictNode(verdict="Weighted pass ratio < 0.05", score=0.0),
+            VerdictNode(verdict=f"Weighted pass ratio ≥ {thr}", score=sco)
+            for thr, sco in zip(reversed(thresholds), reversed(scores))
         ]
 
         # NonBinaryJudgementNode instruction describing how to compute weighted ratio
@@ -457,6 +483,7 @@ class RiskAgent(
             all_risk_outputs,
             weights_text,
             denom,
+            verdicts,
         )
 
         risk_summary_node = NonBinaryJudgementNode(
@@ -475,7 +502,7 @@ class RiskAgent(
             name=f"Evaluate result based on risks (weighted): {', '.join(criteria_by_risk.keys())}",
             dag=DeepAcyclicGraph(root_nodes=root_nodes),
             verbose_mode=True,
-            model=self.config.model_name,
+            # model=self.config.model_name,
         )
         return dag_metric
 
