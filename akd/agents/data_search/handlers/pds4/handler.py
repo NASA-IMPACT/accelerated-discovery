@@ -195,9 +195,8 @@ class PDS4Handler(BaseHandler):
         result = DecompositionResult(
             decomposition=safe_model_dump(decomposition),
             repository="PDS4",
-            query_approaches=[],  # PDS4 uses tool_strategies instead
-            searchable_queries=[],  # PDS4 uses tool_strategies instead
-            tool_strategies=augmented_strategies,  # PDS4-specific field
+            query_approaches=augmented_strategies,  # Store PDS4 tool strategies here
+            searchable_queries=[],  # PDS4 doesn't use this field
             data_results=ranked_collections,
             total_results_from_repository=total_pds4,
             total_results_after_filtering=len(ranked_collections),
@@ -340,6 +339,12 @@ class PDS4Handler(BaseHandler):
                 target_urns = self._extract_urns_from_context(targets, "target")
                 execution_metadata["context_searches_executed"].append("target")
                 execution_metadata["urns_extracted"]["target"] = target_urns
+
+            # Store extracted URNs back in strategy for downstream use (filtering, ranking)
+            if investigation_urns:
+                strategy.investigation_urn = investigation_urns[0]
+            if target_urns:
+                strategy.target_urn = target_urns[0]
 
             # Step 2: Execute collection search with URN filters
             collection_params = {
