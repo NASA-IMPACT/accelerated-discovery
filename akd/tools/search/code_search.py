@@ -18,6 +18,7 @@ from akd.structures import SearchResultItem
 from akd.tools.misc import Embedder, HttpUrlAdapter, OpenAIEmbedder
 from akd.tools.reranker import RerankerToolConfig, RerankerType
 from akd.utils import get_akd_root, google_drive_downloader
+from akd.agents.intents import ScienceDivision
 
 from ._base import (
     SearchTool,
@@ -38,6 +39,11 @@ class CodeSearchToolInputSchema(SearchToolInputSchema):
     def top_k(self) -> int:
         """Returns the number of top results to return."""
         return self.max_results
+
+    division: ScienceDivision = Field(
+        default=ScienceDivision.UNKNOWN,
+        description="The NASA Science division that the query belongs to.",
+    )
 
 
 class CodeSearchToolOutputSchema(SearchToolOutputSchema):
@@ -72,6 +78,11 @@ class CodeSearchToolConfig(SearchToolConfig):
 
     deduplication_keys: list[str] = Field(
         default_factory=lambda: ["url"],  # default to url for code search
+    )
+
+    use_division: bool = Field(
+        default=False,
+        description="Whether to use the division to filter the search results.",
     )
 
 
@@ -445,13 +456,15 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         query: str,
         top_k: int = 25,
         remove_embedding_column: bool = True,
+        division: ScienceDivision = ScienceDivision.UNKNOWN,
     ) -> list[dict]:
         """
-        Perform similarity search against cached embeddings using vectorized computation. # noqa
+        Perform similarity search against cached embeddings using vectorized computation.
 
         Args:
             query: Search query
             top_k: Number of top results to return
+            division: Science division to filter by (if not UNKNOWN)
 
         Returns:
             List of dictionaries with top results and similarity scores
@@ -460,18 +473,29 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         if self.repo_data is None:
             raise ValueError("No data loaded. Check if the data file exists.")
 
+        # Filter by division if specified
+        if division != ScienceDivision.UNKNOWN and self.config.use_division:
+            filtered_data = self.repo_data[self.repo_data["area"] == division.value]
+            if len(filtered_data) == 0:
+                logger.warning(f"No results found for division: {division.value}")
+                return []
+            # Get corresponding embeddings
+            filtered_embeddings = np.vstack(filtered_data[self.config.embeddings_column].tolist())
+        else:
+            filtered_data = self.repo_data
+            filtered_embeddings = self.embeddings_matrix
+
         # Get query embedding
         query_embedding = self.embedder.embed_texts([query])
         if self.debug:
             logger.debug(f"Query embedding shape: {query_embedding.shape}")
 
-        # Compute cosine distances using cdist (more efficient)
-        # cdist with 'cosine' gives cosine distance (1 - cosine_similarity)
+        # Compute cosine distances using cdist
         cosine_distances = cdist(
             query_embedding.reshape(1, -1),
-            self.embeddings_matrix,
+            filtered_embeddings,
             metric="cosine",
-        )[0]  # Extract the single row
+        )[0]
 
         # Convert cosine distances to similarity scores (0-1 range)
         similarities = np.clip(1 - cosine_distances, 0, 1)
@@ -479,7 +503,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         # Get top-k results
         top_indices = np.argsort(similarities)[::-1][:top_k]
 
-        results = self.repo_data.iloc[top_indices].copy()
+        results = filtered_data.iloc[top_indices].copy()
         results["score"] = similarities[top_indices]
         results["score"] = results["score"].astype(float)
 
@@ -509,6 +533,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 query=query,
                 top_k=max_results,
                 remove_embedding_column=self.config.remove_embedding_column,
+                division=kwargs.get("division", ScienceDivision.UNKNOWN),
             )
             if results:
                 for result in results:
@@ -523,7 +548,10 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 url=HttpUrlAdapter.validate_python(result.pop("URL", "")),
                 content=result.pop("text", ""),
                 query=result.pop("query", ""),
-                extra=result,
+                extra={
+                    **result,
+                    "query_division": kwargs.get("division", ScienceDivision.UNKNOWN).value,
+                },
             )  # type: ignore
             for result in all_results_data
         ]
@@ -636,7 +664,7 @@ class SDECodeSearchTool(CodeSearchTool):
     config_schema = SDECodeSearchToolConfig
 
     @retry(stop=stop_after_attempt(2))
-    def sde_search(self, page: int, query: str):
+    def sde_search(self, page: int, query: str, division: ScienceDivision = ScienceDivision.UNKNOWN):
         """
         Search for code using SDE REST API.
         """
@@ -647,6 +675,16 @@ class SDECodeSearchTool(CodeSearchTool):
             "search_term": query,
             "search_type": self.search_mode,
         }
+
+        # Add division filter if specified
+        if division != ScienceDivision.UNKNOWN and self.config.use_division:
+            if self.config.debug:
+                logger.debug(f"Adding division filter for division: {division.value}")
+            # strip last word "Division" from the division value to adhere to the SDE API format
+            division_value = division.value.split(" ")[:-1]
+            division_value = " ".join(division_value).strip()
+            payload["filters"] = {"division": [division_value]}
+
         if self.debug:
             logger.debug(f"Payload: {payload}")
         response = requests.post(self.base_url, headers=self.headers, data=json.dumps(payload))
@@ -672,7 +710,9 @@ class SDECodeSearchTool(CodeSearchTool):
         try:
             for page in range(self.max_pages):
                 try:
-                    results = self.sde_search(page=page, query=query)
+                    results = self.sde_search(
+                        page=page, query=query, division=kwargs.get("division", ScienceDivision.UNKNOWN)
+                    )
                     if results:
                         for result in results:
                             result["query"] = query
@@ -692,7 +732,10 @@ class SDECodeSearchTool(CodeSearchTool):
                 url=HttpUrlAdapter.validate_python(result.pop("url", "")),
                 content=result.pop("full_text", ""),
                 query=result.pop("query", ""),
-                extra=result,
+                extra={
+                    **result,
+                    "query_division": kwargs.get("division", ScienceDivision.UNKNOWN).value,
+                },
             )  # type: ignore
             for result in all_results_data
         ]

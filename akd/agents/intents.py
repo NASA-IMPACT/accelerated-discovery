@@ -29,3 +29,35 @@ class IntentAgent(LiteLLMInstructorBaseAgent[IntentInputSchema, IntentOutputSche
 
     input_schema = IntentInputSchema
     output_schema = IntentOutputSchema
+
+
+class ScienceDivision(str, Enum):
+    EARTH_SCIENCE = "Earth Science Division"
+    PLANETARY_SCIENCE = "Planetary Science Division"
+    ASTROPHYSICS = "Astrophysics Division"
+    HELIOPHYSICS = "Heliophysics Division"
+    BIOLOGICAL_PHYSICAL_SCIENCES = "Biological and Physical Sciences Division"
+    UNKNOWN = "Unknown"
+
+
+class DivisionInputSchema(InputSchema):
+    """Input schema for determining NASA Science division of the query"""
+
+    query: str = Field(..., description="The user's latest query/message/question")
+
+
+class DivisionOutputSchema(OutputSchema):
+    """Output schema represents the NASA Science division of the query"""
+
+    division: ScienceDivision = Field(
+        ...,
+        description="The NASA Science division that the query belongs to. If the query does not belong to any of the divisions, return UNKNOWN.",
+    )
+    reasoning: str = Field(..., description="The reasoning for the division classification")
+
+
+class DivisionAgent(LiteLLMInstructorBaseAgent[DivisionInputSchema, DivisionOutputSchema]):
+    """Division Classifier Agent for NASA Science"""
+
+    input_schema = DivisionInputSchema
+    output_schema = DivisionOutputSchema

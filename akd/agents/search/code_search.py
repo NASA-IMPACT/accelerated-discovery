@@ -56,6 +56,7 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     )
     sde_search_type: Literal["vector", "hybrid", "keyword"] = Field(default="vector", description="SDE search type")
     sde_page_size: int = Field(default=100, description="SDE search page size")
+    use_division_filter: bool = Field(default=False, description="Enable division filter for SDE search")
 
     # Tool selection
     use_local_search: bool = Field(default=True, description="Enable local repository search")
@@ -154,6 +155,7 @@ class CodeSearchAgent(ControlledSearchAgent):
                 debug=self.config.debug,
                 search_mode=self.config.sde_search_type,
                 page_size=self.config.sde_page_size,
+                use_division=self.config.use_division_filter,
             )
             return SDECodeSearchTool(config=sde_config)
 
