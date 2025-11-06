@@ -54,7 +54,7 @@ class MCPConfig(BaseModel):
         description="MCP server endpoint URL",
     )
     timeout_seconds: float = Field(
-        default=30.0,
+        default=120.0,
         description="Request timeout in seconds",
     )
     max_retries: int = Field(default=3, description="Maximum number of retry attempts")

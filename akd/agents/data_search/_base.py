@@ -104,9 +104,13 @@ class DecompositionResult(BaseModel):
         default_factory=list,
         description="Complete queries with known + searchable parameters (repository-specific)",
     )
+    all_collections_from_cmr: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="ALL collections retrieved from CMR via pagination (before any deduplication or ranking)",
+    )
     data_results: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="Data results from repository (collections for CMR, bundles for PDS4, etc.)",
+        description="Final ranked data results from repository (subset of all_collections_from_cmr for CMR)",
     )
     total_results_from_cmr: int = Field(
         default=0,

@@ -75,6 +75,18 @@ Examples:
         help="Subdirectory within captured_data/ for organizing runs (e.g., 'run_20251028_103045')",
     )
 
+    parser.add_argument(
+        "--no-retrieve-all",
+        action="store_true",
+        help="Disable full CMR pagination (retrieve only first page per query, faster but incomplete)",
+    )
+
+    parser.add_argument(
+        "--skip-ranking",
+        action="store_true",
+        help="Skip LLM ranking/filtering stages - return all deduplicated CMR collections (baseline mode)",
+    )
+
     # Model configuration
     parser.add_argument(
         "--model",
@@ -135,6 +147,8 @@ Examples:
         collection_search_timeout=30.0,
         granule_search_timeout=45.0,
         enable_parallel_search=True,
+        retrieve_all_cmr_collections=not args.no_retrieve_all,  # Default: True, can disable with flag
+        skip_ranking_and_filtering=args.skip_ranking,  # Default: False, can enable with flag
         # Per-component models with fallback to --model
         known_parameters_model=args.cmr_known_model or args.model,
         searchable_parameters_model=args.cmr_searchable_model or args.model,
