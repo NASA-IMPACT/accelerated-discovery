@@ -66,6 +66,12 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     followup_query_prompt: str = Field(default=CODE_QUERY_PROMPT, description="System prompt for follow-up query agent")
     relevancy_prompt: str = Field(default=CODE_RELEVANCY_PROMPT, description="System prompt for relevancy agent")
 
+    # Reranker configuration
+    search_result_reranking: bool = Field(
+        default=True,
+        description="Enable reranking of search results.",
+    )
+
 
 class CodeSearchAgent(ControlledSearchAgent):
     """
