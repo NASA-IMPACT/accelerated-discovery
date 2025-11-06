@@ -248,11 +248,11 @@ Examples:
             f"\n✅ Search completed in {result.search_metadata['duration_seconds']:.1f}s",
         )
         print(f"📊 Topics processed: {result.search_metadata['topics_processed']}")
-        print(f"🔍 Total from CMR: {result.total_cmr_results} collections")
+        print(f"🔍 Total from repository: {result.total_repository_results} collections")
         print(f"📦 After filtering: {result.total_filtered_results} collections")
 
-        if result.total_cmr_results > 0:
-            retention = (result.total_filtered_results / result.total_cmr_results) * 100
+        if result.total_repository_results > 0:
+            retention = (result.total_filtered_results / result.total_repository_results) * 100
             print(f"🎯 Retention rate: {retention:.1f}%")
 
         if not args.no_save and result.search_metadata.get("search_id"):

@@ -71,9 +71,9 @@ class TopicResult(BaseModel):
         default_factory=list,
         description="Results for each scientific decomposition of this topic",
     )
-    total_cmr_results: int = Field(
+    total_repository_results: int = Field(
         default=0,
-        description="Sum of total_results_from_cmr across all decompositions",
+        description="Total results from repository across all decompositions",
     )
     total_filtered_results: int = Field(
         default=0,
@@ -180,9 +180,9 @@ class DataSearchAgentOutputSchema(OutputSchema):
         description="Search results organized by topic and decomposition",
     )
     search_metadata: dict = Field(..., description="Search provenance and metadata")
-    total_cmr_results: int = Field(
+    total_repository_results: int = Field(
         default=0,
-        description="Total collections from CMR across all topics (before filtering)",
+        description="Total results from repositories across all topics (before filtering)",
     )
     total_filtered_results: int = Field(
         default=0,

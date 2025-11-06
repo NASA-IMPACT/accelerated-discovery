@@ -393,7 +393,7 @@ class DataSearchAgent(BaseDataSearchAgent):
                     final_topic_results.append(result)
 
             # Calculate totals - aggregate across all topics
-            total_cmr_all = sum(tr.total_cmr_results for tr in final_topic_results)
+            total_repository_all = sum(tr.total_repository_results for tr in final_topic_results)
             total_filtered_all = sum(
                 tr.total_filtered_results for tr in final_topic_results
             )
@@ -418,7 +418,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             final_response = DataSearchAgentOutputSchema(
                 topics=final_topic_results,
                 search_metadata=search_metadata,
-                total_cmr_results=total_cmr_all,
+                total_repository_results=total_repository_all,
                 total_filtered_results=total_filtered_all,
                 summary=summary,
             )
@@ -518,13 +518,13 @@ class DataSearchAgent(BaseDataSearchAgent):
                 final_results.append(result)
 
         # Aggregate statistics from decomposition results
-        total_cmr = sum(dr.total_results_from_repository for dr in final_results)
+        total_repository_results = sum(dr.total_results_from_repository for dr in final_results)
         total_filtered = sum(dr.total_results_after_filtering for dr in final_results)
 
         return TopicResult(
             topic=safe_model_dump(topic),
             decomposition_results=final_results,
-            total_cmr_results=total_cmr,
+            total_repository_results=total_repository_results,
             total_filtered_results=total_filtered,
         )
 
