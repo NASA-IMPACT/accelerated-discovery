@@ -136,7 +136,7 @@ class SummaryCollection(BaseModel):
     title: str = Field(..., description="Decomposition title")
     collections: List[Tuple[str, str]] = Field(
         default_factory=list,
-        description="Top collections as (concept_id, title) tuples (up to 5)",
+        description="Top collections as (identifier, title) tuples (up to 5). Identifier is concept_id (CMR) or id/lid (PDS4)",
     )
     total_collections: int = Field(
         default=0,

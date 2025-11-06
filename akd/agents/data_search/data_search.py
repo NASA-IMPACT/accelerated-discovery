@@ -276,16 +276,21 @@ class DataSearchAgent(BaseDataSearchAgent):
                     "Unknown Decomposition",
                 )
 
-                # Extract top 5 collections as (concept_id, title) tuples
+                # Extract top 5 collections as (identifier, title) tuples
                 collection_tuples = []
                 for collection in decomp_result.data_results[:5]:  # Take first 5
-                    # Collection concept_id and title
-                    concept_id = collection.get("concept_id", "unknown")
-                    title = collection.get(
-                        "entry_title",
-                        collection.get("title", "Untitled"),
+                    # Extract identifier (repository-agnostic)
+                    # CMR uses concept_id, PDS4 uses id/lid
+                    identifier = (
+                        collection.get("concept_id")
+                        or collection.get("id")
+                        or collection.get("lid")
+                        or "unknown"
                     )
-                    collection_tuples.append((concept_id, title))
+                    # Extract title (repository-agnostic)
+                    # CMR uses entry_title, PDS4 uses title
+                    title = collection.get("entry_title") or collection.get("title") or "Untitled"
+                    collection_tuples.append((identifier, title))
 
                 # Create decomposition summary
                 summary_decomps.append(
