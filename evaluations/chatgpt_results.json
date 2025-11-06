@@ -1,0 +1,846 @@
+{
+  "metadata": {
+    "source": "ChatGPT baseline results",
+    "description": "ChatGPT results for comparison against our data search agent. NOT ground truth.",
+    "total_queries": 20,
+    "total_decompositions": 71,
+    "total_concept_ids": 280,
+    "smes": [
+      "Bernard",
+      "Emily"
+    ],
+    "prompt_types": [
+      "Angles",
+      "Basic"
+    ]
+  },
+  "queries": [
+    {
+      "sme": "Emily",
+      "prompt_type": "Basic",
+      "mcp": false,
+      "query_text": "How did sea-ice concentration and thickness in the Kara Sea change each March from 2020 to 2025?",
+      "conversation_link": "https://docs.google.com/document/d/1EEVCaESoyiYwJ7wqhUdPYE33PTwnAiDVG8IC_j7YcTk/edit?usp=sharing",
+      "decompositions": [
+        {
+          "decomp": "sea-ice concentration",
+          "cmr_concept_ids": [
+            "C1513368202-NSIDCV",
+            "C2794540918-NSIDC_ECS",
+            "C3177838875-NSIDC_CPRD"
+          ]
+        },
+        {
+          "decomp": "sea-ice thickness",
+          "cmr_concept_ids": [
+            "C3564876395-NSIDC_CPRD",
+            "C2339302094-NSIDCV",
+            "C1386206541-NSIDCV"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C3632391189-NSIDCV",
+            "C3565574246-NSIDC_CPRD",
+            "C3825009052-NSIDC_CPRD"
+          ]
+        }
+      ],
+      "query_number": 1
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Basic",
+      "mcp": false,
+      "query_text": "Assess inundation extent and persistence following Cyclone Mocha (May 2023) in western Myanmar using SAR and optical data",
+      "conversation_link": null,
+      "decompositions": [
+        {
+          "decomp": "flood extent (SAR)",
+          "cmr_concept_ids": [
+            "C1214472994-ASF",
+            "C1214472978-ASF"
+          ]
+        },
+        {
+          "decomp": "flood extent (Optical)",
+          "cmr_concept_ids": [
+            "C2021957657-LPCLOUD",
+            "C2021957295-LPCLOUD",
+            "C3442503899-USGS_EROS",
+            "C2343115666-LPCLOUD",
+            "C2763377726-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "flood persistence",
+          "cmr_concept_ids": [
+            "C2519119034-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2723754859-GES_DISC",
+            "C2938664585-NSIDC_CPRD",
+            "C1220566448-USGS_LTA",
+            "C1220567908-USGS_LTA",
+            "C2763298119-LPCLOUD"
+          ]
+        }
+      ],
+      "query_number": 2
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Basic",
+      "mcp": false,
+      "query_text": "Quantify changes in global lightning flash density (2001–2024) and relate to CAPE patterns",
+      "conversation_link": null,
+      "decompositions": [
+        {
+          "decomp": "flash extent density",
+          "cmr_concept_ids": [
+            "C1979883245-GHRC_DAAC",
+            "C2278812167-GHRC_DAAC",
+            "C1979889849-GHRC_DAAC",
+            "C1983762329-GHRC_DAAC",
+            "C2303212754-GHRC_DAAC",
+            "C1995863244-GHRC_DAAC",
+            "C3534731641-GHRC_DAAC"
+          ]
+        },
+        {
+          "decomp": "Vertical Temperature Profile",
+          "cmr_concept_ids": [
+            "C1276812879-GES_DISC",
+            "C1276812907-GES_DISC",
+            "C1276812863-GES_DISC",
+            "C1276812902-GES_DISC",
+            "C1276812904-GES_DISC"
+          ]
+        },
+        {
+          "decomp": "Vertical Humidity Profile (dewpoint or specific humidity)",
+          "cmr_concept_ids": [
+            "C1276812879-GES_DISC",
+            "C1276812883-GES_DISC",
+            "C1276812907-GES_DISC",
+            "C1276812863-GES_DISC",
+            "C1276812902-GES_DISC",
+            "C1276812904-GES_DISC"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": []
+        }
+      ],
+      "query_number": 3
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Basic",
+      "mcp": false,
+      "query_text": "Where and when did burn scars occur in the Peloponnese, Greece, during July–September 2021, and how did EVI recover through 2023?",
+      "conversation_link": null,
+      "decompositions": [
+        {
+          "decomp": "Burned Area",
+          "cmr_concept_ids": [
+            "C2763297163-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "EVI",
+          "cmr_concept_ids": [
+            "C2763298064-LPCLOUD",
+            "C2519127224-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2565791013-LPCLOUD",
+            "C2763377736-LPCLOUD"
+          ]
+        }
+      ],
+      "query_number": 4
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Basic",
+      "mcp": false,
+      "query_text": "How did heat index extremes overlap with socio-economic vulnerability across Maricopa County in July–August 2023?",
+      "conversation_link": null,
+      "decompositions": [
+        {
+          "decomp": "surface temperature (to calculate heat index)",
+          "cmr_concept_ids": [
+            "C1276812863-GES_DISC",
+            "C1276812820-GES_DISC",
+            "C2531982907-ORNL_CLOUD",
+            "C2763297212-LPCLOUD",
+            "C2076113037-LPCLOUD",
+            "C2076114664-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "surface dewpoint (to calculate heat index)",
+          "cmr_concept_ids": [
+            "C1276812863-GES_DISC",
+            "C1276812820-GES_DISC",
+            "C2531982907-ORNL_CLOUD",
+            "C2074877891-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "socio-economic baseline",
+          "cmr_concept_ids": [
+            "C2820969258-SEDAC"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2484079608-LPCLOUD",
+            "C3540910651-ESDIS"
+          ]
+        }
+      ],
+      "query_number": 5
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Angles",
+      "mcp": false,
+      "query_text": "How did sea-ice concentration and thickness in the Kara Sea change each March from 2020 to 2025?",
+      "conversation_link": null,
+      "decompositions": [
+        {
+          "decomp": "sea-ice concentration",
+          "cmr_concept_ids": [
+            "C3632391189-NSIDCV",
+            "C1647528934-NSIDC_ECS",
+            "C2698130846-JAXA",
+            "C1990404820-POCLOUD"
+          ]
+        },
+        {
+          "decomp": "sea-ice thickness",
+          "cmr_concept_ids": [
+            "C3565574246-NSIDC_CPRD",
+            "C3825009052-NSIDC_CPRD",
+            "C3206550748-NSIDC_CPRD",
+            "C1990404820-POCLOUD",
+            "C3643680627-NSIDC_CPRD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C3564876395-NSIDC_CPRD"
+          ]
+        }
+      ],
+      "query_number": 6
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Angles",
+      "mcp": false,
+      "query_text": "Assess inundation extent and persistence following Cyclone Mocha (May 2023) in western Myanmar using SAR and optical data",
+      "conversation_link": null,
+      "decompositions": [
+        {
+          "decomp": "flood extent (SAR)",
+          "cmr_concept_ids": [
+            "C1831864787-ASF"
+          ]
+        },
+        {
+          "decomp": "flood extent (Optical)",
+          "cmr_concept_ids": [
+            "C2343115666-LPCLOUD",
+            "C2021957295-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "flood persistence",
+          "cmr_concept_ids": []
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2723754864-GES_DISC",
+            "C2938664585-NSIDC_CPRD",
+            "C2763266360-LPCLOUD",
+            "C2484079608-LPCLOUD",
+            "C3365931269-LAADS",
+            "C1711961296-LPCLOUD"
+          ]
+        }
+      ],
+      "query_number": 7
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Angles",
+      "mcp": false,
+      "query_text": "Quantify changes in global lightning flash density (2001–2024) and relate to CAPE patterns",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "flash extent density",
+          "cmr_concept_ids": [
+            "C1983762329-GHRC_DAAC",
+            "C2303212754-GHRC_DAAC",
+            "C1979889849-GHRC_DAAC",
+            "C1979883245-GHRC_DAAC",
+            "C1995863244-GHRC_DAAC"
+          ]
+        },
+        {
+          "decomp": "Vertical Temperature Profile",
+          "cmr_concept_ids": [
+            "C1276812863-GES_DISC",
+            "C1276812879-GES_DISC",
+            "C1276812838-GES_DISC",
+            "C1276812884-GES_DISC"
+          ]
+        },
+        {
+          "decomp": "Vertical Humidity Profile (dewpoint or specific humidity)",
+          "cmr_concept_ids": [
+            "C1276812863-GES_DISC",
+            "C1276812879-GES_DISC",
+            "C1276812838-GES_DISC",
+            "C1276812884-GES_DISC"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2723754847-GES_DISC",
+            "C1443535037-LAADS",
+            "C1443536017-LAADS"
+          ],
+          "notes": "Just a note if a data collection from a mission was suggested but not a specific dataset, I didn't include it"
+        }
+      ],
+      "query_number": 8
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Angles",
+      "mcp": false,
+      "query_text": "Where and when did burn scars occur in the Peloponnese, Greece, during July–September 2021, and how did EVI recover through 2023?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "Burned Area",
+          "cmr_concept_ids": [
+            "C2565786756-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "EVI",
+          "cmr_concept_ids": [
+            "C1748066515-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2105705664-LANCEMODIS",
+            "C2545314541-LPCLOUD"
+          ]
+        }
+      ],
+      "query_number": 9
+    },
+    {
+      "sme": "Emily",
+      "prompt_type": "Angles",
+      "mcp": false,
+      "query_text": "How did heat index extremes overlap with socio-economic vulnerability across Maricopa County in July–August 2023?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "surface temperature (to calculate heat index)",
+          "cmr_concept_ids": []
+        },
+        {
+          "decomp": "surface dewpoint (to calculate heat index)",
+          "cmr_concept_ids": []
+        },
+        {
+          "decomp": "socio-economic baseline",
+          "cmr_concept_ids": []
+        }
+      ],
+      "query_number": 10
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Basic",
+      "mcp": true,
+      "query_text": "How did sea-ice concentration and thickness in the Kara Sea change each March from 2020 to 2025?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "sea-ice concentration",
+          "cmr_concept_ids": [
+            "C2399557265-NSIDC_ECS",
+            "C2794540918-NSIDC_ECS",
+            "C3364030505-NSIDCV",
+            "C1542606326-NSIDC_ECS",
+            "C1542606320-NSIDC_ECS",
+            "C2759458713-NSIDCV",
+            "C3660239710-NSIDCV",
+            "C2176562253-NSIDC_ECS",
+            "C1886605827-LANCEAMSR",
+            "C1886605830-LANCEAMSR"
+          ]
+        },
+        {
+          "decomp": "sea-ice thickness",
+          "cmr_concept_ids": [
+            "C3565574246-NSIDC_CPRD",
+            "C3825009052-NSIDC_CPRD",
+            "C3206550748-NSIDC_CPRD",
+            "C3263544354-NSIDC_CPRD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C3205181648-NSIDC_CPRD",
+            "C3205181034-NSIDC_CPRD",
+            "C3643680627-NSIDC_CPRD",
+            "C1965336922-ESA",
+            "C2119689655-ESA"
+          ]
+        }
+      ],
+      "query_number": 11
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Basic",
+      "mcp": true,
+      "query_text": "Assess inundation extent and persistence following Cyclone Mocha (May 2023) in western Myanmar using SAR and optical data",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "flood extent (SAR)",
+          "cmr_concept_ids": [
+            "C2777436413-ASF",
+            "C2777443834-ASF",
+            "C1595422627-ASF",
+            "C2709161906-ASF",
+            "C2859376221-ASF"
+          ]
+        },
+        {
+          "decomp": "flood extent (Optical)",
+          "cmr_concept_ids": [
+            "C2021957657-LPCLOUD",
+            "C3442503899-USGS_EROS",
+            "C2617126679-POCLOUD",
+            "C2018623526-LANCEMODIS",
+            "C2019295250-LANCEMODIS"
+          ]
+        },
+        {
+          "decomp": "flood persistence",
+          "cmr_concept_ids": []
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2723754847-GES_DISC",
+            "C2723754864-GES_DISC",
+            "C2179081499-GES_DISC",
+            "C2179081553-GES_DISC"
+          ]
+        }
+      ],
+      "query_number": 12
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Basic",
+      "mcp": true,
+      "query_text": "Quantify changes in global lightning flash density (2001–2024) and relate to CAPE patterns",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "flash extent density",
+          "cmr_concept_ids": [
+            "C1983762329-GHRC_DAAC",
+            "C3838944284-GHRC_DAAC",
+            "C2278812167-GHRC_DAAC",
+            "C3301410475-GHRC_DAAC",
+            "C3671144020-GHRC_DAAC",
+            "C1979882997-GHRC_DAAC",
+            "C1979883116-GHRC_DAAC",
+            "C1979883245-GHRC_DAAC",
+            "C1979883359-GHRC_DAAC",
+            "C1276812879-GES_DISC",
+            "C1276812838-GES_DISC",
+            "C2033151148-GES_DISC"
+          ]
+        },
+        {
+          "decomp": "Vertical Temperature Profile",
+          "cmr_concept_ids": [
+            "C1276812863-GES_DISC"
+          ]
+        },
+        {
+          "decomp": "Vertical Humidity Profile (dewpoint or specific humidity)",
+          "cmr_concept_ids": []
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C3534731641-GHRC_DAAC"
+          ]
+        }
+      ],
+      "query_number": 13
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Basic",
+      "mcp": true,
+      "query_text": "Where and when did burn scars occur in the Peloponnese, Greece, during July–September 2021, and how did EVI recover through 2023?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "Burned Area",
+          "cmr_concept_ids": [
+            "C2565786756-LPCLOUD",
+            "C2847928673-LPCLOUD",
+            "C2548142691-FEDEO",
+            "C2548143166-FEDEO"
+          ]
+        },
+        {
+          "decomp": "EVI",
+          "cmr_concept_ids": [
+            "C1748066515-LPCLOUD",
+            "C2307290656-LPCLOUD",
+            "C2565788901-LPCLOUD",
+            "C2565794046-LPCLOUD",
+            "C2565788905-LPCLOUD",
+            "C2565794049-LPCLOUD",
+            "C2327962326-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2519127224-LPCLOUD",
+            "C3246894861-LPCLOUD",
+            "C3246892554-LPCLOUD",
+            "C2565791013-LPCLOUD",
+            "C2565794059-LPCLOUD",
+            "C2565791018-LPCLOUD",
+            "C2565794060-LPCLOUD",
+            "C2545314541-LPCLOUD",
+            "C2343112831-LPCLOUD",
+            "C2343114343-LPCLOUD",
+            "C2343111356-LPCLOUD",
+            "C2343113743-LPCLOUD",
+            "C2021957295-LPCLOUD",
+            "C2021957657-LPCLOUD"
+          ]
+        }
+      ],
+      "query_number": 14
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Basic",
+      "mcp": true,
+      "query_text": "How did heat index extremes overlap with socio-economic vulnerability across Maricopa County in July–August 2023?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "surface temperature (to calculate heat index)",
+          "cmr_concept_ids": [
+            "C2033151148-GES_DISC",
+            "C1342986035-GES_DISC",
+            "C1276812820-GES_DISC",
+            "C2076090826-LPCLOUD",
+            "C1748058432-LPCLOUD",
+            "C1748046084-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "surface dewpoint (to calculate heat index)",
+          "cmr_concept_ids": []
+        },
+        {
+          "decomp": "socio-economic baseline",
+          "cmr_concept_ids": [
+            "C3550190487-ESDIS",
+            "C3540912000-ESDIS"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2839237275-GES_DISC"
+          ]
+        }
+      ],
+      "query_number": 15
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Angles",
+      "mcp": true,
+      "query_text": "How did sea-ice concentration and thickness in the Kara Sea change each March from 2020 to 2025?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "sea-ice concentration",
+          "cmr_concept_ids": [
+            "C2399557265-NSIDC_ECS",
+            "C1542606326-NSIDC_ECS",
+            "C1542606320-NSIDC_ECS",
+            "C3364030505-NSIDCV",
+            "C3660239710-NSIDCV",
+            "C2794540918-NSIDC_ECS"
+          ]
+        },
+        {
+          "decomp": "sea-ice thickness",
+          "cmr_concept_ids": [
+            "C3206550748-NSIDC_CPRD",
+            "C3643680627-NSIDC_CPRD",
+            "C3263544354-NSIDC_CPRD",
+            "C3205181648-NSIDC_CPRD",
+            "C3565574246-NSIDC_CPRD",
+            "C2613553243-NSIDC_CPRD",
+            "C3825009052-NSIDC_CPRD",
+            "C3564876395-NSIDC_CPRD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C1276812863-GES_DISC",
+            "C1276812859-GES_DISC",
+            "C1276812820-GES_DISC",
+            "C1276812879-GES_DISC",
+            "C2036881712-POCLOUD",
+            "C2780732234-LANCEMODIS",
+            "C1977853902-NSIDCV",
+            "C1542606326-NSIDC_ECS",
+            "C186290274-NSIDC_ECS"
+          ]
+        }
+      ],
+      "query_number": 16
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Angles",
+      "mcp": true,
+      "query_text": "Assess inundation extent and persistence following Cyclone Mocha (May 2023) in western Myanmar using SAR and optical data",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "flood extent (SAR)",
+          "cmr_concept_ids": [
+            "C2949811996-POCLOUD",
+            "C2777436413-ASF"
+          ]
+        },
+        {
+          "decomp": "flood extent (Optical)",
+          "cmr_concept_ids": [
+            "C2021957657-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "flood persistence",
+          "cmr_concept_ids": []
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2723754847-GES_DISC",
+            "C2723754864-GES_DISC",
+            "C2938664763-NSIDC_CPRD",
+            "C3480440870-NSIDC_CPRD",
+            "C2018623526-LANCEMODIS",
+            "C2019424090-LANCEMODIS",
+            "C1748066515-LPCLOUD",
+            "C2307290656-LPCLOUD",
+            "C2484079608-LPCLOUD",
+            "C3498036008-LANCEMODIS",
+            "C2519127224-LPCLOUD",
+            "C2763266360-LPCLOUD",
+            "C2763264762-LPCLOUD"
+          ]
+        }
+      ],
+      "query_number": 17
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Angles",
+      "mcp": true,
+      "query_text": "Quantify changes in global lightning flash density (2001–2024) and relate to CAPE patterns",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "flash extent density",
+          "cmr_concept_ids": [
+            "C3671144020-GHRC_DAAC",
+            "C3838944284-GHRC_DAAC",
+            "C1983762329-GHRC_DAAC"
+          ]
+        },
+        {
+          "decomp": "Vertical Temperature Profile",
+          "cmr_concept_ids": [
+            "C1276812838-GES_DISC",
+            "C1276812900-GES_DISC",
+            "C1748058432-LPCLOUD",
+            "C1748046084-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "Vertical Humidity Profile (dewpoint or specific humidity)",
+          "cmr_concept_ids": [
+            "C1276812879-GES_DISC",
+            "C1276812863-GES_DISC",
+            "C2033151148-GES_DISC"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2723754847-GES_DISC",
+            "C1239536905-GES_DISC",
+            "C1276812830-GES_DISC"
+          ]
+        }
+      ],
+      "query_number": 18
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Angles",
+      "mcp": true,
+      "query_text": "Where and when did burn scars occur in the Peloponnese, Greece, during July–September 2021, and how did EVI recover through 2023?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "Burned Area",
+          "cmr_concept_ids": [
+            "C2565786756-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "EVI",
+          "cmr_concept_ids": [
+            "C1748066515-LPCLOUD",
+            "C2307290656-LPCLOUD",
+            "C2565788901-LPCLOUD",
+            "C2565794046-LPCLOUD",
+            "C2327962326-LPCLOUD",
+            "C2327957988-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C2105705664-LANCEMODIS",
+            "C1942970257-LANCEMODIS",
+            "C2545314541-LPCLOUD",
+            "C2847928673-LPCLOUD",
+            "C2021957657-LPCLOUD",
+            "C3246892554-LPCLOUD",
+            "C2269056084-LPCLOUD",
+            "C2269057787-LPCLOUD",
+            "C2484079608-LPCLOUD",
+            "C2938664763-NSIDC_CPRD",
+            "C2938664585-NSIDC_CPRD",
+            "C2723754864-GES_DISC",
+            "C2179081680-GES_DISC"
+          ]
+        }
+      ],
+      "query_number": 19
+    },
+    {
+      "sme": "Bernard",
+      "prompt_type": "Angles",
+      "mcp": true,
+      "query_text": "How did heat index extremes overlap with socio-economic vulnerability across Maricopa County in July–August 2023?",
+      "conversation_link": "Link",
+      "decompositions": [
+        {
+          "decomp": "surface temperature (to calculate heat index)",
+          "cmr_concept_ids": [
+            "C2076090826-LPCLOUD",
+            "C2076113037-LPCLOUD",
+            "C1748058432-LPCLOUD",
+            "C1748046084-LPCLOUD",
+            "C2545303088-LPCLOUD",
+            "C2565805783-LPCLOUD",
+            "C2545303093-LPCLOUD",
+            "C2565805789-LPCLOUD",
+            "C3442506077-USGS_EROS"
+          ]
+        },
+        {
+          "decomp": "surface dewpoint (to calculate heat index)",
+          "cmr_concept_ids": [
+            "C1701805619-GES_DISC",
+            "C1701805652-GES_DISC",
+            "C1276812863-GES_DISC",
+            "C1276812838-GES_DISC",
+            "C2938664763-NSIDC_CPRD",
+            "C3480440870-NSIDC_CPRD",
+            "C2938664585-NSIDC_CPRD",
+            "C2723754847-GES_DISC",
+            "C2723754851-GES_DISC",
+            "C2076105456-LPCLOUD",
+            "C2076108728-LPCLOUD",
+            "C2683463996-LPCLOUD"
+          ]
+        },
+        {
+          "decomp": "socio-economic baseline",
+          "cmr_concept_ids": [
+            "C3540930104-ESDIS",
+            "C3540932167-ESDIS"
+          ]
+        },
+        {
+          "decomp": "other decomps",
+          "cmr_concept_ids": [
+            "C1748066515-LPCLOUD",
+            "C2307290656-LPCLOUD",
+            "C2565788901-LPCLOUD",
+            "C2565794046-LPCLOUD",
+            "C2484086411-LPCLOUD",
+            "C2090073749-LPCLOUD",
+            "C2324689816-LPCLOUD"
+          ]
+        }
+      ],
+      "query_number": 20
+    }
+  ]
+}
