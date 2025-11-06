@@ -2,10 +2,24 @@ from typing import Optional
 
 from langchain_openai import ChatOpenAI
 from loguru import logger
+from pydantic import BaseModel
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
+
+
+class TemporalExtent(BaseModel):
+    """Structured temporal coverage for a dataset request."""
+
+    start: Optional[str] = Field(
+        default=None,
+        description="Start date (ISO 8601 format: YYYY-MM-DD or YYYY).",
+    )
+    end: Optional[str] = Field(
+        default=None,
+        description="End date (ISO 8601 format: YYYY-MM-DD or YYYY).",
+    )
 
 
 class ExtractInputSchema(InputSchema):
@@ -40,6 +54,11 @@ class ExtractOutputSchema(OutputSchema):
     frequency: str = Field(
         default="all",
         description="The periodicity or frequency of the dataset requested (e.g., daily, monthly, yearly, all).",
+    )
+
+    temporal_extent: Optional[TemporalExtent] = Field(
+        default=None,
+        description="Time interval (start and end dates) extracted from the query.",
     )
 
 
@@ -78,13 +97,17 @@ class ExtractAgent(BaseAgent):
             - location: the place or region (human-readable)
             - bbox: the bounding box of the location in GeoJSON format (use None if unknown)
             - frequency: the temporal frequency (e.g. daily, monthly, yearly, all)
+            - temporal_extent: JSON object with optional "start" and "end" fields (ISO 8601 format).
+                If only one date is provided, set it as both start and end.
+                Resolve any known dates, present dates, date references from current automatically
 
             Respond strictly in JSON format, like this:
             {{
             "dataset_type": "...",
             "location": "...",
             "bbox": "...",
-            "frequency": "..."
+            "frequency": "...",
+            "temporal_extent": {{"start": "2019-01-01", "end": "2020-01-01"}}
             }}
 
             User query:
@@ -106,6 +129,10 @@ class ExtractAgent(BaseAgent):
                 location=data.get("location", "global"),
                 bbox=data.get("bbox", None),
                 frequency=data.get("frequency", "all"),
+                temporal_extent=TemporalExtent(
+                    start=data.get("temporal_extent").get("start"),
+                    end=data.get("temporal_extent").get("end"),
+                ),
             )
 
         except Exception as e:
