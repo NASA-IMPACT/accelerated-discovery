@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "description": "Explicit field mappings between agents (human-defined, highest trust)",
+  "mappings": {
+    "eie_extraction->collection_search": {
+      "dataset_type": "dataset_type",
+      "location": "location",
+      "bbox": "bbox",
+      "frequency":"frequency",
+      "temporal_extent": "temporal_extent"
+    }
+  }
+}

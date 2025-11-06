@@ -57,7 +57,7 @@ class FieldMappingRegistry:
             llm_path: Path to LLM-generated mappings JSON file
         """
         self.explicit_path = explicit_path or str(
-            get_akd_root() / "akd" / "mapping" / "field_mappings.json",
+            get_akd_root() / "akd" / "mapping" / "eie_field_mappings.json",
         )
         self.llm_path = llm_path or str(
             get_akd_root() / "akd" / "mapping" / "llm_generated_mappings.json",
