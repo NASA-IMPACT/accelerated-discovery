@@ -31,7 +31,7 @@ from .config import PDS4HandlerConfig
 from .schemas import (
     PDS4ApproachCollectionFilteringInputSchema,
     PDS4FinalCollectionRankingInputSchema,
-    PDS4ToolStrategy,
+    PDS4QueryApproach,
 )
 
 
@@ -43,8 +43,8 @@ class PDS4Handler(BaseHandler):
     1. Extract unified tool strategies from decomposition
     2. Execute context searches (investigations/targets) to get URNs
     3. Execute collection searches using URN references
-    4. Filter and rank collections per strategy
-    5. Final cross-strategy ranking
+    4. Filter and rank collections per approach
+    5. Final cross-approach ranking
     6. Return collections as data_results
     """
 
@@ -149,15 +149,15 @@ class PDS4Handler(BaseHandler):
         )
 
         # Select strategies based on execution mode
-        if self.single_path_mode and parameter_output.tool_strategies:
-            strategies_to_use = [parameter_output.tool_strategies[0]]
+        if self.single_path_mode and parameter_output.query_approaches:
+            approaches_to_use = [parameter_output.query_approaches[0]]
             if self.debug:
                 logger.info(
                     f"Single-path mode: Using strategy[0], "
-                    f"generated {len(parameter_output.tool_strategies)} total",
+                    f"generated {len(parameter_output.query_approaches)} total",
                 )
         else:
-            strategies_to_use = parameter_output.tool_strategies[
+            approaches_to_use = parameter_output.query_approaches[
                 : self.config.max_strategies
             ]
 
@@ -165,8 +165,8 @@ class PDS4Handler(BaseHandler):
         (
             strategy_collections,
             strategy_execution_logs,
-        ) = await self._execute_tool_strategies(
-            strategies_to_use,
+        ) = await self._execute_query_approaches(
+            approaches_to_use,
             params,
         )
         total_collections = sum(len(c) for c in strategy_collections.values())
@@ -177,7 +177,7 @@ class PDS4Handler(BaseHandler):
             original_query,
             topic,
             decomposition,
-            parameter_output.tool_strategies,
+            parameter_output.query_approaches,
             run_id,
         )
 
@@ -188,7 +188,7 @@ class PDS4Handler(BaseHandler):
 
         # Augment strategies with execution metadata
         augmented_strategies, total_pds4 = self._augment_strategies_with_execution_metadata(
-            parameter_output.tool_strategies,
+            parameter_output.query_approaches,
             strategy_execution_logs,
         )
 
@@ -212,14 +212,14 @@ class PDS4Handler(BaseHandler):
 
     async def _execute_context_search(
         self,
-        strategy: PDS4ToolStrategy,
+        approach: PDS4QueryApproach,
         search_type: str,
     ) -> List[Dict[str, Any]]:
         """
         Execute context search (investigation or target) to get URN references.
 
         Args:
-            strategy: Tool strategy with search parameters
+            approach: Query approach with search parameters
             search_type: Either "investigation" or "target"
 
         Returns:
@@ -228,7 +228,7 @@ class PDS4Handler(BaseHandler):
         try:
             if search_type == "investigation":
                 # Search investigations
-                search_params = strategy.get_context_search_params()
+                search_params = approach.get_context_search_params()
                 if not search_params.get("keywords"):
                     return []
 
@@ -243,7 +243,7 @@ class PDS4Handler(BaseHandler):
 
             elif search_type == "target":
                 # Search targets
-                search_params = strategy.get_context_search_params()
+                search_params = approach.get_context_search_params()
                 if not search_params.get("keywords"):
                     return []
 
@@ -288,26 +288,26 @@ class PDS4Handler(BaseHandler):
 
     async def _execute_single_strategy(
         self,
-        strategy: PDS4ToolStrategy,
+        approach: PDS4QueryApproach,
         params: DataSearchAgentInputSchema,
-        strategy_idx: int,
+        approach_idx: int,
     ) -> Dict[str, Any]:
         """
-        Execute a single tool strategy and return results.
+        Execute a single query approach and return results.
 
         Workflow:
         1. Execute context search (investigation/target) if needed
         2. Extract URN references
         3. Execute collection search with URN filters
-        4. Return collections with strategy metadata
+        4. Return collections with approach metadata
 
         Args:
-            strategy: Tool strategy to execute
+            approach: Query approach to execute
             params: Search parameters
-            strategy_idx: Index of the strategy
+            approach_idx: Index of the approach
 
         Returns:
-            Dictionary with strategy_idx, collections, and execution metadata
+            Dictionary with approach_idx, collections, and execution metadata
         """
         execution_metadata = {
             "context_searches_executed": [],
@@ -321,10 +321,10 @@ class PDS4Handler(BaseHandler):
 
         try:
             # Step 1: Execute context searches if needed
-            # Execute investigation search if strategy has investigation keywords
-            if strategy.investigation_keywords:
+            # Execute investigation search if approach has investigation keywords
+            if approach.investigation_keywords:
                 investigations = await self._execute_context_search(
-                    strategy,
+                    approach,
                     "investigation",
                 )
                 investigation_urns = self._extract_urns_from_context(
@@ -334,18 +334,18 @@ class PDS4Handler(BaseHandler):
                 execution_metadata["context_searches_executed"].append("investigation")
                 execution_metadata["urns_extracted"]["investigation"] = investigation_urns
 
-            # Execute target search if strategy has target keywords
-            if strategy.target_keywords:
-                targets = await self._execute_context_search(strategy, "target")
+            # Execute target search if approach has target keywords
+            if approach.target_keywords:
+                targets = await self._execute_context_search(approach, "target")
                 target_urns = self._extract_urns_from_context(targets, "target")
                 execution_metadata["context_searches_executed"].append("target")
                 execution_metadata["urns_extracted"]["target"] = target_urns
 
-            # Store extracted URNs back in strategy for downstream use (filtering, ranking)
+            # Store extracted URNs back in approach for downstream use (filtering, ranking)
             if investigation_urns:
-                strategy.investigation_urn = investigation_urns[0]
+                approach.investigation_urn = investigation_urns[0]
             if target_urns:
-                strategy.target_urn = target_urns[0]
+                approach.target_urn = target_urns[0]
 
             # Step 2: Execute collection search with URN filters
             collection_params = {
@@ -371,70 +371,70 @@ class PDS4Handler(BaseHandler):
 
             if self.debug:
                 logger.info(
-                    f"Strategy {strategy_idx} returned {len(collections)} collections",
+                    f"Approach {approach_idx} returned {len(collections)} collections",
                 )
 
             return {
-                "strategy_idx": strategy_idx,
+                "approach_idx": approach_idx,
                 "collections": collections,
-                "strategy_object": strategy,
+                "strategy_object": approach,
                 "execution_metadata": execution_metadata,
             }
 
         except Exception as e:
             if self.debug:
-                logger.error(f"Strategy {strategy_idx} execution failed: {e}")
+                logger.error(f"Approach {approach_idx} execution failed: {e}")
 
             return {
-                "strategy_idx": strategy_idx,
+                "approach_idx": approach_idx,
                 "collections": [],
-                "strategy_object": strategy,
+                "strategy_object": approach,
                 "execution_metadata": execution_metadata,
             }
 
-    async def _execute_tool_strategies(
+    async def _execute_query_approaches(
         self,
-        tool_strategies: List[PDS4ToolStrategy],
+        query_approaches: List[PDS4QueryApproach],
         params: DataSearchAgentInputSchema,
     ) -> tuple[Dict[int, List[Dict[str, Any]]], List[Dict[str, Any]]]:
         """
-        Execute tool strategies in parallel and return collections grouped by strategy.
+        Execute query approaches in parallel and return collections grouped by approach.
 
         Args:
-            tool_strategies: Strategies to execute
+            query_approaches: Approaches to execute
             params: Search parameters
 
         Returns:
             Tuple of (strategy_collections, execution_logs)
-            - strategy_collections: Dictionary mapping strategy_index to list of collections
-            - execution_logs: List of execution metadata for each strategy
+            - strategy_collections: Dictionary mapping approach_index to list of collections
+            - execution_logs: List of execution metadata for each approach
         """
         if self.config.enable_parallel_search:
-            # Create parallel tasks for all strategies
-            strategy_tasks = []
-            for strategy in tool_strategies:
+            # Create parallel tasks for all approaches
+            approach_tasks = []
+            for approach in query_approaches:
                 task = self._execute_single_strategy(
-                    strategy,
+                    approach,
                     params,
-                    strategy.strategy_index,
+                    approach.approach_index,
                 )
-                strategy_tasks.append(task)
+                approach_tasks.append(task)
 
-            # Execute all strategies in parallel
-            results = await asyncio.gather(*strategy_tasks, return_exceptions=True)
+            # Execute all approaches in parallel
+            results = await asyncio.gather(*approach_tasks, return_exceptions=True)
         else:
             # Execute sequentially
             results = []
-            for strategy in tool_strategies:
+            for approach in query_approaches:
                 result = await self._execute_single_strategy(
-                    strategy,
+                    approach,
                     params,
-                    strategy.strategy_index,
+                    approach.approach_index,
                 )
                 results.append(result)
 
-        # Group results by strategy and collect execution logs
-        strategy_collections = {}  # strategy_index -> [collections]
+        # Group results by approach and collect execution logs
+        strategy_collections = {}  # approach_index -> [collections]
         execution_logs = []
 
         for result in results:
@@ -443,12 +443,12 @@ class PDS4Handler(BaseHandler):
                     logger.error(f"Strategy execution failed: {result}")
                 continue
 
-            strategy_idx = result["strategy_idx"]
+            approach_idx = result["approach_idx"]
             collections = result["collections"]
 
-            if strategy_idx not in strategy_collections:
-                strategy_collections[strategy_idx] = []
-            strategy_collections[strategy_idx].extend(collections)
+            if approach_idx not in strategy_collections:
+                strategy_collections[approach_idx] = []
+            strategy_collections[approach_idx].extend(collections)
 
             # Collect execution metadata
             execution_logs.append(
@@ -462,15 +462,15 @@ class PDS4Handler(BaseHandler):
 
     def _augment_strategies_with_execution_metadata(
         self,
-        tool_strategies: List[PDS4ToolStrategy],
+        query_approaches: List[PDS4QueryApproach],
         execution_logs: List[Dict[str, Any]],
     ) -> tuple[List[Dict[str, Any]], int]:
         """
         Augment tool strategy dicts with execution metadata.
 
         Args:
-            tool_strategies: Original strategy objects
-            execution_logs: Execution metadata from _execute_tool_strategies
+            query_approaches: Original strategy objects
+            execution_logs: Execution metadata from _execute_query_approaches
 
         Returns:
             Tuple of (augmented_strategies, total_pds4_results)
@@ -480,21 +480,21 @@ class PDS4Handler(BaseHandler):
         augmented = []
         total_pds4 = 0
 
-        for strategy in tool_strategies:
-            strategy_dict = safe_model_dump(strategy)
+        for approach in query_approaches:
+            approach_dict = safe_model_dump(approach)
 
             # Find matching execution log
             matching_log = next(
-                (log for log in execution_logs if log["strategy"] == strategy),
+                (log for log in execution_logs if log["strategy"] == approach),
                 None,
             )
 
             if matching_log:
                 metadata = matching_log["metadata"]
-                strategy_dict["execution_metadata"] = metadata
+                approach_dict["execution_metadata"] = metadata
                 total_pds4 += metadata["collections_returned"]
 
-            augmented.append(strategy_dict)
+            augmented.append(approach_dict)
 
         return augmented, total_pds4
 
@@ -510,8 +510,8 @@ class PDS4Handler(BaseHandler):
         deduplicated_by_strategy = {}
 
         # Process strategies in order (0, 1, 2, ...)
-        for strategy_idx in sorted(strategy_collections.keys()):
-            collections = strategy_collections[strategy_idx]
+        for approach_idx in sorted(strategy_collections.keys()):
+            collections = strategy_collections[approach_idx]
             deduplicated = []
 
             for collection in collections:
@@ -520,7 +520,7 @@ class PDS4Handler(BaseHandler):
                     global_seen_ids.add(lidvid)
                     deduplicated.append(collection)
 
-            deduplicated_by_strategy[strategy_idx] = deduplicated
+            deduplicated_by_strategy[approach_idx] = deduplicated
 
         return deduplicated_by_strategy
 
@@ -530,7 +530,7 @@ class PDS4Handler(BaseHandler):
         original_query: str,
         topic: Topic,
         decomp: ScientificDecomposition,
-        tool_strategies: List[PDS4ToolStrategy],
+        query_approaches: List[PDS4QueryApproach],
         run_id: Optional[str] = None,
     ) -> Dict[int, List[Dict[str, Any]]]:
         """
@@ -549,25 +549,25 @@ class PDS4Handler(BaseHandler):
         # Create filtering tasks for each strategy
         filtering_tasks = []
 
-        for strategy_idx in sorted(strategy_collections.keys()):
-            collections = strategy_collections[strategy_idx]
+        for approach_idx in sorted(strategy_collections.keys()):
+            collections = strategy_collections[approach_idx]
 
             if not collections:
                 if self.debug:
-                    logger.debug(f"Strategy {strategy_idx} has no collections, skipping")
+                    logger.debug(f"Approach {approach_idx} has no collections, skipping")
                 continue
 
-            # Get the corresponding ToolStrategy
-            if strategy_idx >= len(tool_strategies):
+            # Get the corresponding QueryApproach
+            if approach_idx >= len(query_approaches):
                 if self.debug:
-                    logger.debug(f"No tool strategy for index {strategy_idx}, skipping")
+                    logger.debug(f"No query approach for index {approach_idx}, skipping")
                 continue
 
-            strategy = tool_strategies[strategy_idx]
+            approach = query_approaches[approach_idx]
 
             if self.debug:
                 logger.debug(
-                    f"Creating filter input for strategy {strategy_idx} with {len(collections)} collections",
+                    f"Creating filter input for approach {approach_idx} with {len(collections)} collections",
                 )
 
             filter_input = PDS4ApproachCollectionFilteringInputSchema(
@@ -576,16 +576,16 @@ class PDS4Handler(BaseHandler):
                 topic_context=topic.functional_context,
                 decomposition_title=decomp.title,
                 decomposition_justification=decomp.scientific_justification,
-                strategy_description=strategy.strategy_description,
-                investigation_keywords=strategy.investigation_keywords,
-                target_keywords=strategy.target_keywords,
-                instrument_keywords=strategy.instrument_keywords,
-                instrument_host_keywords=strategy.instrument_host_keywords,
-                temporal_context=strategy.temporal_context,
-                investigation_urn=strategy.investigation_urn,
-                target_urn=strategy.target_urn,
-                instrument_urn=strategy.instrument_urn,
-                instrument_host_urn=strategy.instrument_host_urn,
+                strategy_description=approach.approach_description,
+                investigation_keywords=approach.investigation_keywords,
+                target_keywords=approach.target_keywords,
+                instrument_keywords=approach.instrument_keywords,
+                instrument_host_keywords=approach.instrument_host_keywords,
+                temporal_context=approach.temporal_context,
+                investigation_urn=approach.investigation_urn,
+                target_urn=approach.target_urn,
+                instrument_urn=approach.instrument_urn,
+                instrument_host_urn=approach.instrument_host_urn,
                 data_items=collections,
                 max_items=self.config.max_collections_per_strategy,
             )
@@ -601,7 +601,7 @@ class PDS4Handler(BaseHandler):
             )
 
             task = filtering_component.arun(filter_input)
-            filtering_tasks.append((strategy_idx, collections, task))
+            filtering_tasks.append((approach_idx, collections, task))
 
         if self.debug:
             logger.debug(f"Created {len(filtering_tasks)} filtering tasks")
@@ -624,17 +624,17 @@ class PDS4Handler(BaseHandler):
         # Map results back to collections
         filtered_by_strategy = {}
 
-        for (strategy_idx, collections, _), result in zip(filtering_tasks, results):
+        for (approach_idx, collections, _), result in zip(filtering_tasks, results):
             if isinstance(result, Exception):
                 if self.debug:
-                    logger.error(f"Strategy {strategy_idx} filtering failed: {result}")
+                    logger.error(f"Strategy {approach_idx} filtering failed: {result}")
                 continue
 
             if self.debug:
                 logger.info(
-                    f"Strategy {strategy_idx} selected {len(result.selected_item_indexes)} collections",
+                    f"Strategy {approach_idx} selected {len(result.selected_item_indexes)} collections",
                 )
-                logger.debug(f"Strategy {strategy_idx} LLM reasoning: {result.reasoning}")
+                logger.debug(f"Strategy {approach_idx} LLM reasoning: {result.reasoning}")
 
             # Extract selected collections using the list of indexes
             selected = [
@@ -643,7 +643,7 @@ class PDS4Handler(BaseHandler):
                 if 0 <= idx < len(collections)
             ]
 
-            filtered_by_strategy[strategy_idx] = selected
+            filtered_by_strategy[approach_idx] = selected
 
         if self.debug:
             logger.info(
@@ -662,7 +662,7 @@ class PDS4Handler(BaseHandler):
         original_query: str,
         topic: Topic,
         decomp: ScientificDecomposition,
-        tool_strategies: List[PDS4ToolStrategy] = None,
+        query_approaches: List[PDS4QueryApproach] = None,
         run_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -696,14 +696,14 @@ class PDS4Handler(BaseHandler):
             original_query,
             topic,
             decomp,
-            tool_strategies,
+            query_approaches,
             run_id,
         )
 
         # Flatten all strategy results into single list
         all_filtered = []
-        for strategy_idx in sorted(filtered_by_strategy.keys()):
-            all_filtered.extend(filtered_by_strategy[strategy_idx])
+        for approach_idx in sorted(filtered_by_strategy.keys()):
+            all_filtered.extend(filtered_by_strategy[approach_idx])
 
         if self.debug:
             logger.info(

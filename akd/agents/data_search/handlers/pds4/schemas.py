@@ -84,21 +84,21 @@ class PDS4InstrumentHostType(str, Enum):
 
 
 # ============================================================================
-# Tool Strategy Schema (Core of Unified Approach)
+# Query Approach Schema (Core of Unified Approach)
 # ============================================================================
 
-class PDS4ToolStrategy(BaseModel):
+class PDS4QueryApproach(BaseModel):
     """
-    Complete PDS4 MCP tool execution strategy with unified parameters.
+    Complete PDS4 MCP tool execution approach with unified parameters.
 
     Represents a unified approach combining context parameters,
     search keywords, and tool orchestration logic. Unlike CMR's
     two-stage approach, this contains everything needed for execution.
 
     Example:
-        PDS4ToolStrategy(
-            strategy_index=0,
-            strategy_description="Investigation-first: Search for Mars rover missions",
+        PDS4QueryApproach(
+            approach_index=0,
+            approach_description="Investigation-first: Search for Mars rover missions",
             investigation_keywords=["mars rover", "curiosity", "msl"],
             target_keywords=["mars"],
             instrument_keywords=["spectrometer", "chemcam"],
@@ -107,14 +107,14 @@ class PDS4ToolStrategy(BaseModel):
         )
     """
 
-    strategy_index: int = Field(
+    approach_index: int = Field(
         ...,
-        description="0-based index of this strategy (0-3)"
+        description="0-based index of this approach (0-3)"
     )
 
-    strategy_description: str = Field(
+    approach_description: str = Field(
         ...,
-        description="Human-readable description of this strategy's approach"
+        description="Human-readable description of this approach"
     )
 
     # ---- Context Parameters (PDS4-specific) ----
@@ -271,16 +271,16 @@ class PDS4ParameterExtractionInputSchema(InputSchema):
 class PDS4ParameterExtractionOutput(BaseModel):
     """Output from unified parameter extraction component."""
 
-    tool_strategies: List[PDS4ToolStrategy] = Field(
+    query_approaches: List[PDS4QueryApproach] = Field(
         ...,
-        description="1-4 complete tool execution strategies",
+        description="1-4 complete tool execution approaches",
         min_length=1,
         max_length=4
     )
 
     reasoning: str = Field(
         ...,
-        description="Explanation of strategy generation decisions"
+        description="Explanation of approach generation decisions"
     )
 
 
@@ -294,7 +294,7 @@ class PDS4ApproachCollectionFilteringInputSchema(BaseApproachFilteringInputSchem
     # Approach-specific parameters
     strategy_description: str = Field(
         ...,
-        description="Description of the tool strategy/approach that generated these collections",
+        description="Description of the tool approach that generated these collections",
     )
 
     # Keywords used in context searches

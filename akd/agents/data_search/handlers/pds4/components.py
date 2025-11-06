@@ -80,20 +80,20 @@ class PDS4ParameterExtractionComponent(
             decomposition: Scientific decomposition with justification
 
         Returns:
-            PDS4ParameterExtractionOutput with complete tool strategies
+            PDS4ParameterExtractionOutput with complete query approaches
         """
         if self.debug:
             logger.debug(
-                f"Extracting PDS4 tool strategies for decomposition: '{decomposition.title}'",
+                f"Extracting PDS4 query approaches for decomposition: '{decomposition.title}'",
             )
 
         # Extract min/max approaches from output schema metadata
         # metadata[0] = MinLen, metadata[1] = MaxLen
         min_approaches = (
-            self.output_schema.model_fields["tool_strategies"].metadata[0].min_length
+            self.output_schema.model_fields["query_approaches"].metadata[0].min_length
         )
         max_approaches = (
-            self.output_schema.model_fields["tool_strategies"].metadata[1].max_length
+            self.output_schema.model_fields["query_approaches"].metadata[1].max_length
         )
 
         # Format user prompt
@@ -122,14 +122,14 @@ class PDS4ParameterExtractionComponent(
 
         if self.debug:
             logger.debug(
-                f"Extracted {len(result.tool_strategies)} tool strategies: {result.reasoning}",
+                f"Extracted {len(result.query_approaches)} query approaches: {result.reasoning}",
             )
-            if not result.tool_strategies:
-                logger.warning("⚠️ EMPTY tool_strategies returned by LLM - workflow will fail!")
+            if not result.query_approaches:
+                logger.warning("⚠️ EMPTY query_approaches returned by LLM - workflow will fail!")
                 logger.debug(f"Reasoning: {result.reasoning}")
             else:
-                for idx, strat in enumerate(result.tool_strategies):
-                    logger.debug(f"  Strategy {idx}: {strat.strategy_description}")
+                for idx, approach in enumerate(result.query_approaches):
+                    logger.debug(f"  Approach {idx}: {approach.approach_description}")
 
         return result
 
