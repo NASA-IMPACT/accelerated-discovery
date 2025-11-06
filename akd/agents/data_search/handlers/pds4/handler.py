@@ -291,6 +291,225 @@ class PDS4Handler(BaseHandler):
                 urns.append(urn)
         return urns
 
+    def _filter_urns_by_type(
+        self,
+        urns: List[str],
+        context_items: List[Dict[str, Any]],
+        context_type: str,
+    ) -> List[str]:
+        """
+        Filter URNs to exclude inappropriate types.
+
+        For target URNs, excludes:
+        - laboratory_analog: Lab samples, not celestial bodies
+        - equipment: Instruments/hardware, not observation targets
+        - calibrator: Calibration targets, not science targets
+
+        For other context types (investigation, instrument), no filtering applied.
+
+        Args:
+            urns: List of URN identifiers to filter
+            context_items: Original context search results (for metadata access)
+            context_type: "investigation", "target", "instrument", etc.
+
+        Returns:
+            Filtered list of URN identifiers
+        """
+        if context_type != "target":
+            # Only filter target URNs for now
+            return urns
+
+        # Target types to exclude
+        excluded_types = {"laboratory_analog", "equipment", "calibrator"}
+
+        # Build URN-to-item mapping for metadata lookup
+        urn_to_item = {}
+        for item in context_items:
+            item_urn = item.get("lid") or item.get("lidvid") or item.get("id")
+            if item_urn:
+                urn_to_item[item_urn] = item
+
+        filtered_urns = []
+        for urn in urns:
+            # Extract type from URN: "urn:nasa:pds:context:target:planet.mars" → "planet"
+            urn_parts = urn.split(":")
+            if len(urn_parts) >= 6:
+                # Format: urn:nasa:pds:context:target:TYPE.name
+                target_identifier = urn_parts[5]  # e.g., "planet.mars"
+                target_type = target_identifier.split(".")[0]  # e.g., "planet"
+
+                # Exclude unwanted types
+                if target_type.lower() not in excluded_types:
+                    filtered_urns.append(urn)
+                elif self.debug:
+                    logger.debug(f"Filtered out target URN (type={target_type}): {urn}")
+            else:
+                # Malformed URN, keep it (let downstream handle)
+                filtered_urns.append(urn)
+
+        return filtered_urns
+
+    def _rank_urns_by_relevance(
+        self,
+        urns: List[str],
+        context_items: List[Dict[str, Any]],
+        keywords: List[str],
+    ) -> List[str]:
+        """
+        Rank URNs by relevance to search keywords.
+
+        Scoring system:
+        - Exact keyword match in title: +10 points per keyword
+        - Partial keyword match in title: +5 points per keyword
+        - Keyword in description: +2 points per keyword
+
+        Args:
+            urns: List of URN identifiers to rank
+            context_items: Original context search results with metadata
+            keywords: Search keywords to match against
+
+        Returns:
+            URNs sorted by descending relevance score
+        """
+        if not urns or not keywords:
+            return urns
+
+        # Build URN-to-item mapping for metadata access
+        urn_to_item = {}
+        for item in context_items:
+            item_urn = item.get("lid") or item.get("lidvid") or item.get("id")
+            if item_urn:
+                urn_to_item[item_urn] = item
+
+        # Normalize keywords for matching
+        normalized_keywords = [kw.lower().strip() for kw in keywords]
+
+        # Score each URN
+        urn_scores = []
+        for urn in urns:
+            item = urn_to_item.get(urn)
+            if not item:
+                # No metadata, assign neutral score
+                urn_scores.append((urn, 0))
+                continue
+
+            score = 0
+
+            # Get title and description
+            title = item.get("title", "").lower()
+            description = ""
+
+            # Extract description based on context type
+            if "investigation" in item:
+                description = item.get("investigation", {}).get("description", "").lower()
+            elif "target" in item:
+                description = item.get("target", {}).get("description", "").lower()
+            elif "instrument" in item:
+                description = item.get("instrument", {}).get("description", "").lower()
+
+            # Score based on keyword matches
+            for keyword in normalized_keywords:
+                if not keyword:
+                    continue
+
+                # Exact match in title
+                if keyword == title:
+                    score += 10
+                # Partial match in title
+                elif keyword in title:
+                    score += 5
+
+                # Match in description
+                if keyword in description:
+                    score += 2
+
+            urn_scores.append((urn, score))
+
+        # Sort by score (descending), then by original order (stable)
+        urn_scores.sort(key=lambda x: x[1], reverse=True)
+
+        # Return sorted URNs
+        ranked_urns = [urn for urn, score in urn_scores]
+
+        if self.debug:
+            logger.debug(f"URN ranking scores: {[(urn.split(':')[-1], score) for urn, score in urn_scores[:5]]}")
+
+        return ranked_urns
+
+    def _generate_urn_combinations(
+        self,
+        investigation_urns: List[str],
+        target_urns: List[str],
+    ) -> List[Dict[str, str]]:
+        """
+        Generate URN combinations for collection searches.
+
+        Creates all possible combinations of investigation and target URNs,
+        respecting configuration limits.
+
+        Args:
+            investigation_urns: Ranked list of investigation URNs
+            target_urns: Ranked list of target URNs
+
+        Returns:
+            List of parameter dictionaries for collection searches, each containing:
+            - ref_lid_investigation: Investigation URN (or "")
+            - ref_lid_target: Target URN (or "")
+        """
+        combinations = []
+
+        # Limit URNs per type based on configuration
+        inv_limited = investigation_urns[: self.config.max_investigation_urns_per_approach]
+        tgt_limited = target_urns[: self.config.max_target_urns_per_approach]
+
+        # If we have both investigations and targets, create all combinations
+        if inv_limited and tgt_limited:
+            for inv_urn in inv_limited:
+                for tgt_urn in tgt_limited:
+                    combinations.append(
+                        {
+                            "ref_lid_investigation": inv_urn,
+                            "ref_lid_target": tgt_urn,
+                        }
+                    )
+        # If only investigations (no targets), search by investigation alone
+        elif inv_limited:
+            for inv_urn in inv_limited:
+                combinations.append(
+                    {
+                        "ref_lid_investigation": inv_urn,
+                        "ref_lid_target": "",
+                    }
+                )
+        # If only targets (no investigations), search by target alone
+        elif tgt_limited:
+            for tgt_urn in tgt_limited:
+                combinations.append(
+                    {
+                        "ref_lid_investigation": "",
+                        "ref_lid_target": tgt_urn,
+                    }
+                )
+        # Fallback: no context URNs (shouldn't happen, but handle gracefully)
+        else:
+            combinations.append(
+                {
+                    "ref_lid_investigation": "",
+                    "ref_lid_target": "",
+                }
+            )
+
+        # Cap total combinations based on configuration
+        combinations = combinations[: self.config.max_approach_combinations]
+
+        if self.debug:
+            logger.debug(
+                f"Generated {len(combinations)} URN combinations "
+                f"({len(inv_limited)} investigations × {len(tgt_limited)} targets)"
+            )
+
+        return combinations
+
     async def _execute_single_strategy(
         self,
         approach: PDS4QueryApproach,
@@ -326,15 +545,24 @@ class PDS4Handler(BaseHandler):
 
         try:
             # Step 1: Execute context searches if needed
+            investigations = []
+            targets = []
+
             # Execute investigation search if approach has investigation keywords
             if approach.investigation_keywords:
                 investigations = await self._execute_context_search(
                     approach,
                     "investigation",
                 )
-                investigation_urns = self._extract_urns_from_context(
+                investigation_urns_raw = self._extract_urns_from_context(
                     investigations,
                     "investigation",
+                )
+                # Rank by relevance to keywords
+                investigation_urns = self._rank_urns_by_relevance(
+                    investigation_urns_raw,
+                    investigations,
+                    approach.investigation_keywords,
                 )
                 execution_metadata["context_searches_executed"].append("investigation")
                 execution_metadata["urns_extracted"]["investigation"] = investigation_urns
@@ -342,37 +570,98 @@ class PDS4Handler(BaseHandler):
             # Execute target search if approach has target keywords
             if approach.target_keywords:
                 targets = await self._execute_context_search(approach, "target")
-                target_urns = self._extract_urns_from_context(targets, "target")
+                target_urns_raw = self._extract_urns_from_context(targets, "target")
+                # Filter out inappropriate types (laboratory_analog, equipment, etc.)
+                target_urns_filtered = self._filter_urns_by_type(
+                    target_urns_raw,
+                    targets,
+                    "target",
+                )
+                # Rank by relevance to keywords
+                target_urns = self._rank_urns_by_relevance(
+                    target_urns_filtered,
+                    targets,
+                    approach.target_keywords,
+                )
                 execution_metadata["context_searches_executed"].append("target")
                 execution_metadata["urns_extracted"]["target"] = target_urns
 
-            # Store extracted URNs back in approach for downstream use (filtering, ranking)
+            # Store first URN back in approach for backward compatibility
             if investigation_urns:
                 approach.investigation_urn = investigation_urns[0]
             if target_urns:
                 approach.target_urn = target_urns[0]
 
-            # Step 2: Execute collection search with URN filters
-            collection_params = {
-                "ref_lid_investigation": investigation_urns[0] if investigation_urns else "",
-                "ref_lid_target": target_urns[0] if target_urns else "",
-                "ref_lid_instrument": "",
-                "ref_lid_instrument_host": "",
-                "limit": self.config.collection_search_page_size,
-            }
+            # Step 2: Generate URN combinations and execute collection searches
+            urn_combinations = self._generate_urn_combinations(
+                investigation_urns,
+                target_urns,
+            )
 
-            execution_metadata["collection_search_parameters"] = collection_params
+            # Track combination-specific metadata
+            execution_metadata["urn_combinations_generated"] = len(urn_combinations)
+            execution_metadata["urn_combinations"] = []
 
-            # Execute collection search
-            tool_input = self.collection_search_tool.input_schema(**collection_params)
-            result = await self.collection_search_tool.arun(tool_input)
+            # Execute collection search for each URN combination
+            all_collections = []
+            seen_lidvids = set()  # For deduplication
 
-            # Extract collections
-            collections = []
-            if hasattr(result, "collections") and result.collections:
-                total_from_pds4 = len(result.collections)
-                collections = result.collections[: self.config.collections_per_strategy]
-                execution_metadata["collections_returned"] = total_from_pds4
+            for combo_idx, combo_params in enumerate(urn_combinations):
+                # Add standard parameters
+                collection_params = {
+                    **combo_params,
+                    "ref_lid_instrument": "",
+                    "ref_lid_instrument_host": "",
+                    "limit": self.config.collection_search_page_size,
+                }
+
+                # Store first combination parameters for backward compatibility
+                if combo_idx == 0:
+                    execution_metadata["collection_search_parameters"] = collection_params
+
+                try:
+                    # Execute collection search
+                    tool_input = self.collection_search_tool.input_schema(**collection_params)
+                    result = await self.collection_search_tool.arun(tool_input)
+
+                    # Extract and deduplicate collections
+                    combo_collections = []
+                    if hasattr(result, "collections") and result.collections:
+                        for collection in result.collections:
+                            # Deduplicate by lidvid
+                            lidvid = collection.get("lidvid") or collection.get("lid", "")
+                            if lidvid and lidvid not in seen_lidvids:
+                                seen_lidvids.add(lidvid)
+                                combo_collections.append(collection)
+                                all_collections.append(collection)
+
+                    # Track this combination
+                    execution_metadata["urn_combinations"].append({
+                        "investigation_urn": combo_params.get("ref_lid_investigation", ""),
+                        "target_urn": combo_params.get("ref_lid_target", ""),
+                        "collections_returned": len(combo_collections),
+                    })
+
+                    if self.debug and combo_collections:
+                        logger.debug(
+                            f"  Combo {combo_idx+1}/{len(urn_combinations)}: "
+                            f"{len(combo_collections)} collections"
+                        )
+
+                except Exception as e:
+                    if self.debug:
+                        logger.warning(f"  Combo {combo_idx+1} failed: {e}")
+                    execution_metadata["urn_combinations"].append({
+                        "investigation_urn": combo_params.get("ref_lid_investigation", ""),
+                        "target_urn": combo_params.get("ref_lid_target", ""),
+                        "collections_returned": 0,
+                        "error": str(e),
+                    })
+
+            # Limit total collections per approach
+            collections = all_collections[: self.config.collections_per_strategy]
+            execution_metadata["collections_returned"] = len(all_collections)
+            execution_metadata["collections_after_deduplication"] = len(collections)
 
             if self.debug:
                 logger.info(

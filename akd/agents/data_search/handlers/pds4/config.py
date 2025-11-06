@@ -36,6 +36,20 @@ class PDS4HandlerConfig(DataSearchToolConfig):
         description="Page size for context searches (investigations/targets)",
     )
 
+    # URN combination strategy
+    max_investigation_urns_per_approach: int = Field(
+        default=4,
+        description="Maximum number of investigation URNs to use per base approach",
+    )
+    max_target_urns_per_approach: int = Field(
+        default=3,
+        description="Maximum number of target URNs to use per base approach",
+    )
+    max_approach_combinations: int = Field(
+        default=12,
+        description="Maximum total URN combinations to generate per base approach",
+    )
+
     # Ranking pipeline configuration
     collections_per_strategy: int = Field(
         default=5,
