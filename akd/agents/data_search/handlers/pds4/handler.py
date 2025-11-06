@@ -229,11 +229,13 @@ class PDS4Handler(BaseHandler):
             if search_type == "investigation":
                 # Search investigations
                 search_params = approach.get_context_search_params()
-                if not search_params.get("keywords"):
+                investigation_params = search_params.get("investigation_params")
+
+                if not investigation_params or not investigation_params.get("keywords"):
                     return []
 
                 tool_input = self.investigation_search_tool.input_schema(
-                    keywords=search_params["keywords"],
+                    keywords=investigation_params["keywords"],
                     limit=self.config.context_search_page_size,
                 )
                 result = await self.investigation_search_tool.arun(tool_input)
@@ -244,11 +246,13 @@ class PDS4Handler(BaseHandler):
             elif search_type == "target":
                 # Search targets
                 search_params = approach.get_context_search_params()
-                if not search_params.get("keywords"):
+                target_params = search_params.get("target_params")
+
+                if not target_params or not target_params.get("keywords"):
                     return []
 
                 tool_input = self.target_search_tool.input_schema(
-                    keywords=search_params["keywords"],
+                    keywords=target_params["keywords"],
                     limit=self.config.context_search_page_size,
                 )
                 result = await self.target_search_tool.arun(tool_input)
@@ -280,8 +284,9 @@ class PDS4Handler(BaseHandler):
         """
         urns = []
         for item in context_items:
-            # PDS4 context products typically have lidvid or id fields
-            urn = item.get("lidvid") or item.get("id")
+            # PDS4 context products use 'lid' field for identifiers
+            # Try lid first (standard), then lidvid (versioned), then id (generic)
+            urn = item.get("lid") or item.get("lidvid") or item.get("id")
             if urn:
                 urns.append(urn)
         return urns
