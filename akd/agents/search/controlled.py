@@ -35,6 +35,7 @@ from akd.structures import SearchResultItem
 from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessor,
     LinkRelevancyAssessorConfig,
+    LinkRelevancyAssessorInputSchema,
 )
 from akd.tools.search import SearxNGSearchTool
 from akd.tools.search._base import QueryFocusStrategy, SearchToolInputSchema
@@ -120,6 +121,12 @@ class ControlledSearchAgentConfig(LitSearchAgentConfig):
         description="Relevancy score threshold to trigger full content fetching",
     )
 
+    # Link relevancy assessment configuration
+    enable_per_link_assessment: bool = Field(
+        default=False,
+        description="Enable per-link relevancy assessment",
+    )
+
 
 class ControlledSearchAgent(LitBaseAgent):
     """
@@ -154,6 +161,8 @@ class ControlledSearchAgent(LitBaseAgent):
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
         self.query_agent = query_agent or QueryAgent()
         self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
+
+        self.link_relevancy_assessor = LinkRelevancyAssessor(config=LinkRelevancyAssessorConfig(debug=self.debug))
 
         # Track rubric patterns for agentic learning
         self.rubric_history = []
@@ -847,6 +856,22 @@ class ControlledSearchAgent(LitBaseAgent):
                     logger.debug(
                         f"Fallback successful: found {len(current_results)} results",
                     )
+
+            if self.config.enable_per_link_assessment:
+                if self.debug:
+                    logger.debug(f"Performing link relevancy assessment for {len(current_results)} results")
+                link_relevancy_input = LinkRelevancyAssessorInputSchema(
+                    search_results=current_results,
+                    original_query=params.query,
+                    reformulated_query=None,
+                    domain_context=None,
+                )
+                link_relevancy_result = await self.link_relevancy_assessor.arun(link_relevancy_input)
+                if self.debug:
+                    logger.debug(
+                        f"Num results after link relevancy assessment: {len(link_relevancy_result.filtered_results)}"
+                    )
+                current_results = link_relevancy_result.filtered_results
 
             all_results.extend(current_results)
 

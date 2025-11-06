@@ -66,6 +66,12 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     followup_query_prompt: str = Field(default=CODE_QUERY_PROMPT, description="System prompt for follow-up query agent")
     relevancy_prompt: str = Field(default=CODE_RELEVANCY_PROMPT, description="System prompt for relevancy agent")
 
+    # Link relevancy assessment configuration
+    enable_per_link_assessment: bool = Field(
+        default=False,
+        description="Enable per-link relevancy assessment",
+    )
+
 
 class CodeSearchAgent(ControlledSearchAgent):
     """
