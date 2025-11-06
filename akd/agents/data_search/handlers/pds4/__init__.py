@@ -15,8 +15,8 @@ from .schemas import (
     PDS4InstrumentType,
     PDS4ParameterExtractionInputSchema,
     PDS4ParameterExtractionOutput,
+    PDS4QueryApproach,
     PDS4TargetType,
-    PDS4ToolStrategy,
 )
 
 __all__ = [
@@ -28,7 +28,7 @@ __all__ = [
     "PDS4ApproachCollectionFilteringComponent",
     "PDS4FinalCollectionRankingComponent",
     # Schemas
-    "PDS4ToolStrategy",
+    "PDS4QueryApproach",
     "PDS4ParameterExtractionInputSchema",
     "PDS4ParameterExtractionOutput",
     "PDS4ApproachCollectionFilteringInputSchema",
