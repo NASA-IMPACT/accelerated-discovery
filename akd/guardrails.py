@@ -16,6 +16,7 @@ from akd.agents.risk import (
     RiskAgentInputSchema,
     RiskAgentOutputSchema,
     RiskReportAgent,
+    RiskReportAgentConfig,
     RiskReportAgentInputSchema,
 )
 from akd.configs.guardrails_config import GuardrailsConfig
@@ -619,7 +620,7 @@ def add_guardrails(
 
                             if ra_result.dag_metric.score != 1.0:
                                 risk_report_agent = RiskReportAgent(
-                                    RiskAgentConfig(
+                                    RiskReportAgentConfig(
                                         agent_description=self._risk_agent.agent_description,
                                     ),
                                 )
