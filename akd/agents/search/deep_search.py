@@ -225,6 +225,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         self,
         instructions: str,
         original_query: str,
+        max_results: int,
     ) -> dict:
         """
         Perform the actual deep research using iterative search and synthesis.
@@ -254,8 +255,9 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             # Perform searches
             search_results = await self._execute_searches(
-                initial_queries,
-                original_query,
+                queries=initial_queries,
+                max_results=max_results,
+                original_query=original_query,
                 is_reformulated=(iterations > 1),
             )
 
@@ -349,6 +351,7 @@ class DeepLitSearchAgent(LitBaseAgent):
     async def _execute_searches(
         self,
         queries: List[str],
+        max_results: int,
         original_query: str | None = None,
         is_reformulated: bool = False,
     ) -> List[SearchResultItem]:
@@ -369,7 +372,9 @@ class DeepLitSearchAgent(LitBaseAgent):
         try:
             tool_input = self.search_tool.input_schema(
                 queries=queries,
+                max_results=max_results,
             )
+            logger.debug(f"Executing search tool: {type(self.search_tool).__name__} with params: {tool_input}")
             tasks.append(
                 asyncio.create_task(
                     self.search_tool.arun(
@@ -545,6 +550,9 @@ class DeepLitSearchAgent(LitBaseAgent):
         5. Return structured results
         """
         original_query = params.query
+        max_results = kwargs.get("max_results", params.search_mode.to_max_results())
+        logger.info(f"DeepLitSearchAgent with params: {params}")
+        logger.debug(f"DeepLitSearchAgent | max_results = {max_results}")
 
         # Step 1: Triage the query using embedded component
         triage_result = await self._handle_triage(original_query)
@@ -582,6 +590,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         research_output = await self._perform_deep_research(
             instructions,
             original_query,
+            max_results=max_results,
         )
 
         # Step 5: Generate shortform answer and report

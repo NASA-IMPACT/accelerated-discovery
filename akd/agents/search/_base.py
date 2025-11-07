@@ -27,9 +27,9 @@ class SearchMode(str, Enum):
         """Convert search mode to maximum number of results."""
         mapping = {
             SearchMode.FAST: 10,
-            SearchMode.MEDIUM: 20,
-            SearchMode.LONG: 50,
-            SearchMode.EXTENSIVE: 100,
+            SearchMode.MEDIUM: 50,
+            SearchMode.LONG: 100,
+            SearchMode.EXTENSIVE: 200,
         }
         return mapping[self]
 
