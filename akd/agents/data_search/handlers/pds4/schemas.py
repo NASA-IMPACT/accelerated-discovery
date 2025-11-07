@@ -176,6 +176,11 @@ class PDS4QueryApproach(BaseModel):
         description="Max targets to retrieve in context discovery"
     )
 
+    instrument_search_limit: int = Field(
+        10,
+        description="Max instruments to retrieve in context discovery"
+    )
+
     collection_search_limit: int = Field(
         20,
         description="Max collections to retrieve"
@@ -213,7 +218,7 @@ class PDS4QueryApproach(BaseModel):
         Get parameters for context discovery tools.
 
         Returns:
-            Dict with keys: investigation_params, target_params
+            Dict with keys: investigation_params, target_params, instrument_params
         """
         params = {}
 
@@ -227,6 +232,12 @@ class PDS4QueryApproach(BaseModel):
             params["target_params"] = {
                 "keywords": " ".join(self.target_keywords),
                 "limit": self.target_search_limit
+            }
+
+        if self.instrument_keywords:
+            params["instrument_params"] = {
+                "keywords": " ".join(self.instrument_keywords),
+                "limit": self.instrument_search_limit
             }
 
         return params

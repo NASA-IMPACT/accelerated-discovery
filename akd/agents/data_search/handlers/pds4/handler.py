@@ -16,6 +16,7 @@ from akd.agents.data_search.components import ScientificDecomposition, Topic
 from akd.tools.data_search import (
     PDS4BundleSearchTool,
     PDS4CollectionSearchTool,
+    PDS4InstrumentSearchTool,
     PDS4InvestigationSearchTool,
     PDS4TargetSearchTool,
 )
@@ -70,6 +71,9 @@ class PDS4Handler(BaseHandler):
             **tool_config_params,
         )
         self.target_search_tool = PDS4TargetSearchTool.from_params(
+            **tool_config_params,
+        )
+        self.instrument_search_tool = PDS4InstrumentSearchTool.from_params(
             **tool_config_params,
         )
 
@@ -216,14 +220,14 @@ class PDS4Handler(BaseHandler):
         search_type: str,
     ) -> List[Dict[str, Any]]:
         """
-        Execute context search (investigation or target) to get URN references.
+        Execute context search (investigation, target, or instrument) to get URN references.
 
         Args:
             approach: Query approach with search parameters
-            search_type: Either "investigation" or "target"
+            search_type: Either "investigation", "target", or "instrument"
 
         Returns:
-            List of context items (investigations or targets)
+            List of context items (investigations, targets, or instruments)
         """
         try:
             if search_type == "investigation":
@@ -259,6 +263,23 @@ class PDS4Handler(BaseHandler):
 
                 if hasattr(result, "targets") and result.targets:
                     return result.targets[: self.config.context_search_page_size]
+
+            elif search_type == "instrument":
+                # Search instruments
+                search_params = approach.get_context_search_params()
+                instrument_params = search_params.get("instrument_params")
+
+                if not instrument_params or not instrument_params.get("keywords"):
+                    return []
+
+                tool_input = self.instrument_search_tool.input_schema(
+                    keywords=instrument_params["keywords"],
+                    limit=self.config.context_search_page_size,
+                )
+                result = await self.instrument_search_tool.arun(tool_input)
+
+                if hasattr(result, "instruments") and result.instruments:
+                    return result.instruments[: self.config.context_search_page_size]
 
             return []
 
@@ -305,18 +326,19 @@ class PDS4Handler(BaseHandler):
         - equipment: Instruments/hardware, not observation targets
         - calibrator: Calibration targets, not science targets
 
-        For other context types (investigation, instrument), no filtering applied.
+        For investigation URNs: No filtering (all missions are valid)
+        For instrument URNs: No filtering (all instruments are valid scientific devices)
 
         Args:
             urns: List of URN identifiers to filter
             context_items: Original context search results (for metadata access)
-            context_type: "investigation", "target", "instrument", etc.
+            context_type: "investigation", "target", or "instrument"
 
         Returns:
             Filtered list of URN identifiers
         """
         if context_type != "target":
-            # Only filter target URNs for now
+            # Only filter target URNs - investigations and instruments are all valid
             return urns
 
         # Target types to exclude
@@ -440,62 +462,122 @@ class PDS4Handler(BaseHandler):
         self,
         investigation_urns: List[str],
         target_urns: List[str],
+        instrument_urns: List[str],
     ) -> List[Dict[str, str]]:
         """
         Generate URN combinations for collection searches.
 
-        Creates all possible combinations of investigation and target URNs,
-        respecting configuration limits.
+        Creates all possible combinations of investigation, target, and instrument URNs,
+        respecting configuration limits. Handles 8 scenarios:
+        1. inv + tgt + inst (3-way combinations)
+        2. inv + tgt (2-way combinations)
+        3. inv + inst (2-way combinations)
+        4. tgt + inst (2-way combinations)
+        5. inv only
+        6. tgt only
+        7. inst only
+        8. none (fallback)
 
         Args:
             investigation_urns: Ranked list of investigation URNs
             target_urns: Ranked list of target URNs
+            instrument_urns: Ranked list of instrument URNs
 
         Returns:
             List of parameter dictionaries for collection searches, each containing:
             - ref_lid_investigation: Investigation URN (or "")
             - ref_lid_target: Target URN (or "")
+            - ref_lid_instrument: Instrument URN (or "")
         """
         combinations = []
 
         # Limit URNs per type based on configuration
         inv_limited = investigation_urns[: self.config.max_investigation_urns_per_approach]
         tgt_limited = target_urns[: self.config.max_target_urns_per_approach]
+        inst_limited = instrument_urns[: self.config.max_instrument_urns_per_approach]
 
-        # If we have both investigations and targets, create all combinations
-        if inv_limited and tgt_limited:
+        # Scenario 1: All three types (3-way combinations)
+        if inv_limited and tgt_limited and inst_limited:
+            for inv_urn in inv_limited:
+                for tgt_urn in tgt_limited:
+                    for inst_urn in inst_limited:
+                        combinations.append(
+                            {
+                                "ref_lid_investigation": inv_urn,
+                                "ref_lid_target": tgt_urn,
+                                "ref_lid_instrument": inst_urn,
+                            }
+                        )
+        # Scenario 2: Investigation + Target (2-way)
+        elif inv_limited and tgt_limited:
             for inv_urn in inv_limited:
                 for tgt_urn in tgt_limited:
                     combinations.append(
                         {
                             "ref_lid_investigation": inv_urn,
                             "ref_lid_target": tgt_urn,
+                            "ref_lid_instrument": "",
                         }
                     )
-        # If only investigations (no targets), search by investigation alone
+        # Scenario 3: Investigation + Instrument (2-way)
+        elif inv_limited and inst_limited:
+            for inv_urn in inv_limited:
+                for inst_urn in inst_limited:
+                    combinations.append(
+                        {
+                            "ref_lid_investigation": inv_urn,
+                            "ref_lid_target": "",
+                            "ref_lid_instrument": inst_urn,
+                        }
+                    )
+        # Scenario 4: Target + Instrument (2-way)
+        elif tgt_limited and inst_limited:
+            for tgt_urn in tgt_limited:
+                for inst_urn in inst_limited:
+                    combinations.append(
+                        {
+                            "ref_lid_investigation": "",
+                            "ref_lid_target": tgt_urn,
+                            "ref_lid_instrument": inst_urn,
+                        }
+                    )
+        # Scenario 5: Investigation only
         elif inv_limited:
             for inv_urn in inv_limited:
                 combinations.append(
                     {
                         "ref_lid_investigation": inv_urn,
                         "ref_lid_target": "",
+                        "ref_lid_instrument": "",
                     }
                 )
-        # If only targets (no investigations), search by target alone
+        # Scenario 6: Target only
         elif tgt_limited:
             for tgt_urn in tgt_limited:
                 combinations.append(
                     {
                         "ref_lid_investigation": "",
                         "ref_lid_target": tgt_urn,
+                        "ref_lid_instrument": "",
                     }
                 )
-        # Fallback: no context URNs (shouldn't happen, but handle gracefully)
+        # Scenario 7: Instrument only
+        elif inst_limited:
+            for inst_urn in inst_limited:
+                combinations.append(
+                    {
+                        "ref_lid_investigation": "",
+                        "ref_lid_target": "",
+                        "ref_lid_instrument": inst_urn,
+                    }
+                )
+        # Scenario 8: Fallback - no context URNs
         else:
             combinations.append(
                 {
                     "ref_lid_investigation": "",
                     "ref_lid_target": "",
+                    "ref_lid_instrument": "",
                 }
             )
 
@@ -505,7 +587,7 @@ class PDS4Handler(BaseHandler):
         if self.debug:
             logger.debug(
                 f"Generated {len(combinations)} URN combinations "
-                f"({len(inv_limited)} investigations × {len(tgt_limited)} targets)"
+                f"({len(inv_limited)} inv × {len(tgt_limited)} tgt × {len(inst_limited)} inst)"
             )
 
         return combinations
@@ -520,10 +602,11 @@ class PDS4Handler(BaseHandler):
         Execute a single query approach and return results.
 
         Workflow:
-        1. Execute context search (investigation/target) if needed
-        2. Extract URN references
-        3. Execute collection search with URN filters
-        4. Return collections with approach metadata
+        1. Execute context searches (investigation/target/instrument) if needed
+        2. Extract and rank URN references
+        3. Generate URN combinations (up to 3-way: inv × tgt × inst)
+        4. Execute collection searches with URN filters
+        5. Return collections with approach metadata
 
         Args:
             approach: Query approach to execute
@@ -542,6 +625,7 @@ class PDS4Handler(BaseHandler):
 
         investigation_urns = []
         target_urns = []
+        instrument_urns = []
 
         try:
             # Step 1: Execute context searches if needed
@@ -586,16 +670,36 @@ class PDS4Handler(BaseHandler):
                 execution_metadata["context_searches_executed"].append("target")
                 execution_metadata["urns_extracted"]["target"] = target_urns
 
+            # Execute instrument search if approach has instrument keywords
+            if approach.instrument_keywords:
+                instruments = await self._execute_context_search(approach, "instrument")
+                instrument_urns_raw = self._extract_urns_from_context(
+                    instruments,
+                    "instrument",
+                )
+                # No type filtering needed for instruments (all are valid)
+                # Rank by relevance to keywords
+                instrument_urns = self._rank_urns_by_relevance(
+                    instrument_urns_raw,
+                    instruments,
+                    approach.instrument_keywords,
+                )
+                execution_metadata["context_searches_executed"].append("instrument")
+                execution_metadata["urns_extracted"]["instrument"] = instrument_urns
+
             # Store first URN back in approach for backward compatibility
             if investigation_urns:
                 approach.investigation_urn = investigation_urns[0]
             if target_urns:
                 approach.target_urn = target_urns[0]
+            if instrument_urns:
+                approach.instrument_urn = instrument_urns[0]
 
             # Step 2: Generate URN combinations and execute collection searches
             urn_combinations = self._generate_urn_combinations(
                 investigation_urns,
                 target_urns,
+                instrument_urns,
             )
 
             # Track combination-specific metadata
@@ -610,7 +714,6 @@ class PDS4Handler(BaseHandler):
                 # Add standard parameters
                 collection_params = {
                     **combo_params,
-                    "ref_lid_instrument": "",
                     "ref_lid_instrument_host": "",
                     "limit": self.config.collection_search_page_size,
                 }
@@ -639,6 +742,7 @@ class PDS4Handler(BaseHandler):
                     execution_metadata["urn_combinations"].append({
                         "investigation_urn": combo_params.get("ref_lid_investigation", ""),
                         "target_urn": combo_params.get("ref_lid_target", ""),
+                        "instrument_urn": combo_params.get("ref_lid_instrument", ""),
                         "collections_returned": len(combo_collections),
                     })
 
@@ -654,6 +758,7 @@ class PDS4Handler(BaseHandler):
                     execution_metadata["urn_combinations"].append({
                         "investigation_urn": combo_params.get("ref_lid_investigation", ""),
                         "target_urn": combo_params.get("ref_lid_target", ""),
+                        "instrument_urn": combo_params.get("ref_lid_instrument", ""),
                         "collections_returned": 0,
                         "error": str(e),
                     })

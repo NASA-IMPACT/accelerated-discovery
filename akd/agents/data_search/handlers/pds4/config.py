@@ -33,21 +33,25 @@ class PDS4HandlerConfig(DataSearchToolConfig):
     )
     context_search_page_size: int = Field(
         default=10,
-        description="Page size for context searches (investigations/targets)",
+        description="Page size for context searches (investigations/targets/instruments)",
     )
 
     # URN combination strategy
     max_investigation_urns_per_approach: int = Field(
-        default=4,
+        default=3,
         description="Maximum number of investigation URNs to use per base approach",
     )
     max_target_urns_per_approach: int = Field(
         default=3,
         description="Maximum number of target URNs to use per base approach",
     )
+    max_instrument_urns_per_approach: int = Field(
+        default=3,
+        description="Maximum number of instrument URNs to use per base approach",
+    )
     max_approach_combinations: int = Field(
-        default=12,
-        description="Maximum total URN combinations to generate per base approach",
+        default=27,
+        description="Maximum total URN combinations to generate per base approach (3×3×3 for 3-way combinations)",
     )
 
     # Ranking pipeline configuration
@@ -71,13 +75,13 @@ class PDS4HandlerConfig(DataSearchToolConfig):
     )
     min_context_relevance_score: float = Field(
         default=0.4,
-        description="Minimum context (investigation/target) relevance score for URN extraction",
+        description="Minimum context (investigation/target/instrument) relevance score for URN extraction",
     )
 
     # Performance tuning
     context_search_timeout: float = Field(
         default=20.0,
-        description="Timeout for context searches (investigations/targets) in seconds",
+        description="Timeout for context searches (investigations/targets/instruments) in seconds",
     )
     collection_search_timeout: float = Field(
         default=30.0,
