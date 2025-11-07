@@ -48,6 +48,8 @@ class SearchAgentInputSchema(InputSchema):
 class SearchAgentOutputSchema(OutputSchema):
     """Base output schema for literature search agents."""
 
+    __response_field__ = "report"
+
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
     report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
     results: list[SearchResultItem] = Field(..., description="List of search results")

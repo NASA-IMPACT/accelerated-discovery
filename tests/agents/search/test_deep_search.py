@@ -1358,6 +1358,53 @@ class TestDeepLitSearchAgentRealLLM:
         assert len(first_result_content) > 0, "Report should have some content"
 
 
+@pytest.mark.asyncio
+async def test_search_agent_response_field():
+    """Test that _response field returns the same value as report field."""
+    # Create a simple output schema instance
+    output = LitSearchAgentOutputSchema(
+        answer="Short answer to the query",
+        report="This is a detailed research report on the topic.",
+        results=[
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="Test Paper",
+                content="Test content",
+            ),
+        ],
+        iterations_performed=1,
+    )
+
+    # Test that _response field matches report field
+    assert hasattr(output, "_response")
+    assert output._response == output.report
+    assert output._response == "This is a detailed research report on the topic."
+
+
+@pytest.mark.asyncio
+async def test_search_agent_response_field_none_report():
+    """Test that _response field handles None report gracefully."""
+    # Create output with None report
+    output = LitSearchAgentOutputSchema(
+        answer="Short answer",
+        report=None,
+        results=[
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="Test Paper",
+                content="Test content",
+            ),
+        ],
+        iterations_performed=1,
+    )
+
+    # Test that _response field is falsy when report is None
+    assert hasattr(output, "_response")
+    assert not output._response
+
+
 if __name__ == "__main__":
     # Run specific tests for development
     pytest.main([__file__, "-v"])

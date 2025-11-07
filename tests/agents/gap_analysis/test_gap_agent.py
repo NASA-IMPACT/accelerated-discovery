@@ -211,3 +211,19 @@ async def test_arun_full_pipeline(
 
     assert len(result.output) > 0
     assert len(result.attributed_source_answers) > 0
+
+
+@pytest.mark.asyncio
+async def test_gap_agent_response_field():
+    """Test that _response field returns the same value as output field."""
+    # Create a simple output instance
+    result = GapOutputSchema(
+        output="This is the gap analysis output.",
+        attributed_source_answers={"node1": "source1"},
+        graph=None,
+    )
+
+    # Test that _response field matches output field
+    assert hasattr(result, "_response")
+    assert result._response == result.output
+    assert result._response == "This is the gap analysis output."

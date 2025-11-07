@@ -5,7 +5,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Type, cast
 
 from loguru import logger
-from pydantic import BaseModel, Field, ValidationError, create_model
+from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
 
 from akd.errors import SchemaValidationError
 from akd.utils import AsyncRunMixin, LangchainToolMixin, get_model_fields
@@ -66,6 +66,23 @@ class InputSchema(IOSchema):
 
 class OutputSchema(IOSchema):
     "Output schema for the agent or tool"
+
+    __response_field__: str | None = None
+
+    @computed_field
+    def _response(self) -> str:
+        """
+        Private response field that points to the actual output text as per agent usage.
+
+        Subclasses can specify which field to use by setting the __response_field__ class attribute.
+        Example:
+            class MyOutputSchema(OutputSchema):
+                __response_field__ = "output"
+                output: str = Field(...)
+        """
+        if self.__response_field__ is not None:
+            return getattr(self, self.__response_field__, "")
+        return ""
 
 
 class AbstractBaseMeta(ABCMeta):
