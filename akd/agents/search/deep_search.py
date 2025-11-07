@@ -548,14 +548,14 @@ class DeepLitSearchAgent(LitBaseAgent):
         5. Return structured results
 
         Note 1: The maximum number of results to retrieve while running the DeepLitSearchAgent.search_tool is controlled  either:
-        - By `SearchMode` from `params.search_mode` (if kwargs does not specify `max_results`). This is the user-facing paramter to control search.
-        - By passing `max_results` in `kwargs` (overrides SearchMode). This is useful for dev-mode
+        - By `SearchMode` from `params.search_mode` (if kwargs does not specify `search_max_results`). This is the user-facing paramter to control search.
+        - By passing `search_max_results` in `kwargs` (overrides SearchMode). This is useful for dev-mode
 
         Note 2:
         - The `DeepLitSearchAgentConfig.max_results` parameter is a hard cap on the total number of results the agent will keep track of during research to control the research iteration. (TODO: Implement reranking at before capping.)
         """
         original_query = params.query
-        max_results = kwargs.get("max_results", params.search_mode.to_max_results())
+        max_results = kwargs.get("search_max_results", params.search_mode.to_max_results())
         logger.info(f"DeepLitSearchAgent with params: {params}")
         logger.debug(f"DeepLitSearchAgent | max_results = {max_results}")
 
