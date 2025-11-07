@@ -269,14 +269,11 @@ class DeepLitSearchAgent(LitBaseAgent):
             new_results = self._deduplicate_results(search_results, all_results)
             all_results.extend(new_results)
 
-            # Cap total results to prevent memory issues
-            if len(all_results) > 50:
-                all_results = all_results[:50]
+            # HARD Cap total results
+            # TODO: Implement reranking before capping
+            # Note: Search tool already implements reranking though. `new_results` is already reranked.
+            all_results = all_results[: self.config.max_results]
 
-                if self.debug:
-                    logger.debug(
-                        f"Capped results: keeping first {len(all_results)} results",
-                    )
             # Evaluate quality
             if new_results:
                 quality_score = await self._evaluate_research_quality(
@@ -322,6 +319,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             "citations": research_output.citations,
             "iterations_performed": iterations,
             "results": all_results,
+            "research_traces": research_trace,
         }
 
     async def _generate_initial_queries(self, instructions: str) -> List[str]:
@@ -548,6 +546,13 @@ class DeepLitSearchAgent(LitBaseAgent):
         3. Build research instructions
         4. Perform deep research
         5. Return structured results
+
+        Note 1: The maximum number of results to retrieve while running the DeepLitSearchAgent.search_tool is controlled  either:
+        - By `SearchMode` from `params.search_mode` (if kwargs does not specify `max_results`). This is the user-facing paramter to control search.
+        - By passing `max_results` in `kwargs` (overrides SearchMode). This is useful for dev-mode
+
+        Note 2:
+        - The `DeepLitSearchAgentConfig.max_results` parameter is a hard cap on the total number of results the agent will keep track of during research to control the research iteration. (TODO: Implement reranking at before capping.)
         """
         original_query = params.query
         max_results = kwargs.get("max_results", params.search_mode.to_max_results())
@@ -617,5 +622,6 @@ class DeepLitSearchAgent(LitBaseAgent):
                 "evidence_quality_score": research_output["evidence_quality_score"],
                 "citations": research_output["citations"],
                 "answer_reasoning_traces": shortform_answer.reasoning_traces,
+                "research_traces": research_output.get("research_traces", []),
             },
         )

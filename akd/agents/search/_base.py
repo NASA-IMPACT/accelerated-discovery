@@ -71,6 +71,11 @@ class SearchAgentConfig(BaseAgentConfig):
         default=5,
         description="Maximum number of search iterations",
     )
+    # used to limit results per iteration
+    max_results: int = Field(
+        default=50,
+        description="Maximum number of search results to retrieve by the agent (hard limit). This is not used for capping search tool results, which is controlled by SearchMode or 'max_results' from kwargs.",
+    )
 
 
 class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSchema](
