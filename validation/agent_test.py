@@ -88,7 +88,13 @@ _search_cfg_composite = CompositeCodeSearchToolConfig(
 
 _search_tool = CompositeCodeSearchTool(config=_search_cfg_composite, tools=[_search_tool_local, _search_tool_sde])
 
-_search_agent_config = CodeSearchAgentConfig(debug=True, search_result_reranking=True)
+# _search_tool = _search_tool_local
+
+_search_agent_config = CodeSearchAgentConfig(
+    debug=True,
+    search_result_reranking=True,
+    reranker_config=RerankerToolConfig(model_name="ibm-granite/granite-embedding-reranker-english-r2"),
+)
 _search_agent = CodeSearchAgent(config=_search_agent_config, search_tool=_search_tool)
 
 
