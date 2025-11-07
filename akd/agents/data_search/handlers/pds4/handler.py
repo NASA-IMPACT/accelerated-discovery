@@ -714,7 +714,6 @@ class PDS4Handler(BaseHandler):
                 # Add standard parameters
                 collection_params = {
                     **combo_params,
-                    "ref_lid_instrument_host": "",
                     "limit": self.config.collection_search_page_size,
                 }
 
@@ -979,12 +978,10 @@ class PDS4Handler(BaseHandler):
                 investigation_keywords=approach.investigation_keywords,
                 target_keywords=approach.target_keywords,
                 instrument_keywords=approach.instrument_keywords,
-                instrument_host_keywords=approach.instrument_host_keywords,
                 temporal_context=approach.temporal_context,
                 investigation_urn=approach.investigation_urn,
                 target_urn=approach.target_urn,
                 instrument_urn=approach.instrument_urn,
-                instrument_host_urn=approach.instrument_host_urn,
                 data_items=collections,
                 max_items=self.config.max_collections_per_strategy,
             )

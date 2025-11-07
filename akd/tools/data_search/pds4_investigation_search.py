@@ -11,11 +11,11 @@ from akd._base import OutputSchema
 from ._base import (
     BaseDataSearchTool,
     DataSearchToolConfig,
-    DataSearchToolInputSchema,
+    PDS4DataSearchToolInputSchema,
 )
 
 
-class PDS4InvestigationSearchInputSchema(DataSearchToolInputSchema):
+class PDS4InvestigationSearchInputSchema(PDS4DataSearchToolInputSchema):
     """Input schema for PDS4 investigation search operations."""
 
     keywords: str = Field(

@@ -11,11 +11,11 @@ from akd._base import OutputSchema
 from ._base import (
     BaseDataSearchTool,
     DataSearchToolConfig,
-    DataSearchToolInputSchema,
+    PDS4DataSearchToolInputSchema,
 )
 
 
-class PDS4CollectionSearchInputSchema(DataSearchToolInputSchema):
+class PDS4CollectionSearchInputSchema(PDS4DataSearchToolInputSchema):
     """Input schema for PDS4 collection search operations."""
 
     ref_lid_instrument: str = Field(
@@ -25,10 +25,6 @@ class PDS4CollectionSearchInputSchema(DataSearchToolInputSchema):
     ref_lid_target: str = Field(
         "",
         description="URN identifier for target (e.g., urn:nasa:pds:context:target:planet.mars)",
-    )
-    ref_lid_instrument_host: str = Field(
-        "",
-        description="URN identifier for instrument host (e.g., urn:nasa:pds:context:instrument_host:spacecraft.mars2020)",
     )
     ref_lid_investigation: str = Field(
         "",
@@ -59,7 +55,7 @@ class PDS4CollectionSearchTool(
     """
     Tool for searching PDS data collections filtered by context references.
 
-    Collections are data products filtered by instrument, target, instrument host,
+    Collections are data products filtered by instrument, target,
     or investigation URNs. This tool is typically used after context discovery to
     find actual data.
 
@@ -89,7 +85,6 @@ class PDS4CollectionSearchTool(
         arguments = {
             "ref_lid_instrument": params.ref_lid_instrument,
             "ref_lid_target": params.ref_lid_target,
-            "ref_lid_instrument_host": params.ref_lid_instrument_host,
             "ref_lid_investigation": params.ref_lid_investigation,
             "limit": params.limit,
         }

@@ -66,8 +66,8 @@ search_bundles(title_query="surface composition", limit=10)
 
 **6. Progressive Refinement**:
 ```
-search_instrument_hosts("mars rover", instrument_host_type="Rover") →
-search_collections(ref_lid_instrument_host=host_urn)
+search_instruments("spectrometer", instrument_type="Spectrometer") →
+search_collections(ref_lid_instrument=instrument_urn)
 ```
 
 ## Critical Guidelines

@@ -15,14 +15,12 @@
 - Investigation/Mission: {investigation}
 - Target: {target}
 - Instruments: {instruments}
-- Instrument Hosts: {instrument_hosts}
 - Temporal Period: {temporal}
 
 **Extracted Context URNs:**
 - Investigation: {investigation_urn}
 - Target: {target_urn}
 - Instrument: {instrument_urn}
-- Instrument Host: {instrument_host_urn}
 
 ## PDS4 Products to Review ({num_items} total)
 

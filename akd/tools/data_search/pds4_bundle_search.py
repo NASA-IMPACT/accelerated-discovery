@@ -11,11 +11,11 @@ from akd._base import OutputSchema
 from ._base import (
     BaseDataSearchTool,
     DataSearchToolConfig,
-    DataSearchToolInputSchema,
+    PDS4DataSearchToolInputSchema,
 )
 
 
-class PDS4BundleSearchInputSchema(DataSearchToolInputSchema):
+class PDS4BundleSearchInputSchema(PDS4DataSearchToolInputSchema):
     """Input schema for PDS4 bundle search operations."""
 
     title_query: Optional[str] = Field(

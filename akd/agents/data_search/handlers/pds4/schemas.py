@@ -102,7 +102,6 @@ class PDS4QueryApproach(BaseModel):
             investigation_keywords=["mars rover", "curiosity", "msl"],
             target_keywords=["mars"],
             instrument_keywords=["spectrometer", "chemcam"],
-            instrument_host_keywords=["rover"],
             tool_sequence=["search_investigations", "search_targets", "search_collections"]
         )
     """
@@ -133,11 +132,6 @@ class PDS4QueryApproach(BaseModel):
     instrument_keywords: List[str] = Field(
         default_factory=list,
         description="Keywords for instrument search (e.g., ['spectrometer', 'chemcam'])"
-    )
-
-    instrument_host_keywords: List[str] = Field(
-        default_factory=list,
-        description="Keywords for instrument host search (e.g., ['rover', 'orbiter'])"
     )
 
     # ---- Search Parameters ----
@@ -208,11 +202,6 @@ class PDS4QueryApproach(BaseModel):
         description="Instrument URN extracted from context search (e.g., 'urn:nasa:pds:context:instrument:msl.chemcam')"
     )
 
-    instrument_host_urn: Optional[str] = Field(
-        None,
-        description="Instrument host URN extracted from context search (e.g., 'urn:nasa:pds:context:instrument_host:spacecraft.msl')"
-    )
-
     def get_context_search_params(self) -> Dict[str, Any]:
         """
         Get parameters for context discovery tools.
@@ -247,14 +236,12 @@ class PDS4QueryApproach(BaseModel):
         investigation_urn: Optional[str] = None,
         target_urn: Optional[str] = None,
         instrument_urn: Optional[str] = None,
-        instrument_host_urn: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Get parameters for collection search using extracted URNs."""
         return {
             "ref_lid_investigation": investigation_urn or "",
             "ref_lid_target": target_urn or "",
             "ref_lid_instrument": instrument_urn or "",
-            "ref_lid_instrument_host": instrument_host_urn or "",
             "limit": self.collection_search_limit
         }
 
@@ -321,10 +308,6 @@ class PDS4ApproachCollectionFilteringInputSchema(BaseApproachFilteringInputSchem
         default_factory=list,
         description="Instrument keywords used in context search",
     )
-    instrument_host_keywords: List[str] = Field(
-        default_factory=list,
-        description="Instrument host keywords used in context search",
-    )
     temporal_context: Optional[str] = Field(
         None,
         description="Temporal context/period for the search",
@@ -342,10 +325,6 @@ class PDS4ApproachCollectionFilteringInputSchema(BaseApproachFilteringInputSchem
     instrument_urn: Optional[str] = Field(
         None,
         description="Instrument URN extracted from context search",
-    )
-    instrument_host_urn: Optional[str] = Field(
-        None,
-        description="Instrument host URN extracted from context search",
     )
 
     # Use base class fields (data_items, max_items) and provide PDS4-specific aliases

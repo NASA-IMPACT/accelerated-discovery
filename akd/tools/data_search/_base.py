@@ -36,10 +36,19 @@ class DataSearchToolConfig(BaseToolConfig):
     )
 
 
-class DataSearchToolInputSchema(InputSchema):
+class BaseDataSearchToolInputSchema(InputSchema):
     """
-    Base input schema for data search tools.
-    Common parameters used across different data search tools.
+    Minimal base input schema for all data search tools.
+    Repository-agnostic foundation without any specific parameters.
+    """
+
+    pass
+
+
+class CMRDataSearchToolInputSchema(BaseDataSearchToolInputSchema):
+    """
+    Input schema for CMR (Common Metadata Repository) data search tools.
+    Includes spatial/temporal filtering parameters specific to CMR.
     """
 
     temporal: Optional[str] = Field(
@@ -52,6 +61,20 @@ class DataSearchToolInputSchema(InputSchema):
     )
     page_size: Optional[int] = Field(None, description="Number of results per page")
     page_num: Optional[int] = Field(None, description="Page number (1-based)")
+
+
+class PDS4DataSearchToolInputSchema(BaseDataSearchToolInputSchema):
+    """
+    Input schema for PDS4 (Planetary Data System) data search tools.
+    Clean base without CMR-specific spatial/temporal parameters.
+    PDS4 tools use URN-based filtering instead.
+    """
+
+    pass
+
+
+# Backward compatibility alias - points to CMR schema
+DataSearchToolInputSchema = CMRDataSearchToolInputSchema
 
 
 class DataSearchToolOutputSchema(OutputSchema):
@@ -67,7 +90,7 @@ class DataSearchToolOutputSchema(OutputSchema):
 
 
 class BaseDataSearchTool[
-    TInput: DataSearchToolInputSchema,
+    TInput: BaseDataSearchToolInputSchema,
     TOutput: DataSearchToolOutputSchema,
 ](BaseTool[TInput, TOutput]):
     """
@@ -80,7 +103,7 @@ class BaseDataSearchTool[
     - Response format standardization
     """
 
-    input_schema = DataSearchToolInputSchema
+    input_schema = BaseDataSearchToolInputSchema
     output_schema = DataSearchToolOutputSchema
     config_schema = DataSearchToolConfig
 

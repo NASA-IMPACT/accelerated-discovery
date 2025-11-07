@@ -8,13 +8,13 @@ from pydantic import Field
 
 from ._base import (
     BaseDataSearchTool,
+    CMRDataSearchToolInputSchema,
     DataSearchToolConfig,
-    DataSearchToolInputSchema,
     DataSearchToolOutputSchema,
 )
 
 
-class CMRGranuleSearchInputSchema(DataSearchToolInputSchema):
+class CMRGranuleSearchInputSchema(CMRDataSearchToolInputSchema):
     """Input schema for CMR granule search operations."""
 
     collection_concept_id: str = Field(

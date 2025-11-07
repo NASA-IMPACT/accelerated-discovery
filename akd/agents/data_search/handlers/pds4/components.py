@@ -229,12 +229,10 @@ class PDS4ApproachCollectionFilteringComponent(
             "investigation": ", ".join(params.investigation_keywords) if params.investigation_keywords else "Not specified",
             "target": ", ".join(params.target_keywords) if params.target_keywords else "Not specified",
             "instruments": ", ".join(params.instrument_keywords) if params.instrument_keywords else "Not specified",
-            "instrument_hosts": ", ".join(params.instrument_host_keywords) if params.instrument_host_keywords else "Not specified",
             "temporal": params.temporal_context or "Not specified",
             "investigation_urn": params.investigation_urn or "Not specified",
             "target_urn": params.target_urn or "Not specified",
             "instrument_urn": params.instrument_urn or "Not specified",
-            "instrument_host_urn": params.instrument_host_urn or "Not specified",
         }
 
 

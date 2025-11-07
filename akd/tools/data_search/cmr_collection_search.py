@@ -9,8 +9,8 @@ from pydantic import Field
 
 from ._base import (
     BaseDataSearchTool,
+    CMRDataSearchToolInputSchema,
     DataSearchToolConfig,
-    DataSearchToolInputSchema,
     DataSearchToolOutputSchema,
 )
 
@@ -22,7 +22,7 @@ warnings.filterwarnings(
 )
 
 
-class CMRCollectionSearchInputSchema(DataSearchToolInputSchema):
+class CMRCollectionSearchInputSchema(CMRDataSearchToolInputSchema):
     """Input schema for CMR collection search operations."""
 
     keyword: Optional[str] = Field(
