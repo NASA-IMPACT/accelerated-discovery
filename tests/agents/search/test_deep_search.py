@@ -512,7 +512,7 @@ class TestDeepLitSearchAgentSearchExecution:
         agent = DeepLitSearchAgent(config=config, search_tool=mock_search_pipeline)
 
         queries = ["artificial intelligence applications", "machine learning research"]
-        results = await agent._execute_searches(queries)
+        results = await agent._execute_searches(queries, max_results=SearchMode.FAST.to_max_results())
 
         assert len(results) == 1
         assert results[0].title == "Research Paper 1"
@@ -544,7 +544,7 @@ class TestDeepLitSearchAgentSearchExecution:
         )
 
         queries = ["machine learning research"]
-        results = await agent._execute_searches(queries)
+        results = await agent._execute_searches(queries, max_results=SearchMode.FAST.to_max_results())
 
         assert len(results) == 1
         assert any(r.title == "Primary Paper" for r in results)
@@ -582,6 +582,7 @@ class TestDeepLitSearchAgentSearchExecution:
         queries = ["machine learning"]
         results = await agent._execute_searches(
             queries,
+            max_results=SearchMode.FAST.to_max_results(),
             original_query="machine learning",
         )
 
@@ -1102,7 +1103,7 @@ class TestDeepLitSearchAgentCoreMethods:
             search_tool=mock_search_pipeline,
         )
 
-        results = await agent._execute_searches(["test query"])
+        results = await agent._execute_searches(["test query"], max_results=SearchMode.FAST.to_max_results())
 
         assert len(results) == 2
         # First result: no full text enhancement
