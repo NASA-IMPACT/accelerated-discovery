@@ -113,33 +113,40 @@ search_collections(ref_lid_instrument=instrument_urn)
 
 **Approach 1 (Investigation-First)**:
 ```
-Tool Strategy: search_investigations("mars rover") → search_collections(ref_lid_investigation=urn)
-Keywords: "mars rover"
-Target Context: Mars, Planet
+Approach Description: Search for Mars rover missions, then retrieve collections using investigation URNs
+Investigation Keywords: ["mars", "rover"]
+Target Keywords: ["mars"]
+Primary Keywords: ["surface", "composition"]
 ```
 
 **Approach 2 (Target + Instrument)**:
 ```
-Tool Strategy: search_targets("mars") + search_instruments("spectrometer") → search_collections(ref_lid_target=target_urn, ref_lid_instrument=instrument_urn)
-Keywords: "mars", "spectrometer", "surface composition"
-Target Context: Mars, Planet
+Approach Description: Search for Mars target and spectrometer instruments, then retrieve collections using multiple URN combinations
+Target Keywords: ["mars"]
+Instrument Keywords: ["spectrometer"]
+Primary Keywords: ["surface", "composition"]
 ```
 
 **Approach 3 (Bundle Discovery)**:
 ```
-Tool Strategy: search_bundles("mars surface composition")
-Keywords: "mars surface composition"
+Approach Description: Direct bundle search for Mars surface composition datasets
+Primary Keywords: ["mars", "surface", "composition"]
 ```
 
 ## Output Requirements
 
-**For Each Approach**:
-- **Tool Strategy**: Specific PDS4 MCP tool usage pattern
-- **Primary Keywords**: Main search terms for context tools
-- **Target Context**: Target body and type information
-- **Instrument Context**: Instrument types and capabilities (if relevant)
-- **Mission Context**: Investigation/mission information (if relevant)
-- **Temporal Context**: Time periods or mission phases (if relevant)
+**For Each Approach** (PDS4QueryApproach schema):
+- **approach_description**: Clear human-readable description of the search approach and tool combination strategy
+- **investigation_keywords**: List of keywords for investigation/mission context search (if relevant)
+- **target_keywords**: List of keywords for target/celestial body context search (if relevant)
+- **instrument_keywords**: List of keywords for instrument context search (if relevant)
+- **primary_keywords**: Main search terms for bundle/collection queries
+- **temporal_context**: Descriptive time period or mission phase (if relevant)
+
+**Note**: The following fields are auto-populated during execution:
+- **approach_index**: Automatically assigned (0-based index)
+- **investigation_urns, target_urns, instrument_urns**: Populated from context searches (top 3 of each type)
+- **Search limits**: Use defaults unless specific limits are needed
 
 **Quality Validation**:
 - Ensure tool strategies align with PDS4 MCP capabilities

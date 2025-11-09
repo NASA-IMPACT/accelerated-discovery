@@ -1,4 +1,4 @@
-# Extract PDS4 Parameters and Tool Strategies
+# Extract PDS4 Query Approaches
 
 ## Research Context
 
@@ -12,7 +12,7 @@
 
 ## Your Task
 
-Analyze this planetary science research context and generate **{min_approaches}-{max_approaches} PDS4 MCP tool strategies** - different approaches for discovering relevant datasets using PDS4's context-based discovery system.
+Analyze this planetary science research context and generate **{min_approaches}-{max_approaches} PDS4 query approaches** - different discovery strategies for finding relevant datasets using PDS4's context-based discovery system.
 
 ## Parameter Extraction
 
@@ -47,39 +47,51 @@ For each approach, extract and structure:
 - Measurement types
 - Analysis targets
 
-## PDS4 MCP Tool Strategy Generation
+## PDS4 Query Approach Generation
 
-For each approach, specify:
+For each approach, generate a complete PDS4QueryApproach with these fields:
 
-**Tool Strategy:** The sequence of PDS4 MCP tools to use
-- Example: `search_investigations("mars rover") → search_collections(ref_lid_investigation=urn)`
-- Example: `search_targets("europa") + search_instruments("spectrometer") → search_collections(ref_lid_target=urn1, ref_lid_instrument=urn2)`
+**Required Fields:**
+- **approach_description**: Human-readable description of the search approach (what context searches will be performed and how they'll be combined)
+- **investigation_keywords**: List of keywords for investigation/mission context search (e.g., ["mars", "rover", "curiosity"])
+- **target_keywords**: List of keywords for target/celestial body context search (e.g., ["mars", "phobos"])
+- **instrument_keywords**: List of keywords for instrument context search (e.g., ["spectrometer", "chemcam"])
+- **primary_keywords**: Main search terms for direct bundle/collection queries (e.g., ["surface", "composition"])
+- **temporal_context**: Descriptive temporal period if relevant (e.g., "2012-2020", "Apollo era")
 
-**Primary Keywords:** Main search terms for context discovery tools
+**Auto-populated Fields (do not specify):**
+- **approach_index**: Automatically assigned (0, 1, 2, 3...)
+- **investigation_urns, target_urns, instrument_urns**: Populated during execution from context searches (top 3 of each)
+- **Search limits**: Defaults are used unless you need specific limits
 
 ## Strategy Examples
 
 **Investigation-First:**
 ```
-Tool Strategy: search_investigations(keywords) → search_collections(ref_lid_investigation=urn)
+approach_description: "Search for specific mission/investigation, then retrieve collections by investigation URN"
+investigation_keywords: ["mars", "odyssey"]
 Use when: Specific mission mentioned or mission-focused research
 ```
 
 **Target-First:**
 ```
-Tool Strategy: search_targets(keywords, target_type) → search_collections(ref_lid_target=urn)
+approach_description: "Search for target celestial body, then retrieve collections by target URN"
+target_keywords: ["europa", "jupiter"]
 Use when: Target body is primary focus
 ```
 
 **Multi-Context:**
 ```
-Tool Strategy: search_investigations(mission) + search_targets(target) → search_collections(ref_lid_investigation=urn1, ref_lid_target=urn2)
+approach_description: "Search for mission and target, then retrieve collections using multiple URN combinations"
+investigation_keywords: ["cassini"]
+target_keywords: ["titan"]
 Use when: Both mission and target are important constraints
 ```
 
 **Bundle Discovery:**
 ```
-Tool Strategy: search_bundles(title_query)
+approach_description: "Direct bundle search for thematic datasets"
+primary_keywords: ["surface", "composition", "mars"]
 Use when: Looking for thematic datasets or broad phenomenon studies
 ```
 
@@ -94,8 +106,10 @@ Use when: Looking for thematic datasets or broad phenomenon studies
 
 ## Important
 
-- Focus on tool strategies that leverage PDS4's context relationships (investigation → target → instrument → collection)
+- Focus on approaches that leverage PDS4's context relationships (investigation → target → instrument → collection)
 - Use natural language keywords that PDS4 MCP tools can understand
+- Provide clear `approach_description` that explains which context searches will be performed
 - Consider both narrow (highly specific) and broad (comprehensive coverage) approaches
 - Ensure each approach offers a meaningfully different way to discover relevant planetary science data
 - Account for the hierarchical nature of PDS4 data (bundles → collections → observational products)
+- Remember: URNs will be extracted from context searches during execution - focus on providing good keywords

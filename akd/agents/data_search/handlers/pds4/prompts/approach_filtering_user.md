@@ -19,16 +19,18 @@
 
 **Context URNs Used in Collection Searches:**
 
-The collections below were retrieved using all combinations of these URNs (up to 27 different searches). Collections may come from ANY combination of these contexts.
+The collections below were retrieved using **all combinations** of these URNs (up to 3×3×3 = 27 different searches). Each list contains the **top 3 most relevant** URNs from context searches. Collections may come from **ANY combination** of these contexts.
 
-**Investigations** (collections may be from any of these missions):
+**Investigations** (top 3 missions - collections may be from any of these):
 {investigation_urns}
 
-**Targets** (collections may reference any of these celestial bodies):
+**Targets** (top 3 celestial bodies - collections may reference any of these):
 {target_urns}
 
-**Instruments** (collections may use any of these instruments):
+**Instruments** (top 3 instruments - collections may use any of these):
 {instrument_urns}
+
+**Important**: A collection showing "Mars Odyssey" as the mission is valid even if "Mars Reconnaissance Orbiter" appears first in the list above - all combinations were searched equally.
 
 ## PDS4 Products to Review ({num_items} total)
 
