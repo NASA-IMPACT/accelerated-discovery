@@ -91,9 +91,9 @@ class PDS4QueryApproach(BaseModel):
     """
     Complete PDS4 MCP tool execution approach with unified parameters.
 
-    Represents a unified approach combining context parameters,
-    search keywords, and tool orchestration logic. Unlike CMR's
-    two-stage approach, this contains everything needed for execution.
+    Represents a unified approach combining context parameters and
+    search keywords. Unlike CMR's two-stage approach, this contains
+    everything needed for execution.
 
     Example:
         PDS4QueryApproach(
@@ -102,7 +102,6 @@ class PDS4QueryApproach(BaseModel):
             investigation_keywords=["mars rover", "curiosity", "msl"],
             target_keywords=["mars"],
             instrument_keywords=["spectrometer", "chemcam"],
-            tool_sequence=["search_investigations", "search_targets", "search_collections"]
         )
     """
 
@@ -146,18 +145,6 @@ class PDS4QueryApproach(BaseModel):
         description="Descriptive temporal period (e.g., '2012-2020', 'Apollo era')"
     )
 
-    # ---- Tool Orchestration ----
-
-    tool_sequence: List[str] = Field(
-        default_factory=list,
-        description="Ordered list of MCP tools to execute (e.g., ['search_investigations', 'search_collections'])"
-    )
-
-    expected_urn_types: List[str] = Field(
-        default_factory=list,
-        description="URN types to extract from context searches (e.g., ['investigation', 'target'])"
-    )
-
     # ---- Execution Parameters ----
 
     investigation_search_limit: int = Field(
@@ -187,19 +174,36 @@ class PDS4QueryApproach(BaseModel):
 
     # ---- Extracted URNs (populated during execution) ----
 
+    # Complete URN lists (top 3 of each, used in combinations)
+    investigation_urns: List[str] = Field(
+        default_factory=list,
+        description="All investigation URNs extracted and ranked (top 3, used in collection search combinations)"
+    )
+
+    target_urns: List[str] = Field(
+        default_factory=list,
+        description="All target URNs extracted and ranked (top 3, used in collection search combinations)"
+    )
+
+    instrument_urns: List[str] = Field(
+        default_factory=list,
+        description="All instrument URNs extracted and ranked (top 3, used in collection search combinations)"
+    )
+
+    # Legacy single URN fields (DEPRECATED - kept for backward compatibility, excluded from serialization)
     investigation_urn: Optional[str] = Field(
         None,
-        description="Investigation URN extracted from context search (e.g., 'urn:nasa:pds:context:investigation:mission.msl')"
+        description="[DEPRECATED] Top investigation URN - use investigation_urns[0] instead"
     )
 
     target_urn: Optional[str] = Field(
         None,
-        description="Target URN extracted from context search (e.g., 'urn:nasa:pds:context:target:planet.mars')"
+        description="[DEPRECATED] Top target URN - use target_urns[0] instead"
     )
 
     instrument_urn: Optional[str] = Field(
         None,
-        description="Instrument URN extracted from context search (e.g., 'urn:nasa:pds:context:instrument:msl.chemcam')"
+        description="[DEPRECATED] Top instrument URN - use instrument_urns[0] instead"
     )
 
     def get_context_search_params(self) -> Dict[str, Any]:
@@ -313,18 +317,33 @@ class PDS4ApproachCollectionFilteringInputSchema(BaseApproachFilteringInputSchem
         description="Temporal context/period for the search",
     )
 
-    # URNs extracted from context searches
+    # URNs extracted from context searches (COMPLETE LISTS used in combinations)
+    investigation_urns: List[str] = Field(
+        default_factory=list,
+        description="All investigation URNs used in collection searches (top 3, used in combinations)",
+    )
+    target_urns: List[str] = Field(
+        default_factory=list,
+        description="All target URNs used in collection searches (top 3, used in combinations)",
+    )
+    instrument_urns: List[str] = Field(
+        default_factory=list,
+        description="All instrument URNs used in collection searches (top 3, used in combinations)",
+    )
+
+    # Legacy single URN fields (DEPRECATED - use plural fields above)
+    # These will be removed from serialization
     investigation_urn: Optional[str] = Field(
         None,
-        description="Investigation URN extracted from context search",
+        description="[DEPRECATED] Top investigation URN - use investigation_urns instead",
     )
     target_urn: Optional[str] = Field(
         None,
-        description="Target URN extracted from context search",
+        description="[DEPRECATED] Top target URN - use target_urns instead",
     )
     instrument_urn: Optional[str] = Field(
         None,
-        description="Instrument URN extracted from context search",
+        description="[DEPRECATED] Top instrument URN - use instrument_urns instead",
     )
 
     # Use base class fields (data_items, max_items) and provide PDS4-specific aliases

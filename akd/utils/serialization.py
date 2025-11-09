@@ -66,19 +66,27 @@ def safe_serialize_for_websocket(obj: Any) -> Dict[str, Any]:
         return obj
 
 
-def safe_model_dump(obj: Any, exclude_none: bool = True) -> Dict[str, Any]:
+def safe_model_dump(
+    obj: Any,
+    exclude_none: bool = True,
+    exclude: set = None,
+) -> Dict[str, Any]:
     """
     Safely convert objects to dictionaries, handling both Pydantic models and regular objects.
 
     Args:
         obj: Object to convert to dictionary
         exclude_none: Whether to exclude None values from Pydantic models
+        exclude: Set of field names to exclude from Pydantic models
 
     Returns:
         Dictionary representation of the object
     """
     if hasattr(obj, "model_dump"):
-        return obj.model_dump(exclude_none=exclude_none)
+        kwargs = {"exclude_none": exclude_none}
+        if exclude is not None:
+            kwargs["exclude"] = exclude
+        return obj.model_dump(**kwargs)
     elif isinstance(obj, dict):
         return dict(obj)
     elif hasattr(obj, "__dict__"):

@@ -57,8 +57,6 @@ For each approach, specify:
 
 **Primary Keywords:** Main search terms for context discovery tools
 
-**Expected Tool Sequence:** List of tools to be called in order
-
 ## Strategy Examples
 
 **Investigation-First:**

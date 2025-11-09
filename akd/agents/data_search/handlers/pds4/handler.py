@@ -687,7 +687,16 @@ class PDS4Handler(BaseHandler):
                 execution_metadata["context_searches_executed"].append("instrument")
                 execution_metadata["urns_extracted"]["instrument"] = instrument_urns
 
-            # Store first URN back in approach for backward compatibility
+            # Store URN lists in approach for use in filtering (top 3 used in combinations)
+            max_inv_urns = self.config.max_investigation_urns_per_approach
+            max_tgt_urns = self.config.max_target_urns_per_approach
+            max_inst_urns = self.config.max_instrument_urns_per_approach
+
+            approach.investigation_urns = investigation_urns[:max_inv_urns]
+            approach.target_urns = target_urns[:max_tgt_urns]
+            approach.instrument_urns = instrument_urns[:max_inst_urns]
+
+            # Store first URN for backward compatibility (DEPRECATED - use plural fields)
             if investigation_urns:
                 approach.investigation_urn = investigation_urns[0]
             if target_urns:
@@ -879,7 +888,12 @@ class PDS4Handler(BaseHandler):
         total_pds4 = 0
 
         for approach in query_approaches:
-            approach_dict = safe_model_dump(approach)
+            # Exclude deprecated singular URN fields from serialization
+            # (plural URN fields contain the complete information)
+            approach_dict = safe_model_dump(
+                approach,
+                exclude={"investigation_urn", "target_urn", "instrument_urn"},
+            )
 
             # Find matching execution log
             matching_log = next(
@@ -979,6 +993,11 @@ class PDS4Handler(BaseHandler):
                 target_keywords=approach.target_keywords,
                 instrument_keywords=approach.instrument_keywords,
                 temporal_context=approach.temporal_context,
+                # Pass complete URN lists used in combinations
+                investigation_urns=approach.investigation_urns,
+                target_urns=approach.target_urns,
+                instrument_urns=approach.instrument_urns,
+                # Legacy singular URNs (deprecated)
                 investigation_urn=approach.investigation_urn,
                 target_urn=approach.target_urn,
                 instrument_urn=approach.instrument_urn,

@@ -17,10 +17,18 @@
 - Instruments: {instruments}
 - Temporal Period: {temporal}
 
-**Extracted Context URNs:**
-- Investigation: {investigation_urn}
-- Target: {target_urn}
-- Instrument: {instrument_urn}
+**Context URNs Used in Collection Searches:**
+
+The collections below were retrieved using all combinations of these URNs (up to 27 different searches). Collections may come from ANY combination of these contexts.
+
+**Investigations** (collections may be from any of these missions):
+{investigation_urns}
+
+**Targets** (collections may reference any of these celestial bodies):
+{target_urns}
+
+**Instruments** (collections may use any of these instruments):
+{instrument_urns}
 
 ## PDS4 Products to Review ({num_items} total)
 

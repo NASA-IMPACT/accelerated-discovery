@@ -116,7 +116,6 @@ search_collections(ref_lid_instrument=instrument_urn)
 Tool Strategy: search_investigations("mars rover") → search_collections(ref_lid_investigation=urn)
 Keywords: "mars rover"
 Target Context: Mars, Planet
-Expected Tools: search_investigations, search_collections
 ```
 
 **Approach 2 (Target + Instrument)**:
@@ -124,14 +123,12 @@ Expected Tools: search_investigations, search_collections
 Tool Strategy: search_targets("mars") + search_instruments("spectrometer") → search_collections(ref_lid_target=target_urn, ref_lid_instrument=instrument_urn)
 Keywords: "mars", "spectrometer", "surface composition"
 Target Context: Mars, Planet
-Expected Tools: search_targets, search_instruments, search_collections
 ```
 
 **Approach 3 (Bundle Discovery)**:
 ```
 Tool Strategy: search_bundles("mars surface composition")
 Keywords: "mars surface composition"
-Expected Tools: search_bundles
 ```
 
 ## Output Requirements
@@ -143,7 +140,6 @@ Expected Tools: search_bundles
 - **Instrument Context**: Instrument types and capabilities (if relevant)
 - **Mission Context**: Investigation/mission information (if relevant)
 - **Temporal Context**: Time periods or mission phases (if relevant)
-- **Expected Tools**: List of PDS4 MCP tools to be used in sequence
 
 **Quality Validation**:
 - Ensure tool strategies align with PDS4 MCP capabilities

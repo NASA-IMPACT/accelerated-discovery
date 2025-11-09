@@ -1,7 +1,7 @@
 """PDS4-specific component implementations."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -224,15 +224,24 @@ class PDS4ApproachCollectionFilteringComponent(
 
         PDS4 approaches include keywords and URN references from context searches.
         """
+        # Format URN lists as bullet points for the LLM
+        def format_urn_list(urns: List[str], label: str) -> str:
+            if not urns:
+                return "Not specified"
+            if len(urns) == 1:
+                return urns[0]
+            # Multiple URNs - format as indented bullet list
+            return "\n  " + "\n  ".join(f"- {urn}" for urn in urns)
+
         return {
             "strategy_description": params.strategy_description,
             "investigation": ", ".join(params.investigation_keywords) if params.investigation_keywords else "Not specified",
             "target": ", ".join(params.target_keywords) if params.target_keywords else "Not specified",
             "instruments": ", ".join(params.instrument_keywords) if params.instrument_keywords else "Not specified",
             "temporal": params.temporal_context or "Not specified",
-            "investigation_urn": params.investigation_urn or "Not specified",
-            "target_urn": params.target_urn or "Not specified",
-            "instrument_urn": params.instrument_urn or "Not specified",
+            "investigation_urns": format_urn_list(params.investigation_urns, "Investigation"),
+            "target_urns": format_urn_list(params.target_urns, "Target"),
+            "instrument_urns": format_urn_list(params.instrument_urns, "Instrument"),
         }
 
 
