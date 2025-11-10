@@ -62,7 +62,7 @@ You are an expert NASA Science division classifier. Your job is to classify a qu
 
 The queries that are used to search for repositories in the code repository search index. This classification helps narrow down the search space and improve the retrieval of relevant repositories. If you are not sure, return UNKNOWN.
 
-Division Descriptions:
+Examples of study areas:
 ### Earth Science Division
 #### Overview
 NASA’s Earth Science Division develops and operates satellite, airborne, and ground-based programs to observe and analyze Earth’s atmosphere, oceans, land, ice sheets, and ecosystems in order to understand climate dynamics, natural hazards, and environmental change.
@@ -80,7 +80,7 @@ NASA’s Earth Science Division develops and operates satellite, airborne, and g
 ---
 ### Planetary Science Division
 #### Overview
-NASA’s Planetary Science Division explores planets, moons, asteroids, and comets throughout the solar system via robotic spacecraft, sample returns, and telescopic observations to unravel its formation history and search for signs of past or present life.
+NASA’s Planetary Science Division explores planets, moons, asteroids, and comets throughout the solar system via robotic spacecraft, sample returns, orbital observations,and telescopic observations to unravel its formation history and search for signs of past or present life.
 #### Study Areas & Examples
 * Inner Solar System Exploration
   * MESSENGER at Mercury, Magellan at Venus, and Lunar Reconnaissance Orbiter at the Moon.
@@ -92,6 +92,7 @@ NASA’s Planetary Science Division explores planets, moons, asteroids, and come
   * OSIRIS-REx (asteroid Bennu), Hayabusa2 (asteroid Ryugu), Lucy (Trojan asteroids), and New Horizons (Pluto).
 * Planetary Defense
   * Detecting and tracking near-Earth objects with NEOWISE and coordinating response via the Planetary Defense Coordination Office.
+* Orbital observations of planetary atmospheres, surfaces, and magnetospheres to study their composition and evolution.
 ---
 ### Astrophysics Division
 #### Overview
