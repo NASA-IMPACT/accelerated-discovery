@@ -225,6 +225,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         self,
         instructions: str,
         original_query: str,
+        max_results: int,
     ) -> dict:
         """
         Perform the actual deep research using iterative search and synthesis.
@@ -254,8 +255,9 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             # Perform searches
             search_results = await self._execute_searches(
-                initial_queries,
-                original_query,
+                queries=initial_queries,
+                max_results=max_results,
+                original_query=original_query,
                 is_reformulated=(iterations > 1),
             )
 
@@ -267,14 +269,11 @@ class DeepLitSearchAgent(LitBaseAgent):
             new_results = self._deduplicate_results(search_results, all_results)
             all_results.extend(new_results)
 
-            # Cap total results to prevent memory issues
-            if len(all_results) > 50:
-                all_results = all_results[:50]
+            # HARD Cap total results
+            # TODO: Implement reranking before capping
+            # Note: Search tool already implements reranking though. `new_results` is already reranked.
+            all_results = all_results[: self.config.max_results]
 
-                if self.debug:
-                    logger.debug(
-                        f"Capped results: keeping first {len(all_results)} results",
-                    )
             # Evaluate quality
             if new_results:
                 quality_score = await self._evaluate_research_quality(
@@ -320,6 +319,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             "citations": research_output.citations,
             "iterations_performed": iterations,
             "results": all_results,
+            "research_traces": research_trace,
         }
 
     async def _generate_initial_queries(self, instructions: str) -> List[str]:
@@ -349,6 +349,7 @@ class DeepLitSearchAgent(LitBaseAgent):
     async def _execute_searches(
         self,
         queries: List[str],
+        max_results: int,
         original_query: str | None = None,
         is_reformulated: bool = False,
     ) -> List[SearchResultItem]:
@@ -369,7 +370,9 @@ class DeepLitSearchAgent(LitBaseAgent):
         try:
             tool_input = self.search_tool.input_schema(
                 queries=queries,
+                max_results=max_results,
             )
+            logger.debug(f"Executing search tool: {type(self.search_tool).__name__} with params: {tool_input}")
             tasks.append(
                 asyncio.create_task(
                     self.search_tool.arun(
@@ -543,8 +546,18 @@ class DeepLitSearchAgent(LitBaseAgent):
         3. Build research instructions
         4. Perform deep research
         5. Return structured results
+
+        Note 1: The maximum number of results to retrieve while running the DeepLitSearchAgent.search_tool is controlled  either:
+        - By `SearchMode` from `params.search_mode` (if kwargs does not specify `search_max_results`). This is the user-facing paramter to control search.
+        - By passing `search_max_results` in `kwargs` (overrides SearchMode). This is useful for dev-mode
+
+        Note 2:
+        - The `DeepLitSearchAgentConfig.max_results` parameter is a hard cap on the total number of results the agent will keep track of during research to control the research iteration. (TODO: Implement reranking at before capping.)
         """
         original_query = params.query
+        max_results = kwargs.get("search_max_results", params.search_mode.to_max_results())
+        logger.info(f"DeepLitSearchAgent with params: {params}")
+        logger.debug(f"DeepLitSearchAgent | max_results = {max_results}")
 
         # Step 1: Triage the query using embedded component
         triage_result = await self._handle_triage(original_query)
@@ -582,6 +595,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         research_output = await self._perform_deep_research(
             instructions,
             original_query,
+            max_results=max_results,
         )
 
         # Step 5: Generate shortform answer and report
@@ -608,5 +622,6 @@ class DeepLitSearchAgent(LitBaseAgent):
                 "evidence_quality_score": research_output["evidence_quality_score"],
                 "citations": research_output["citations"],
                 "answer_reasoning_traces": shortform_answer.reasoning_traces,
+                "research_traces": research_output.get("research_traces", []),
             },
         )

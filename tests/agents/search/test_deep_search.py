@@ -512,7 +512,7 @@ class TestDeepLitSearchAgentSearchExecution:
         agent = DeepLitSearchAgent(config=config, search_tool=mock_search_pipeline)
 
         queries = ["artificial intelligence applications", "machine learning research"]
-        results = await agent._execute_searches(queries)
+        results = await agent._execute_searches(queries, max_results=SearchMode.FAST.to_max_results())
 
         assert len(results) == 1
         assert results[0].title == "Research Paper 1"
@@ -544,7 +544,7 @@ class TestDeepLitSearchAgentSearchExecution:
         )
 
         queries = ["machine learning research"]
-        results = await agent._execute_searches(queries)
+        results = await agent._execute_searches(queries, max_results=SearchMode.FAST.to_max_results())
 
         assert len(results) == 1
         assert any(r.title == "Primary Paper" for r in results)
@@ -582,6 +582,7 @@ class TestDeepLitSearchAgentSearchExecution:
         queries = ["machine learning"]
         results = await agent._execute_searches(
             queries,
+            max_results=SearchMode.FAST.to_max_results(),
             original_query="machine learning",
         )
 
@@ -1102,7 +1103,7 @@ class TestDeepLitSearchAgentCoreMethods:
             search_tool=mock_search_pipeline,
         )
 
-        results = await agent._execute_searches(["test query"])
+        results = await agent._execute_searches(["test query"], max_results=SearchMode.FAST.to_max_results())
 
         assert len(results) == 2
         # First result: no full text enhancement
@@ -1356,6 +1357,53 @@ class TestDeepLitSearchAgentRealLLM:
         assert isinstance(first_result_content, str), "Report should have content"
         # More flexible assertion - just check that some content exists
         assert len(first_result_content) > 0, "Report should have some content"
+
+
+@pytest.mark.asyncio
+async def test_search_agent_response_field():
+    """Test that _response field returns the same value as report field."""
+    # Create a simple output schema instance
+    output = LitSearchAgentOutputSchema(
+        answer="Short answer to the query",
+        report="This is a detailed research report on the topic.",
+        results=[
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="Test Paper",
+                content="Test content",
+            ),
+        ],
+        iterations_performed=1,
+    )
+
+    # Test that _response field matches report field
+    assert hasattr(output, "_response")
+    assert output._response == output.report
+    assert output._response == "This is a detailed research report on the topic."
+
+
+@pytest.mark.asyncio
+async def test_search_agent_response_field_none_report():
+    """Test that _response field handles None report gracefully."""
+    # Create output with None report
+    output = LitSearchAgentOutputSchema(
+        answer="Short answer",
+        report=None,
+        results=[
+            SearchResultItem(
+                query="test",
+                url="http://example.com/1",
+                title="Test Paper",
+                content="Test content",
+            ),
+        ],
+        iterations_performed=1,
+    )
+
+    # Test that _response field is falsy when report is None
+    assert hasattr(output, "_response")
+    assert not output._response
 
 
 if __name__ == "__main__":

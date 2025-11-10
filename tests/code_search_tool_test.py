@@ -220,3 +220,33 @@ async def test_code_search_agent(code_search_agent):
     input_params = LitSearchAgentInputSchema(query="weather prediction", search_mode=SearchMode.FAST)
     output = await code_search_agent.arun(input_params)
     validate_output_structure(output)
+
+
+"""Test10: Code Search Agent Response Field"""
+
+
+@pytest.mark.asyncio
+async def test_code_search_agent_response_field():
+    """Test that _response field returns the same value as report field."""
+    from akd.agents.search._base import SearchAgentOutputSchema
+    from akd.structures import SearchResultItem
+
+    # Create a simple output schema instance
+    output = SearchAgentOutputSchema(
+        answer="Brief answer about weather prediction code",
+        report="This is a detailed report on weather prediction code repositories.",
+        results=[
+            SearchResultItem(
+                query="weather prediction",
+                url="http://github.com/example/weather",
+                title="Weather Prediction Code",
+                content="Code for weather forecasting",
+            ),
+        ],
+        iterations_performed=1,
+    )
+
+    # Test that _response field matches report field
+    assert hasattr(output, "_response")
+    assert output._response == output.report
+    assert output._response == "This is a detailed report on weather prediction code repositories."

@@ -27,9 +27,9 @@ class SearchMode(str, Enum):
         """Convert search mode to maximum number of results."""
         mapping = {
             SearchMode.FAST: 10,
-            SearchMode.MEDIUM: 20,
-            SearchMode.LONG: 50,
-            SearchMode.EXTENSIVE: 100,
+            SearchMode.MEDIUM: 50,
+            SearchMode.LONG: 100,
+            SearchMode.EXTENSIVE: 200,
         }
         return mapping[self]
 
@@ -47,6 +47,8 @@ class SearchAgentInputSchema(InputSchema):
 
 class SearchAgentOutputSchema(OutputSchema):
     """Base output schema for literature search agents."""
+
+    __response_field__ = "report"
 
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
     report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
@@ -68,6 +70,11 @@ class SearchAgentConfig(BaseAgentConfig):
     max_iterations: int = Field(
         default=5,
         description="Maximum number of search iterations",
+    )
+    # used to limit results per iteration
+    max_results: int = Field(
+        default=50,
+        description="Maximum number of search results to retrieve by the agent (hard limit). This is not used for capping search tool results, which is controlled by SearchMode or 'search_max_results' from kwargs.",
     )
 
 
