@@ -128,12 +128,8 @@ class ControlledSearchAgentConfig(LitSearchAgentConfig):
     )
 
     # Reranker configuration
-    search_result_reranking: bool = Field(
-        default=False,
-        description="Enable reranking of search results.",
-    )
     reranker_type: RerankerType = Field(
-        default="cross_encoder",
+        default="none",
         description="The type of reranker to use for combining results from multiple search tools.",
     )
     reranker_config: RerankerToolConfig = Field(
@@ -879,13 +875,12 @@ class ControlledSearchAgent(LitBaseAgent):
 
             all_results.extend(current_results)
 
-            if self.config.search_result_reranking:
-                reranker_input = RerankerToolInputSchema(
-                    query=params.query,
-                    results=all_results,
-                )
-                reranked_results = await self.reranker.arun(reranker_input)
-                all_results = reranked_results.results
+            reranker_input = RerankerToolInputSchema(
+                query=params.query,
+                results=all_results,
+            )
+            reranked_results = await self.reranker.arun(reranker_input)
+            all_results = reranked_results.results
 
             # Update accumulated content after each iteration
             new_content = self._accumulate_content(current_results)

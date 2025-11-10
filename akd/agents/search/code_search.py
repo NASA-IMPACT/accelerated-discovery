@@ -67,9 +67,9 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     relevancy_prompt: str = Field(default=CODE_RELEVANCY_PROMPT, description="System prompt for relevancy agent")
 
     # Reranker configuration
-    search_result_reranking: bool = Field(
-        default=True,
-        description="Enable reranking of search results.",
+    reranker_type: RerankerType = Field(
+        default="cross_encoder",
+        description="The type of reranker to use for combining results from multiple search tools.",
     )
 
 
