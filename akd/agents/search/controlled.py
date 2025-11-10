@@ -36,13 +36,7 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessor,
     LinkRelevancyAssessorConfig,
 )
-from akd.tools.reranker import (
-    RerankerTool,
-    RerankerToolConfig,
-    RerankerType,
-    create_reranker,
-    RerankerToolInputSchema,
-)
+from akd.tools.reranker import RerankerToolInputSchema
 from akd.tools.search import SearxNGSearchTool
 from akd.tools.search._base import QueryFocusStrategy, SearchToolInputSchema
 
@@ -127,18 +121,6 @@ class ControlledSearchAgentConfig(LitSearchAgentConfig):
         description="Relevancy score threshold to trigger full content fetching",
     )
 
-    # Reranker configuration
-    reranker_type: RerankerType = Field(
-        default="none",
-        description="The type of reranker to use for combining results from multiple search tools.",
-    )
-    reranker_config: RerankerToolConfig = Field(
-        default_factory=lambda: RerankerToolConfig(
-            model_name="cross-encoder/ms-marco-MiniLM-L12-v2",
-        ),
-        description="Configuration for the reranker tool.",
-    )
-
 
 class ControlledSearchAgent(LitBaseAgent):
     """
@@ -173,12 +155,6 @@ class ControlledSearchAgent(LitBaseAgent):
         self.relevancy_agent = relevancy_agent or MultiRubricRelevancyAgent()
         self.query_agent = query_agent or QueryAgent()
         self.followup_query_agent = followup_query_agent or FollowUpQueryAgent()
-
-        self.reranker: RerankerTool = create_reranker(
-            reranker_type=self.reranker_type,  # type: ignore
-            config=self.reranker_config,  # type: ignore
-            debug=self.debug,
-        )
 
         # Track rubric patterns for agentic learning
         self.rubric_history = []
