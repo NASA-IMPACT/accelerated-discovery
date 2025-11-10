@@ -646,12 +646,43 @@ Natural Language Query
        ↓
 [5] Search Variations Generation (0-5 variations per approach)
        ↓
-[6] Collection Search & Ranking (parallel execution across all variations)
+[6] Collection Retrieval & Pagination (retrieve ALL available collections from CMR)
        ↓
-[7] Granule Search (parallel across collections)
+[7] Collection Ranking & Filtering (select top collections for final results)
+       ↓
+[8] Granule Search (parallel across collections)
        ↓
 Data Files with Download URLs
 ```
+
+### CMR Collection Retrieval with Pagination
+
+**Default Behavior (NEW)**: The system now retrieves **ALL available collections** from CMR via automatic pagination, not just the first page.
+
+**Configuration**: `CMRHandlerConfig(retrieve_all_cmr_collections=True)` (default)
+
+**How It Works**:
+1. Execute CMR query → Get first page (20 collections) + `total_hits` (e.g., 725)
+2. Automatically paginate through remaining pages until all collections retrieved
+3. Store ALL collections in `all_collections_from_cmr` field
+4. Continue with existing ranking pipeline using top 5 per query
+5. Final output includes BOTH all retrieved collections AND ranked subset
+
+**Example**:
+```python
+# CMR reports 725 matching collections
+# System automatically paginates: Page 1 (20), Page 2 (20), ... Page 37 (5)
+# Result:
+{
+  "all_collections_from_cmr": [725 collections],  # ALL retrieved
+  "data_results": [25 collections],                # Final ranked (subset)
+  "total_results_from_cmr": 725                   # Accurate count
+}
+```
+
+**Performance**: CMR queries are fast (~100-200ms per page), so pagination overhead is minimal. A query with 500 results adds ~5-10 seconds total.
+
+**Disable for Testing**: Use `--no-retrieve-all` CLI flag to retrieve only first page (faster for development/testing)
 
 ### Detailed Step-by-Step Flow
 
@@ -877,34 +908,71 @@ cmr_config = CMRHandlerConfig(include_keyword_only_approach=False)
 }
 ```
 
-#### Step 6: Collection Search & Ranking (Approach-Aware Pipeline)
-**Execution**: `akd/agents/data_search/handlers/cmr_handler.py` (CMR-specific implementation)
-**Ranking**: `akd/agents/data_search/handlers/cmr_handler.py` (_rank_collections method)
+#### Step 6: Collection Retrieval & Pagination
+**Location**: `akd/agents/data_search/handlers/cmr/handler.py` (_execute_single_query, _execute_searchable_queries)
 
-The collection search and ranking process now uses a four-stage approach-aware pipeline for better scalability and quality:
+**NEW: Full Pagination Support**
 
-**Stage 1: Per-Query Collection Limiting**
-Location: `akd/agents/data_search/handlers/cmr_handler.py` (_execute_searchable_queries)
+The system now retrieves ALL available collections from CMR via automatic pagination (default behavior).
 
+**Per-Query Retrieval with Pagination**:
 ```python
-# Group queries by source approach
-for query in searchable_queries:
-    approach_idx = query.approach_index  # Each query tagged with approach
-    approach_queries[approach_idx].append(query)
+# Execute query and paginate through all results
+all_collections_retrieved = []
+page_num = 1
+total_hits = 0
 
-# Execute queries grouped by approach
-for approach_idx, queries in approach_queries.items():
-    for query in queries:
-        result = await collection_search_tool.arun(query)
-        # Limit to top N per query (default: 5)
-        limited = result.collections[:config.collections_per_query]
-        approach_collections[approach_idx].extend(limited)
+while True:
+    search_params["page_num"] = page_num
+    result = await collection_search_tool.arun(search_params)
+
+    total_hits = result.total_hits
+    page_collections = result.collections
+
+    if not page_collections:
+        break
+
+    all_collections_retrieved.extend(page_collections)
+
+    if len(all_collections_retrieved) >= total_hits:
+        break
+
+    page_num += 1
+
+# Store ALL collections + limited subset for ranking
+return {
+    "all_collections": all_collections_retrieved,  # ALL retrieved (e.g., 725)
+    "collections": all_collections_retrieved[:5],  # Top 5 for ranking pipeline
+}
 ```
 
-**Output**: Up to 5 approaches (4 LLM + 1 keyword-only) × 3 queries/approach × 5 collections/query = max 75 collections grouped by approach
+**Aggregation Across Queries**:
+```python
+# Collect ALL collections across all queries (before any limits)
+all_collections_unranked = []
+for result in query_results:
+    all_collections_unranked.extend(result["all_collections"])  # ALL retrieved
+    approach_collections[approach_idx].extend(result["collections"][:5])  # Limited for ranking
+
+# Output both sets
+return approach_collections, all_collections_unranked
+```
+
+**Output**:
+- `all_collections_unranked`: ALL collections retrieved (e.g., 2,847 total across all queries)
+- `approach_collections`: Limited subset for ranking (up to 5 approaches × 3 queries × 5 collections = max 75)
+
+#### Step 7: Collection Ranking & Filtering (Approach-Aware Pipeline)
+**Location**: `akd/agents/data_search/handlers/cmr/handler.py` (_rank_collections method)
+
+The ranking pipeline operates on the limited subset from Step 6 for performance, while all retrieved collections are preserved separately.
+
+**Stage 1: Per-Query Collection Limiting** (Already Applied in Step 6)
+- Each query contributes top 5 collections to ranking pipeline
+- Full collection set stored separately in `all_collections_from_cmr`
 
 **Stage 2: Per-Approach Deduplication**
-Location: `akd/agents/data_search/handlers/cmr_handler.py` (_deduplicate_approach_collections)
+Location: `akd/agents/data_search/handlers/cmr/handler.py` (_deduplicate_approach_collections)
 
 ```python
 global_seen_ids = set()
@@ -1066,9 +1134,22 @@ Query variations generated:
 4. Instrument=HLS, Keywords="land cover classification"
 ```
 
-**Step 6: Collection Search & Ranking**
+**Step 6: Collection Retrieval & Pagination** (NEW)
 ```
-Collections found: 15 total
+Query 1: CMR reports 145 matching collections
+  → Pagination: Pages 1-8 retrieved (145 collections total)
+Query 2: CMR reports 89 matching collections
+  → Pagination: Pages 1-5 retrieved (89 collections total)
+Query 3: CMR reports 203 matching collections
+  → Pagination: Pages 1-11 retrieved (203 collections total)
+
+Total retrieved: 437 collections (ALL available from CMR)
+For ranking pipeline: 15 collections (5 per query × 3 queries)
+```
+
+**Step 7: Collection Ranking & Filtering**
+```
+Collections for ranking: 15 total
 After approach filtering: 8 collections (4 per approach)
 Final ranking: Top 5 collections selected
 - Rank 1: HLS Landsat 8 OLI Surface Reflectance (30m, weekly)
@@ -1076,7 +1157,7 @@ Final ranking: Top 5 collections selected
 - Rank 3: MODIS Land Cover Type (500m, annual - filtered due to resolution)
 ```
 
-**Step 7: Granule Search**
+**Step 8: Granule Search**
 ```
 Granules found: 234 data files
 - Collection: HLS L30 - 145 granules
@@ -1096,10 +1177,10 @@ Total downloadable data: 234 files with download URLs
           "decomposition": {"title": "Land cover classification", "scientific_justification": "..."},
           "query_approaches": [...],
           "searchable_queries": [...],
-          "collections": [5 ranked collections],
-          "granules": [234 data files],
-          "total_collections_found": 15,
-          "total_granules_found": 234
+          "all_collections_from_cmr": [437 collections],  // NEW: ALL retrieved via pagination
+          "data_results": [5 ranked collections],         // Final ranked subset
+          "total_results_from_cmr": 437,                 // Total retrieved
+          "total_results_after_filtering": 5             // Final count
         }
       ]
     }
@@ -1556,18 +1637,23 @@ class TopicResult(BaseModel):
 ```
 
 ### Decomposition Result Structure
-**Location**: `akd/agents/data_search/_base.py:84`
+**Location**: `akd/agents/data_search/_base.py:88`
 
 ```python
 class DecompositionResult(BaseModel):
     decomposition: Dict[str, Any]  # Scientific decomposition
     query_approaches: List[Dict[str, Any]]  # Known parameter approaches
     searchable_queries: List[Dict[str, Any]]  # Complete search queries
-    collections: List[Dict[str, Any]]  # Ranked collections
-    granules: List[Dict[str, Any]]  # Final data files
-    total_collections_found: int
-    total_granules_found: int
+    all_collections_from_cmr: List[Dict[str, Any]]  # NEW: ALL collections retrieved via pagination
+    data_results: List[Dict[str, Any]]  # Final ranked collections (subset of all_collections)
+    total_results_from_cmr: int  # Count of all_collections_from_cmr
+    total_results_after_filtering: int  # Count of data_results
 ```
+
+**Key Fields**:
+- `all_collections_from_cmr`: **NEW** - Contains ALL collections retrieved from CMR via pagination (unfiltered, unranked)
+- `data_results`: Final ranked collections (typically 25) - subset of `all_collections_from_cmr`
+- This dual structure enables both complete retrieval logging and efficient ranking
 
 ### Tool Input/Output Schemas
 
@@ -1792,9 +1878,10 @@ class CMRHandlerConfig(BaseModel):
     collection_search_page_size: int = 20
     granule_search_page_size: int = 50
     include_keyword_only_approach: bool = True  # Add keyword-only variant (no instrument/platform)
+    retrieve_all_cmr_collections: bool = True   # NEW: Paginate to retrieve ALL collections (default: enabled)
 
     # Approach-aware ranking configuration
-    collections_per_query: int = 5           # Top N from each CMR query
+    collections_per_query: int = 5           # Top N from each CMR query (for ranking pipeline)
     max_collections_per_approach: int = 5    # Top N per approach after filtering
     final_collection_count: int = 25         # Final ranked output size
 

@@ -71,6 +71,14 @@ class CMRHandlerConfig(DataSearchToolConfig):
         default=True,
         description="Add keyword-only approach (no instrument/platform) based on first LLM approach to catch collections with incomplete metadata",
     )
+    retrieve_all_cmr_collections: bool = Field(
+        default=True,
+        description="Retrieve all available collections from CMR via pagination (not just first page). When True, paginates through all results. When False, only retrieves first page.",
+    )
+    skip_ranking_and_filtering: bool = Field(
+        default=False,
+        description="Skip LLM-based approach filtering and final ranking stages. Returns all deduplicated collections from all_collections_from_cmr. Use for baseline evaluations and raw CMR analysis.",
+    )
 
     # Component model configuration
     known_parameters_model: str = Field(

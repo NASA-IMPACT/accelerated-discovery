@@ -286,6 +286,7 @@ class CMRHandler(BaseHandler):
             approach_collections,
             approach_collections_by_query,
             query_execution_logs,
+            all_collections_unranked,
         ) = await self._execute_searchable_queries(
             queries_to_execute,
             params,
@@ -332,6 +333,7 @@ class CMRHandler(BaseHandler):
             searchable_queries=augmented_queries,  # Now includes execution metadata
             data_results=ranked_collections,  # Collections for now
             total_results_from_repository=total_cmr,
+            all_collections_from_cmr=all_collections_unranked,  # NEW: ALL retrieved collections
             total_results_after_filtering=len(ranked_collections),
             enum_corrections=all_corrections,  # Instrument/platform corrections metadata
             ranking_fallbacks=ranking_metadata
@@ -377,32 +379,82 @@ class CMRHandler(BaseHandler):
         try:
             print(f"DEBUG: CMR Search Parameters: {search_params}")
 
-            # Execute search
-            tool_input = self.collection_search_tool.input_schema(**search_params)
-            result = await self.collection_search_tool.arun(tool_input)
+            # Retrieve collections - paginate if config enabled
+            all_collections_retrieved = []
+            total_hits = 0
 
-            # Extract and limit collections per query
-            collections = []
-            total_from_cmr = 0
-            if hasattr(result, "collections") and result.collections:
-                total_from_cmr = len(result.collections)
-                collections = result.collections[: self.config.collections_per_query]
+            if self.config.retrieve_all_cmr_collections:
+                # Paginate through all results
+                page_num = 1
+                while True:
+                    search_params["page_num"] = page_num
+                    tool_input = self.collection_search_tool.input_schema(
+                        **search_params,
+                    )
+                    result = await self.collection_search_tool.arun(tool_input)
+
+                    # Update total_hits from CMR response
+                    if hasattr(result, "total_hits"):
+                        total_hits = result.total_hits
+
+                    # Get collections from this page
+                    page_collections = (
+                        result.collections
+                        if hasattr(result, "collections") and result.collections
+                        else []
+                    )
+
+                    if not page_collections:
+                        # No more results
+                        break
+
+                    all_collections_retrieved.extend(page_collections)
+
+                    print(
+                        f"DEBUG: Page {page_num} retrieved {len(page_collections)} collections (total so far: {len(all_collections_retrieved)}/{total_hits})",
+                    )
+
+                    # Check if we've retrieved all available
+                    if len(all_collections_retrieved) >= total_hits:
+                        break
+
+                    page_num += 1
+
+                print(
+                    f"DEBUG: Pagination complete - retrieved {len(all_collections_retrieved)} of {total_hits} total collections",
+                )
+            else:
+                # Single page retrieval (legacy behavior)
+                tool_input = self.collection_search_tool.input_schema(**search_params)
+                result = await self.collection_search_tool.arun(tool_input)
+
+                if hasattr(result, "collections") and result.collections:
+                    all_collections_retrieved = result.collections
+                if hasattr(result, "total_hits"):
+                    total_hits = result.total_hits
+
+            # Limit collections for ranking pipeline
+            collections_for_ranking = all_collections_retrieved[
+                : self.config.collections_per_query
+            ]
 
             print(
-                f"DEBUG: CMR returned {len(collections)} collections for approach {approach_idx}",
+                f"DEBUG: Using {len(collections_for_ranking)} collections for ranking (from {len(all_collections_retrieved)} retrieved) for approach {approach_idx}",
             )
-            if collections:
+            if collections_for_ranking:
                 print(
-                    f"DEBUG: First collection title: {collections[0].get('entry_title', 'N/A')[:80]}",
+                    f"DEBUG: First collection title: {collections_for_ranking[0].get('entry_title', 'N/A')[:80]}",
                 )
 
             return {
                 "approach_idx": approach_idx,
-                "collections": collections,
+                "all_collections": all_collections_retrieved,  # NEW: All retrieved collections
+                "collections": collections_for_ranking,  # Collections for ranking (limited)
                 "query_object": query,
                 "execution_metadata": {
                     "mcp_parameters_sent": search_params,
-                    "cmr_collections_returned": total_from_cmr,
+                    "cmr_collections_returned": len(all_collections_retrieved),
+                    "cmr_total_hits": total_hits,
                 },
             }
 
@@ -411,11 +463,13 @@ class CMRHandler(BaseHandler):
             # Return empty result on failure
             return {
                 "approach_idx": approach_idx,
+                "all_collections": [],
                 "collections": [],
                 "query_object": query,
                 "execution_metadata": {
                     "mcp_parameters_sent": search_params,
                     "cmr_collections_returned": 0,
+                    "cmr_total_hits": 0,
                 },
             }
 
@@ -427,6 +481,7 @@ class CMRHandler(BaseHandler):
         Dict[int, List[Dict[str, Any]]],
         Dict[int, List[List[Dict[str, Any]]]],
         List[Dict[str, Any]],
+        List[Dict[str, Any]],
     ]:
         """
         Execute searchable queries in parallel and return collections grouped by approach.
@@ -436,10 +491,11 @@ class CMRHandler(BaseHandler):
             params: Search parameters
 
         Returns:
-            Tuple of (approach_collections, approach_collections_by_query, execution_logs)
-            - approach_collections: Dictionary mapping approach_index to flat list of collections
+            Tuple of (approach_collections, approach_collections_by_query, execution_logs, all_collections_unranked)
+            - approach_collections: Dictionary mapping approach_index to flat list of collections (limited for ranking)
             - approach_collections_by_query: Dictionary mapping approach_index to list of query result lists
             - execution_logs: List of execution metadata for each query
+            - all_collections_unranked: List of ALL collections retrieved from CMR (before any limits)
         """
         # Create parallel tasks for all queries across all approaches
         query_tasks = []
@@ -451,8 +507,9 @@ class CMRHandler(BaseHandler):
         results = await asyncio.gather(*query_tasks, return_exceptions=True)
 
         # Group results by approach and collect execution logs
-        approach_collections = {}  # approach_index -> [all collections flattened]
+        approach_collections = {}  # approach_index -> [collections for ranking - limited]
         approach_collections_by_query = {}  # approach_index -> [[query0], [query1], ...]
+        all_collections_unranked = []  # ALL collections retrieved from CMR
         execution_logs = []
 
         for result in results:
@@ -461,9 +518,13 @@ class CMRHandler(BaseHandler):
                 continue
 
             approach_idx = result["approach_idx"]
-            collections = result["collections"]
+            collections = result["collections"]  # Limited for ranking
+            all_collections = result.get("all_collections", [])  # ALL retrieved
 
-            # Track flat list (for normal flow)
+            # Track ALL retrieved collections (NEW)
+            all_collections_unranked.extend(all_collections)
+
+            # Track flat list (for normal ranking flow - limited)
             if approach_idx not in approach_collections:
                 approach_collections[approach_idx] = []
             approach_collections[approach_idx].extend(collections)
@@ -481,7 +542,12 @@ class CMRHandler(BaseHandler):
                 },
             )
 
-        return approach_collections, approach_collections_by_query, execution_logs
+        return (
+            approach_collections,
+            approach_collections_by_query,
+            execution_logs,
+            all_collections_unranked,
+        )
 
     def _augment_queries_with_execution_metadata(
         self,
@@ -808,6 +874,51 @@ class CMRHandler(BaseHandler):
         if not approach_collections:
             print("DEBUG: No approach_collections, returning empty list")
             return [], {}
+
+        # Early exit if ranking/filtering disabled
+        if self.config.skip_ranking_and_filtering:
+            logger.info(
+                f"[{run_id}] Skipping ranking/filtering (skip_ranking_and_filtering=True) - "
+                f"using all deduplicated collections from CMR pagination",
+            )
+
+            # Deduplicate approach collections (keep this step)
+            deduplicated_flat = {}
+            for approach_idx, collections in approach_collections.items():
+                seen_ids = set()
+                deduped = []
+                for coll in collections:
+                    concept_id = coll.get("concept_id")
+                    if concept_id and concept_id not in seen_ids:
+                        seen_ids.add(concept_id)
+                        deduped.append(coll)
+                deduplicated_flat[approach_idx] = deduped
+
+            # Flatten all approaches into single list (no ranking)
+            all_collections = []
+            for approach_idx in sorted(deduplicated_flat.keys()):
+                all_collections.extend(deduplicated_flat[approach_idx])
+
+            # Return ALL deduplicated collections (no limit)
+            ranking_metadata = {
+                "approach_filtering": {
+                    "enabled": False,
+                    "reason": "skip_ranking_and_filtering=True",
+                },
+                "final_ranking": {
+                    "enabled": False,
+                    "reason": "skip_ranking_and_filtering=True",
+                },
+                "total_before_filtering": len(all_collections),
+                "total_after_filtering": len(all_collections),
+                "total_after_ranking": len(all_collections),
+            }
+
+            logger.info(
+                f"[{run_id}] Returning {len(all_collections)} deduplicated collections (unranked)",
+            )
+
+            return all_collections, ranking_metadata
 
         # Stage 1: Per-approach deduplication (preserving query grouping)
         deduplicated_grouped = self._deduplicate_approach_collections_grouped(
