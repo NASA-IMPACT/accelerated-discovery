@@ -36,6 +36,7 @@ from akd.tools.link_relevancy_assessor import (
     LinkRelevancyAssessor,
     LinkRelevancyAssessorConfig,
 )
+from akd.tools.reranker import RerankerToolInputSchema
 from akd.tools.search import SearxNGSearchTool
 from akd.tools.search._base import QueryFocusStrategy, SearchToolInputSchema
 
@@ -849,6 +850,13 @@ class ControlledSearchAgent(LitBaseAgent):
                     )
 
             all_results.extend(current_results)
+
+            reranker_input = RerankerToolInputSchema(
+                query=params.query,
+                results=all_results,
+            )
+            reranked_results = await self.reranker.arun(reranker_input)
+            all_results = reranked_results.results
 
             # Update accumulated content after each iteration
             new_content = self._accumulate_content(current_results)

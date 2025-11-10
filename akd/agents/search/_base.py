@@ -11,6 +11,12 @@ from pydantic import BaseModel, Field
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResultItem
+from akd.tools.reranker import (
+    RerankerTool,
+    RerankerToolConfig,
+    RerankerType,
+    create_reranker,
+)
 
 from .answer import QuestionAnsweringAgent, QuestionAnsweringAgentOutputSchema
 
@@ -77,6 +83,18 @@ class SearchAgentConfig(BaseAgentConfig):
         description="Maximum number of search results to retrieve by the agent (hard limit). This is not used for capping search tool results, which is controlled by SearchMode or 'search_max_results' from kwargs.",
     )
 
+    # Reranker configuration
+    reranker_type: RerankerType = Field(
+        default="none",
+        description="The type of reranker to use for combining results from multiple search tools.",
+    )
+    reranker_config: RerankerToolConfig = Field(
+        default_factory=lambda: RerankerToolConfig(
+            model_name="cross-encoder/ms-marco-MiniLM-L12-v2",
+        ),
+        description="Configuration for the reranker tool.",
+    )
+
 
 class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSchema](
     BaseAgent[TInput, TOutput],
@@ -95,6 +113,11 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
     ):
         super().__init__(config=config, debug=debug)
         self.answer_agent = answer_agent or QuestionAnsweringAgent()
+        self.reranker: RerankerTool = create_reranker(
+            reranker_type=self.config.reranker_type,
+            config=self.config.reranker_config,
+            debug=self.debug,
+        )
 
     async def get_response_async(
         self,
