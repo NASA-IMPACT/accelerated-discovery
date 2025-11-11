@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
-from akd.structures import SearchResultItem
+from akd.structures import SearchResult
 from akd.tools.reranker import (
     RerankerTool,
     RerankerToolConfig,
@@ -58,7 +58,7 @@ class SearchAgentOutputSchema(OutputSchema):
 
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
     report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
-    results: list[SearchResultItem] = Field(..., description="List of search results")
+    results: list[SearchResult] = Field(..., description="List of search results")
     iterations_performed: int = Field(
         default=1,
         description="Number of search iterations performed",
@@ -140,7 +140,7 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
     async def _generate_answer(
         self,
         query: str,
-        search_results: List[SearchResultItem],
+        search_results: list[SearchResult],
         additional_context: str | None = None,
         **kwargs,
     ) -> QuestionAnsweringAgentOutputSchema:
@@ -170,7 +170,7 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
     async def _generate_report(
         self,
         query: str,
-        results: List[SearchResultItem],
+        results: list[SearchResult],
         **kwargs,
     ) -> str:
         """

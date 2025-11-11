@@ -2,14 +2,14 @@ from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import LiteLLMInstructorBaseAgent
-from akd.structures import SearchResultItem
+from akd.structures import SearchResult
 
 
 class QuestionAnsweringAgentInputSchema(InputSchema):
     """Input schema for the Question Answering agent to answer query based on search results."""
 
     query: str = Field(..., description="The query to answer")
-    search_results: list[SearchResultItem] = Field(..., description="The search results to use for answering the query")
+    search_results: list[SearchResult] = Field(..., description="The search results to use for answering the query")
     additional_context: str | None = Field(
         None,
         description="Any additional context to consider while answering the query",
