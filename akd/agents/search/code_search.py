@@ -71,6 +71,12 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
         default=False,
         description="Enable per-link relevancy assessment",
     )
+    
+    # Reranker configuration
+    reranker_type: RerankerType = Field(
+        default="cross_encoder",
+        description="The type of reranker to use for combining results from multiple search tools.",
+    )
 
 
 class CodeSearchAgent(ControlledSearchAgent):

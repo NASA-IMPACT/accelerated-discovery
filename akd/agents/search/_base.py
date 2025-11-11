@@ -11,6 +11,12 @@ from pydantic import BaseModel, Field
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResultItem
+from akd.tools.reranker import (
+    RerankerTool,
+    RerankerToolConfig,
+    RerankerType,
+    create_reranker,
+)
 
 from .answer import QuestionAnsweringAgent, QuestionAnsweringAgentOutputSchema
 
@@ -27,9 +33,9 @@ class SearchMode(str, Enum):
         """Convert search mode to maximum number of results."""
         mapping = {
             SearchMode.FAST: 10,
-            SearchMode.MEDIUM: 20,
-            SearchMode.LONG: 50,
-            SearchMode.EXTENSIVE: 100,
+            SearchMode.MEDIUM: 50,
+            SearchMode.LONG: 100,
+            SearchMode.EXTENSIVE: 200,
         }
         return mapping[self]
 
@@ -47,6 +53,8 @@ class SearchAgentInputSchema(InputSchema):
 
 class SearchAgentOutputSchema(OutputSchema):
     """Base output schema for literature search agents."""
+
+    __response_field__ = "report"
 
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
     report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
@@ -69,6 +77,23 @@ class SearchAgentConfig(BaseAgentConfig):
         default=5,
         description="Maximum number of search iterations",
     )
+    # used to limit results per iteration
+    max_results: int = Field(
+        default=50,
+        description="Maximum number of search results to retrieve by the agent (hard limit). This is not used for capping search tool results, which is controlled by SearchMode or 'search_max_results' from kwargs.",
+    )
+
+    # Reranker configuration
+    reranker_type: RerankerType = Field(
+        default="none",
+        description="The type of reranker to use for combining results from multiple search tools.",
+    )
+    reranker_config: RerankerToolConfig = Field(
+        default_factory=lambda: RerankerToolConfig(
+            model_name="cross-encoder/ms-marco-MiniLM-L12-v2",
+        ),
+        description="Configuration for the reranker tool.",
+    )
 
 
 class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSchema](
@@ -88,6 +113,11 @@ class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSche
     ):
         super().__init__(config=config, debug=debug)
         self.answer_agent = answer_agent or QuestionAnsweringAgent()
+        self.reranker: RerankerTool = create_reranker(
+            reranker_type=self.config.reranker_type,
+            config=self.config.reranker_config,
+            debug=self.debug,
+        )
 
     async def get_response_async(
         self,

@@ -162,8 +162,8 @@ class SearxNGSearchTool(SearchTool):
                 search_results.append(
                     SearchResultItem(
                         url=result.pop("url", None),
-                        title=result.pop("title", "Untitled"),
-                        content=result.pop("content", ""),
+                        title=result.pop("title", "Untitled") or "",
+                        content=result.pop("content", "") or "",
                         query=query,
                         pdf_url=result.pop("pdf_url", None),
                         category=result.pop("category", None),
