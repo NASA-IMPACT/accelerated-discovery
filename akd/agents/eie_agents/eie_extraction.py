@@ -1,4 +1,5 @@
-from typing import Optional
+from datetime import date
+from typing import Dict, Optional
 
 from langchain_openai import ChatOpenAI
 from loguru import logger
@@ -56,9 +57,9 @@ class ExtractOutputSchema(OutputSchema):
         description="The periodicity or frequency of the dataset requested (e.g., daily, monthly, yearly, all).",
     )
 
-    temporal_extent: Optional[TemporalExtent] = Field(
-        default=None,
-        description="Time interval (start and end dates) extracted from the query.",
+    temporal_extent: Optional[Dict] = Field(
+        default={"dates": {"start": "1900-01-01", "end": date.today().isoformat()}},
+        description="Time interval or dates extracted from the query.",
     )
 
 
@@ -90,38 +91,38 @@ class ExtractAgent(BaseAgent):
         )
 
         prompt = f"""
-            You are an expert in geospatial data extraction.
-            Given a user query, extract the following structured fields:
+        You are an expert in geospatial data and temporal reasoning.
+        Given a user query, extract the following structured fields as a JSON object.
 
-            - dataset_type: the category of dataset (e.g. methane, population, nitrogen dioxide)
-            - location: the place or region (human-readable)
-            - bbox: the bounding box of the location in GeoJSON format (use None if unknown)
-            - frequency: the temporal frequency (e.g. daily, monthly, yearly, all)
-            - temporal_extent: JSON object with optional "start" and "end" fields (ISO 8601 format).
-                If only one date is provided, set it as both start and end.
-                Resolve any known dates, present dates, date references from current automatically
+        Fields to extract:
+        - dataset_type: Category of dataset (e.g. "methane", "population", "nitrogen dioxide").
+        - location: Human-readable place or region name.
+        - bbox: Bounding box of the location in GeoJSON format, or null if unknown.
+        - frequency: Temporal frequency of the data (e.g. "daily", "monthly", "yearly", "all").
+        - temporal_extent: Represents time information extracted from the query.
+            - If an interval is mentioned, use an object with "start" and "end" keys (ISO 8601 format).
+            Example: {{"start": "2019-01-01", "end": "2020-01-01"}}
+            - If one or more discrete dates are mentioned, use a list of ISO date strings.
+            Example: ["2021-06-01"] or ["2020-01-01", "2021-03-15"]
+            - If no date is provided, set this field to null.
+            - Resolve relative references such as "last year", "past month", or "present" using the current date.
 
-            Respond strictly in JSON format, like this:
-            {{
-            "dataset_type": "...",
-            "location": "...",
-            "bbox": "...",
-            "frequency": "...",
-            "temporal_extent": {{"start": "2019-01-01", "end": "2020-01-01"}}
-            }}
+        Respond strictly in **valid JSON format**, with no extra text or explanations.
 
-            User query:
-            {params.query}
-            """
+        User query:
+        {params.query}
+        """
 
         try:
+            print("Activating Extraction Agent...")
             response = await llm.ainvoke(prompt)
             content = getattr(response, "content", None)
+            print("content ", content)
 
-            # convert to a dictionary
-            import ast
+            import json
 
-            data = ast.literal_eval(content)
+            data = json.loads(content)
+            print("data ", data)
 
             # Validate and fill missing defaults
             return ExtractOutputSchema(
@@ -129,10 +130,7 @@ class ExtractAgent(BaseAgent):
                 location=data.get("location", "global"),
                 bbox=data.get("bbox", None),
                 frequency=data.get("frequency", "all"),
-                temporal_extent=TemporalExtent(
-                    start=data.get("temporal_extent").get("start"),
-                    end=data.get("temporal_extent").get("end"),
-                ),
+                temporal_extent={"dates": data.get("temporal_extent", {})},
             )
 
         except Exception as e:
@@ -143,6 +141,7 @@ class ExtractAgent(BaseAgent):
                 location="global",
                 bbox=None,
                 frequency="all",
+                temporal_extent={"dates": {"start": "1900-01-01", "end": date.today().isoformat()}},
             )
 
     async def _arun(self, params: ExtractInputSchema, **kwargs) -> ExtractOutputSchema:

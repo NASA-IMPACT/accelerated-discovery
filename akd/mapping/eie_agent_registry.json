@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "created_at": "2025-11-04T22:37:34.227191+00:00",
-  "updated_at": "2025-11-04T22:37:34.227234+00:00",
+  "created_at": "2025-11-11T20:22:21.118690+00:00",
+  "updated_at": "2025-11-11T20:22:21.118731+00:00",
   "agents": {
     "eie_extraction": {
       "agent_id": "eie_extraction",
@@ -57,108 +57,86 @@
           },
           {
             "name": "temporal_extent",
-            "type": "object",
-            "description": "Time interval (start and end dates) extracted from the query.",
-            "required": false,
-            "default": null,
-            "properties": {
-              "start": {
-                "type": "string",
-                "description": "Start date (ISO 8601 format: YYYY-MM-DD or YYYY).",
-                "required": false,
-                "default": null
-              },
-              "end": {
-                "type": "string",
-                "description": "End date (ISO 8601 format: YYYY-MM-DD or YYYY).",
-                "required": false,
-                "default": null
-              }
-            }
+            "type": "string",
+            "description": "Time interval or dates extracted from the query.",
+            "required": false
           }
-
         ]
       },
-      "tags": ["eie"],
-      "use_cases": ["Agent for eie extraction"],
+      "tags": [
+        "eie"
+      ],
+      "use_cases": [
+        "Agent for eie extraction"
+      ],
       "dependencies": []
     },
     "collection_search": {
       "agent_id": "collection_search",
       "name": "Collection Search",
-      "description": "STAC collections based on extracted parameters.",
-      "agent_class": "akd.agents.eie_agents.eie_extraction.CollectionSearchAgent",
+      "description": "Agent for collection search",
+      "agent_class": "akd.agents.eie_agents.collection_search.CollectionSearchAgent",
       "enabled": true,
-      "output_schema": {
-        "fields": [
-          {
-            "name": "response",
-            "type": "string",
-            "description": "Response with the results of matching STAC collections with metadata.",
-            "default": null
-          }
-        ]
-      },
       "input_schema": {
         "fields": [
           {
             "name": "dataset_type",
             "type": "string",
-            "description": "The dataset type extracted by the agent based on the query, e.g., methane, population, nitrogen dioxide.",
-            "required": false,
-            "default": "all",
+            "description": "Dataset type passed from extraction agent",
+            "required": true,
+            "default": null,
             "items_type": null
           },
           {
             "name": "location",
             "type": "string",
-            "description": "Human-readable location or place extracted by the agent based on the query.",
-            "required": false,
-            "default": "global",
+            "description": "Location passed from extraction agent",
+            "required": true,
+            "default": null,
             "items_type": null
           },
           {
             "name": "bbox",
             "type": "string",
-            "description": "A GeoJSON string representing the bounding box coordinates of the location.",
-            "required": false,
+            "description": "A GeoJSON string representing the bounding box coordinates of the location passed from extraction agent",
+            "required": true,
             "default": null,
             "items_type": null
           },
           {
             "name": "frequency",
             "type": "string",
-            "description": "The periodicity or frequency of the dataset requested (e.g., daily, monthly, yearly, all).",
-            "required": false,
-            "default": "all",
+            "description": "Frequency passed from extraction agent",
+            "required": true,
+            "default": null,
             "items_type": null
           },
           {
             "name": "temporal_extent",
-            "type": "object",
-            "description": "Time interval (start and end dates) extracted from the query.",
-            "required": false,
-            "default": null,
-            "properties": {
-              "start": {
-                "type": "string",
-                "description": "Start date (ISO 8601 format: YYYY-MM-DD or YYYY).",
-                "required": false,
-                "default": null
-              },
-              "end": {
-                "type": "string",
-                "description": "End date (ISO 8601 format: YYYY-MM-DD or YYYY).",
-                "required": false,
-                "default": null
-              }
-            }
+            "type": "string",
+            "description": "Time interval or dates passed from extraction agent",
+            "required": true
           }
-
         ]
       },
-      "tags": ["eie"],
-      "use_cases": ["Agent for stac collection search"],
+      "output_schema": {
+        "fields": [
+          {
+            "name": "response",
+            "type": "string",
+            "description": "Response with the results of matching STAC collections with metadata.",
+            "required": false,
+            "default": null,
+            "items_type": null
+          }
+        ]
+      },
+      "tags": [
+        "collection"
+      ],
+      "use_cases": [
+        "Agent for collection search"
+      ],
       "dependencies": []
     }
   }

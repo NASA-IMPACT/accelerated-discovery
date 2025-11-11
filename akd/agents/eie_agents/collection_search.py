@@ -1,4 +1,5 @@
-from typing import Optional
+from datetime import date
+from typing import Dict, List, Optional
 
 import httpx
 from langchain_openai import ChatOpenAI
@@ -7,18 +8,21 @@ from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
-from akd.agents.eie_agents.eie_extraction import TemporalExtent
 
 
 class CollectionSearchInputSchema(InputSchema):
     """Input schema for Collection Search agent"""
 
-    dataset_type: str = Field(..., description="Dataset type extracted from user query.")
-    location: str = Field(..., description="Location extracted from user query.")
-    frequency: str = Field(..., description="Frequency extracted from user query.")
-    temporal_extent: Optional[TemporalExtent] = Field(
+    dataset_type: str = Field(..., description="Dataset type passed from extraction agent")
+    location: str = Field(..., description="Location passed from extraction agent")
+    bbox: Optional[str] = Field(
         default=None,
-        description="Time interval (start and end dates) extracted from the query.",
+        description="A GeoJSON string representing the bounding box coordinates of the location passed from extraction agent",
+    )
+    frequency: str = Field(..., description="Frequency passed from extraction agent")
+    temporal_extent: Optional[Dict] = Field(
+        default={"dates": {"start": "1900-01-01", "end": date.today().isoformat()}},
+        description="Time interval or dates passed from extraction agent",
     )
 
 
@@ -34,6 +38,13 @@ class CollectionSearchOutputSchema(OutputSchema):
 class CollectionSearchAgentConfig(BaseAgentConfig):
     """Config  for Collection Search agent"""
 
+    stac_roots: List[str] = Field(
+        default_factory=lambda: [
+            "https://dev.ghg.center/api/stac",
+            "https://openveda.cloud/api/stac",
+        ],
+        description="List of STAC API endpoints to query.",
+    )
     stac_root: str = Field(default="http://dev.ghg.center/api/stac", description="Base STAC API endpoint.")
 
 
@@ -75,6 +86,7 @@ class CollectionSearchAgent(BaseAgent):
               - dataset_type: {params.dataset_type}
               - location: {params.location}
               - frequency: {params.frequency}
+              - temporal_extent: {params.temporal_extent}
 
             Below is a list of available STAC collections (truncated to essentials):
 
@@ -84,6 +96,8 @@ class CollectionSearchAgent(BaseAgent):
             [
               {{"id": "...", "title": "...", "description": "..."}}
             ]
+
+            If you cant find any datasets, try giving some that are close to the search criteria. Give emphasis to the dataset_type, location, tempral_extent and frequency in order
             """
 
             response = await llm.ainvoke(llm_prompt)

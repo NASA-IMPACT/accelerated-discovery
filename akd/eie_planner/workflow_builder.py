@@ -119,7 +119,7 @@ class WorkflowBuilder:
         Args:
             agent: Current agent instance
             prev_agent: Previous agent instance
-            filled_inputs: Pre-filled inputs for all agents
+            filled_inputs: Pre-filled inputs for all agents (will be modified in-place)
             agent_id: Current agent ID
             prev_agent_id: Previous agent ID
 
@@ -133,56 +133,68 @@ class WorkflowBuilder:
         # Get available source fields for validation
         source_field_names = {f.name for f in prev_agent.output_schema.fields}
 
-        # Map each required input using three-tier strategy
+        # Get field mapping from registry
+        mapping = self.mapping_registry.get_mapping(
+            prev_agent_id,
+            agent_id,
+        )
+
+        # CRITICAL: Check ALL fields (required and optional) that CAN be mapped
+        # If a field can be mapped, ALWAYS use io_map and remove from inputs
+        # This overrides LLM-filled values that should come from previous agent
         for field in agent.input_schema.fields:
-            if field.required and field.name not in inputs:
-                # Get field mapping from registry
-                mapping = self.mapping_registry.get_mapping(
-                    prev_agent_id,
-                    agent_id,
-                )
+            # Check if this field can be mapped from previous agent
+            can_be_mapped = False
+            source_field = None
 
-                if mapping and field.name in mapping:
-                    # Priority 1 or 2: Use explicit or LLM-approved mapping
-                    source_field = mapping[field.name]
+            if mapping and field.name in mapping:
+                # Priority 1 or 2: Use explicit or LLM-approved mapping
+                source_field = mapping[field.name]
 
-                    # VALIDATION: Check source field exists in prev_agent outputs
-                    if source_field not in source_field_names:
-                        logger.error(
-                            f"Invalid mapping: {agent_id}.{field.name} <- "
-                            f"{prev_agent_id}.{source_field} "
-                            f"(source field '{source_field}' does not exist in {prev_agent_id} output schema)",
-                        )
-                        if self.debug:
-                            raise ValueError(
-                                f"Mapping references non-existent output field: '{source_field}' "
-                                f"not in {prev_agent_id}.outputs. "
-                                f"Available fields: {source_field_names}",
-                            )
-                        # Skip invalid mapping in production mode
-                        logger.warning(f"Skipping invalid mapping for {agent_id}.{field.name}")
-                        continue
-
-                    # Build and validate JSONPath expression
-                    io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, source_field)
-                    logger.debug(
-                        f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry, validated)",
-                    )
+                # VALIDATION: Check source field exists in prev_agent outputs
+                if source_field in source_field_names:
+                    can_be_mapped = True
                 else:
-                    # Priority 3: Exact name match fallback
-                    if field.name in source_field_names:
-                        # Build and validate JSONPath expression
-                        io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, field.name)
-                        logger.debug(
-                            f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match, validated)",
+                    logger.error(
+                        f"Invalid mapping: {agent_id}.{field.name} <- "
+                        f"{prev_agent_id}.{source_field} "
+                        f"(source field '{source_field}' does not exist in {prev_agent_id} output schema)",
+                    )
+                    if self.debug:
+                        raise ValueError(
+                            f"Mapping references non-existent output field: '{source_field}' "
+                            f"not in {prev_agent_id}.outputs. "
+                            f"Available fields: {source_field_names}",
                         )
-                    else:
-                        # No mapping available - will need LLM generation
-                        logger.warning(
-                            f"No mapping found for {agent_id}.{field.name} from "
-                            f"{prev_agent_id}. Field will be missing unless LLM mapping "
-                            f"is generated.",
-                        )
+                    logger.warning(f"Skipping invalid mapping for {agent_id}.{field.name}")
+            elif field.name in source_field_names:
+                # Priority 3: Exact name match fallback
+                source_field = field.name
+                can_be_mapped = True
+
+            if can_be_mapped:
+                # ALWAYS map this field via io_map, even if LLM filled it in inputs
+                # Remove from inputs to prevent duplicate/conflicting values
+                if field.name in inputs:
+                    logger.warning(
+                        f"Field {agent_id}.{field.name} was filled by LLM but can be auto-mapped "
+                        f"from {prev_agent_id}.{source_field}. Removing from inputs and using io_map instead.",
+                    )
+                    del inputs[field.name]
+
+                # Build and validate JSONPath expression
+                io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, source_field)
+                logger.debug(
+                    f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} "
+                    f"({'from registry' if mapping and field.name in mapping else 'exact match'}, validated)",
+                )
+            elif field.required and field.name not in inputs:
+                # Field is required but cannot be mapped and not in inputs
+                logger.warning(
+                    f"No mapping found for {agent_id}.{field.name} from "
+                    f"{prev_agent_id}. Field will be missing unless LLM mapping "
+                    f"is generated or provided in inputs.",
+                )
 
         return io_map
 
@@ -193,6 +205,7 @@ class WorkflowBuilder:
         Args:
             plan: WorkflowPlan from LLM
             filled_inputs: Pre-filled inputs per agent {agent_id: {field: value}}
+                          (may be modified in-place to remove auto-mapped fields)
 
         Returns:
             WorkflowFormat ready for execution
@@ -219,9 +232,6 @@ class WorkflowBuilder:
                 logger.warning(f"Agent {agent_id} not in registry, skipping")
                 continue
 
-            # Get filled inputs for this agent
-            inputs = filled_inputs.get(agent_id, {})
-
             # Build io_map for runtime data flow from previous agent
             io_map = {}
             if i > 0:
@@ -231,13 +241,17 @@ class WorkflowBuilder:
                 if not prev_agent:
                     logger.warning(f"Previous agent {prev_agent_id} not in registry")
                 else:
+                    # This will modify filled_inputs in-place to remove auto-mapped fields
                     io_map = self._build_field_mappings(
                         agent,
                         prev_agent,
-                        filled_inputs,
+                        filled_inputs,  # Pass original dict so it can be modified
                         agent_id,
                         prev_agent_id,
                     )
+
+            # Get filled inputs for this agent AFTER mapping (auto-mapped fields removed)
+            inputs = filled_inputs.get(agent_id, {})
 
             # Create node
             node = WorkflowNode(

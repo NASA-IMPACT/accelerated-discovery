@@ -161,7 +161,7 @@ EXTRACTION STRATEGY:
 CRITICAL - AUTO-MAPPED FIELDS:
 - DO NOT extract values for fields that come from previous agent outputs
 - If Dependencies shows this agent depends on previous agents, check which fields can be auto-mapped
-- Common auto-mapped fields: search_results, results, queries, content (from previous agent outputs)
+- Common auto-mapped fields: bbox, location, dataset_type, frequency, temporal_extent (from previous agent outputs)
 - Only extract fields that come from user input or require manual specification
 - Auto-mapped fields will be populated at runtime via io_map - leave them UNSET
 

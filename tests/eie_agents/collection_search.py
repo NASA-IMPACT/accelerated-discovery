@@ -4,14 +4,14 @@ from akd.agents.eie_agents.collection_search import (
     CollectionSearchAgent,
     CollectionSearchInputSchema,
 )
-from akd.agents.eie_agents.eie_extraction import TemporalExtent
 
 agent = CollectionSearchAgent()
 params = CollectionSearchInputSchema(
-    dataset_type="methane",
+    dataset_type="sulfur",
     location="USA",
-    frequency="yearly",
-    temporal_extent=TemporalExtent(start="2020-01-01", end="2024-01-01"),
+    bbox="",
+    frequency="all",
+    temporal_extent={"dates": ["201--12-25", "2011-12-25", "2020-12-25"]},
 )
 
 
