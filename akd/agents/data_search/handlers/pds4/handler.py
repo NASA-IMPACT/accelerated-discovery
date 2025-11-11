@@ -371,93 +371,6 @@ class PDS4Handler(BaseHandler):
 
         return filtered_urns
 
-    def _rank_urns_by_relevance(
-        self,
-        urns: List[str],
-        context_items: List[Dict[str, Any]],
-        keywords: List[str],
-    ) -> List[str]:
-        """
-        Rank URNs by relevance to search keywords.
-
-        Scoring system:
-        - Exact keyword match in title: +10 points per keyword
-        - Partial keyword match in title: +5 points per keyword
-        - Keyword in description: +2 points per keyword
-
-        Args:
-            urns: List of URN identifiers to rank
-            context_items: Original context search results with metadata
-            keywords: Search keywords to match against
-
-        Returns:
-            URNs sorted by descending relevance score
-        """
-        if not urns or not keywords:
-            return urns
-
-        # Build URN-to-item mapping for metadata access
-        urn_to_item = {}
-        for item in context_items:
-            item_urn = item.get("lid") or item.get("lidvid") or item.get("id")
-            if item_urn:
-                urn_to_item[item_urn] = item
-
-        # Normalize keywords for matching
-        normalized_keywords = [kw.lower().strip() for kw in keywords]
-
-        # Score each URN
-        urn_scores = []
-        for urn in urns:
-            item = urn_to_item.get(urn)
-            if not item:
-                # No metadata, assign neutral score
-                urn_scores.append((urn, 0))
-                continue
-
-            score = 0
-
-            # Get title and description
-            title = item.get("title", "").lower()
-            description = ""
-
-            # Extract description based on context type
-            if "investigation" in item:
-                description = item.get("investigation", {}).get("description", "").lower()
-            elif "target" in item:
-                description = item.get("target", {}).get("description", "").lower()
-            elif "instrument" in item:
-                description = item.get("instrument", {}).get("description", "").lower()
-
-            # Score based on keyword matches
-            for keyword in normalized_keywords:
-                if not keyword:
-                    continue
-
-                # Exact match in title
-                if keyword == title:
-                    score += 10
-                # Partial match in title
-                elif keyword in title:
-                    score += 5
-
-                # Match in description
-                if keyword in description:
-                    score += 2
-
-            urn_scores.append((urn, score))
-
-        # Sort by score (descending), then by original order (stable)
-        urn_scores.sort(key=lambda x: x[1], reverse=True)
-
-        # Return sorted URNs
-        ranked_urns = [urn for urn, score in urn_scores]
-
-        if self.debug:
-            logger.debug(f"URN ranking scores: {[(urn.split(':')[-1], score) for urn, score in urn_scores[:5]]}")
-
-        return ranked_urns
-
     def _generate_urn_combinations(
         self,
         investigation_urns: List[str],
@@ -642,12 +555,8 @@ class PDS4Handler(BaseHandler):
                     investigations,
                     "investigation",
                 )
-                # Rank by relevance to keywords
-                investigation_urns = self._rank_urns_by_relevance(
-                    investigation_urns_raw,
-                    investigations,
-                    approach.investigation_keywords,
-                )
+                # Use API's native Solr ranking (already relevance-sorted)
+                investigation_urns = investigation_urns_raw
                 execution_metadata["context_searches_executed"].append("investigation")
                 execution_metadata["urns_extracted"]["investigation"] = investigation_urns
 
@@ -661,12 +570,8 @@ class PDS4Handler(BaseHandler):
                     targets,
                     "target",
                 )
-                # Rank by relevance to keywords
-                target_urns = self._rank_urns_by_relevance(
-                    target_urns_filtered,
-                    targets,
-                    approach.target_keywords,
-                )
+                # Use API's native Solr ranking (already relevance-sorted)
+                target_urns = target_urns_filtered
                 execution_metadata["context_searches_executed"].append("target")
                 execution_metadata["urns_extracted"]["target"] = target_urns
 
@@ -678,12 +583,8 @@ class PDS4Handler(BaseHandler):
                     "instrument",
                 )
                 # No type filtering needed for instruments (all are valid)
-                # Rank by relevance to keywords
-                instrument_urns = self._rank_urns_by_relevance(
-                    instrument_urns_raw,
-                    instruments,
-                    approach.instrument_keywords,
-                )
+                # Use API's native Solr ranking (already relevance-sorted)
+                instrument_urns = instrument_urns_raw
                 execution_metadata["context_searches_executed"].append("instrument")
                 execution_metadata["urns_extracted"]["instrument"] = instrument_urns
 
