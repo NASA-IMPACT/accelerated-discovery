@@ -59,10 +59,6 @@ class SearchAgentOutputSchema(OutputSchema):
     answer: str = Field(..., description="Concise shortform answer to the research query in few sentences.")
     report: str | None = Field(default=None, description="Detailed report pertaining to the research query.")
     results: list[SearchResult] = Field(..., description="List of search results")
-    iterations_performed: int = Field(
-        default=1,
-        description="Number of search iterations performed",
-    )
     extra: dict[str, Any] = Field(
         default_factory=dict,
         description="Extra metadata and synthesis information",
@@ -99,7 +95,13 @@ class SearchAgentConfig(BaseAgentConfig):
 class SearchAgent[TInput: SearchAgentInputSchema, TOutput: SearchAgentOutputSchema](
     BaseAgent[TInput, TOutput],
 ):
-    """Base agent for performing literature searches using a search tool."""
+    """
+    Base agent for performing literature searches using a search tool.
+
+    Notes:
+    - By default `answer` is auto-generated using `akd.agents.search.answer.QuestionAnsweringAgent`.
+    - Subclasses must implement `_generate_report()` to provide custom report generation logic.
+    """
 
     input_schema = SearchAgentInputSchema
     output_schema = SearchAgentOutputSchema
