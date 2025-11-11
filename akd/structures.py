@@ -36,22 +36,54 @@ except ImportError:
 # =============================================================================
 
 
-class SearchResultItem(IOSchema):
+class SearchResult(IOSchema):
+    """Base class for all search result types across different search domains.
+
+    Provides common interface for search results including query context,
+    title, content/description, and relevance scoring. Subclasses should
+    add domain-specific fields (e.g., url, doi for literature; decompositions
+    for hierarchical data search).
+    """
+
+    query: str = Field(..., description="Query that produced this search result")
+    title: str = Field(..., description="Title or name of the search result")
+    content: str = Field(default="", description="Content snippet, description, or summary")
+    score: float | None = Field(None, description="Relevance or ranking score")
+    extra: dict[str, Any] = Field(default_factory=dict, description="Extra metadata")
+
+    @computed_field
+    def relevancy_score(self) -> float | None:
+        """Alias for score field for consistency."""
+        return self.score
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def validate_content(cls, v):
+        """Convert None to empty string for content field."""
+        return v if v is not None else ""
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def validate_score(cls, v):
+        """Convert numpy float types to Python float for JSON serialization."""
+        if v is None:
+            return None
+        # Handle numpy float types (float32, float64, etc.)
+        if hasattr(v, "item"):  # numpy scalar types have .item() method
+            return float(v.item())
+        return float(v)
+
+
+class SearchResultItem(SearchResult):
     """Represents a single search result item with metadata."""
 
     # Required fields
     url: AnyUrl = Field(..., description="The URL of the search result")
-    title: str = Field(..., description="The title of the search result")
-    query: str = Field(..., description="The query used to obtain the search result")
 
     # Optional metadata
     pdf_url: AnyUrl | None = Field(
         None,
         description="The PDF URL of the search paper",
-    )
-    content: str = Field(
-        default="",
-        description="The content snippet of the search result",
     )
     category: str | None = Field(
         None,
@@ -79,16 +111,6 @@ class SearchResultItem(IOSchema):
         description="List of authors for DOI resolution by title and author",
     )
 
-    score: float | None = Field(
-        None,
-        description="Relevance score of the search result",
-    )
-
-    extra: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Extra information from the search result",
-    )
-
     @computed_field
     @property
     def title_augmented(self) -> str:
@@ -96,27 +118,6 @@ class SearchResultItem(IOSchema):
         if self.published_date:
             return f"{self.title} - (Published {self.published_date})"
         return self.title
-
-    @computed_field
-    def relevancy_score(self) -> float | None:
-        return self.score
-
-    @field_validator("content", mode="before")
-    @classmethod
-    def validate_content(cls, v):
-        """Convert None to empty string for content field."""
-        return v if v is not None else ""
-
-    @field_validator("score", mode="before")
-    @classmethod
-    def validate_score(cls, v):
-        """Convert numpy float types to Python float for JSON serialization."""
-        if v is None:
-            return None
-        # Handle numpy float types (float32, float64, etc.)
-        if hasattr(v, "item"):  # numpy scalar types have .item() method
-            return float(v.item())
-        return float(v)
 
 
 class ResearchData(BaseModel):
@@ -299,13 +300,6 @@ class SingleEstimation(ExtractionSchema):
     )
 
 
-class ExtractionDTO(BaseModel):
-    """Data Transfer Object for extraction results."""
-
-    source: str = Field(..., description="Source of the extraction")
-    result: Any = Field(..., description="Extracted result data")
-
-
 # =============================================================================
 # Tool System Models
 # =============================================================================
@@ -343,14 +337,18 @@ class ToolSearchResult(BaseModel):
 # Exports
 # =============================================================================
 
+# Type alias for semantic clarity in literature search contexts
+LitSearchResult = SearchResultItem
+
 __all__ = [
     # Search and Data Models
+    "SearchResult",
     "SearchResultItem",
+    "LitSearchResult",
     "ResearchData",
     # Extraction Schemas
     "ExtractionSchema",
     "SingleEstimation",
-    "ExtractionDTO",
     # Tool Models
     "ToolSearchResult",
 ]
