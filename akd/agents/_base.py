@@ -64,6 +64,12 @@ class BaseAgentConfig(BaseConfig):
         default=True,
         description="Enable automatic message trimming",
     )
+    num_retries: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Number of retries for LLM calls",
+    )
 
     @model_validator(mode="after")
     def validate_max_tokens_against_model(self):
@@ -539,6 +545,7 @@ class LiteLLMInstructorBaseAgent[
             response_model=instructor_model,
             api_base=str(self.base_url).rstrip("/") if self.base_url else None,
             api_key=self.api_key,
+            num_retries=self.num_retries,
         )
 
         response_data = response.model_dump()
