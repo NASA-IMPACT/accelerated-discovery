@@ -19,6 +19,9 @@ from akd.tools.misc import Embedder, HttpUrlAdapter, OpenAIEmbedder
 from akd.tools.reranker import RerankerToolConfig, RerankerType
 from akd.utils import get_akd_root, google_drive_downloader
 from akd.agents.intents import ScienceDivision
+from akd.agents.intents import DivisionAgent, DivisionInputSchema
+from akd.agents._base import BaseAgentConfig
+from akd.configs.code_prompts import DIVISION_PROMPT
 
 from ._base import (
     SearchTool,
@@ -39,11 +42,6 @@ class CodeSearchToolInputSchema(SearchToolInputSchema):
     def top_k(self) -> int:
         """Returns the number of top results to return."""
         return self.max_results
-
-    division: ScienceDivision = Field(
-        default=ScienceDivision.UNKNOWN,
-        description="The NASA Science division that the query belongs to.",
-    )
 
 
 class CodeSearchToolOutputSchema(SearchToolOutputSchema):
@@ -94,6 +92,12 @@ class CodeSearchTool(SearchTool):
     input_schema = CodeSearchToolInputSchema
     output_schema = CodeSearchToolOutputSchema
     config_schema = CodeSearchToolConfig
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.division_agent = DivisionAgent(
+            config=BaseAgentConfig(model_name="gpt-4o-mini", system_prompt=DIVISION_PROMPT)
+        )
 
     def _validate_input(
         self,
@@ -342,6 +346,7 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
                 )
 
             logger.info("CodeSearchTool initialization complete.")
+
         except Exception as e:
             logger.error(f"Error during CodeSearchTool initialization: {e}")
 
@@ -451,12 +456,11 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         logger.info(f"Saved updated data with embeddings to {self.config.data_file}")
         self.repo_data = save_data
 
-    def find_repo(
+    async def find_repo(
         self,
         query: str,
         top_k: int = 25,
         remove_embedding_column: bool = True,
-        division: ScienceDivision = ScienceDivision.UNKNOWN,
     ) -> list[dict]:
         """
         Perform similarity search against cached embeddings using vectorized computation.
@@ -464,7 +468,6 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         Args:
             query: Search query
             top_k: Number of top results to return
-            division: Science division to filter by (if not UNKNOWN)
 
         Returns:
             List of dictionaries with top results and similarity scores
@@ -473,8 +476,16 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
         if self.repo_data is None:
             raise ValueError("No data loaded. Check if the data file exists.")
 
+        if self.config.use_division:
+            division = await self.division_agent.arun(DivisionInputSchema(query=query))
+            division = division.division
+            if self.config.debug:
+                logger.debug(f"Division for query '{query}': {division.value}")
+        else:
+            division = ScienceDivision.UNKNOWN
+
         # Filter by division if specified
-        if division != ScienceDivision.UNKNOWN and self.config.use_division:
+        if division != ScienceDivision.UNKNOWN:
             filtered_data = self.repo_data[self.repo_data["area"] == division.value]
             if len(filtered_data) == 0:
                 logger.warning(f"No results found for division: {division.value}")
@@ -529,11 +540,10 @@ class LocalRepoCodeSearchTool(CodeSearchTool):
             )
 
         try:
-            results = self.find_repo(
+            results = await self.find_repo(
                 query=query,
                 top_k=max_results,
                 remove_embedding_column=self.config.remove_embedding_column,
-                division=kwargs.get("division", ScienceDivision.UNKNOWN),
             )
             if results:
                 for result in results:
@@ -664,7 +674,7 @@ class SDECodeSearchTool(CodeSearchTool):
     config_schema = SDECodeSearchToolConfig
 
     @retry(stop=stop_after_attempt(2))
-    def sde_search(self, page: int, query: str, division: ScienceDivision = ScienceDivision.UNKNOWN):
+    async def sde_search(self, page: int, query: str):
         """
         Search for code using SDE REST API.
         """
@@ -676,8 +686,16 @@ class SDECodeSearchTool(CodeSearchTool):
             "search_type": self.search_mode,
         }
 
+        if self.config.use_division:
+            division = await self.division_agent.arun(DivisionInputSchema(query=query))
+            division = division.division
+            if self.config.debug:
+                logger.debug(f"Division for query '{query}': {division}")
+        else:
+            division = ScienceDivision.UNKNOWN
+
         # Add division filter if specified
-        if division != ScienceDivision.UNKNOWN and self.config.use_division:
+        if division != ScienceDivision.UNKNOWN:
             if self.config.debug:
                 logger.debug(f"Adding division filter for division: {division.value}")
             # strip last word "Division" from the division value to adhere to the SDE API format
@@ -710,9 +728,7 @@ class SDECodeSearchTool(CodeSearchTool):
         try:
             for page in range(self.max_pages):
                 try:
-                    results = self.sde_search(
-                        page=page, query=query, division=kwargs.get("division", ScienceDivision.UNKNOWN)
-                    )
+                    results = await self.sde_search(page=page, query=query)
                     if results:
                         for result in results:
                             result["query"] = query
