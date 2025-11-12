@@ -1,6 +1,6 @@
 import uuid
 from abc import abstractmethod
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable
 
 from jsonpath_ng import parse as jsonpath_parse
 from loguru import logger
@@ -147,7 +147,7 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
     def to_langgraph_node(
         self,
         key: str | None = None,
-    ) -> Callable[[GlobalState], Awaitable[GlobalState]]:
+    ) -> Callable[[GlobalState], Awaitable[dict]]:
         """
         Convert to langgraph compatile node.
         Global state in -> global state out
@@ -158,7 +158,7 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
 
         key = key or self.node_id
 
-        async def _node_fn(gs: GlobalState) -> Dict[str, NodeState]:
+        async def _node_fn(gs: GlobalState) -> dict[str, dict[str, NodeState]]:
             ns = await self.arun(gs)
             # return {key: ns} -> return per-node partial state
             # return gs # return full global state -> not recommended
@@ -317,7 +317,7 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         self,
         node_state: NodeState,
         global_state: GlobalState,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Build JSONPath context from global state for cross-node data access.
 
@@ -346,8 +346,7 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
 
         if self.debug:
             logger.debug(
-                f"[SingleAgentNodeTemplate {self.node_id}] "
-                f"JSONPath context keys: {list(context.keys())}",
+                f"[SingleAgentNodeTemplate {self.node_id}] JSONPath context keys: {list(context.keys())}",
             )
 
         return context
@@ -426,8 +425,7 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
             self.agent.input_schema(**resolved_inputs)
             if self.debug:
                 logger.debug(
-                    f"[SingleAgentNodeTemplate {self.node_id}] "
-                    f"Successfully resolved inputs: {resolved_inputs}",
+                    f"[SingleAgentNodeTemplate {self.node_id}] Successfully resolved inputs: {resolved_inputs}",
                 )
             return resolved_inputs
 
@@ -511,14 +509,12 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
 
             if self.debug:
                 logger.debug(
-                    f"[SingleAgentNodeTemplate {self.node_id}] "
-                    f"Agent output: {agent_output}",
+                    f"[SingleAgentNodeTemplate {self.node_id}] Agent output: {agent_output}",
                 )
 
         except Exception as e:
             logger.error(
-                f"[SingleAgentNodeTemplate {self.node_id}] "
-                f"Error executing agent {self.agent.__class__.__name__}: {e}",
+                f"[SingleAgentNodeTemplate {self.node_id}] Error executing agent {self.agent.__class__.__name__}: {e}",
             )
             raise
 
