@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Type, cast
@@ -8,7 +9,50 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
 
 from akd.errors import SchemaValidationError
-from akd.utils import AsyncRunMixin, LangchainToolMixin, get_model_fields
+from akd.utils import get_model_fields
+
+
+def get_event_loop() -> asyncio.AbstractEventLoop:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
+
+
+class AsyncRunMixin:
+    """
+    Mixin for adding interface to run
+    async methods in a sync context.
+    """
+
+    @abstractmethod
+    async def arun(self, *args, **kwargs) -> Any:
+        raise NotImplementedError("Subclasses should implement this method")
+
+    # async def ainvoke(self, *args, **kwargs) -> Any:
+    #     return await self.arun(*args, **kwargs)
+
+    def run(self, *args, **kwargs) -> Any:
+        """
+        Runs the async method in a sync context.
+        """
+        if not hasattr(self, "arun"):
+            raise AttributeError("Method 'arun' not implemented in the class")
+        try:
+            # Check if there's a running event loop
+            loop = get_event_loop()
+            # If we're already in an event loop, we need to use create_task and wait for it
+            if loop and loop.is_running():
+                # This creates a new task in the current event loop
+                future = asyncio.ensure_future(self.arun(*args, **kwargs))
+                return loop.run_until_complete(future)
+            else:
+                return asyncio.run(self.arun(*args, **kwargs))
+        except RuntimeError:
+            # No running event loop, create a new one
+            return asyncio.run(self.arun(*args, **kwargs))
 
 
 class BaseConfig(BaseModel):
@@ -138,7 +182,7 @@ class AbstractBaseMeta(ABCMeta):
 class AbstractBase[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AsyncRunMixin, LangchainToolMixin, ABC, metaclass=AbstractBaseMeta):
+](AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
@@ -335,7 +379,7 @@ class AbstractBase[
 class UnrestrictedAbstractBase[
     InSchema: BaseModel,
     OutSchema: BaseModel,
-](AsyncRunMixin, LangchainToolMixin, ABC):
+](AsyncRunMixin, ABC):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
