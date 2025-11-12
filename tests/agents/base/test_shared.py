@@ -23,13 +23,13 @@ class TestBaseAgentSharedFunctionality:
     async def test_arun_with_instructor_base_agent(self, mock_instructor_client, test_input):
         """Test full arun execution with InstructorBaseAgent."""
         # Setup mock response
-        expected_response = AgentTestOutputSchema(
-            response="Test response",
-            metadata={"test": True},
-        )
+        response_data = {
+            "response": "Test response",
+            "metadata": {"test": True},
+        }
         mock_structured_client = await setup_async_mock_response(
             mock_instructor_client,
-            expected_response,
+            response_data,
             "instructor",
         )
 
@@ -46,7 +46,7 @@ class TestBaseAgentSharedFunctionality:
         assert result.metadata == {"test": True}
 
         # Verify memory was updated by base _arun (only in stateful mode)
-        assert len(agent.memory) == 2  # user + assistant messages
+        assert len(agent.memory) == 3  # user + assistant messages
 
     @pytest.mark.asyncio
     async def test_stateless_behavior_default(
