@@ -243,7 +243,6 @@ async def test_code_search_agent_response_field():
                 content="Code for weather forecasting",
             ),
         ],
-        iterations_performed=1,
     )
 
     # Test that _response field matches report field
