@@ -140,7 +140,6 @@ class AbstractBaseMeta(ABCMeta):
             "AbstractBase",
             "UnrestrictedAbstractBase",
             "BaseAgent",
-            "LangBaseAgent",
             "InstructorBaseAgent",
             "LiteLLMInstructorBaseAgent",
             "BaseTool",

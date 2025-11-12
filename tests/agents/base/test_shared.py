@@ -1,7 +1,7 @@
 # noqa: F841
 """Shared integration tests for base agents."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,7 +11,6 @@ from .conftest import (
     AgentTestInputSchema,
     AgentTestOutputSchema,
     TestInstructorBaseAgent,
-    TestLangBaseAgent,
     TestLiteLLMAgent,
     setup_async_mock_response,
 )
@@ -21,50 +20,16 @@ class TestBaseAgentSharedFunctionality:
     """Test shared functionality between base agents."""
 
     @pytest.mark.asyncio
-    async def test_arun_with_lang_base_agent(self, mock_chatopenai_client, test_input):
-        """Test full arun execution with LangBaseAgent."""
+    async def test_arun_with_instructor_base_agent(self, mock_instructor_client, test_input):
+        """Test full arun execution with InstructorBaseAgent."""
         # Setup mock response
         expected_response = AgentTestOutputSchema(
             response="Test response",
             metadata={"test": True},
         )
         mock_structured_client = await setup_async_mock_response(
-            mock_chatopenai_client,
-            expected_response,
-            "chatopenai",
-        )
-
-        # Create agent with stateless=False to test memory management
-        config = BaseAgentConfig(stateless=False)
-        agent = TestLangBaseAgent(config=config)
-
-        # Execute arun - this will call base _arun which manages memory
-        result = await agent.arun(test_input)
-
-        # Verify result structure and type
-        assert isinstance(result, AgentTestOutputSchema)
-        assert result.response == "Test response"
-        assert result.metadata == {"test": True}
-
-        # Verify memory was updated by base _arun (only in stateful mode)
-        assert len(agent.memory.messages) == 2  # user + assistant messages
-
-    @pytest.mark.asyncio
-    async def test_arun_with_instructor_base_agent(
-        self,
-        mock_openai_client,
-        mock_instructor_client,
-        test_input,
-    ):
-        """Test full arun execution with InstructorBaseAgent."""
-        # Setup mock response
-        response_data = {
-            "response": "Test instructor response",
-            "metadata": {"test": True},
-        }
-        mock_chat_completions = await setup_async_mock_response(
             mock_instructor_client,
-            response_data,
+            expected_response,
             "instructor",
         )
 
@@ -77,26 +42,25 @@ class TestBaseAgentSharedFunctionality:
 
         # Verify result structure and type
         assert isinstance(result, AgentTestOutputSchema)
-        assert result.response == "Test instructor response"
+        assert result.response == "Test response"
         assert result.metadata == {"test": True}
 
         # Verify memory was updated by base _arun (only in stateful mode)
-        assert len(agent.memory) == 3  # system + user + assistant messages
+        assert len(agent.memory) == 2  # user + assistant messages
 
     @pytest.mark.asyncio
     async def test_stateless_behavior_default(
         self,
-        mock_chatopenai_client,
-        mock_openai_client,
         mock_instructor_client,
+        mock_openai_client,
     ):
         """Test that agents are stateless by default and don't store memory."""
-        # Setup mocks for LangBaseAgent
+        # Setup mocks for InstructorBaseAgent
         expected_response = AgentTestOutputSchema(response="Test response")
         mock_structured_client = await setup_async_mock_response(
-            mock_chatopenai_client,
+            mock_instructor_client,
             expected_response,
-            "chatopenai",
+            "instructor",
         )
 
         # Setup mocks for InstructorBaseAgent
@@ -110,15 +74,15 @@ class TestBaseAgentSharedFunctionality:
             "instructor",
         )
 
-        # Test LangBaseAgent (default stateless)
-        lang_agent = TestLangBaseAgent()
-        assert lang_agent.stateless is True
+        # Test InstructorBaseAgent (default stateless)
+        instructor_agent = TestInstructorBaseAgent()
+        assert instructor_agent.stateless is True
 
         test_input = AgentTestInputSchema(query="test query")
-        result = await lang_agent.arun(test_input)
+        result = await instructor_agent.arun(test_input)
 
         # Memory should remain empty in stateless mode
-        assert len(lang_agent.memory.messages) == 0
+        assert len(instructor_agent.memory) == 0
         assert isinstance(result, AgentTestOutputSchema)
 
         # Test InstructorBaseAgent (default stateless)
@@ -131,9 +95,9 @@ class TestBaseAgentSharedFunctionality:
         assert len(instructor_agent.memory) == 0
         assert isinstance(result, AgentTestOutputSchema)
 
-    def test_schema_validation_integration(self, mock_chatopenai_client):
+    def test_schema_validation_integration(self, mock_instructor_client):
         """Test that agents properly validate input/output schemas."""
-        agent = TestLangBaseAgent()
+        agent = TestInstructorBaseAgent()
 
         # Verify schema attributes
         assert agent.input_schema == AgentTestInputSchema
@@ -163,11 +127,11 @@ class TestBaseAgentSharedFunctionality:
         # Mock the imports to avoid client initialization
         from unittest.mock import patch
 
-        with patch("akd.agents._base.ChatOpenAI"):
+        with patch("akd.agents._base.instructor.from_openai"):
             with patch("akd.agents._base.instructor.from_openai"):
                 with patch("akd.agents._base.openai.AsyncOpenAI"):
                     with patch("instructor.from_litellm"):
-                        lang_agent = TestLangBaseAgent(config=custom_config)
+                        instructor_agent = TestInstructorBaseAgent(config=custom_config)
                         instructor_agent = TestInstructorBaseAgent(config=custom_config)
                         litellm_agent = TestLiteLLMAgent(
                             config=BaseAgentConfig(
@@ -182,7 +146,7 @@ class TestBaseAgentSharedFunctionality:
                         )
 
                         # Verify attributes were mapped from config for all agents
-                        for agent in [lang_agent, instructor_agent, litellm_agent]:
+                        for agent in [instructor_agent, instructor_agent, litellm_agent]:
                             assert agent.model_name == "gpt-4o-mini"
                             assert agent.temperature == 0.8
                             assert agent.api_key == "custom_key"
@@ -192,42 +156,38 @@ class TestBaseAgentSharedFunctionality:
 class TestEdgeCasesAndErrorHandling:
     """Test edge cases and error handling scenarios."""
 
-    def test_none_config_handling(self, mock_chatopenai_client):
+    def test_none_config_handling(self, mock_instructor_client):
         """Test handling of None config."""
-        agent = TestLangBaseAgent(config=None)
+        agent = TestInstructorBaseAgent(config=None)
         # Should use default config
         assert agent.config is not None
 
     def test_empty_memory_operations(
         self,
-        mock_chatopenai_client,
-        mock_openai_client,
         mock_instructor_client,
+        mock_openai_client,
     ):
         """Test memory operations with empty memory."""
-        lang_agent = TestLangBaseAgent()
+        instructor_agent = TestInstructorBaseAgent()
         instructor_agent = TestInstructorBaseAgent()
 
         # Test reset on empty memory
-        lang_agent.reset_memory()
+        instructor_agent.reset_memory()
         instructor_agent.reset_memory()
 
         # Verify still empty
-        assert len(lang_agent.memory.messages) == 0
+        assert len(instructor_agent.memory) == 0
         assert len(instructor_agent.memory) == 0
 
     @pytest.mark.asyncio
-    async def test_response_type_validation(self, mock_chatopenai_client):
+    async def test_response_type_validation(self, mock_instructor_client):
         """Test that response types are properly validated."""
         # Return invalid response type
-        invalid_response = {"invalid": "response"}
-        mock_structured_client = AsyncMock()
-        mock_structured_client.ainvoke.return_value = invalid_response
-        mock_chatopenai_client.with_structured_output.return_value = (
-            mock_structured_client
-        )
+        invalid_response = MagicMock()
+        invalid_response.model_dump.return_value = {"invalid": "response"}
+        mock_instructor_client.chat.completions.create.return_value = invalid_response
 
-        agent = TestLangBaseAgent()
+        agent = TestInstructorBaseAgent()
 
         # This should handle type validation gracefully
         # The actual behavior depends on the AbstractBase implementation
@@ -244,11 +204,11 @@ class TestEdgeCasesAndErrorHandling:
         # Test that all agent types have the same required interface
         from unittest.mock import patch
 
-        with patch("akd.agents._base.ChatOpenAI"):
+        with patch("akd.agents._base.instructor.from_openai"):
             with patch("akd.agents._base.instructor.from_openai"):
                 with patch("akd.agents._base.openai.AsyncOpenAI"):
                     with patch("instructor.from_litellm"):
-                        lang_agent = TestLangBaseAgent()
+                        instructor_agent = TestInstructorBaseAgent()
                         instructor_agent = TestInstructorBaseAgent()
                         litellm_agent = TestLiteLLMAgent()
 
@@ -263,21 +223,15 @@ class TestEdgeCasesAndErrorHandling:
                             "output_schema",
                         ]
 
-                        for agent in [lang_agent, instructor_agent, litellm_agent]:
+                        for agent in [instructor_agent, instructor_agent, litellm_agent]:
                             # Check required methods
                             for method in required_methods:
-                                assert hasattr(agent, method), (
-                                    f"{type(agent).__name__} missing {method}"
-                                )
-                                assert callable(getattr(agent, method)), (
-                                    f"{type(agent).__name__}.{method} not callable"
-                                )
+                                assert hasattr(agent, method), f"{type(agent).__name__} missing {method}"
+                                assert callable(getattr(agent, method)), f"{type(agent).__name__}.{method} not callable"
 
                             # Check required properties
                             for prop in required_properties:
-                                assert hasattr(agent, prop), (
-                                    f"{type(agent).__name__} missing {prop}"
-                                )
+                                assert hasattr(agent, prop), f"{type(agent).__name__} missing {prop}"
 
     def test_agent_inheritance_hierarchy(self):
         """Test that inheritance hierarchy is correct."""
@@ -288,7 +242,7 @@ class TestEdgeCasesAndErrorHandling:
         )
 
         # Test inheritance chain
-        assert issubclass(TestLangBaseAgent, BaseAgent)
+        assert issubclass(TestInstructorBaseAgent, BaseAgent)
         assert issubclass(TestInstructorBaseAgent, BaseAgent)
         assert issubclass(TestInstructorBaseAgent, InstructorBaseAgent)
         assert issubclass(TestLiteLLMAgent, InstructorBaseAgent)
@@ -300,29 +254,21 @@ class TestEdgeCasesAndErrorHandling:
     @pytest.mark.asyncio
     async def test_agent_error_recovery(
         self,
-        mock_chatopenai_client,
-        mock_openai_client,
         mock_instructor_client,
+        mock_openai_client,
     ):
         """Test that agents handle errors gracefully."""
         # Test with failing clients
-        mock_chatopenai_client.with_structured_output.side_effect = Exception(
-            "Client error",
-        )
         mock_instructor_client.chat.completions.create.side_effect = Exception(
             "Instructor error",
         )
 
-        lang_agent = TestLangBaseAgent()
+        instructor_agent = TestInstructorBaseAgent()
         instructor_agent = TestInstructorBaseAgent()
 
         test_input = AgentTestInputSchema(query="test query")
 
         # Test that agents raise appropriate exceptions
-        with pytest.raises(Exception) as exc_info:
-            await lang_agent.arun(test_input)
-        assert "Client error" in str(exc_info.value)
-
         with pytest.raises(Exception) as exc_info:
             await instructor_agent.arun(test_input)
         assert "Instructor error" in str(exc_info.value)
