@@ -1,10 +1,13 @@
+import json
 from datetime import date
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
+import httpx
 from langchain_openai import ChatOpenAI
 from loguru import logger
 from pydantic import BaseModel
 from pydantic.fields import Field
+from shapely.geometry import shape
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgent, BaseAgentConfig
@@ -47,9 +50,9 @@ class ExtractOutputSchema(OutputSchema):
         description="Human-readable location or place extracted by the agent based on the query.",
     )
 
-    bbox: Optional[str] = Field(
+    bbox: List = Field(
         default=None,
-        description="A GeoJSON string representing the bounding box coordinates of the location.",
+        description="A list of coordinates representing the bounding box coordinates of the location.",
     )
 
     frequency: str = Field(
@@ -65,6 +68,31 @@ class ExtractOutputSchema(OutputSchema):
 
 class ExtractAgentConfig(BaseAgentConfig):
     """Configuration for Extract Agent"""
+
+    geodini_api: str = Field("localhost:9000", description="API to resolve location to polygons")
+
+
+async def get_geometry(location: str, geodini_api: str):
+    url = f"{geodini_api}/search?query={location}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()  # raises error for 4xx/5xx responses
+        data = response.json()
+        return data
+
+
+def get_bbox(geometry: dict) -> list[float]:
+    """
+    Given a GeoJSON Polygon or MultiPolygon geometry,
+    return its bounding box [min_lon, min_lat, max_lon, max_lat].
+    """
+    # Extract the geometry field
+    geom = geometry["results"][0]["geometry"]
+    polygon = shape(geom)
+
+    # Extract bbox as [minx, miny, maxx, maxy]
+    minx, miny, maxx, maxy = polygon.bounds
+    return [minx, miny, maxx, maxy]
 
 
 class ExtractAgent(BaseAgent):
@@ -100,10 +128,10 @@ class ExtractAgent(BaseAgent):
         - bbox: Bounding box of the location in GeoJSON format, or null if unknown.
         - frequency: Temporal frequency of the data (e.g. "daily", "monthly", "yearly", "all").
         - temporal_extent: Represents time information extracted from the query.
-            - If an interval is mentioned, use an object with "start" and "end" keys (ISO 8601 format).
-            Example: {{"start": "2019-01-01", "end": "2020-01-01"}}
+            - If an interval is mentioned, use an object with "start" and "end" keys adhere to RFC 3339 format.
+            Example: {{"start": "2019-01-01T23:20:50Z", "end": "2020-01-01T23:20:50Z"}}
             - If one or more discrete dates are mentioned, use a list of ISO date strings.
-            Example: ["2021-06-01"] or ["2020-01-01", "2021-03-15"]
+            Example: ["2021-06-01T23:20:50Z"] or ["2020-01-01T23:20:50Z", "2021-03-15T23:20:50Z"]
             - If no date is provided, set this field to null.
             - Resolve relative references such as "last year", "past month", or "present" using the current date.
 
@@ -117,18 +145,20 @@ class ExtractAgent(BaseAgent):
             print("Activating Extraction Agent...")
             response = await llm.ainvoke(prompt)
             content = getattr(response, "content", None)
-            print("content ", content)
-
-            import json
-
             data = json.loads(content)
-            print("data ", data)
+
+            print("see this", data.get("location"))
+
+            # get the geojson using geodini api call
+            response = await get_geometry(data.get("location"), "http://localhost:9000")
+
+            bbox = get_bbox(response)
 
             # Validate and fill missing defaults
             return ExtractOutputSchema(
                 dataset_type=data.get("dataset_type", "all"),
                 location=data.get("location", "global"),
-                bbox=data.get("bbox", None),
+                bbox=bbox,
                 frequency=data.get("frequency", "all"),
                 temporal_extent={"dates": data.get("temporal_extent", {})},
             )

@@ -7,11 +7,11 @@ from akd.agents.eie_agents.collection_search import (
 
 agent = CollectionSearchAgent()
 params = CollectionSearchInputSchema(
-    dataset_type="sulfur",
-    location="USA",
+    dataset_type="night light",
+    location="nepal",
     bbox="",
     frequency="all",
-    temporal_extent={"dates": ["201--12-25", "2011-12-25", "2020-12-25"]},
+    temporal_extent={"dates": {"start": "2019-01-01T00:00:00Z", "end": "2019-01-20T00:00:00Z"}},
 )
 
 

@@ -89,6 +89,7 @@ class AgentRegistry:
         # "aspect_search": ("akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
         "eie_extraction": ("akd.agents.eie_agents.eie_extraction", "ExtractAgent"),
         "collection_search": ("akd.agents.eie_agents.collection_search", "CollectionSearchAgent"),
+        "item_search": ("akd.agents.eie_agents.item_search", "ItemSearchAgent"),
     }
 
     def __new__(cls, config: Optional[AgentRegistryConfig] = None):

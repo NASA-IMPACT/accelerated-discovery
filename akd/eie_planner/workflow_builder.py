@@ -103,98 +103,69 @@ class WorkflowBuilder:
     def _build_field_mappings(
         self,
         agent: AgentEntry,
-        prev_agent: AgentEntry,
+        all_prev_agents: list[AgentEntry],
         filled_inputs: dict[str, AgentInputs],
         agent_id: str,
-        prev_agent_id: str,
     ) -> dict[str, str]:
         """
-        Build io_map for runtime data flow from previous agent to current agent.
+        Build io_map for an agent using all upstream agents.
 
-        Uses three-tier field mapping strategy:
-        1. Explicit/LLM-approved mapping from registry (Priority 1 & 2)
-        2. Exact name match fallback (Priority 3)
-        3. No mapping - logs warning
-
-        Args:
-            agent: Current agent instance
-            prev_agent: Previous agent instance
-            filled_inputs: Pre-filled inputs for all agents (will be modified in-place)
-            agent_id: Current agent ID
-            prev_agent_id: Previous agent ID
-
-        Returns:
-            Dictionary mapping current agent field names to JSONPath expressions
-            (e.g., {"field_name": "$.prev_agent_id.outputs.source_field"})
+        Rules:
+        - If ANY explicit mapping exists in registry → use io_map, remove input.
+        - Else if exact name match exists in ANY upstream agent → use io_map, remove input.
+        - Otherwise → keep in inputs (LLM fallback).
         """
+
         io_map = {}
         inputs = filled_inputs.get(agent_id, {})
 
-        # Get available source fields for validation
-        source_field_names = {f.name for f in prev_agent.output_schema.fields}
-
-        # Get field mapping from registry
-        mapping = self.mapping_registry.get_mapping(
-            prev_agent_id,
-            agent_id,
-        )
-
-        # CRITICAL: Check ALL fields (required and optional) that CAN be mapped
-        # If a field can be mapped, ALWAYS use io_map and remove from inputs
-        # This overrides LLM-filled values that should come from previous agent
+        # Iterate through each field of the current agent
         for field in agent.input_schema.fields:
-            # Check if this field can be mapped from previous agent
-            can_be_mapped = False
+            mapped = False
             source_field = None
+            source_agent_id = None
 
-            if mapping and field.name in mapping:
-                # Priority 1 or 2: Use explicit or LLM-approved mapping
-                source_field = mapping[field.name]
+            # 1️⃣ FIRST: Check explicit mapping across ALL upstream agents
+            for prev_agent in reversed(all_prev_agents):  # nearest first
+                prev_id = prev_agent.agent_id
+                mapping = self.mapping_registry.get_mapping(prev_id, agent_id)
+                prev_outputs = {f.name for f in prev_agent.output_schema.fields}
 
-                # VALIDATION: Check source field exists in prev_agent outputs
-                if source_field in source_field_names:
-                    can_be_mapped = True
-                else:
-                    logger.error(
-                        f"Invalid mapping: {agent_id}.{field.name} <- "
-                        f"{prev_agent_id}.{source_field} "
-                        f"(source field '{source_field}' does not exist in {prev_agent_id} output schema)",
-                    )
-                    if self.debug:
-                        raise ValueError(
-                            f"Mapping references non-existent output field: '{source_field}' "
-                            f"not in {prev_agent_id}.outputs. "
-                            f"Available fields: {source_field_names}",
-                        )
-                    logger.warning(f"Skipping invalid mapping for {agent_id}.{field.name}")
-            elif field.name in source_field_names:
-                # Priority 3: Exact name match fallback
-                source_field = field.name
-                can_be_mapped = True
+                if mapping and field.name in mapping:
+                    src = mapping[field.name]
+                    if src in prev_outputs:
+                        mapped = True
+                        source_field = src
+                        source_agent_id = prev_id
+                        break
 
-            if can_be_mapped:
-                # ALWAYS map this field via io_map, even if LLM filled it in inputs
-                # Remove from inputs to prevent duplicate/conflicting values
+            # 2️⃣ SECOND: Exact name matching across ALL upstream agents
+            if not mapped:
+                for prev_agent in reversed(all_prev_agents):
+                    prev_id = prev_agent.agent_id
+                    prev_outputs = {f.name for f in prev_agent.output_schema.fields}
+
+                    if field.name in prev_outputs:
+                        mapped = True
+                        source_field = field.name
+                        source_agent_id = prev_id
+                        break
+
+            # 3️⃣ Build io_map if found
+            if mapped:
+                # Remove LLM prefilled value
                 if field.name in inputs:
-                    logger.warning(
-                        f"Field {agent_id}.{field.name} was filled by LLM but can be auto-mapped "
-                        f"from {prev_agent_id}.{source_field}. Removing from inputs and using io_map instead.",
-                    )
                     del inputs[field.name]
 
-                # Build and validate JSONPath expression
-                io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, source_field)
-                logger.debug(
-                    f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} "
-                    f"({'from registry' if mapping and field.name in mapping else 'exact match'}, validated)",
+                io_map[field.name] = self._build_and_validate_jsonpath(
+                    source_agent_id,
+                    source_field,
                 )
-            elif field.required and field.name not in inputs:
-                # Field is required but cannot be mapped and not in inputs
-                logger.warning(
-                    f"No mapping found for {agent_id}.{field.name} from "
-                    f"{prev_agent_id}. Field will be missing unless LLM mapping "
-                    f"is generated or provided in inputs.",
-                )
+                continue
+
+            # 4️⃣ Fallback to inputs (LLM) — do nothing
+            # Called only if not mapped
+            logger.debug(f"{agent_id}.{field.name} remains in inputs")
 
         return io_map
 
@@ -233,22 +204,17 @@ class WorkflowBuilder:
                 continue
 
             # Build io_map for runtime data flow from previous agent
-            io_map = {}
-            if i > 0:
-                prev_agent_id = agents[i - 1].agent_id
-                prev_agent = self.registry.get_agent(prev_agent_id)
+            # Build list of all previous agents for inheritance
+            all_prev_agents = [
+                self.registry.get_agent(a.agent_id) for a in agents[:i] if self.registry.get_agent(a.agent_id)
+            ]
 
-                if not prev_agent:
-                    logger.warning(f"Previous agent {prev_agent_id} not in registry")
-                else:
-                    # This will modify filled_inputs in-place to remove auto-mapped fields
-                    io_map = self._build_field_mappings(
-                        agent,
-                        prev_agent,
-                        filled_inputs,  # Pass original dict so it can be modified
-                        agent_id,
-                        prev_agent_id,
-                    )
+            io_map = self._build_field_mappings(
+                agent,
+                all_prev_agents,
+                filled_inputs,
+                agent_id,
+            )
 
             # Get filled inputs for this agent AFTER mapping (auto-mapped fields removed)
             inputs = filled_inputs.get(agent_id, {})

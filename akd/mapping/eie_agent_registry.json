@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "created_at": "2025-11-11T20:22:21.118690+00:00",
-  "updated_at": "2025-11-11T20:22:21.118731+00:00",
+  "created_at": "2025-11-13T20:16:45.616001+00:00",
+  "updated_at": "2025-11-13T20:16:45.616037+00:00",
   "agents": {
     "eie_extraction": {
       "agent_id": "eie_extraction",
@@ -41,8 +41,8 @@
           },
           {
             "name": "bbox",
-            "type": "string",
-            "description": "A GeoJSON string representing the bounding box coordinates of the location.",
+            "type": "array",
+            "description": "A list of coordinates representing the bounding box coordinates of the location.",
             "required": false,
             "default": null,
             "items_type": null
@@ -59,7 +59,7 @@
             "name": "temporal_extent",
             "type": "string",
             "description": "Time interval or dates extracted from the query.",
-            "required": false
+            "required": true
           }
         ]
       },
@@ -97,7 +97,7 @@
           },
           {
             "name": "bbox",
-            "type": "string",
+            "type": "array",
             "description": "A GeoJSON string representing the bounding box coordinates of the location passed from extraction agent",
             "required": true,
             "default": null,
@@ -124,10 +124,18 @@
           {
             "name": "response",
             "type": "string",
-            "description": "Response with the results of matching STAC collections with metadata.",
+            "description": "Response from the collection search",
             "required": false,
             "default": null,
             "items_type": null
+          },
+          {
+            "name": "collections",
+            "type": "array",
+            "description": "List of collections matching the search.",
+            "required": true,
+            "default": null,
+            "items_type": "string"
           }
         ]
       },
@@ -136,6 +144,66 @@
       ],
       "use_cases": [
         "Agent for collection search"
+      ],
+      "dependencies": []
+    },
+    "item_search": {
+      "agent_id": "item_search",
+      "name": "Item Search",
+      "description": "Agent for item search",
+      "agent_class": "akd.agents.eie_agents.item_search.ItemSearchAgent",
+      "enabled": true,
+      "input_schema": {
+        "fields": [
+          {
+            "name": "bbox",
+            "type": "array",
+            "description": "A GeoJSON string representing the bounding box coordinates of the location passed from extraction agent",
+            "required": true,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "frequency",
+            "type": "string",
+            "description": "Frequency passed from extraction agent",
+            "required": true,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "temporal_extent",
+            "type": "string",
+            "description": "Time interval or dates passed from extraction agent",
+            "required": true
+          },
+          {
+            "name": "collections",
+            "type": "array",
+            "description": "List of collections to search for items.",
+            "required": true,
+            "default": null,
+            "items_type": "string"
+          }
+        ]
+      },
+      "output_schema": {
+        "fields": [
+          {
+            "name": "items",
+            "type": "object",
+            "description": "List of items matching the search.",
+            "required": true,
+            "default": null,
+            "items_type": null
+          }
+        ]
+      },
+      "tags": [
+        "item"
+      ],
+      "use_cases": [
+        "Agent for item search"
       ],
       "dependencies": []
     }

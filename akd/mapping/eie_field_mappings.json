@@ -6,8 +6,15 @@
       "dataset_type": "dataset_type",
       "location": "location",
       "bbox": "bbox",
-      "frequency":"frequency",
+      "frequency": "frequency",
       "temporal_extent": "temporal_extent"
+    },
+    "eie_extraction->item_search": {
+      "bbox": "bbox",
+      "temporal_extent": "temporal_extent"
+    },
+    "collection_search->item_search": {
+      "collections": "collections"
     }
   }
 }
