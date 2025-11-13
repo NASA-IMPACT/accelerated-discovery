@@ -262,6 +262,7 @@ class AbstractBase[
         Returns:
             str: Formatted string with field information, empty if no input schema.
         """
+        # avoid circular dependency
         if not hasattr(self, "input_schema") or not self.input_schema:
             return ""
 
@@ -281,6 +282,8 @@ class AbstractBase[
         Returns:
             str: Formatted string with field information, empty if no output schema.
         """
+
+        # avoid circular dependency
         if not hasattr(self, "output_schema") or not self.output_schema:
             return ""
 

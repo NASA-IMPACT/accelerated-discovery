@@ -19,8 +19,8 @@ from akd.tools.reranker import (
 )
 from akd.tools.resolvers._base import BaseArticleResolver
 from akd.tools.resolvers.composite import CompositeResolver
-from akd.tools.search.utils import deduplicate_results, normalize_results
-from akd.utils import reciprocal_rank_fusion
+
+from .utils import deduplicate_results, normalize_results, reciprocal_rank_fusion
 
 
 class QueryFocusStrategy(str, Enum):

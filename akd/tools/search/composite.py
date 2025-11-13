@@ -16,7 +16,7 @@ from akd.tools.search._base import (
     SearchToolInputSchema,
     SearchToolOutputSchema,
 )
-from akd.utils import reciprocal_rank_fusion
+from akd.tools.search.utils import reciprocal_rank_fusion
 
 
 class CompositeSearchToolConfig(SearchToolConfig):
