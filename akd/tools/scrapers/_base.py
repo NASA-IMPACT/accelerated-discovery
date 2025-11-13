@@ -241,9 +241,9 @@ class WebScraper(ScraperToolBase):
                 schema_data = json.loads(tag.string)
                 if isinstance(schema_data, dict):
                     if "datePublished" in schema_data:
-                        metadata["published_date"] = metadata["published_date"] or schema_data["datePublished"]
+                        metadata["published_date"] = metadata.get("published_date") or schema_data["datePublished"]
                     if "keywords" in schema_data:
-                        metadata["keywords"] = metadata["keywords"] or schema_data["keywords"]
+                        metadata["keywords"] = metadata.get("keywords") or schema_data["keywords"]
             except (json.JSONDecodeError, AttributeError):
                 pass
 
@@ -256,7 +256,7 @@ class WebScraper(ScraperToolBase):
         for twitter_name, meta_key in twitter_mappings.items():
             meta_tag = soup.find("meta", attrs={"name": twitter_name})
             if meta_tag and meta_tag.get("content"):
-                metadata[meta_key] = metadata[meta_key] or meta_tag.get("content")
+                metadata[meta_key] = metadata.get(meta_key) or meta_tag.get("content")
 
         # Extract citation metadata
         citation_mappings = {
