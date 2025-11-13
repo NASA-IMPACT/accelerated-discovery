@@ -77,7 +77,7 @@ class CMRHandlerConfig(DataSearchToolConfig):
     )
     skip_ranking_and_filtering: bool = Field(
         default=False,
-        description="Skip LLM-based approach filtering and final ranking stages. Returns all deduplicated collections from all_collections_from_cmr. Use for baseline evaluations and raw CMR analysis.",
+        description="Skip LLM-based approach filtering and final ranking stages. Returns all deduplicated collections from unfiltered_collections. Use for baseline evaluations and raw CMR analysis.",
     )
 
     # Component model configuration

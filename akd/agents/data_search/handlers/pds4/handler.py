@@ -196,11 +196,17 @@ class PDS4Handler(BaseHandler):
             strategy_execution_logs,
         )
 
+        # Flatten strategy_collections into a single list for unfiltered_collections
+        all_unfiltered_collections = []
+        for collections in strategy_collections.values():
+            all_unfiltered_collections.extend(collections)
+
         result = DecompositionResult(
             decomposition=safe_model_dump(decomposition),
             repository="PDS4",
             query_approaches=augmented_strategies,  # Store PDS4 tool strategies here
             searchable_queries=[],  # PDS4 doesn't use this field
+            unfiltered_collections=all_unfiltered_collections,  # ALL retrieved collections before filtering/ranking
             data_results=ranked_collections,
             total_results_from_repository=total_pds4,
             total_results_after_filtering=len(ranked_collections),
