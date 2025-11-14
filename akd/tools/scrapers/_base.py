@@ -240,10 +240,8 @@ class WebScraper(ScraperToolBase):
             try:
                 schema_data = json.loads(tag.string)
                 if isinstance(schema_data, dict):
-                    if "datePublished" in schema_data:
-                        metadata["published_date"] = metadata.get("published_date") or schema_data["datePublished"]
-                    if "keywords" in schema_data:
-                        metadata["keywords"] = metadata.get("keywords") or schema_data["keywords"]
+                    metadata["published_date"] = metadata.get("published_date") or schema_data.get("datePublished")
+                    metadata["keywords"] = metadata.get("keywords") or schema_data.get("keywords")
             except (json.JSONDecodeError, AttributeError):
                 pass
 
