@@ -147,10 +147,8 @@ class ExtractAgent(BaseAgent):
             content = getattr(response, "content", None)
             data = json.loads(content)
 
-            print("see this", data.get("location"))
-
             # get the geojson using geodini api call
-            response = await get_geometry(data.get("location"), "http://localhost:9000")
+            response = await get_geometry(data.get("location"), "http://host.docker.internal:9000")
 
             bbox = get_bbox(response)
 
@@ -158,7 +156,7 @@ class ExtractAgent(BaseAgent):
             return ExtractOutputSchema(
                 dataset_type=data.get("dataset_type", "all"),
                 location=data.get("location", "global"),
-                bbox=bbox,
+                bbox=list(bbox),
                 frequency=data.get("frequency", "all"),
                 temporal_extent={"dates": data.get("temporal_extent", {})},
             )

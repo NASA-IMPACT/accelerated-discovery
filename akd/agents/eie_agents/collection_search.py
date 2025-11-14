@@ -65,6 +65,7 @@ class CollectionSearchAgent(BaseAgent):
         params: CollectionSearchInputSchema,
     ) -> Dict[str, List[str]]:
         """Fetch all STAC items from a root /search endpoint, returning results grouped by collection URL."""
+
         results: Dict[str, List[str]] = {}
         base_url = f"{root}/search"
 
@@ -73,8 +74,8 @@ class CollectionSearchAgent(BaseAgent):
             "limit": 100,
         }
 
-        if params.bbox:
-            base_query["bbox"] = params.bbox
+        # if params.bbox:
+        #     base_query["bbox"] = params.bbox
 
         if params.temporal_extent and "dates" in params.temporal_extent:
             start = params.temporal_extent["dates"].get("start")
@@ -87,6 +88,7 @@ class CollectionSearchAgent(BaseAgent):
 
         try:
             while next_url:
+                print("in while loop")
                 r = await client.get(next_url, params=query)
                 r.raise_for_status()
                 data = r.json()
@@ -133,25 +135,77 @@ class CollectionSearchAgent(BaseAgent):
     async def _arun(self, params: CollectionSearchInputSchema, **kwargs) -> CollectionSearchOutputSchema:
         return await self.get_response_async(params, **kwargs)
 
+    async def fetch_all_collections(self, client: httpx.AsyncClient) -> List[Dict]:
+        """Fetch and paginate collections from all STAC roots."""
+
+        stac_roots = [r.rstrip("/") for r in self.config.stac_roots]
+
+        results = []  # final list
+
+        for root in stac_roots:
+            next_url = f"{root}/collections"
+            params = None  # first call only
+
+            try:
+                while next_url:
+                    r = await client.get(next_url, params=params)
+                    r.raise_for_status()
+                    data = r.json()
+
+                    # Extract collections in this page
+                    for c in data.get("collections", []):
+                        coll_id = c.get("id")
+                        if not coll_id:
+                            continue
+
+                        collection_url = f"{root}/collections/{coll_id}"
+
+                        results.append(
+                            {
+                                "title": c.get("title"),
+                                "description": c.get("description", ""),
+                                "collection_url": collection_url,
+                            },
+                        )
+
+                    # Pagination: find "next" link
+                    next_link = next(
+                        (link for link in data.get("links", []) if link.get("rel") == "next"),
+                        None,
+                    )
+
+                    if next_link:
+                        next_url = next_link["href"]
+                        params = None  # next pages must NOT resend params
+                    else:
+                        next_url = None
+
+            except Exception as e:
+                logger.error(f"Failed to fetch collections from {root}: {e}")
+
+        return results
+
     async def get_response_async(self, params: CollectionSearchInputSchema, **kwargs) -> CollectionSearchOutputSchema:
         """Filter STAC collections based on extracted parameters."""
-        stac_roots = [r.rstrip("/") for r in self.config.stac_roots]
-        all_items: Dict[str, List[str]] = {}
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for root in stac_roots:
-                items = await self._fetch_items(client, root, params)
-                # merge items into all_items
-                for coll_url, hrefs in items.items():
-                    all_items.setdefault(coll_url, []).extend(hrefs)
 
-            collection_urls = list(all_items.keys())
-            print("all coll", len(collection_urls), type(collection_urls))
-            all_collections = []
+        # searching all items and then filtering collection took a lot of time
+        # all_items: Dict[str, List[str]] = {}
+        # async with httpx.AsyncClient(timeout=60.0) as client:
+        #     for root in stac_roots:
+        #         items = await self._fetch_items(client, root, params)
+        #         # merge items into all_items
+        #         for coll_url, hrefs in items.items():
+        #             all_items.setdefault(coll_url, []).extend(hrefs)
 
-            for collection_url in collection_urls:
-                all_collections.append(await self._fetch_collections(client, collection_url))
+        #     collection_urls = list(all_items.keys())
+        #     all_collections = []
 
-            # --- Stage 2: use LLM to pick the relevant collection IDs ---
+        #     for collection_url in collection_urls:
+        #         all_collections.append(await self._fetch_collections(client, collection_url))
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            all_collections = await self.fetch_all_collections(client)
+
             llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1, max_tokens=500, api_key=self.config.api_key)
             llm_prompt = f"""
             You are a geospatial data expert.
