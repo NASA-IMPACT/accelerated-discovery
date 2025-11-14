@@ -171,6 +171,9 @@ class SimpleWebScraper(WebScraper):
         # Clean up the markdown
         markdown_content = await self._clean_markdown(markdown_content)
 
+        # Detect anti-bot/security checks in content
+        self._validate_security_check(markdown_content, str(params.url))
+
         # Extract metadata
         metadata = await self._extract_metadata(
             soup,
