@@ -19,7 +19,7 @@ classifiers = [
 ]
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "crawl4ai>=0.5.0.post4",
+    "crawl4ai>=0.7.6",
     "duckduckgo-search>=8.0.1",
     "gdown>=5.2.0",
     "instructor==1.13.0",
