@@ -6,7 +6,7 @@ This module contains core data models, schemas, and type definitions
 organized into logical sections for better maintainability.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import (
     AnyUrl,
@@ -21,15 +21,6 @@ from akd._base import IOSchema
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
-
-# Import guards for optional dependencies
-try:
-    import langchain_core  # noqa: F401
-
-    LANGCHAIN_CORE_INSTALLED = True
-except ImportError:
-    LANGCHAIN_CORE_INSTALLED = False
-
 
 # =============================================================================
 # Search and Data Models
@@ -136,7 +127,7 @@ class ResearchData(BaseModel):
         ...,
         description="Mission/Instrument/Model the data is derived from (e.g., HLS, MERRA-2)",
     )
-    data_url: Optional[AnyUrl] = Field(
+    data_url: AnyUrl | None = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )
@@ -145,107 +136,107 @@ class ResearchData(BaseModel):
 class PaperDataItem(BaseModel):
     """Represents a single paper data object retrieved from Semantic Scholar."""
 
-    paper_id: Optional[str] = Field(
+    paper_id: str | None = Field(
         ...,
         description="Semantic Scholar’s primary unique identifier for a paper.",
     )
-    corpus_id: Optional[int] = Field(
+    corpus_id: int | None = Field(
         ...,
         description="Semantic Scholar’s secondary unique identifier for a paper.",
     )
-    external_ids: Optional[object] = Field(
+    external_ids: object | None = Field(
         None,
         description="Valid URL to download data referenced in research. Leave None if unavailable.",
     )
-    url: Optional[str] = Field(
+    url: str | None = Field(
         ...,
         description="URL of the paper on the Semantic Scholar website.",
     )
-    title: Optional[str] = Field(
+    title: str | None = Field(
         ...,
         description="Title of the paper.",
     )
-    abstract: Optional[str] = Field(
+    abstract: str | None = Field(
         ...,
         description="The paper's abstract. Note that due to legal reasons, this may be missing even if we display an abstract on the website.",
     )
-    venue: Optional[str] = Field(
+    venue: str | None = Field(
         ...,
         description="The name of the paper’s publication venue.",
     )
-    publication_venue: Optional[object] = Field(
+    publication_venue: object | None = Field(
         ...,
         description="An object that contains the following information about the journal or conference in which this paper was published: id (the venue’s unique ID), name (the venue’s name), type (the type of venue), alternate_names (an array of alternate names for the venue), and url (the venue’s website).",
     )
-    year: Optional[int] = Field(
+    year: int | None = Field(
         ...,
         description="The year the paper was published.",
     )
-    reference_count: Optional[int] = Field(
+    reference_count: int | None = Field(
         ...,
         description="The total number of papers this paper references.",
     )
-    citation_count: Optional[int] = Field(
+    citation_count: int | None = Field(
         ...,
         description="The total number of papers that references this paper.",
     )
-    influential_citation_count: Optional[int] = Field(
+    influential_citation_count: int | None = Field(
         ...,
         description="A subset of the citation count, where the cited publication has a significant impact on the citing publication.",
     )
-    is_open_access: Optional[bool] = Field(
+    is_open_access: bool | None = Field(
         ...,
         description="Whether the paper is open access.",
     )
-    open_access_pdf: Optional[object] = Field(
+    open_access_pdf: object | None = Field(
         ...,
         description="An object that contains the following parameters: url (a link to the paper’s PDF), status, the paper's license, and a legal disclaimer.",
     )
-    fields_of_study: Optional[list[str]] = Field(
+    fields_of_study: list[str] | None = Field(
         ...,
         description="A list of the paper’s high-level academic categories from external sources.",
     )
-    s2_fields_of_study: Optional[list[object]] = Field(
+    s2_fields_of_study: list[object] | None = Field(
         ...,
         description="An array of objects. Each object contains the following parameters: category (a field of study. The possible fields are the same as in fieldsOfStudy), and source (specifies whether the category was classified by Semantic Scholar or by an external source.",
     )
-    publication_types: Optional[list[str]] = Field(
+    publication_types: list[str] | None = Field(
         ...,
         description="The type of this publication.",
     )
-    publication_date: Optional[str] = Field(
+    publication_date: str | None = Field(
         ...,
         description="The date when this paper was published, in YYYY-MM-DD format.",
     )
-    journal: Optional[object] = Field(
+    journal: object | None = Field(
         ...,
         description="An object that contains the following parameters, if available: name (the journal name), volume (the journal’s volume number), and pages (the page number range)",
     )
-    citation_styles: Optional[object] = Field(
+    citation_styles: object | None = Field(
         ...,
         description="The BibTex bibliographical citation of the paper.",
     )
-    authors: Optional[list[object]] = Field(
+    authors: list[object] | None = Field(
         ...,
         description="List of authors corresponding to the paper.",
     )
-    citations: Optional[list[object]] = Field(
+    citations: list[object] | None = Field(
         ...,
         description="List of citations the paper has.",
     )
-    references: Optional[list[object]] = Field(
+    references: list[object] | None = Field(
         ...,
         description="List of references used in the paper.",
     )
-    embedding: Optional[object] = Field(
+    embedding: object | None = Field(
         ...,
         description="The paper's embedding.",
     )
-    tldr: Optional[object] = Field(
+    tldr: object | None = Field(
         ...,
         description="Tldr version of the paper.",
     )
-    external_id: Optional[str] = Field(
+    external_id: str | None = Field(
         ...,
         description="The external id of the paper from the query.",
     )
@@ -263,7 +254,7 @@ class ExtractionSchema(BaseModel):
         CONFIG.model_config_settings.default_no_answer,
         description="Direct, concise answer to the input query",
     )
-    related_knowledge: Optional[List[str]] = Field(
+    related_knowledge: list[str] | None = Field(
         None,
         description="List of concise related information supporting the query answer",
     )
@@ -286,15 +277,15 @@ class SingleEstimation(ExtractionSchema):
         ...,
         description="Methodology used for the estimation",
     )
-    assumptions: Optional[List[str]] = Field(
+    assumptions: list[str] | None = Field(
         None,
         description="Key assumptions made during the estimation process",
     )
-    confidence_level: Optional[float] = Field(
+    confidence_level: float | None = Field(
         None,
         description="Confidence level of the estimation (e.g., probability or margin of error)",
     )
-    validation_method: Optional[str] = Field(
+    validation_method: str | None = Field(
         None,
         description="How the estimation was validated or cross-checked",
     )
@@ -311,16 +302,16 @@ class ToolSearchResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # causes serialization issues as arbitrary type
-    tool: Optional[Any] = Field(
+    tool: Any | None = Field(
         None,
         description="Tool found during search",
     )  # Should be ToolType, but circular import issues
     # tool: Optional["ToolType"] = Field(...)
-    args: Optional[Dict[str, Any]] = Field(
+    args: dict[str, Any] | None = Field(
         None,
         description="Input arguments extracted when tool is found",
     )
-    result: Optional[Any] = Field(
+    result: Any | None = Field(
         None,
         description="Result when tool is executed",
     )

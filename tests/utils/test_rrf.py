@@ -3,7 +3,7 @@
 import pytest
 
 from akd.structures import SearchResultItem
-from akd.utils import reciprocal_rank_fusion
+from akd.tools.search.utils import reciprocal_rank_fusion
 
 
 class TestReciprocalRankFusion:

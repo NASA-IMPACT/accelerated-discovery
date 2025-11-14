@@ -4,7 +4,8 @@ from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, UndetectedAdapter
+from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
 from loguru import logger
 from markdownify import markdownify
 from pydantic import ConfigDict, Field, computed_field
@@ -170,6 +171,9 @@ class SimpleWebScraper(WebScraper):
         # Clean up the markdown
         markdown_content = await self._clean_markdown(markdown_content)
 
+        # Detect anti-bot/security checks in content
+        self._validate_security_check(markdown_content, str(params.url))
+
         # Extract metadata
         metadata = await self._extract_metadata(
             soup,
@@ -222,12 +226,29 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
         playwright install chromium
         ```
 
+    Anti-Bot Protection:
+        The scraper includes several features to bypass anti-bot systems like
+        Radware Bot Manager, Cloudflare, and similar protections:
+        - Stealth mode: Modifies browser fingerprints to avoid detection
+        - User agent rotation: Randomizes user agents across requests
+        - Human behavior simulation: Adds realistic delays and interactions
+        - Non-headless mode: Runs visible browser (less detectable)
+
     Attributes:
         use_docker: Enable Docker browser connection via CDP (default: False)
         playwright_cdp_url: WebSocket URL for CDP connection (default: "ws://localhost:9222")
         fallback_to_local: Auto-fallback to local Playwright if Docker fails (default: True)
         browser_type: Browser engine - "chromium", "firefox", or "webkit" (default: "chromium")
-        headless: Run browser without GUI (default: True)
+        headless: Run browser without GUI (default: True for servers, set False for better anti-bot bypass)
+        enable_stealth: Enable stealth mode to bypass bot detection (default: True)
+        user_agent_mode: User agent strategy - "random" for rotation (default: "random")
+        simulate_user: Simulate human-like behavior (default: True)
+        wait_time: Delay after page load in seconds (default: 3.0)
+        delay_before_return_html: Additional delay before extraction (default: 2.0)
+        magic: Enhanced anti-detection mode (default: True)
+        proxy_config: Proxy configuration dict with server, username, password (default: None)
+        use_undetected_browser: Use UndetectedAdapter for extreme anti-bot (default: False, slower)
+        security_check_indicators: Keywords to detect anti-bot pages (inherited from base)
 
     Fallback Behavior:
         By default, if Docker mode is enabled but fails, the scraper will automatically
@@ -261,7 +282,41 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
     )
     headless: bool = Field(
         default=True,
-        description="Run browser in headless mode.",
+        description="Run browser in headless mode. Set to False for better anti-bot bypass (requires display).",
+    )
+
+    # Anti-bot bypass features
+    enable_stealth: bool = Field(
+        default=True,
+        description="Enable stealth mode using playwright-stealth to modify browser fingerprints.",
+    )
+    user_agent_mode: Literal["default", "random"] = Field(
+        default="random",
+        description="User agent strategy: 'default' uses system UA, 'random' rotates user agents.",
+    )
+    simulate_user: bool = Field(
+        default=True,
+        description="Simulate human-like behavior with mouse movements and realistic interactions.",
+    )
+    wait_time: float = Field(
+        default=3.0,
+        description="Time in seconds to wait after page load before extraction.",
+    )
+    delay_before_return_html: float = Field(
+        default=2.0,
+        description="Additional delay in seconds before returning HTML content.",
+    )
+    magic: bool = Field(
+        default=True,
+        description="Enable enhanced anti-detection mode with advanced fingerprint evasion.",
+    )
+    proxy_config: dict | None = Field(
+        default=None,
+        description="Proxy configuration: {'server': 'http://...', 'username': '...', 'password': '...'}",
+    )
+    use_undetected_browser: bool = Field(
+        default=False,
+        description="Use UndetectedAdapter for extremely aggressive anti-bot systems (slower but more effective).",
     )
 
     # filter header and footer by default
@@ -294,10 +349,21 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
 
     @computed_field
     def _run_config(self) -> CrawlerRunConfig:
-        return CrawlerRunConfig(
-            excluded_tags=self.excluded_tags if self.filter_header_footer else [],
-            excluded_selector=self.excluded_selector if self.filter_header_footer else "",
-        )
+        config_params = {
+            "excluded_tags": self.excluded_tags if self.filter_header_footer else [],
+            "excluded_selector": self.excluded_selector if self.filter_header_footer else "",
+            "delay_before_return_html": self.delay_before_return_html,
+            "simulate_user": self.simulate_user,
+            "magic": self.magic,
+            "user_agent_mode": self.user_agent_mode,
+            "mean_delay": self.wait_time,  # Use wait_time as mean_delay for timing control
+        }
+
+        # Add proxy config if provided
+        if self.proxy_config:
+            config_params["proxy_config"] = self.proxy_config
+
+        return CrawlerRunConfig(**config_params)
 
 
 class Crawl4AIWebScraper(WebScraper):
@@ -417,6 +483,26 @@ class Crawl4AIWebScraper(WebScraper):
             )
             return base_url
 
+    def _create_crawler(self, browser_config: BrowserConfig) -> AsyncWebCrawler:
+        """
+        Create AsyncWebCrawler with optional UndetectedAdapter.
+
+        Args:
+            browser_config: Browser configuration
+
+        Returns:
+            Configured AsyncWebCrawler instance
+        """
+        if self.use_undetected_browser:
+            adapter = UndetectedAdapter()
+            strategy = AsyncPlaywrightCrawlerStrategy(
+                browser_config=browser_config,
+                browser_adapter=adapter,
+            )
+            return AsyncWebCrawler(crawler_strategy=strategy, config=browser_config)
+        else:
+            return AsyncWebCrawler(config=browser_config)
+
     async def fetch(self, url: str):
         # Try Docker mode first if configured
         if self.use_docker:
@@ -435,36 +521,59 @@ class Crawl4AIWebScraper(WebScraper):
         return await self._fetch_with_local(url)
 
     async def _fetch_with_docker(self, url: str):
-        """Fetch URL using Docker-based browser."""
+        """Fetch URL using Docker-based browser with anti-bot bypass."""
         # Discover the full CDP endpoint URL
         cdp_url = await self._get_cdp_endpoint(self.playwright_cdp_url)
 
-        browser_config_params = {
-            "browser_type": self.browser_type,
-            "headless": self.headless,
-            "verbose": self.debug,
-            "browser_mode": "docker",
-            "cdp_url": cdp_url,
-            "use_managed_browser": True,
-        }
+        browser_config = BrowserConfig(
+            browser_type=self.browser_type,
+            headless=self.headless,
+            verbose=self.debug,
+            browser_mode="docker",
+            cdp_url=cdp_url,
+            use_managed_browser=True,
+            enable_stealth=self.enable_stealth,
+        )
 
-        browser_config = BrowserConfig(**browser_config_params)
-
-        async with AsyncWebCrawler(config=browser_config) as crawler:
+        async with self._create_crawler(browser_config) as crawler:
             return await crawler.arun(url=url, config=self._run_config)
 
     async def _fetch_with_local(self, url: str):
-        """Fetch URL using local Playwright."""
-        browser_config_params = {
-            "browser_type": self.browser_type,
-            "headless": self.headless,
-            "verbose": self.debug,
-        }
+        """Fetch URL using local Playwright with anti-bot bypass."""
+        browser_config = BrowserConfig(
+            browser_type=self.browser_type,
+            headless=self.headless,
+            verbose=self.debug,
+            enable_stealth=self.enable_stealth,
+        )
 
-        browser_config = BrowserConfig(**browser_config_params)
-
-        async with AsyncWebCrawler(config=browser_config) as crawler:
+        async with self._create_crawler(browser_config) as crawler:
             return await crawler.arun(url=url, config=self._run_config)
+
+    def _validate_http_response(self, crawl_result, url: str) -> None:
+        """
+        Validate HTTP response status and crawl success.
+
+        Args:
+            crawl_result: CrawlResult from crawl4ai
+            url: URL being crawled
+
+        Raises:
+            HTTPError: If HTTP status code >= 400
+            RuntimeError: If crawl was unsuccessful
+        """
+        # Check for HTTP errors
+        if crawl_result.status_code and crawl_result.status_code >= 400:
+            raise HTTPError(
+                f"HTTP {crawl_result.status_code} error fetching {url}: "
+                f"{crawl_result.error_message or 'Unknown error'}",
+            )
+
+        # Check if crawl was successful
+        if not crawl_result.success:
+            raise RuntimeError(
+                f"Failed to crawl {url}: {crawl_result.error_message or 'Unknown error'}",
+            )
 
     async def _arun(self, params: ScraperToolInputSchema, **kwargs) -> ScraperToolOutputSchema:
         if params.url.path.endswith((".pdf", ".PDF")):
@@ -472,8 +581,14 @@ class Crawl4AIWebScraper(WebScraper):
 
         crawl_result = await self.fetch(str(params.url))
 
+        # Validate HTTP response
+        self._validate_http_response(crawl_result, str(params.url))
+
         # Use Crawl4AI's built-in markdown
         markdown = crawl_result.markdown.strip()
+
+        # Detect anti-bot/security checks in content
+        self._validate_security_check(markdown, str(params.url))
 
         # Use original HTML for metadata extraction
         soup = BeautifulSoup(crawl_result.html, "html.parser")

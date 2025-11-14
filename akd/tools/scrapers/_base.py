@@ -72,6 +72,22 @@ class ScraperToolConfig(BaseToolConfig):
         default=False,
         description="Boolean flag for debug mode",
     )
+    security_check_indicators: list[str] = Field(
+        default_factory=lambda: [
+            "verify you are human",
+            "checking if you're human",
+            "checking if you are human",
+            "please verify you are",
+            "confirm you are a human",
+            "confirm you are human",
+            "prove you are human",
+            "are you a robot",
+            "human verification required",
+            "complete the security check",
+            "we apologize for the inconvenience",
+        ],
+        description="Phrases to detect anti-bot/security check pages. Uses action-oriented phrases unlikely to appear in real content.",
+    )
 
 
 class ScraperToolBase(BaseTool[ScraperToolInputSchema, ScraperToolOutputSchema]):
@@ -83,6 +99,35 @@ class ScraperToolBase(BaseTool[ScraperToolInputSchema, ScraperToolOutputSchema])
     input_schema = ScraperToolInputSchema
     output_schema = ScraperToolOutputSchema
     config_schema = ScraperToolConfig
+
+    def _validate_security_check(self, content: str | None, url: str, max_words: int = 300) -> None:
+        """
+        Check if content contains anti-bot/security check indicators.
+
+        Uses heuristics to avoid false positives:
+        - Only checks if content is suspiciously short (< max_words)
+        - Looks for specific anti-bot phrases, not general terms
+
+        Args:
+            content: Page content to check (can be None)
+            url: URL being checked
+            max_words: Only validate if content has fewer than this many words (default: 300)
+
+        Raises:
+            RuntimeError: If security check indicators are found
+        """
+        content = content or ""
+        if not self.security_check_indicators or len(content.split()) > max_words:
+            return
+
+        content_lower = content.lower()
+        for indicator in self.security_check_indicators:
+            if indicator.lower() in content_lower:
+                raise RuntimeError(
+                    f"Anti-bot protection detected on {url}. "
+                    f"Content contains '{indicator}' ({len(content.split())} words). "
+                    f"Try using a different scraper or anti-bot bypass techniques.",
+                )
 
 
 class WebScraperToolConfig(ScraperToolConfig):
