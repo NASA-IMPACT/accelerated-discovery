@@ -245,6 +245,7 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
         magic: Enhanced anti-detection mode (default: True)
         proxy_config: Proxy configuration dict with server, username, password (default: None)
         use_undetected_browser: Use UndetectedAdapter for extreme anti-bot (default: False, slower)
+        security_check_indicators: Keywords to detect anti-bot pages (inherited from base)
 
     Fallback Behavior:
         By default, if Docker mode is enabled but fails, the scraper will automatically
@@ -313,20 +314,6 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
     use_undetected_browser: bool = Field(
         default=False,
         description="Use UndetectedAdapter for extremely aggressive anti-bot systems (slower but more effective).",
-    )
-    security_check_indicators: list[str] = Field(
-        default_factory=lambda: [
-            "security check",
-            "captcha",
-            "verify you are human",
-            "cloudflare",
-            "access denied",
-            "bot manager",
-            "checking if you're human",
-            "please verify",
-            "are you a robot",
-        ],
-        description="Keywords to detect anti-bot/security check pages. Raise error if found in content.",
     )
 
     # filter header and footer by default
@@ -584,29 +571,6 @@ class Crawl4AIWebScraper(WebScraper):
             raise RuntimeError(
                 f"Failed to crawl {url}: {crawl_result.error_message or 'Unknown error'}",
             )
-
-    def _validate_security_check(self, content: str, url: str) -> None:
-        """
-        Check if content contains anti-bot/security check indicators.
-
-        Args:
-            content: Page content to check
-            url: URL being checked
-
-        Raises:
-            RuntimeError: If security check indicators are found
-        """
-        if not self.security_check_indicators:
-            return
-
-        content_lower = content.lower()
-        for indicator in self.security_check_indicators:
-            if indicator.lower() in content_lower:
-                raise RuntimeError(
-                    f"Anti-bot protection detected on {url}. "
-                    f"Content contains '{indicator}'. "
-                    f"Try using use_undetected_browser=True or a different scraper.",
-                )
 
     async def _arun(self, params: ScraperToolInputSchema, **kwargs) -> ScraperToolOutputSchema:
         if params.url.path.endswith((".pdf", ".PDF")):

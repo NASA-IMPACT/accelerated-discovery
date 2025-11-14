@@ -72,6 +72,20 @@ class ScraperToolConfig(BaseToolConfig):
         default=False,
         description="Boolean flag for debug mode",
     )
+    security_check_indicators: list[str] = Field(
+        default_factory=lambda: [
+            "security check",
+            "captcha",
+            "verify you are human",
+            "cloudflare",
+            "access denied",
+            "bot manager",
+            "checking if you're human",
+            "please verify",
+            "are you a robot",
+        ],
+        description="Keywords to detect anti-bot/security check pages. Raise error if found in content.",
+    )
 
 
 class ScraperToolBase(BaseTool[ScraperToolInputSchema, ScraperToolOutputSchema]):
@@ -83,6 +97,29 @@ class ScraperToolBase(BaseTool[ScraperToolInputSchema, ScraperToolOutputSchema])
     input_schema = ScraperToolInputSchema
     output_schema = ScraperToolOutputSchema
     config_schema = ScraperToolConfig
+
+    def _validate_security_check(self, content: str, url: str) -> None:
+        """
+        Check if content contains anti-bot/security check indicators.
+
+        Args:
+            content: Page content to check
+            url: URL being checked
+
+        Raises:
+            RuntimeError: If security check indicators are found
+        """
+        if not self.security_check_indicators:
+            return
+
+        content_lower = content.lower()
+        for indicator in self.security_check_indicators:
+            if indicator.lower() in content_lower:
+                raise RuntimeError(
+                    f"Anti-bot protection detected on {url}. "
+                    f"Content contains '{indicator}'. "
+                    f"Try using a different scraper or anti-bot bypass techniques.",
+                )
 
 
 class WebScraperToolConfig(ScraperToolConfig):
