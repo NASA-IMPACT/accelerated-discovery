@@ -6,6 +6,11 @@ This script measures the data search agent's total recall by checking if expecte
 concept IDs (from SME truth set) appear anywhere in the complete set of CMR results
 returned by the agent's queries (before ranking/filtering).
 
+Uses count-based (micro-average) calculation:
+- Decomp accuracy: found_in_decomp / expected_in_decomp
+- Query accuracy: total_found_in_query / total_expected_in_query
+- Overall accuracy: total_found_across_all / total_expected_across_all
+
 This is a recall metric focused on system capability - could the agent have found it?
 
 Output: total_recall.json
@@ -79,15 +84,17 @@ def score_decomposition(
 def calculate_query_accuracy(
     query: dict,
     full_concept_ids: List[str],
-) -> Tuple[float, List[dict]]:
+) -> Tuple[float, int, int, List[dict]]:
     """
     Calculate accuracy for a single query across all minimum decompositions.
 
+    Uses count-based (micro-average) approach:
+    query_accuracy = total_found_in_query / total_expected_in_query
+
     Returns:
-        Tuple of (query_accuracy_percent, decomposition_details_list)
+        Tuple of (query_accuracy_percent, total_expected, total_found, decomposition_details_list)
     """
     decomp_details = []
-    decomp_scores = []
     total_expected = 0
     total_found = 0
 
@@ -117,14 +124,15 @@ def calculate_query_accuracy(
                 },
             )
 
-            decomp_scores.append(score)
             total_expected += len(expected_ids)
             total_found += len(found_ids)
 
-    # Query accuracy is average of all minimum decomposition scores
-    query_accuracy = sum(decomp_scores) / len(decomp_scores) if decomp_scores else 0.0
+    # Query accuracy is count-based: total found / total expected
+    query_accuracy = (
+        (total_found / total_expected * 100.0) if total_expected > 0 else 100.0
+    )
 
-    return query_accuracy, decomp_details
+    return query_accuracy, total_expected, total_found, decomp_details
 
 
 def main(run_dir: Path, truth_set_path: Path, output_path: Optional[Path] = None):
@@ -199,14 +207,12 @@ def main(run_dir: Path, truth_set_path: Path, output_path: Optional[Path] = None
             continue
 
         # Calculate accuracy for this query
-        query_accuracy, decomp_details = calculate_query_accuracy(
-            query,
-            full_concept_ids,
+        query_accuracy, total_expected, total_found, decomp_details = (
+            calculate_query_accuracy(
+                query,
+                full_concept_ids,
+            )
         )
-
-        # Count total expected and found concepts
-        total_expected = sum(len(d["expected_concept_ids"]) for d in decomp_details)
-        total_found = sum(len(d["found_concept_ids"]) for d in decomp_details)
 
         query_scores.append(
             {
@@ -226,10 +232,13 @@ def main(run_dir: Path, truth_set_path: Path, output_path: Optional[Path] = None
         )
         queries_processed += 1
 
-    # Calculate overall statistics
+    # Calculate overall statistics using count-based (micro-average) approach
+    # Overall accuracy = total found across all queries / total expected across all queries
+    overall_total_expected = sum(q["total_expected_concepts"] for q in query_scores)
+    overall_total_found = sum(q["total_found_concepts"] for q in query_scores)
     overall_accuracy = (
-        sum(q["accuracy_percent"] for q in query_scores) / len(query_scores)
-        if query_scores
+        (overall_total_found / overall_total_expected * 100.0)
+        if overall_total_expected > 0
         else 0.0
     )
 
@@ -244,7 +253,7 @@ def main(run_dir: Path, truth_set_path: Path, output_path: Optional[Path] = None
         1 for d in all_decomps if len(d["found_concept_ids"]) > 0 and not d["matched"]
     )
     decomps_not_matched = sum(
-        1 for d in all_decomps if len(d["found_concept_ids"]) == 0
+        1 for d in all_decomps if len(d["found_concept_ids"]) == 0 and not d["matched"]
     )
 
     # Build output

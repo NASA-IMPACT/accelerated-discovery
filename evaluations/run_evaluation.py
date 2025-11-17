@@ -12,9 +12,14 @@ import argparse
 import asyncio
 import json
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
+
+# Import slugify from the agent's metadata module
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from akd.agents.data_search.utils.metadata import slugify
 
 
 def load_truth_set(filepath: str) -> Dict:
@@ -129,14 +134,12 @@ def run_query(
 
 
 def create_query_slug(query_text: str, max_length: int = 50) -> str:
-    """Create a URL-safe slug from query text for matching output files"""
-    import re
+    """Create a URL-safe slug from query text for matching output files
 
-    # Convert to lowercase, replace spaces/special chars with underscores
-    slug = re.sub(r"[^a-z0-9]+", "_", query_text.lower())
-    # Remove leading/trailing underscores and limit length
-    slug = slug.strip("_")[:max_length]
-    return slug
+    Uses the same slugify function as the agent to ensure consistency.
+    """
+    # Use the agent's slugify function to match file naming logic
+    return slugify(query_text, max_length=max_length)
 
 
 async def run_evaluation(

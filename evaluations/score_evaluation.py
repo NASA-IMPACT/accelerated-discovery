@@ -5,6 +5,11 @@ Calculate Top-5 Recall for agent evaluation outputs against SME truth set.
 Measures how many of the required ground truth concept IDs appear in the
 top 5 ranked collections returned by the agent for each decomposition.
 
+Uses count-based (micro-average) calculation:
+- Decomp recall: found_in_top5 / expected_in_decomp
+- Query recall: total_found_in_top5 / total_expected_in_query
+- Overall recall: total_found_across_all / total_expected_across_all
+
 This is a recall metric focused on user experience - what users actually see.
 
 Output: top_5_recall.json
@@ -58,14 +63,19 @@ def score_query(
     """
     Score a single query by comparing truth set against agent collection pool.
 
+    Uses count-based scoring:
+    - Decomp score = (# matched IDs / # expected IDs) * 100%
+    - Query score = (total matched / total expected) * 100%
+
     Returns:
         - decomposition_scores: List of per-decomp results
-        - score_percent: Average of minimum decomp scores
-        - minimum_decomps_total: Count of minimum=true decomps
-        - minimum_decomps_matched: Count of matched decomps
+        - score_percent: Query recall percentage (count-based)
+        - total_expected: Total concept IDs expected in this query
+        - total_found: Total concept IDs found in top-5
     """
     decomp_scores = []
-    scores_for_average = []
+    total_expected = 0
+    total_found = 0
 
     # Iterate through truth set topics and decomps
     for topic in truth_query.get("topics", []):
@@ -76,40 +86,45 @@ def score_query(
             minimum = decomp.get("minimum", False)
             truth_ids = decomp.get("cmr_concept_ids", [])
 
-            # Check if ANY truth ID exists in agent pool
+            # Count how many truth IDs exist in agent pool
             matched_ids = [tid for tid in truth_ids if tid in agent_pool]
-            matched = len(matched_ids) > 0
-            score = 100.0 if matched else 0.0
+
+            # Count-based scoring
+            if len(truth_ids) > 0:
+                score = (len(matched_ids) / len(truth_ids)) * 100.0
+            else:
+                score = 100.0  # No expected IDs = perfect score
+
+            matched = len(matched_ids) == len(truth_ids)
 
             decomp_score = {
                 "topic": topic_name,
                 "decomp": decomp_name,
                 "minimum": minimum,
-                "truth_concept_ids": truth_ids,
+                "expected_concept_ids": truth_ids,
+                "found_concept_ids": matched_ids,
                 "matched": matched,
-                "matched_ids": matched_ids,
-                "score": score,
+                "score_percent": score,
             }
 
             decomp_scores.append(decomp_score)
 
-            # Only count minimum=true decomps in average
+            # Only count minimum=true decomps in totals
             if minimum:
-                scores_for_average.append(score)
+                total_expected += len(truth_ids)
+                total_found += len(matched_ids)
 
-    # Calculate query score (average of minimum decomps)
-    if scores_for_average:
-        query_score = sum(scores_for_average) / len(scores_for_average)
+    # Calculate query score using counts
+    if total_expected > 0:
+        query_score = (total_found / total_expected) * 100.0
     else:
-        query_score = 0.0
-
-    minimum_decomps_matched = sum(1 for s in scores_for_average if s == 100.0)
+        query_score = 100.0
 
     return {
         "decomposition_scores": decomp_scores,
         "score_percent": query_score,
-        "minimum_decomps_total": len(scores_for_average),
-        "minimum_decomps_matched": minimum_decomps_matched,
+        "total_expected": total_expected,
+        "total_found": total_found,
     }
 
 
@@ -196,10 +211,10 @@ def score_evaluation(
             "query_number": query_num,
             "query_text": result.get("query_text", truth_query.get("query_text", "")),
             "score_percent": scoring_result["score_percent"],
+            "total_expected": scoring_result["total_expected"],
+            "total_found": scoring_result["total_found"],
             "agent_pool_size": len(agent_pool),
             "decomposition_scores": scoring_result["decomposition_scores"],
-            "minimum_decomps_total": scoring_result["minimum_decomps_total"],
-            "minimum_decomps_matched": scoring_result["minimum_decomps_matched"],
             "agent_metadata": {
                 "duration_seconds": result.get("duration_seconds"),
                 "topics_processed": result.get("topics_processed"),
@@ -212,33 +227,31 @@ def score_evaluation(
 
         print(
             f"  Score: {scoring_result['score_percent']:.1f}% "
-            f"({scoring_result['minimum_decomps_matched']}/{scoring_result['minimum_decomps_total']} decomps matched)",
+            f"({scoring_result['total_found']}/{scoring_result['total_expected']} concepts found)",
         )
 
-    # Calculate summary statistics
+    # Calculate summary statistics using count-based (micro-average) approach
     if query_scores:
-        total_queries = len(query_scores)
-        avg_score = sum(q["score_percent"] for q in query_scores) / total_queries
+        # Overall recall = total found across all / total expected across all
+        overall_total_expected = sum(q["total_expected"] for q in query_scores)
+        overall_total_found = sum(q["total_found"] for q in query_scores)
+        overall_recall = (
+            (overall_total_found / overall_total_expected * 100.0)
+            if overall_total_expected > 0
+            else 0.0
+        )
+
         queries_100 = sum(1 for q in query_scores if q["score_percent"] == 100.0)
         queries_50_plus = sum(1 for q in query_scores if q["score_percent"] >= 50.0)
         queries_0 = sum(1 for q in query_scores if q["score_percent"] == 0.0)
 
-        total_min_decomps = sum(q["minimum_decomps_total"] for q in query_scores)
-        total_matched = sum(q["minimum_decomps_matched"] for q in query_scores)
-        match_rate = (
-            (total_matched / total_min_decomps * 100.0)
-            if total_min_decomps > 0
-            else 0.0
-        )
-
         summary = {
-            "average_score_percent": round(avg_score, 2),
+            "overall_recall_percent": round(overall_recall, 2),
+            "total_expected": overall_total_expected,
+            "total_found": overall_total_found,
             "queries_100_percent": queries_100,
             "queries_50_plus_percent": queries_50_plus,
             "queries_0_percent": queries_0,
-            "total_minimum_decomps": total_min_decomps,
-            "total_decomps_matched": total_matched,
-            "match_rate_percent": round(match_rate, 2),
         }
     else:
         summary = {}
@@ -334,14 +347,13 @@ def main():
     print("=" * 70)
     summary = stats.get("summary", {})
     print(f"Queries scored: {stats['evaluation_metadata']['queries_scored']}")
-    print(f"Average score: {summary.get('average_score_percent', 0):.1f}%")
+    print(
+        f"Overall recall: {summary.get('overall_recall_percent', 0):.2f}% "
+        f"({summary.get('total_found', 0)}/{summary.get('total_expected', 0)} concepts found)",
+    )
     print(f"Queries at 100%: {summary.get('queries_100_percent', 0)}")
     print(f"Queries at 50%+: {summary.get('queries_50_plus_percent', 0)}")
     print(f"Queries at 0%: {summary.get('queries_0_percent', 0)}")
-    print(
-        f"Decomposition match rate: {summary.get('match_rate_percent', 0):.1f}% "
-        f"({summary.get('total_decomps_matched', 0)}/{summary.get('total_minimum_decomps', 0)})",
-    )
     print("\nDone!")
 
 
