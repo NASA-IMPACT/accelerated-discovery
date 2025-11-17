@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-Calculate evaluation accuracy by comparing truth set against reexecuted full CMR results.
+Calculate Total Recall by comparing truth set against reexecuted full CMR results.
 
-This script scores the data search agent's performance by checking if expected
-concept IDs (from SME truth set) appear anywhere in the full set of CMR results
-returned for each query.
+This script measures the data search agent's total recall by checking if expected
+concept IDs (from SME truth set) appear anywhere in the complete set of CMR results
+returned by the agent's queries (before ranking/filtering).
+
+This is a recall metric focused on system capability - could the agent have found it?
+
+Output: total_recall.json
 
 Usage:
     uv run python evaluations/calculate_accuracy.py evaluations/run_20251027_213136
-    uv run python evaluations/calculate_accuracy.py evaluations/run_20251027_213136 --output my_accuracy.json
+    uv run python evaluations/calculate_accuracy.py evaluations/run_20251027_213136 --output my_recall.json
 """
 
 import argparse
@@ -265,7 +269,7 @@ def main(run_dir: Path, truth_set_path: Path, output_path: Optional[Path] = None
 
     # Determine output path
     if output_path is None:
-        output_path = run_dir / "evaluation_accuracy.json"
+        output_path = run_dir / "total_recall.json"
 
     # Save results
     with open(output_path, "w") as f:
@@ -301,13 +305,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--truth-set",
         type=Path,
-        default=Path("evaluations/truth_set_20251027.json"),
-        help="Path to truth set JSON file (default: evaluations/truth_set_20251027.json)",
+        default=Path("evaluations/truth_set_20251027_deduplicated.json"),
+        help="Path to truth set JSON file (default: evaluations/truth_set_20251027_deduplicated.json)",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        help="Output file path (default: <run_dir>/evaluation_accuracy.json)",
+        help="Output file path (default: <run_dir>/total_recall.json)",
     )
 
     args = parser.parse_args()

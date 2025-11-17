@@ -26,11 +26,11 @@ uv run python evaluations/run_evaluation.py --model gpt-5-mini
 # 2. Re-execute all CMR queries with full pagination
 uv run python evaluations/reexecute_cmr_queries.py evaluations/run_YYYYMMDD_HHMMSS
 
-# 3. Calculate accuracy against full CMR results
+# 3. Calculate total recall (full CMR results)
 uv run python evaluations/calculate_accuracy.py evaluations/run_YYYYMMDD_HHMMSS
 
-# 4. (Optional) Run legacy top-5 scoring
-uv run python evaluations/score_evaluation.py evaluations/run_YYYYMMDD_HHMMSS
+# 4. (Optional) Calculate top-5 recall (user experience)
+uv run python evaluations/score_evaluation.py --runs evaluations/run_YYYYMMDD_HHMMSS/evaluation_runs.json
 
 # 5. (Optional) Export to Excel for manual review
 uv run python evaluations/export_to_excel.py --runs evaluations/run_YYYYMMDD_HHMMSS/evaluation_runs.json
@@ -44,7 +44,8 @@ evaluations/
 │
 ├── Truth Set (Ground Truth):
 │   ├── truth_set_20251027.csv             # SME truth set (CSV format)
-│   └── truth_set_20251027.json            # SME truth set (JSON) - 20 queries, minimum requirements
+│   ├── truth_set_20251027.json            # SME truth set (JSON) - 20 queries, with duplicates
+│   └── truth_set_20251027_deduplicated.json  # Deduplicated version (default for metrics)
 │
 ├── Baseline Comparison (ChatGPT Results):
 │   ├── DataAgentQueries - ChatGPT.csv     # ChatGPT results (CSV from Excel)
@@ -53,8 +54,8 @@ evaluations/
 ├── Evaluation Runs:
 │   └── run_YYYYMMDD_HHMMSS/               # Evaluation run directory
 │       ├── evaluation_runs.json           # Maps query_number → output files
-│       ├── evaluation_stats.json          # Legacy top-5 scoring results
-│       ├── evaluation_accuracy.json       # Full CMR results accuracy
+│       ├── top_5_recall.json              # Top-5 recall (what users see)
+│       ├── total_recall.json              # Total recall (full CMR results)
 │       ├── results_export.xlsx            # Excel export for manual review
 │       └── reexecuted/                    # Re-executed CMR query results
 │           └── {search_id}_concepts.json  # Full concept IDs from CMR
@@ -68,11 +69,13 @@ evaluations/
 └── Scripts:
     ├── run_evaluation.py                  # Execute evaluation queries
     ├── reexecute_cmr_queries.py           # Re-run CMR queries with full pagination
-    ├── calculate_accuracy.py              # Calculate accuracy vs full results
-    ├── score_evaluation.py                # Legacy: Score top-5 results
+    ├── calculate_accuracy.py              # Calculate total recall (full CMR results)
+    ├── score_evaluation.py                # Calculate top-5 recall (user experience)
     ├── export_to_excel.py                 # Export results to Excel
     ├── convert_truth_set.py               # Convert SME CSV → JSON (ground truth)
-    └── convert_chatgpt_results.py         # Convert ChatGPT CSV → JSON (baseline results)
+    ├── convert_chatgpt_results.py         # Convert ChatGPT CSV → JSON (baseline results)
+    ├── compare_chatgpt_to_truth.py        # Compare ChatGPT coverage of ground truth
+    └── deduplicate_truth_set.py           # Create deduplicated truth set
 ```
 
 ## Detailed Workflow
@@ -147,7 +150,7 @@ uv run python evaluations/calculate_accuracy.py evaluations/run_20251027_213136 
     --output my_accuracy.json
 ```
 
-**Output**: Creates `evaluation_accuracy.json` with:
+**Output**: Creates `total_recall.json` with:
 - Overall accuracy percentage
 - Per-query accuracy breakdown
 - Per-decomposition matching details (expected vs found concept IDs)
@@ -181,13 +184,13 @@ Measure how many expected concept IDs appear in the agent's top-5 ranked results
 uv run python evaluations/score_evaluation.py evaluations/run_20251027_213136
 ```
 
-**Output**: Creates `evaluation_stats.json`
+**Output**: Creates `top_5_recall.json`
 
-**Difference from accuracy calculation**:
-- **Top-5 scoring**: Checks if expected IDs are in agent's top 5 ranked collections per decomposition
-- **Accuracy calculation**: Checks if expected IDs are in ALL collections returned by CMR
-- Top-5 measures "user experience" (what users see)
-- Full results measures "system capability" (could it have found them)
+**Difference from total recall**:
+- **Top-5 recall**: Checks if expected IDs are in agent's top 5 ranked collections per decomposition
+- **Total recall**: Checks if expected IDs are in ALL collections returned by CMR
+- Top-5 measures "user experience" (what users actually see)
+- Total recall measures "system capability" (could the agent have found it)
 
 See [SCORING.md](SCORING.md) for legacy scoring methodology.
 
@@ -342,9 +345,43 @@ uv run python evaluations/convert_chatgpt_results.py
 - Decompositions and concept IDs are **NOT** forward-filled (unique per row)
 - Known typo "emyl" is automatically corrected to "Emily"
 
+### 3. Comparing ChatGPT to Ground Truth
+
+To measure how well ChatGPT found the required ground truth datasets:
+
+```bash
+uv run python evaluations/compare_chatgpt_to_truth.py
+```
+
+**What it measures**: For each of the 4 ChatGPT configurations, what percentage of the `minimum=true` concept IDs from the SME truth set did ChatGPT find?
+
+**Output**: Creates `chatgpt_vs_truth_comparison.json` and prints:
+- **Average Coverage**: Per-query average of how many required concepts were found
+- **Overall Coverage**: Total concepts found across all queries
+- **Per-query breakdown**: Shows which specific concept IDs were missing
+
+**Example Output**:
+```
+Bernard | Angles | Yes MCP
+  Average Coverage: 48.7%
+  Overall Coverage: 56.2% (9/16 concepts)
+  Queries Evaluated: 5
+
+Emily | Basic | No MCP
+  Average Coverage: 37.3%
+  Overall Coverage: 31.2% (5/16 concepts)
+  Queries Evaluated: 5
+```
+
+**Key Insights**:
+- Compares ChatGPT baseline performance against expert ground truth
+- Shows which prompt/MCP configurations work better
+- Identifies queries where ChatGPT struggled to find correct datasets
+- Not a perfect comparison (ChatGPT may suggest valid alternatives not in truth set)
+
 ## Understanding Results
 
-### Evaluation Accuracy Output
+### Total Recall Output
 
 ```json
 {
@@ -417,10 +454,10 @@ uv run python evaluations/reexecute_cmr_queries.py evaluations/run_YYYYMMDD_HHMM
 uv run python evaluations/calculate_accuracy.py evaluations/run_YYYYMMDD_HHMMSS
 
 # View results
-cat evaluations/run_YYYYMMDD_HHMMSS/evaluation_accuracy.json | python3 -m json.tool | less
+cat evaluations/run_YYYYMMDD_HHMMSS/total_recall.json | python3 -m json.tool | less
 
 # Check specific query details
-cat evaluations/run_YYYYMMDD_HHMMSS/evaluation_accuracy.json | \
+cat evaluations/run_YYYYMMDD_HHMMSS/total_recall.json | \
     python3 -c "import json, sys; d = json.load(sys.stdin); \
     q = [q for q in d['query_scores'] if q['query_number'] == 1][0]; \
     print(json.dumps(q, indent=2))"

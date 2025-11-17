@@ -145,6 +145,7 @@ async def run_evaluation(
     model: str = "gpt-5-mini",
     resume: bool = False,
     query_number: Optional[int] = None,
+    query_range: Optional[str] = None,
     no_retrieve_all: bool = False,
     skip_ranking: bool = False,
 ):
@@ -199,13 +200,25 @@ async def run_evaluation(
     else:
         run_subdir = state.get("run_subdir")
 
-    # Filter queries if specific query number requested
+    # Filter queries if specific query number or range requested
     if query_number is not None:
         queries = [q for q in queries if q["query_number"] == query_number]
         if not queries:
             print(f"❌ Query number {query_number} not found in truth set")
             return
         print(f"🎯 Running single query: #{query_number}")
+    elif query_range is not None:
+        # Parse range like "11-20"
+        try:
+            start, end = map(int, query_range.split("-"))
+            queries = [q for q in queries if start <= q["query_number"] <= end]
+            if not queries:
+                print(f"❌ No queries found in range {query_range}")
+                return
+            print(f"🎯 Running queries {start}-{end} ({len(queries)} queries)")
+        except ValueError:
+            print(f"❌ Invalid range format: {query_range}. Use format like '11-20'")
+            return
 
     # Process each query
     for query in queries:
@@ -342,6 +355,12 @@ def main():
     )
 
     parser.add_argument(
+        "--query-range",
+        type=str,
+        help="Run a range of queries (e.g., '11-20' or '5-10')",
+    )
+
+    parser.add_argument(
         "--truth-set",
         default="evaluations/truth_set_20251027.json",
         help="Path to truth set JSON file",
@@ -374,6 +393,7 @@ def main():
             model=args.model,
             resume=args.resume,
             query_number=args.query_number,
+            query_range=args.query_range,
             no_retrieve_all=args.no_retrieve_all,
             skip_ranking=args.skip_ranking,
         ),

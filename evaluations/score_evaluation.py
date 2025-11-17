@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-Score agent evaluation outputs against SME truth set.
+Calculate Top-5 Recall for agent evaluation outputs against SME truth set.
 
-Compares top 5 collections from each agent decomposition against
-expected CMR concept IDs from truth set.
+Measures how many of the required ground truth concept IDs appear in the
+top 5 ranked collections returned by the agent for each decomposition.
+
+This is a recall metric focused on user experience - what users actually see.
+
+Output: top_5_recall.json
 """
 
 import argparse
@@ -305,7 +309,7 @@ def main():
 
     # Set output file to same directory as runs file if not specified
     if args.output is None:
-        output_file = (runs_file.parent / "evaluation_stats.json").resolve()
+        output_file = (runs_file.parent / "top_5_recall.json").resolve()
     else:
         output_file = args.output.resolve()
 
