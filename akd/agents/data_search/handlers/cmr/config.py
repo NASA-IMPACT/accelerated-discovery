@@ -46,12 +46,6 @@ class CMRHandlerConfig(DataSearchToolConfig):
         description="Maximum collections in final ranked output",
     )
 
-    # Quality control
-    min_collection_relevance_score: float = Field(
-        default=0.3,
-        description="Minimum collection relevance score to include",
-    )
-
     # Performance tuning
     collection_search_timeout: float = Field(
         default=30.0,
@@ -60,10 +54,6 @@ class CMRHandlerConfig(DataSearchToolConfig):
     granule_search_timeout: float = Field(
         default=45.0,
         description="Timeout for granule searches in seconds",
-    )
-    enable_parallel_search: bool = Field(
-        default=True,
-        description="Enable parallel searches",
     )
 
     # Query approach configuration

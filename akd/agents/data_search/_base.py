@@ -209,10 +209,6 @@ class BaseDataSearchConfig(BaseAgentConfig):
 
     # General settings
     debug: bool = Field(default=False, description="Enable debug logging")
-    enable_parallel_search: bool = Field(
-        default=True,
-        description="Enable parallel searches",
-    )
 
     # Execution modes
     single_path_mode: bool = Field(

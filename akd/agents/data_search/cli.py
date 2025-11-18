@@ -143,10 +143,8 @@ Examples:
         collections_per_query=5,
         max_collections_per_approach=5,
         final_collection_count=25,
-        min_collection_relevance_score=0.3,
         collection_search_timeout=30.0,
         granule_search_timeout=45.0,
-        enable_parallel_search=True,
         retrieve_all_cmr_collections=not args.no_retrieve_all,  # Default: True, can disable with flag
         skip_ranking_and_filtering=args.skip_ranking,  # Default: False, can enable with flag
         # Per-component models with fallback to --model
