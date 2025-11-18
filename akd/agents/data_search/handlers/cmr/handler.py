@@ -367,12 +367,6 @@ class CMRHandler(BaseHandler):
         # Get CMR-compatible parameters using helper method
         search_params = query.get_mcp_parameters()
 
-        # Override with explicit input parameters
-        if params.temporal_range:
-            search_params["temporal"] = params.temporal_range
-        if params.spatial_bounds:
-            search_params["bounding_box"] = params.spatial_bounds
-
         # Add pagination
         search_params["page_size"] = self.config.collection_search_page_size
 
@@ -1076,12 +1070,6 @@ class CMRHandler(BaseHandler):
             "collection_concept_id": concept_id,
             "page_size": self.config.granule_search_page_size,
         }
-
-        # Add temporal/spatial constraints from input params
-        if params.temporal_range:
-            granule_params["temporal"] = params.temporal_range
-        if params.spatial_bounds:
-            granule_params["bounding_box"] = params.spatial_bounds
 
         try:
             # Execute granule search

@@ -14,14 +14,6 @@ class DataSearchAgentInputSchema(InputSchema):
     """Base input schema for data search agents."""
 
     query: str = Field(..., description="Natural language query for data discovery")
-    temporal_range: Optional[str] = Field(
-        None,
-        description="Optional temporal constraint (e.g., '2023-01-01,2023-12-31')",
-    )
-    spatial_bounds: Optional[str] = Field(
-        None,
-        description="Optional spatial constraint as 'west,south,east,north'",
-    )
     max_results: int = Field(
         default=50,
         description="Maximum number of data files/granules to return",
