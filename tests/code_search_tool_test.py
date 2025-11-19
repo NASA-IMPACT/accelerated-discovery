@@ -1,26 +1,34 @@
-import sys
+import json
 import os
+import shutil
+import sys
+import tempfile
+
+import numpy as np
+import pandas as pd
 import pytest
 import requests
-import numpy as np
-import json
-import pandas as pd
 
 # Add the parent directory (the project root) to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import asyncio
+from akd.agents.search import (
+    CodeSearchAgent,
+    CodeSearchAgentConfig,
+    LitSearchAgentInputSchema,
+    SearchMode,
+)
 from akd.tools.misc import Embedder
 from akd.tools.search import SearxNGSearchToolConfig
-from akd.tools.code_search import (
+from akd.tools.search.code_search import (
     CodeSearchToolInputSchema,
+    GitHubCodeSearchTool,
     LocalRepoCodeSearchTool,
     LocalRepoCodeSearchToolConfig,
-    GitHubCodeSearchTool,
     SDECodeSearchTool,
     SDECodeSearchToolConfig,
 )
-
+from akd.utils import google_drive_downloader
 
 """Validate the output structure"""
 
@@ -57,6 +65,18 @@ def sde_tool():
     return SDECodeSearchTool(config=config)
 
 
+@pytest.fixture
+def embedder():
+    model = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
+    return Embedder(model_name=model)
+
+
+@pytest.fixture
+def code_search_agent():
+    config = CodeSearchAgentConfig(debug=True)
+    return CodeSearchAgent(config=config)
+
+
 """Test1: Google Drive Link"""
 
 
@@ -72,9 +92,22 @@ def test_google_drive_link():
 """Test2: Data file validation"""
 
 
-def test_data_file_validation():
+@pytest.fixture
+def temp_data_file():
+    # Setup
+    temp_dir = tempfile.mkdtemp()
+    temp_file = os.path.join(temp_dir, "test_data.csv")
     config = LocalRepoCodeSearchToolConfig()
-    df = pd.read_csv(config.data_file)
+    google_drive_downloader(config.google_drive_file_id, temp_file, quiet=True)
+
+    yield temp_file
+
+    # Teardown
+    shutil.rmtree(temp_dir)
+
+
+def test_data_file_validation(temp_data_file):
+    df = pd.read_csv(temp_data_file)
     assert df is not None
     assert not df.empty
     assert "embeddings" in df.columns
@@ -83,7 +116,7 @@ def test_data_file_validation():
 """Test3: Vector Embedding"""
 
 
-def test_vector_embedding(embedder=Embedder(model_name="all-MiniLM-L6-v2")):
+def test_vector_embedding(embedder):
     texts = ["flood prediction", "earthquake classification"]
     embeddings = embedder.embed_texts(texts)
 
@@ -116,7 +149,7 @@ async def test_local_repo_search(local_tool):
 
 @pytest.mark.asyncio
 async def test_searxng_server():
-    url = "http://localhost:8080"
+    url = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
     response = requests.head(url)
     assert response.status_code == 200
     assert response.headers.get("Content-Type") == "text/html; charset=utf-8"
@@ -136,7 +169,7 @@ async def test_github_code_search(github_tool):
     assert input_params.max_results == 10
 
     # Output structure validation
-    output = await github_tool._arun(input_params)
+    output = await github_tool.arun(input_params)
     validate_output_structure(output)
 
 
@@ -147,7 +180,12 @@ async def test_github_code_search(github_tool):
 async def test_sde_api():
     url = "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    payload = {"filters": {}, "page": 0, "pageSize": 1, "search_term": "test"}
+    payload = {
+        "page": 0,
+        "pageSize": 1,
+        "search_term": "test",
+        "search_type": "keyword",
+    }
 
     response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=5)
     assert response.status_code == 200
@@ -163,6 +201,7 @@ async def test_sde_code_search(sde_tool):
     input_params = CodeSearchToolInputSchema(
         queries=["weather prediction"],
         max_results=5,
+        search_mode="keyword",
     )
     # Input structure validation
     assert input_params.queries == ["weather prediction"]
@@ -171,3 +210,42 @@ async def test_sde_code_search(sde_tool):
     # Output structure validation
     output = await sde_tool._arun(input_params)
     validate_output_structure(output)
+
+
+"""Test9: Code Search Agent"""
+
+
+@pytest.mark.asyncio
+async def test_code_search_agent(code_search_agent):
+    input_params = LitSearchAgentInputSchema(query="weather prediction", search_mode=SearchMode.FAST)
+    output = await code_search_agent.arun(input_params)
+    validate_output_structure(output)
+
+
+"""Test10: Code Search Agent Response Field"""
+
+
+@pytest.mark.asyncio
+async def test_code_search_agent_response_field():
+    """Test that _response field returns the same value as report field."""
+    from akd.agents.search._base import SearchAgentOutputSchema
+    from akd.structures import SearchResultItem
+
+    # Create a simple output schema instance
+    output = SearchAgentOutputSchema(
+        answer="Brief answer about weather prediction code",
+        report="This is a detailed report on weather prediction code repositories.",
+        results=[
+            SearchResultItem(
+                query="weather prediction",
+                url="http://github.com/example/weather",
+                title="Weather Prediction Code",
+                content="Code for weather forecasting",
+            ),
+        ],
+    )
+
+    # Test that _response field matches report field
+    assert hasattr(output, "_response")
+    assert output._response == output.report
+    assert output._response == "This is a detailed report on weather prediction code repositories."

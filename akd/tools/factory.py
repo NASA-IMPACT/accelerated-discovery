@@ -4,16 +4,17 @@ from akd.agents.factory import create_multi_rubric_relevancy_agent
 from akd.agents.relevancy import MultiRubricRelevancyAgent
 from akd.tools.relevancy import EnhancedRelevancyCheckerConfig, RubricWeights
 
-from .scrapers import ScraperToolBase, ScraperToolConfig
-from .scrapers.composite import CompositeScraper, ResearchArticleResolver
-from .scrapers.pdf_scrapers import SimplePDFScraper
-from .scrapers.resolvers import (
+from .resolvers import (
     ADSResolver,
     ArticleResolverConfig,
     ArxivResolver,
     BaseArticleResolver,
+    CompositeResolver,
     IdentityResolver,
 )
+from .scrapers import ScraperToolBase, ScraperToolConfig
+from .scrapers.composite import CompositeScraper
+from .scrapers.pdf_scrapers import SimplePDFScraper
 from .scrapers.web_scrapers import Crawl4AIWebScraper, SimpleWebScraper
 from .search import SearchTool, SearxNGSearchTool, SearxNGSearchToolConfig
 
@@ -43,7 +44,7 @@ def create_default_article_resolver(
     config: Optional[ArticleResolverConfig] = None,
 ) -> BaseArticleResolver:
     config = config or ArticleResolverConfig()
-    return ResearchArticleResolver(
+    return CompositeResolver(
         ADSResolver(config),
         ArxivResolver(config),
         IdentityResolver(config),

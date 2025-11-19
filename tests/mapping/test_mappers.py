@@ -26,6 +26,7 @@ from akd.mapping.mappers import (
     SemanticFieldMapper,
     WaterfallMapper,
 )
+from akd.structures import SearchResultItem
 
 
 # Test schemas for mock scenarios
@@ -393,16 +394,15 @@ class TestRealAgentMappings:
         mapper = WaterfallMapper()
 
         # Create realistic LitAgent output
-        from akd.structures import ExtractionDTO
-
         lit_output = LitSearchAgentOutputSchema(
+            answer="Recent research shows advances in solar cell efficiency.",
+            report="Detailed research report on solar cell technologies.",
             results=[
-                ExtractionDTO(
-                    source="https://example.com/solar-paper",
-                    result={
-                        "title": "Advanced Solar Cell Technologies",
-                        "content": "Recent breakthroughs in perovskite solar cells...",
-                    },
+                SearchResultItem(
+                    url="https://example.com/solar-paper",
+                    title="Advanced Solar Cell Technologies",
+                    content="Recent breakthroughs in perovskite solar cells...",
+                    query="solar cell technologies",
                 ),
             ],
         )
@@ -435,14 +435,8 @@ class TestRealAgentMappings:
         # Should have high confidence for direct field mapping
         assert result.mapping_confidence > 0.8
         assert result.used_strategy == "DirectFieldMapper"
-        assert (
-            result.mapped_model.query
-            == "What is the efficiency of perovskite solar cells?"
-        )
-        assert (
-            result.mapped_model.content
-            == "Recent studies show perovskite solar cells achieve 25% efficiency..."
-        )
+        assert result.mapped_model.query == "What is the efficiency of perovskite solar cells?"
+        assert result.mapped_model.content == "Recent studies show perovskite solar cells achieve 25% efficiency..."
 
     @pytest.mark.asyncio
     async def test_full_agent_pipeline_mapping(self):
@@ -463,15 +457,16 @@ class TestRealAgentMappings:
         )
 
         # Step 2: LitAgent output -> ExtractionAgent input
-        from akd.structures import ExtractionDTO
 
         lit_output = LitSearchAgentOutputSchema(
+            answer="Solar cell efficiency has reached 47.1%.",
+            report="Research report on solar cell efficiency improvements.",
             results=[
-                ExtractionDTO(
-                    source="research_paper.pdf",
-                    result={
-                        "content": "Solar cell efficiency has reached 47.1% using concentrated photovoltaics",
-                    },
+                SearchResultItem(
+                    url="https://example.com/research_paper.pdf",
+                    title="Solar Cell Efficiency Research",
+                    content="Solar cell efficiency has reached 47.1% using concentrated photovoltaics",
+                    query="solar cell efficiency",
                 ),
             ],
         )
@@ -660,6 +655,8 @@ class TestConfigurationScenarios:
 
         # Should use semantic mapping for similar field names
         source = LitSearchAgentOutputSchema(
+            answer="",  # Empty for simplicity
+            report="",  # Empty for simplicity
             results=[],  # Empty results for simplicity
         )
 

@@ -14,11 +14,19 @@ from ._base import (
     SearchAgentConfig,
     SearchAgentInputSchema,
     SearchAgentOutputSchema,
+    SearchMode,
 )
+from .answer import (
+    QuestionAnsweringAgent,
+    QuestionAnsweringAgentInputSchema,
+    QuestionAnsweringAgentOutputSchema,
+)
+from .code_search import CodeSearchAgent, CodeSearchAgentConfig
 from .controlled import ControlledSearchAgent, ControlledSearchAgentConfig
 from .deep_search import DeepLitSearchAgent, DeepLitSearchAgentConfig
 
 __all__ = [
+    "SearchMode",
     # Base classes
     "SearchAgent",
     "SearchAgentConfig",
@@ -28,9 +36,15 @@ __all__ = [
     "LitSearchAgentInputSchema",
     "LitSearchAgentOutputSchema",
     "LitSearchAgentConfig",
-    # Specific agents
+    # Question Answering agents
+    "QuestionAnsweringAgent",
+    "QuestionAnsweringAgentInputSchema",
+    "QuestionAnsweringAgentOutputSchema",
+    # Other specific agents
     "ControlledSearchAgent",
     "ControlledSearchAgentConfig",
     "DeepLitSearchAgent",
     "DeepLitSearchAgentConfig",
+    "CodeSearchAgent",
+    "CodeSearchAgentConfig",
 ]

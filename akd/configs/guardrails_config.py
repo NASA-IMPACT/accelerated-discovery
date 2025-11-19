@@ -10,7 +10,8 @@ class GuardrailsConfig(BaseConfig):
     """Configuration for Granite Guardian guardrails validation for agents and tools."""
 
     enabled: bool = Field(
-        default=True, description="Whether Granite Guardian validation is enabled"
+        default=True,
+        description="Whether Granite Guardian validation is enabled",
     )
 
     input_risk_types: List[RiskDefinition] = Field(
@@ -28,7 +29,8 @@ class GuardrailsConfig(BaseConfig):
     )
 
     guardian_model: GuardianModelID = Field(
-        default=GuardianModelID.GUARDIAN_8B, description="Granite Guardian model to use"
+        default=GuardianModelID.GUARDIAN_8B,
+        description="Granite Guardian model to use",
     )
 
     fail_on_risk: bool = Field(
@@ -37,9 +39,36 @@ class GuardrailsConfig(BaseConfig):
     )
 
     ollama_type: OllamaType = Field(
-        default=OllamaType.CHAT, description="Ollama interface type to use"
+        default=OllamaType.SERVER,
+        description="Ollama interface type to use",
     )
 
     snippet_n_chars: int = Field(
-        default=200, description="Number of characters to include in log snippets"
+        default=200,
+        description="Number of characters to include in log snippets",
+    )
+
+    input_fields: list[str] = Field(
+        default_factory=lambda: [
+            "query",
+            "content",
+            "text",
+            "user_input",
+            "message",
+            "queries",
+        ],
+        description="List of input field names to check for risks. If empty, all input fields will be checked.",
+    )
+
+    output_fields: list[str] = Field(
+        default_factory=lambda: [
+            "response",
+            "answer",
+            "content",
+            "text",
+            "result",
+            "results",
+            "search_results",
+        ],
+        description="List of output field names to check for risks. If empty, all output fields will be checked.",
     )

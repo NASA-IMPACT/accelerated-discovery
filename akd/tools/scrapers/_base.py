@@ -32,6 +32,8 @@ class ScraperToolInputSchema(InputSchema):
 
 
 class ScrapedMetadata(SearchResultItem):
+    """Metadata extracted from the scraped webpage."""
+
     keywords: list[str] | None = Field(
         None,
         description="List of keywords from the webpage content.",
@@ -67,8 +69,24 @@ class ScraperToolConfig(BaseToolConfig):
         description="Format to export the scraped content.",
     )
     debug: bool = Field(
-        default=True,
+        default=False,
         description="Boolean flag for debug mode",
+    )
+    security_check_indicators: list[str] = Field(
+        default_factory=lambda: [
+            "verify you are human",
+            "checking if you're human",
+            "checking if you are human",
+            "please verify you are",
+            "confirm you are a human",
+            "confirm you are human",
+            "prove you are human",
+            "are you a robot",
+            "human verification required",
+            "complete the security check",
+            "we apologize for the inconvenience",
+        ],
+        description="Phrases to detect anti-bot/security check pages. Uses action-oriented phrases unlikely to appear in real content.",
     )
 
 
@@ -81,6 +99,35 @@ class ScraperToolBase(BaseTool[ScraperToolInputSchema, ScraperToolOutputSchema])
     input_schema = ScraperToolInputSchema
     output_schema = ScraperToolOutputSchema
     config_schema = ScraperToolConfig
+
+    def _validate_security_check(self, content: str | None, url: str, max_words: int = 300) -> None:
+        """
+        Check if content contains anti-bot/security check indicators.
+
+        Uses heuristics to avoid false positives:
+        - Only checks if content is suspiciously short (< max_words)
+        - Looks for specific anti-bot phrases, not general terms
+
+        Args:
+            content: Page content to check (can be None)
+            url: URL being checked
+            max_words: Only validate if content has fewer than this many words (default: 300)
+
+        Raises:
+            RuntimeError: If security check indicators are found
+        """
+        content = content or ""
+        if not self.security_check_indicators or len(content.split()) > max_words:
+            return
+
+        content_lower = content.lower()
+        for indicator in self.security_check_indicators:
+            if indicator.lower() in content_lower:
+                raise RuntimeError(
+                    f"Anti-bot protection detected on {url}. "
+                    f"Content contains '{indicator}' ({len(content.split())} words). "
+                    f"Try using a different scraper or anti-bot bypass techniques.",
+                )
 
 
 class WebScraperToolConfig(ScraperToolConfig):
@@ -102,6 +149,14 @@ class WebScraperToolConfig(ScraperToolConfig):
         default="en-US,en;q=0.5",
         description="Accept-Language header for HTTP requests.",
     )
+    accept_encoding: str = Field(
+        default="gzip, deflate",
+        description="Accept-Encoding header for HTTP requests.",
+    )
+    follow_redirects: bool = Field(
+        default=True,
+        description="Whether to follow HTTP redirects.",
+    )
 
     @computed_field
     def headers(self) -> dict[str, str]:
@@ -113,7 +168,9 @@ class WebScraperToolConfig(ScraperToolConfig):
             "User-Agent": self.user_agent,
             "Accept": self.accept_header,
             "Accept-Language": self.accept_language,
+            "Accept-Encoding": self.accept_encoding,
             "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
         }
 
 
@@ -228,14 +285,8 @@ class WebScraper(ScraperToolBase):
             try:
                 schema_data = json.loads(tag.string)
                 if isinstance(schema_data, dict):
-                    if "datePublished" in schema_data:
-                        metadata["published_date"] = (
-                            metadata["published_date"] or schema_data["datePublished"]
-                        )
-                    if "keywords" in schema_data:
-                        metadata["keywords"] = (
-                            metadata["keywords"] or schema_data["keywords"]
-                        )
+                    metadata["published_date"] = metadata.get("published_date") or schema_data.get("datePublished")
+                    metadata["keywords"] = metadata.get("keywords") or schema_data.get("keywords")
             except (json.JSONDecodeError, AttributeError):
                 pass
 
@@ -248,7 +299,7 @@ class WebScraper(ScraperToolBase):
         for twitter_name, meta_key in twitter_mappings.items():
             meta_tag = soup.find("meta", attrs={"name": twitter_name})
             if meta_tag and meta_tag.get("content"):
-                metadata[meta_key] = metadata[meta_key] or meta_tag.get("content")
+                metadata[meta_key] = metadata.get(meta_key) or meta_tag.get("content")
 
         # Extract citation metadata
         citation_mappings = {
@@ -267,9 +318,7 @@ class WebScraper(ScraperToolBase):
                 metadata[meta_key] = metadata[meta_key] or meta_tag.get("content")
 
         # Build citation string for academic content
-        if metadata["doi"] or (
-            metadata["title"] and metadata["author"] and metadata["publication_date"]
-        ):
+        if metadata["doi"] or (metadata["title"] and metadata["author"] and metadata["publication_date"]):
             citation_parts = []
             if metadata["author"]:
                 citation_parts.append(metadata["author"])
@@ -292,7 +341,18 @@ class WebScraper(ScraperToolBase):
 
         if isinstance(metadata["keywords"], str):
             metadata["keywords"] = [metadata["keywords"]]
-        return ScrapedMetadata(**metadata)
+
+        # Separate standard fields from extra fields
+        # Standard fields are defined in ScrapedMetadata/SearchResultItem
+        valid_fields = ScrapedMetadata.model_fields.keys()
+        standard_metadata = {k: v for k, v in metadata.items() if k in valid_fields}
+        extra_metadata = {k: v for k, v in metadata.items() if k not in valid_fields}
+
+        # Put non-standard fields (like site_name, type, image_url, etc.) into 'extra'
+        if extra_metadata:
+            standard_metadata["extra"] = extra_metadata
+
+        return ScrapedMetadata(**standard_metadata)
 
     async def _extract_title(self, soup: BeautifulSoup) -> str | None:
         """
@@ -395,7 +455,10 @@ class PDFScraper(ScraperToolBase):
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         headers = self.headers
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=self.follow_redirects,
+            ) as client:
                 async with client.stream("GET", url, headers=headers) as response:
                     response.raise_for_status()
 

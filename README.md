@@ -13,13 +13,41 @@ This framework is built on the principle that **human researchers should direct 
 
 ## Architecture
 
-The system uses a **Planner-Orchestrator** pattern with standardized `NodeTemplate` components:
+The system implements a **Planner-Orchestrator** pattern with standardized `NodeTemplate` components for maximum flexibility and scientific rigor:
 
-- **Global Context**: Maintains overall research project state
-- **Local Context**: Need-to-know subsets for individual agents
-- **Specialized Agents**: Literature search, data extraction, relevancy checking, etc.
-- **Multi-Agent RAG**: Literature, Data, Code search agents, Gap agents, conflict agents, and quality validators, Science guardrails, etc.
-- **Framework Agnostic**: Core logic decoupled from orchestration and execution of individual agents and tools.
+### Core Design Patterns
+
+- **NodeTemplate Architecture**: All functional components implement the standardized `AbstractNodeTemplate` (`akd.nodes.templates`) with:
+  - Well-defined state management
+  - Input/output guardrails for validation
+  - Tool subset isolation (principle of least privilege)
+  - Framework-agnostic design that can wrap into any orchestration engine
+
+- **Context Management**:
+  - **Global Context**: Maintains overall research project state
+  - **Local Context**: Sandboxed, need-to-know subsets for individual agents
+  - Prevents context bleeding between agents
+
+- **Human-in-the-Loop Control**: Researchers maintain control over:
+  - Workflow approval and modifications
+  - Parameter tuning for any component
+  - Branching and merging decisions
+
+- **Multi-Agent Coordination**: Specialized agents work together with conflict detection and gap identification
+
+### Human-in-the-Loop Control Points
+
+The framework ensures researchers maintain control throughout the discovery process:
+
+- **Plan Approval**: Initial research plans and any significant modifications require explicit human approval
+- **Parameter Control**: Researchers can inspect and adjust parameters for any NodeTemplate component
+- **Workflow Direction**: AI proposes next steps but humans direct the overall research strategy
+- **Quality Gates**: Human validation required before accepting AI-generated analyses or conclusions
+- **Branching Decisions**: Research workflow branching and merging decisions are human-directed
+
+**Golden Rule**: When in doubt about research direction, data validity, or result interpretation, the system defers to human researcher guidance.
+
+For comprehensive design principles, see [Design Philosophy](docs/design_philosophy.md).
 
 ## Quick Start
 
@@ -38,6 +66,15 @@ source .venv/bin/activate
 # Install dependencies
 uv sync
 
+# For development (includes testing tools)
+uv sync --extra dev
+
+# For local development (includes marimo and other local tools)
+uv sync --extra dev --extra local
+
+# For ML development (includes pandas, sentence-transformers, docling, deepeval)
+uv sync --extra ml
+
 # Setup environment variables
 cp .env.example .env
 # Edit .env with your API keys and configurations
@@ -48,26 +85,98 @@ cp .env.example .env
 
 Refer to the [notebooks](notebooks) for examples.
 
+## Workflow Planning System
+
+The framework includes an LLM-based workflow planner that converts natural language research goals into executable workflows:
+
+### Interactive Planning
+
+```python
+from akd.planner.llm_planner import create_planner
+
+planner = await create_planner()
+session = await planner.plan_workflow("Find papers on AlphaFold and identify research gaps")
+response = await session.start()
+
+while not response.ready_to_generate:
+    user_input = input(f"{response.message}\nYour response: ")
+    response = await session.respond(user_input)
+
+workflow = await session.generate_workflow()
+workflow.save_to_file("research_workflow.json")
+```
+
+### Automated Planning
+
+```bash
+# Interactive session
+python scripts/demo_planner.py interactive
+
+# Automated mode (CI/CD, batch processing)
+python scripts/demo_planner.py automated "Research goal" --quiet -o workflow.json
+
+# Quick planning
+python scripts/demo_planner.py quick "Find papers on protein folding"
+```
+
+See [Planner Documentation](akd/planner/README.md) for comprehensive usage and deployment guides.
+
+## Core Tools & Agents
+
+### Search Infrastructure
+- **Search Tools**: SearxNG (web), Semantic Scholar (academic), code repositories
+- **Search Agents**: Deep search with iterative refinement, controlled search workflows, query processing and refinement
+- **Relevancy Filtering**: Content assessment, link validation, context-aware filtering
+
+### Content Extraction
+- **Document Processing**: PDF extraction (PyPaperBot), advanced document parsing (Docling)
+- **Web Scraping**: Multi-source content extraction with validation
+- **Quality Control**: Source validation, credibility assessment, attribution tracking
+
+## Scientific Guardrails
+
+The framework implements deep guardrails specifically designed for scientific research integrity:
+
+### Deep Attribution & Validation
+- **Traceable Claims**: All claims traceable to specific source sentences and data points
+- **Source Quality**: Prioritizes refereed journals and validated data repositories
+- **Attribution Chain**: Complete attribution from final claims back to original sources
+- **Quality Validation**: Multi-level validation of source credibility and relevance
+
+### Conflict Detection & Gap Analysis
+- **Agentic RAG**: Multi-agent approach to comprehensive information retrieval
+  - **Gap Agent**: Actively identifies missing information and research gaps
+  - **Conflict Agent**: Specifically searches for contradictory evidence and conflicting findings
+- **Bias Prevention**: Deliberately surfaces contradictory evidence to prevent confirmation bias
+- **Evidence Balance**: Ensures both supporting and conflicting evidence is presented
+
+### Transparent Research Process
+- **Stateful Execution**: Complete workflow state capture for reproducibility
+- **Shareable Artifacts**: Research graphs that others can inspect, validate, and extend
+- **Human Validation**: All AI-generated content clearly labeled and requires human approval
+- **Complete Transparency**: Every step of the research process is inspectable and documented
+
 ## Key Features
 
-
-- **Deep Attribution**: claims traceable to specific source material, down to the sentences that were combined to make the claim (via factreasoner).
-- **Conflict Detection**: Actively identifies contradictory evidence
-- **Shareable Workflows**: Complete research (execution) graphs that others can inspect and extend, not just summarized end products.
-- **Scientific Guardrails**: Guardrails that go beyond the generic LLM literature, that explicity designed to support scientific research.
-- **Stateful Execution**: The workflow maintains a persistent, stateful context of the research journey, enabling a branching, reversible and iterative process that supports a researcher's natural methodology rather than imposing a rigid, automated sequence that current agentic systems embrace.
+- **Human-in-the-Loop Control**: Researchers direct the discovery process with AI augmentation
+- **Framework Agnostic**: Core logic decoupled from orchestration engines for maximum flexibility
+- **Reproducible Research**: Complete workflow capture enables true reproducibility and sharing
+- **Community-Driven**: Open framework designed for collaborative scientific advancement
 
 ## Project Structure
 
 ```
 akd/                    # Core framework
 ├── agents/            # Specialized research agents
-├── nodes/             # NodeTemplate implementations  
+├── planner/           # LLM workflow planner and builder
+├── nodes/             # NodeTemplate implementations
 ├── tools/             # Research tools and scrapers
-└── configs/           # Configuration management
+├── configs/           # Configuration and prompts
+└── mapping/           # Field mapping definitions
 
 examples/              # Usage examples
-scripts/               # Utility scripts
+scripts/               # Utility scripts and demos
+tests/                 # Comprehensive test suite
 ```
 
 ## Contributing

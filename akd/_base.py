@@ -1,14 +1,58 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Type, cast
 
 from loguru import logger
-from pydantic import BaseModel, ValidationError, create_model
+from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
 
 from akd.errors import SchemaValidationError
-from akd.utils import AsyncRunMixin, LangchainToolMixin
+from akd.utils import get_model_fields
+
+
+def get_event_loop() -> asyncio.AbstractEventLoop:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
+
+
+class AsyncRunMixin:
+    """
+    Mixin for adding interface to run
+    async methods in a sync context.
+    """
+
+    @abstractmethod
+    async def arun(self, *args, **kwargs) -> Any:
+        raise NotImplementedError("Subclasses should implement this method")
+
+    # async def ainvoke(self, *args, **kwargs) -> Any:
+    #     return await self.arun(*args, **kwargs)
+
+    def run(self, *args, **kwargs) -> Any:
+        """
+        Runs the async method in a sync context.
+        """
+        if not hasattr(self, "arun"):
+            raise AttributeError("Method 'arun' not implemented in the class")
+        try:
+            # Check if there's a running event loop
+            loop = get_event_loop()
+            # If we're already in an event loop, we need to use create_task and wait for it
+            if loop and loop.is_running():
+                # This creates a new task in the current event loop
+                future = asyncio.ensure_future(self.arun(*args, **kwargs))
+                return loop.run_until_complete(future)
+            else:
+                return asyncio.run(self.arun(*args, **kwargs))
+        except RuntimeError:
+            # No running event loop, create a new one
+            return asyncio.run(self.arun(*args, **kwargs))
 
 
 class BaseConfig(BaseModel):
@@ -21,7 +65,16 @@ class BaseConfig(BaseModel):
         "extra": "forbid",  # Disallow extra fields
     }
 
-    debug: bool = False  # Debug mode flag
+    description: str | None = None
+    io_hints: bool = Field(
+        default=True,
+        description="Whether to include input/output field hints in the agent/tool description. "
+        "This replaces the deprecated 'input_hints' parameter in BaseAgentConfig.",
+    )
+    debug: bool = Field(
+        default=False,
+        description="Whether to enable debug mode",
+    )
 
 
 class IOSchema(BaseModel):
@@ -58,6 +111,23 @@ class InputSchema(IOSchema):
 class OutputSchema(IOSchema):
     "Output schema for the agent or tool"
 
+    __response_field__: str | None = None
+
+    @computed_field
+    def _response(self) -> str:
+        """
+        Private response field that points to the actual output text as per agent usage.
+
+        Subclasses can specify which field to use by setting the __response_field__ class attribute.
+        Example:
+            class MyOutputSchema(OutputSchema):
+                __response_field__ = "output"
+                output: str = Field(...)
+        """
+        if self.__response_field__ is not None:
+            return getattr(self, self.__response_field__, "")
+        return ""
+
 
 class AbstractBaseMeta(ABCMeta):
     """Metaclass that validates required schema attributes."""
@@ -70,8 +140,8 @@ class AbstractBaseMeta(ABCMeta):
             "AbstractBase",
             "UnrestrictedAbstractBase",
             "BaseAgent",
-            "LangBaseAgent",
             "InstructorBaseAgent",
+            "LiteLLMInstructorBaseAgent",
             "BaseTool",
         ]:
             return cls
@@ -79,15 +149,11 @@ class AbstractBaseMeta(ABCMeta):
         # Check if this class inherits from AbstractBase
         if any(isinstance(base, AbstractBaseMeta) for base in bases):
             # Validate input_schema
-            if "input_schema" not in dct and not any(
-                hasattr(base, "input_schema") for base in bases
-            ):
+            if "input_schema" not in dct and not any(hasattr(base, "input_schema") for base in bases):
                 raise TypeError(f"{name} must define 'input_schema' class attribute")
 
             # Validate output_schema
-            if "output_schema" not in dct and not any(
-                hasattr(base, "output_schema") for base in bases
-            ):
+            if "output_schema" not in dct and not any(hasattr(base, "output_schema") for base in bases):
                 raise TypeError(f"{name} must define 'output_schema' class attribute")
 
             # Validate schema types if they exist
@@ -115,7 +181,7 @@ class AbstractBaseMeta(ABCMeta):
 class AbstractBase[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AsyncRunMixin, LangchainToolMixin, ABC, metaclass=AbstractBaseMeta):
+](AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
@@ -143,15 +209,11 @@ class AbstractBase[
             debug (bool): If True, enables debug mode for additional logging.
             **kwargs: Additional keyword arguments (merged with config)
         """
-        config = (
-            config
-            or (self.config_schema() if self.config_schema else None)
-            or BaseConfig()
-        )
+        config = config or (self.config_schema() if self.config_schema else None) or BaseConfig()
         self.config = config
         self._kwargs = kwargs
         self._post_init()
-        self.debug = getattr(config, "debug", False) or debug
+        self.debug = debug or getattr(config, "debug", False)
 
     def _post_init(self) -> None:
         """
@@ -163,11 +225,75 @@ class AbstractBase[
         for key, value in self._kwargs.items():
             setattr(self, key, value)
 
+        self.description = (getattr(self, "description", None) or self.__class__.__doc__ or "").strip()
+
+        # Add input/output schema info to description if io_hints is True
+        if getattr(self, "io_hints", True):
+            _in_schema = self._input_schema_info
+            if _in_schema:
+                self.description += f"\n\nINPUT FIELD DESCRIPTIONS:\n{_in_schema}"
+            _out_schema = self._output_schema_info
+            if _out_schema:
+                self.description += f"\n\nOUTPUT FIELD DESCRIPTIONS:\n{_out_schema}"
+
     def __set_attrs_from_config(self):
         if self.config is None:
             return
-        for attr, value in self.config.model_dump().items():
-            setattr(self, attr, value)
+        # Iterate over model fields directly to preserve nested Pydantic models
+        # Using model_dump() would convert nested BaseModel instances to dicts
+        # Access model_fields from the class to avoid deprecation warning
+        for field_name in type(self.config).model_fields.keys():
+            value = getattr(self.config, field_name)
+            setattr(self, field_name, value)
+
+        # Also copy computed fields (properties decorated with @computed_field)
+        # These are in model_computed_fields, not model_fields
+        # Pydantic 2.x supports model_computed_fields
+        if hasattr(type(self.config), "model_computed_fields"):
+            for field_name in type(self.config).model_computed_fields.keys():
+                value = getattr(self.config, field_name)
+                setattr(self, field_name, value)
+
+    @property
+    def _input_schema_info(self) -> str:
+        """
+        Extract field names and descriptions from input schema.
+
+        Returns:
+            str: Formatted string with field information, empty if no input schema.
+        """
+        # avoid circular dependency
+        if not hasattr(self, "input_schema") or not self.input_schema:
+            return ""
+
+        fields = get_model_fields(self.input_schema, skip_no_description=False)
+        if not fields:
+            return ""
+
+        return "\n".join(
+            [f"- **{field['name']}**: {field.get('description', field['name'].replace('_', ' '))}" for field in fields],
+        )
+
+    @property
+    def _output_schema_info(self) -> str:
+        """
+        Extract field names and descriptions from output schema.
+
+        Returns:
+            str: Formatted string with field information, empty if no output schema.
+        """
+
+        # avoid circular dependency
+        if not hasattr(self, "output_schema") or not self.output_schema:
+            return ""
+
+        fields = get_model_fields(self.output_schema, skip_no_description=False)
+        if not fields:
+            return ""
+
+        return "\n".join(
+            [f"- **{field['name']}**: {field.get('description', field['name'].replace('_', ' '))}" for field in fields],
+        )
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> AbstractBase:
@@ -183,11 +309,7 @@ class AbstractBase[
                 **fields,
             )
 
-        config = (
-            cls.config_schema(**config_dict)
-            if cls.config_schema and config_dict
-            else None
-        )
+        config = cls.config_schema(**config_dict) if cls.config_schema and config_dict else None
         return cls(config=config, debug=debug)
 
     def _validate_input(self, params: Any) -> InSchema:
@@ -259,7 +381,7 @@ class AbstractBase[
 class UnrestrictedAbstractBase[
     InSchema: BaseModel,
     OutSchema: BaseModel,
-](AsyncRunMixin, LangchainToolMixin, ABC):
+](AsyncRunMixin, ABC):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
@@ -326,11 +448,7 @@ class UnrestrictedAbstractBase[
                 **fields,
             )
 
-        config = (
-            cls.config_schema(**config_dict)
-            if cls.config_schema and config_dict
-            else None
-        )
+        config = cls.config_schema(**config_dict) if cls.config_schema and config_dict else None
         return cls(config=config, debug=debug)
 
     def _validate_input(self, params: Any) -> InSchema:

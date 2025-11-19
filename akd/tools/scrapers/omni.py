@@ -36,6 +36,8 @@ class OmniScraperInputSchema(ScraperToolInputSchema):
 
 
 class OmniScrapedMetadata(ScrapedMetadata):
+    """Metadata for OmniScraper tools, extending the base scraped metadata."""
+
     url: HttpUrl | FilePath | FileUrl = Field(
         ...,
         description="The URL or file path of the scraped document.",
@@ -131,9 +133,7 @@ class DoclingScraper(OmniScraper):
             do_ocr=self.use_ocr,
         )
         pipeline_options.table_structure_options.mode = (
-            TableFormerMode.ACCURATE
-            if self.pdf_mode.lower() == "accurate"
-            else TableFormerMode.FAST
+            TableFormerMode.ACCURATE if self.pdf_mode.lower() == "accurate" else TableFormerMode.FAST
         )
 
         format_options: dict[InputFormat, Any] = {
@@ -221,6 +221,12 @@ class DoclingScraper(OmniScraper):
             path = unquote(params.url.path)
         try:
             content, meta = await self._process_document(path)
+
+            # Detect anti-bot/security checks in content (for HTTP URLs)
+            # Only validate for web URLs, not local files
+            if path.startswith(("http://", "https://")):
+                self._validate_security_check(content, path)
+
             return ScraperToolOutputSchema(content=content, metadata=meta)
 
         except FileNotFoundError as e:
