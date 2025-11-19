@@ -10,7 +10,7 @@ from ._base import (
     OutputSchema,
     UnrestrictedAbstractBase,
 )
-from .utils import exposed_param
+from .utils import ParamExposureMixin, exposed_param
 
 __all__ = [
     # Base classes
@@ -25,6 +25,7 @@ __all__ = [
     "BaseConfig",
     # Metadata and decorators
     "exposed_param",
+    "ParamExposureMixin",
     # Metaclass
     "AbstractBaseMeta",
 ]
