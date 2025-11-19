@@ -1,5 +1,4 @@
 *.swp
-*.ipynb
 *.jpg
 *.jpeg
 *.png
@@ -21,6 +20,13 @@ documents/
 __marimo__/
 .DS_Store
 .devcontainer
+
+# Evaluation Runs and Logs
+examples/captured_data/
+examples/testing/captured_data/
+filtering_messages/
+captured_data/
+evaluations/run*
 
 
 # dirs
