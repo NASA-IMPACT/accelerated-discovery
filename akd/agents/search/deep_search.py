@@ -154,7 +154,6 @@ class DeepLitSearchAgent(LitBaseAgent):
         self.research_history = []
         self.clarification_history = []
 
-    @property
     @exposed_param(description="System prompt used for LLM clarification rounds.")
     def clarification_prompt(self) -> str:
         return self.clarification_component.config.system_prompt

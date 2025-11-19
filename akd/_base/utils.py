@@ -62,7 +62,7 @@ class ExposedParam(BaseModel):
 
 
 @overload
-def exposed_param[F: Callable](_func: F, /) -> F: ...
+def exposed_param[F: Callable](_func: F, /) -> property: ...
 
 
 @overload
@@ -70,7 +70,7 @@ def exposed_param[F: Callable](
     *,
     description: str = "",
     **kwargs,
-) -> Callable[[F], F]: ...
+) -> Callable[[F], property]: ...
 
 
 def exposed_param[F: Callable](
@@ -79,9 +79,12 @@ def exposed_param[F: Callable](
     *,
     description: str = "",
     **kwargs,
-) -> F | Callable[[F], F]:
+) -> property | Callable[[F], property]:
     """
-    Decorator to mark a property as exposed to external system.
+    Decorator to mark a property as exposed to external systems (UI, backend, API, etc.).
+
+    This decorator combines @property functionality with parameter exposure metadata,
+    making the parameter accessible and configurable from external systems.
 
     Can be used with or without parentheses:
         @exposed_param
@@ -90,10 +93,10 @@ def exposed_param[F: Callable](
     Args:
         _func: The function being decorated (positional-only, internal use)
         description: Human readable description of the parameter
-        **kwargs: Additional metadata stored in 'extra' field
+        **kwargs: Additional metadata stored in 'extra' field (e.g., constraints, hints)
     """
 
-    def decorator(func: F) -> F:
+    def decorator(func: F) -> property:
         # Priority: explicit description > function docstring > prettified function name
         final_description = description or (func.__doc__ or "").strip() or func.__name__.replace("_", " ").title()
 
@@ -101,7 +104,7 @@ def exposed_param[F: Callable](
             description=final_description,
             extra=kwargs or {},
         )
-        return func
+        return property(func)  # type: ignore[return-value]
 
     if _func is not None:
         return decorator(_func)
