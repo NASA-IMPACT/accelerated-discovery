@@ -24,7 +24,6 @@ from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
 from akd.agents.data_search.components import ScientificDecomposition, Topic
 from akd.agents.data_search.handlers import CMRHandlerConfig
 from akd.agents.data_search.handlers.cmr import CMRQueryApproach, CMRSearchableQuery
-from akd.configs.data_search_config import get_config
 
 # Load environment variables
 load_dotenv()
@@ -73,7 +72,6 @@ class WorkflowLoader:
 
     def _setup_agent(self):
         """Setup agent with configuration matching the captured data."""
-        config = get_config()
 
         # Extract model config from captured data or use defaults
         model_config = self.data.get("metadata", {}).get(
@@ -88,13 +86,11 @@ class WorkflowLoader:
         )
 
         cmr_handler_config = CMRHandlerConfig(
-            mcp_endpoint=config.mcp.endpoint,
             collection_search_page_size=20,
             granule_search_page_size=10,
             final_collection_count=5,
             collection_search_timeout=30.0,
             granule_search_timeout=45.0,
-            min_collection_relevance_score=0.3,
             known_parameters_model=model_config.get("cmr_query", "gpt-5-mini"),
             searchable_parameters_model=model_config.get("cmr_query", "gpt-5-mini"),
             approach_filtering_model=model_config.get(
@@ -106,7 +102,6 @@ class WorkflowLoader:
 
         agent_config = DataSearchAgentConfig(
             debug=True,
-            enable_parallel_search=True,
             topic_splitting_model=model_config["topic_splitting"],
             scientific_decomposition_model=model_config["scientific_decomposition"],
             repository_routing_model=model_config["repository_routing"],

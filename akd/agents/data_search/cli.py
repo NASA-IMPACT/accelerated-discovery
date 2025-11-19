@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 from akd.agents.data_search import DataSearchAgent, DataSearchAgentConfig
 from akd.agents.data_search._base import DataSearchAgentInputSchema
 from akd.agents.data_search.handlers import CMRHandlerConfig
-from akd.configs.data_search_config import get_config
 
 # Load environment variables
 load_dotenv()
@@ -132,12 +131,9 @@ Examples:
 
     args = parser.parse_args()
 
-    # Load base configuration
-    base_config = get_config()
-
     # Build CMR handler configuration
+    # MCP endpoint is automatically loaded from MCP_ENDPOINT env var or default
     cmr_config = CMRHandlerConfig(
-        mcp_endpoint=str(base_config.mcp.endpoint),
         collection_search_page_size=20,
         granule_search_page_size=10,
         collections_per_query=5,

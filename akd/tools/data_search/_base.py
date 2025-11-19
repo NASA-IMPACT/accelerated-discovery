@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
+from akd.configs.mcp_config import get_mcp_endpoint
 from akd.tools._base import BaseTool, BaseToolConfig
 
 
@@ -18,8 +19,8 @@ class DataSearchToolConfig(BaseToolConfig):
     """
 
     mcp_endpoint: str = Field(
-        default="http://localhost:8080/mcp/cmr/mcp/",
-        description="MCP server endpoint URL",
+        default_factory=get_mcp_endpoint,
+        description="MCP server endpoint URL (set via MCP_ENDPOINT env var or uses default)",
     )
     timeout_seconds: float = Field(
         default=30.0,

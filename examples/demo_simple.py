@@ -16,7 +16,6 @@ from akd.agents.data_search.components import (
     TopicSplittingComponent,
 )
 from akd.agents.data_search.handlers import CMRHandlerConfig
-from akd.configs.data_search_config import get_config
 
 # loads .env file into os.environ
 load_dotenv()
@@ -41,20 +40,16 @@ for component, model in MODEL_CONFIG.items():
     print(f"   • {component.replace('_', ' ').title()}: {model}")
 
 # Load base configuration
-config = get_config()
 
 # Configure CMR handler
 cmr_handler_config = CMRHandlerConfig(
-    mcp_endpoint=config.mcp.endpoint,
     collection_search_page_size=20,
     granule_search_page_size=10,
     collections_per_query=5,
     max_collections_per_approach=5,
     final_collection_count=25,
-    min_collection_relevance_score=0.3,
     collection_search_timeout=30.0,
     granule_search_timeout=45.0,
-    enable_parallel_search=True,
     known_parameters_model=MODEL_CONFIG["cmr_query"],
     searchable_parameters_model=MODEL_CONFIG["cmr_query"],
     approach_filtering_model=MODEL_CONFIG["cmr_query"],
@@ -64,7 +59,6 @@ cmr_handler_config = CMRHandlerConfig(
 # Configure agent with model-specific settings
 agent_config = DataSearchAgentConfig(
     debug=True,
-    enable_parallel_search=True,
     # Universal component models
     topic_splitting_model=MODEL_CONFIG["topic_splitting"],
     scientific_decomposition_model=MODEL_CONFIG["scientific_decomposition"],
@@ -302,8 +296,9 @@ async def test_searchable_parameters_only(
 
     for i, query in enumerate(searchable_output.searchable_queries, 1):
         print(f"\n   Query {i}:")
-        print(f"     Keywords: {', '.join(query.primary_keywords)}")
-        print(f"     Combined: {query.combined_keyword_string}")
+        print(
+            f"     Search string: {query.search_string or '(none - using known parameters only)'}",
+        )
         if query.instrument:
             print(f"     Instrument: {query.instrument}")
         if query.temporal:
@@ -399,7 +394,10 @@ async def test_new_workflow(query: str = None):
                 f"\n      Decomposition {j}: {decomp_result.decomposition.get('title', 'N/A')}",
             )
             print(f"      Repository: {decomp_result.repository}")
-            print(f"      Results Found: {decomp_result.total_results_found}")
+            print(f"      Results from CMR: {decomp_result.total_results_from_cmr}")
+            print(
+                f"      Results after filtering: {decomp_result.total_results_after_filtering}",
+            )
             print(f"      Data Results Returned: {len(decomp_result.data_results)}")
 
             if decomp_result.note:
