@@ -11,8 +11,7 @@ class QueryAgentInputSchema(InputSchema):
 
     query: str = Field(
         ...,
-        description="A detailed query/instruction or request to "
-        "generate search engine queries for.",
+        description="A detailed query/instruction or request to generate search engine queries for.",
     )
     num_queries: int = Field(
         default=3,
@@ -33,6 +32,10 @@ class QueryAgentOutputSchema(OutputSchema):
     category: Optional[Literal["general", "science"]] = Field(
         "science",
         description="Category of the search queries.",
+    )
+    reasoning: Optional[str] = Field(
+        default=None,
+        description="Brief explanation of why these queries were generated.",
     )
 
 
@@ -88,11 +91,9 @@ class FollowUpQueryAgentOutputSchema(OutputSchema):
         description="List of follow-up search queries based on the original content.",
     )
 
-    category: Optional[Literal["general", "science", "research", "clarification"]] = (
-        Field(
-            default="general",
-            description="Category of the follow-up search queries.",
-        )
+    category: Optional[Literal["general", "science", "research", "clarification"]] = Field(
+        default="general",
+        description="Category of the follow-up search queries.",
     )
 
     reasoning: Optional[str] = Field(
@@ -103,8 +104,7 @@ class FollowUpQueryAgentOutputSchema(OutputSchema):
 
     original_query_gaps: Optional[List[str]] = Field(
         default=None,
-        description="Identified gaps or areas that weren't fully covered "
-        "in the original content.",
+        description="Identified gaps or areas that weren't fully covered in the original content.",
     )
 
 
