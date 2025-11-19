@@ -3,11 +3,10 @@ Example script demonstrating the LLM-based reranker.
 
 This example shows how to:
 1. Configure the LLM reranker with custom criteria and categories
-2. Use EvaluationField to provide field descriptions for domain-specific fields
-3. Mix simple string fields with EvaluationField objects in fields_to_evaluate
-4. The reranker creates its own internal scoring agent
-5. Rerank search results using LLM-based individual scoring with parallel criterion evaluation
-6. Access detailed scores for post-hoc analysis
+2. Provide field descriptions for domain-specific fields
+3. The reranker creates its own internal scoring agent
+4. Rerank search results using LLM-based individual scoring (single call per result evaluates all criteria)
+5. Access detailed scores for post-hoc analysis
 """
 
 import asyncio
@@ -22,13 +21,14 @@ from akd.tools.reranker import (
 
 
 async def main():
-    """Demonstrate LLM-based reranking."""
+    """Demonstrate LLM-based reranking with single-call evaluation."""
 
     # Step 1: Configure the reranker
     # The LLMRerankerTool creates its own internal scoring agent
+
     reranker_config = LLMRerankerToolConfig(
         model_name="gpt-4o-mini",
-        # temperature=0.0,
+        temperature=0.0,
         fields_to_evaluate={
             "title": "The title or name of the dataset",
             "content": "Description or abstract of the dataset",
@@ -119,13 +119,13 @@ async def main():
 
     query = "high resolution satellite imagery for climate analysis"
     results = [
-        # SearchResultItem(
-        #     query = query,
-        #     title="MODIS Climate Data",
-        #     content="Moderate Resolution Imaging Spectroradiometer data for climate studies",
-        #     url="https://example.com/modis",
-        #     extra={"spatial_resolution": "250m", "processing_level": "L2"},
-        # ),
+        SearchResultItem(
+            query=query,
+            title="MODIS Climate Data",
+            content="Moderate Resolution Imaging Spectroradiometer data for climate studies",
+            url="https://example.com/modis",
+            extra={"spatial_resolution": "250m", "processing_level": "L2"},
+        ),
         SearchResultItem(
             query=query,
             title="Random Blog Post",
@@ -143,6 +143,14 @@ async def main():
     ]
 
     print(f"Query: {query}")
+    print(f"Number of results: {len(results)}")
+    print(f"Number of criteria: {len(reranker_config.scoring_criteria)}")
+    print(
+        f"\nPERFORMANCE: Using single-call evaluation - {len(results)} results × 1 call/result = {len(results)} total LLM calls",
+    )
+    print(
+        f"            (vs. old approach: {len(results)} results × {len(reranker_config.scoring_criteria)} criteria = {len(results) * len(reranker_config.scoring_criteria)} calls)\n",
+    )
 
     reranked_output = await reranker.arun(
         reranker.input_schema(query=query, results=results),
@@ -150,29 +158,28 @@ async def main():
 
     print(f"\nReranked order: {[r.title for r in reranked_output.results]}")
 
-    # Step 5: Access detailed scores for analysis
     print("\n" + "=" * 80)
-    print("DETAILED SCORES")
+    print("DETAILED SCORES (All criteria evaluated in single LLM call per result)")
     print("=" * 80)
 
     for idx, result in enumerate(reranked_output.results, 1):
         print(f"\n{idx}. {result.title}")
         print(f"   Total Score: {result.score:.3f}")
 
-        # Access the detailed criterion scores stored in extra
         if "llm_reranker" in result.extra:
             criterion_scores = result.extra["llm_reranker"]["criterion_scores"]
             for criterion_name, score_data in criterion_scores.items():
                 print(
                     f"   - {criterion_name}: {score_data['category']} "
-                    f"(score={score_data['score']:.1f}, weight={score_data['weight']:.1f})",
+                    f"(score={score_data['score']:.1f}, weight={score_data['weight']:.2f})",
                 )
                 print(f"     Reasoning: {score_data['reasoning']}")
 
     print("\n" + "=" * 80)
-    print("Post-hoc analysis tips:")
-    print("- Scores are logged and stored in result.extra['llm_reranker']")
-    print("- You can adjust weights in config without re-running the LLM")
+    print("KEY FEATURES:")
+    print("- Single LLM call evaluates ALL criteria simultaneously (efficient)")
+    print("- Scores logged and stored in result.extra['llm_reranker']")
+    print("- Adjust weights in config without re-running LLM")
     print("- Compare different weight combinations against SME ground truth")
     print("=" * 80)
 
