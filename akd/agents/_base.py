@@ -17,7 +17,13 @@ from pydantic import (
     model_validator,
 )
 
-from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
+from akd._base import (
+    AbstractBase,
+    BaseConfig,
+    InputSchema,
+    OutputSchema,
+    ParamExposureMixin,
+)
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 
@@ -104,7 +110,7 @@ class BaseAgentConfig(BaseConfig):
 class BaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AbstractBase):
+](AbstractBase, ParamExposureMixin):
     """
     Base class for chat agents that interact with a language model.
 
