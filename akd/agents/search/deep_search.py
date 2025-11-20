@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from pydantic import Field
 
+from akd._base import exposed_param
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -152,6 +153,14 @@ class DeepLitSearchAgent(LitBaseAgent):
         # Track research state
         self.research_history = []
         self.clarification_history = []
+
+    @exposed_param(description="System prompt used for LLM clarification rounds.")
+    def clarification_prompt(self) -> str:
+        return self.clarification_component.config.system_prompt
+
+    @clarification_prompt.setter
+    def clarification_prompt(self, prompt: str) -> None:
+        self.clarification_component.config.system_prompt = prompt
 
     async def _handle_triage(self, query: str) -> dict:
         """Handle query triage using embedded component."""
@@ -616,12 +625,12 @@ class DeepLitSearchAgent(LitBaseAgent):
             answer=shortform_answer.answer,
             report=detailed_report,
             results=research_output["results"],
-            iterations_performed=research_output["iterations_performed"],
             extra={
                 "key_findings": research_output["key_findings"],
                 "evidence_quality_score": research_output["evidence_quality_score"],
                 "citations": research_output["citations"],
                 "answer_reasoning_traces": shortform_answer.reasoning_traces,
                 "research_traces": research_output.get("research_traces", []),
+                "iterations_performed": research_output["iterations_performed"],
             },
         )

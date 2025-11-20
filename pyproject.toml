@@ -19,15 +19,15 @@ classifiers = [
 ]
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "crawl4ai>=0.5.0.post4",
+    "crawl4ai>=0.7.6",
     "duckduckgo-search>=8.0.1",
     "gdown>=5.2.0",
-    "instructor>=1.7.7",
+    "instructor==1.13.0",
     "langchain-community>=0.3.24",
     "langchain-core>=0.3.48",
     "langchain-google-community>=2.0.7",
     "langchain-huggingface>=0.2.0",
-    "langgraph>=0.4.0",
+    "langgraph==1.0.3",
     "loguru>=0.7.3",
     "lxml-html-clean>=0.4.1",
     "markdownify>=1.1.0",

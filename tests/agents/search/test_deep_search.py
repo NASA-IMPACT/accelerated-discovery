@@ -962,11 +962,11 @@ class TestDeepLitSearchAgentIntegration:
         # Run the agent
         input_params = LitSearchAgentInputSchema(query="quality research topic")
 
-        result = await agent._arun(input_params)
+        result = await agent.arun(input_params)
 
         # Should stop after 2 iterations due to quality threshold
         # (First iteration: 4/6 = 0.67, Second iteration: average = (0.67 + 1.0)/2 = 0.835 > 0.8)
-        assert result.iterations_performed >= 2
+        assert result.extra.get("iterations_performed", 1) >= 2
 
         # Verify search results are included (no longer excluding first result)
         assert len(result.results) >= 1
@@ -1301,7 +1301,7 @@ class TestDeepLitSearchAgentRealLLM:
         # Print comprehensive results
         print("\n📊 RESULTS SUMMARY")
         print(f"Total results: {len(result.results)}")
-        print(f"Iterations performed: {getattr(result, 'iterations_performed', 'N/A')}")
+        print(f"Iterations performed: {getattr(result.extra, 'iterations_performed', 'N/A')}")
 
         # Print research report if available
         first_result = result.results[0]
@@ -1374,7 +1374,6 @@ async def test_search_agent_response_field():
                 content="Test content",
             ),
         ],
-        iterations_performed=1,
     )
 
     # Test that _response field matches report field
@@ -1398,7 +1397,6 @@ async def test_search_agent_response_field_none_report():
                 content="Test content",
             ),
         ],
-        iterations_performed=1,
     )
 
     # Test that _response field is falsy when report is None

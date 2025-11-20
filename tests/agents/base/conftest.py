@@ -10,7 +10,6 @@ from akd._base import InputSchema, OutputSchema
 from akd.agents._base import (
     BaseAgentConfig,
     InstructorBaseAgent,
-    LangBaseAgent,
     LiteLLMInstructorBaseAgent,
 )
 
@@ -52,23 +51,6 @@ class AgentTestCustomConfig(BaseAgentConfig):
 
 
 # Test agent implementations
-class TestLangBaseAgent(LangBaseAgent[AgentTestInputSchema, AgentTestOutputSchema]):
-    """Test implementation of LangBaseAgent."""
-
-    input_schema = AgentTestInputSchema
-    output_schema = AgentTestOutputSchema
-
-    async def _arun(
-        self,
-        params: AgentTestInputSchema,
-        **kwargs,
-    ) -> AgentTestOutputSchema:
-        """Test implementation that calls parent to handle memory."""
-        # Call the parent _arun which handles memory management
-        result = await super()._arun(params, **kwargs)
-        return result
-
-
 class TestInstructorBaseAgent(
     InstructorBaseAgent[AgentTestInputSchema, AgentTestOutputSchema],
 ):
@@ -98,7 +80,6 @@ class TestLiteLLMAgent(
 
 
 # Prevent pytest from collecting test classes as tests themselves
-TestLangBaseAgent.__test__ = False
 TestInstructorBaseAgent.__test__ = False
 TestLiteLLMAgent.__test__ = False
 
@@ -203,15 +184,6 @@ def mock_litellm_client():
         yield mock_client
 
 
-@pytest.fixture
-def mock_chatopenai_client():
-    """Create a mock ChatOpenAI client for testing."""
-    with patch("akd.agents._base.ChatOpenAI") as mock_chat_openai:
-        mock_client = MagicMock()
-        mock_chat_openai.return_value = mock_client
-        yield mock_client
-
-
 # Helper functions
 def create_config_with_overrides(
     base_config: BaseAgentConfig,
@@ -233,10 +205,6 @@ def setup_mock_response(
         mock_response = MagicMock()
         mock_response.model_dump.return_value = response_data
         mock_client.chat.completions.create.return_value = mock_response
-    elif client_type == "chatopenai":
-        mock_structured_client = AsyncMock()
-        mock_structured_client.ainvoke.return_value = response_data
-        mock_client.with_structured_output.return_value = mock_structured_client
     elif client_type == "litellm":
         mock_response = MagicMock()
         mock_response.model_dump.return_value = response_data
@@ -256,11 +224,6 @@ async def setup_async_mock_response(
         mock_client.chat.completions.create = mock_chat_completions
         mock_chat_completions.return_value = mock_response
         return mock_chat_completions
-    elif client_type == "chatopenai":
-        mock_structured_client = AsyncMock()
-        mock_structured_client.ainvoke.return_value = response_data
-        mock_client.with_structured_output.return_value = mock_structured_client
-        return mock_structured_client
     elif client_type == "litellm":
         mock_response = MagicMock()
         mock_response.model_dump.return_value = response_data

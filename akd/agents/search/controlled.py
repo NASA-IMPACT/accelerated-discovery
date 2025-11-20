@@ -897,8 +897,8 @@ class ControlledSearchAgent(LitBaseAgent):
             answer=shortform_answer.answer,
             report=detailed_report,
             results=all_results,
-            iterations_performed=iteration,
             extra=dict(
                 answer_reasoning_traces=shortform_answer.reasoning_traces,
+                iterations_performed=iteration,
             ),
         )

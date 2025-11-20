@@ -4,9 +4,8 @@ from typing import Any, Callable, Coroutine, Dict, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, create_model
 
-from akd._base import InputSchema, OutputSchema
+from akd._base import AsyncRunMixin, InputSchema, OutputSchema
 from akd.common_types import CallableSpec
-from akd.utils import AsyncRunMixin
 
 from ._base import BaseTool
 
@@ -38,14 +37,8 @@ def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
         sig = inspect.signature(func)
         fields = {}
         for name, param in sig.parameters.items():
-            field_type = (
-                param.annotation
-                if param.annotation is not inspect.Parameter.empty
-                else Any
-            )
-            default = (
-                param.default if param.default is not inspect.Parameter.empty else ...
-            )
+            field_type = param.annotation if param.annotation is not inspect.Parameter.empty else Any
+            default = param.default if param.default is not inspect.Parameter.empty else ...
             fields[name] = (field_type, default)
         return fields
 
@@ -88,11 +81,7 @@ def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
             """
             Check if a single argument is provided and it's already an instance of the input schema.
             """
-            return (
-                len(args) == 1
-                and not kwargs
-                and isinstance(args[0], self.__class__.input_schema)
-            )
+            return len(args) == 1 and not kwargs and isinstance(args[0], self.__class__.input_schema)
 
         def _convert_positional_to_keyword_args(self, args):
             """

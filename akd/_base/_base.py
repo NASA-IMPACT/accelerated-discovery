@@ -8,7 +8,9 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
 
 from akd.errors import SchemaValidationError
-from akd.utils import AsyncRunMixin, LangchainToolMixin, get_model_fields
+from akd.utils import get_model_fields
+
+from .utils import AsyncRunMixin
 
 
 class BaseConfig(BaseModel):
@@ -96,7 +98,6 @@ class AbstractBaseMeta(ABCMeta):
             "AbstractBase",
             "UnrestrictedAbstractBase",
             "BaseAgent",
-            "LangBaseAgent",
             "InstructorBaseAgent",
             "LiteLLMInstructorBaseAgent",
             "BaseTool",
@@ -138,7 +139,7 @@ class AbstractBaseMeta(ABCMeta):
 class AbstractBase[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AsyncRunMixin, LangchainToolMixin, ABC, metaclass=AbstractBaseMeta):
+](AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
@@ -219,6 +220,7 @@ class AbstractBase[
         Returns:
             str: Formatted string with field information, empty if no input schema.
         """
+        # avoid circular dependency
         if not hasattr(self, "input_schema") or not self.input_schema:
             return ""
 
@@ -238,6 +240,8 @@ class AbstractBase[
         Returns:
             str: Formatted string with field information, empty if no output schema.
         """
+
+        # avoid circular dependency
         if not hasattr(self, "output_schema") or not self.output_schema:
             return ""
 
@@ -335,7 +339,7 @@ class AbstractBase[
 class UnrestrictedAbstractBase[
     InSchema: BaseModel,
     OutSchema: BaseModel,
-](AsyncRunMixin, LangchainToolMixin, ABC):
+](AsyncRunMixin, ABC):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle

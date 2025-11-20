@@ -4,9 +4,9 @@ from typing import Any, List, Union
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from akd._base import AsyncRunMixin
 from akd.agents import InstructorBaseAgent
 from akd.structures import ExtractionSchema, SingleEstimation
-from akd.utils import AsyncRunMixin
 
 from .intents import Intent
 

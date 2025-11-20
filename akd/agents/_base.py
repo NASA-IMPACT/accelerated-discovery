@@ -5,9 +5,6 @@ from typing import Any, cast
 
 import instructor
 import openai
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_openai import ChatOpenAI
 from litellm import acompletion, get_model_info
 from litellm.utils import trim_messages
 from loguru import logger
@@ -20,13 +17,19 @@ from pydantic import (
     model_validator,
 )
 
-from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
+from akd._base import (
+    AbstractBase,
+    BaseConfig,
+    InputSchema,
+    OutputSchema,
+    ParamExposureMixin,
+)
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 
 
 class BaseAgentConfig(BaseConfig):
-    """Configuration class for LangBaseAgent."""
+    """Configuration class for base agents."""
 
     base_url: AnyUrl | None = Field(default=CONFIG.model_config_settings.base_url)
     api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
@@ -63,6 +66,12 @@ class BaseAgentConfig(BaseConfig):
     enable_trimming: bool = Field(
         default=True,
         description="Enable automatic message trimming",
+    )
+    num_retries: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Number of retries for LLM calls",
     )
 
     @model_validator(mode="after")
@@ -101,7 +110,7 @@ class BaseAgentConfig(BaseConfig):
 class BaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AbstractBase):
+](AbstractBase, ParamExposureMixin):
     """
     Base class for chat agents that interact with a language model.
 
@@ -173,127 +182,6 @@ class BaseAgent[
             OutputSchema: The response from the language model.
         """
         raise NotImplementedError("Subclasses must implement this method.")
-
-
-class LangBaseAgent[
-    InSchema: InputSchema,
-    OutSchema: OutputSchema,
-](BaseAgent):
-    """Base class for LangChain-based chat agents.
-    This class provides a foundation for agents that use LangChain's
-    ChatOpenAI client for generating responses based on user input.
-    It includes configuration options for the language model and memory management.
-
-    Note:
-        The object attributes (like `api_key`, `model_name` etc.) are dynamically set from the config.
-    """
-
-    def __init__(
-        self,
-        config: BaseAgentConfig | None = None,
-        debug: bool = False,
-    ) -> None:
-        super().__init__(config=config, debug=debug)
-
-        # Create the OpenAI client
-        self.client = ChatOpenAI(
-            api_key=self.api_key,
-            model=self.model_name,
-            base_url=str(self.base_url),
-            temperature=self.temperature,  # type: ignore
-        )
-
-        # Initialize memory
-        self._memory = ChatMessageHistory()
-
-        # Create system prompt template
-        self.prompt_template = ChatPromptTemplate.from_messages(
-            [
-                {
-                    "role": "system",
-                    "content": self._system_prompt,
-                },
-                MessagesPlaceholder(variable_name="memory"),
-            ],
-        )
-
-    @property
-    def memory(self) -> ChatMessageHistory:
-        return self._memory
-
-    def reset_memory(self) -> None:
-        """
-        Resets the memory of the agent.
-        This method clears the chat message history, effectively resetting the agent's memory.
-        """
-        self.memory.clear()
-
-    async def get_response_async(
-        self,
-        messages: list | None = None,
-        response_model: type[OutputSchema] | None = None,
-    ) -> OutSchema:
-        """
-        Obtains a response from the language model asynchronously.
-
-        Args:
-            response_model (Type[BaseModel], optional):
-                The schema for the response data. If not set,
-                self.output_schema is used.
-
-        Returns:
-            Type[BaseModel]: The response from the language model.
-        """
-        messages = messages or self.memory.messages
-        response_model = response_model or self.output_schema
-        structured_client = self.client.with_structured_output(
-            response_model,
-            method="function_calling",
-        )
-
-        # Format messages using the prompt template
-        formatted_messages = self.prompt_template.format_messages(
-            memory=messages,
-        )
-
-        response = await structured_client.ainvoke(formatted_messages)
-
-        return cast(OutSchema, response)
-
-    async def _arun(
-        self,
-        params: InSchema,
-        **kwargs,
-    ) -> OutSchema:
-        """
-        Runs the chat agent with the given user input asynchronously.
-
-        Args:
-            user_input (Optional[InputSchema]):
-                The input from the user.
-                If not provided, skips adding to memory.
-
-        Returns:
-            OutputSchema: The response from the chat agent.
-        """
-
-        # reference new empty memory if stateless
-        _memory = ChatMessageHistory() if self.stateless else self.memory
-
-        if params:
-            _memory.add_user_message(params.model_dump_json(exclude={"type"}))
-
-        response = await self.get_response_async(
-            messages=_memory.messages,
-            response_model=self.output_schema,
-        )
-
-        # Update memory only not stateless
-        if not self.stateless and params:
-            _memory.add_ai_message(response.model_dump_json(exclude={"type"}))
-            self._memory = _memory
-
-        return response
 
 
 class InstructorBaseAgent[
@@ -539,6 +427,7 @@ class LiteLLMInstructorBaseAgent[
             response_model=instructor_model,
             api_base=str(self.base_url).rstrip("/") if self.base_url else None,
             api_key=self.api_key,
+            num_retries=self.num_retries,
         )
 
         response_data = response.model_dump()
