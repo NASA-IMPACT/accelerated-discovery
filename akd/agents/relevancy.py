@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents import LiteLLMInstructorBaseAgent
@@ -30,15 +30,11 @@ class RelevancyAgentOutputSchema(OutputSchema):
 
     label: RelevancyLabel = Field(
         ...,
-        description=(
-            "The label indicating the relevance between the query and the content."
-        ),
+        description=("The label indicating the relevance between the query and the content."),
     )
     reasoning_steps: List[str] = Field(
         ...,
-        description=(
-            "Very concise/step-by-step reasoning steps leading to the relevance check."
-        ),
+        description=("Very concise/step-by-step reasoning steps leading to the relevance check."),
     )
 
 
@@ -155,3 +151,85 @@ class MultiRubricRelevancyAgent(
 ):
     input_schema = MultiRubricRelevancyInputSchema
     output_schema = MultiRubricRelevancyOutputSchema
+
+
+# Dynamic Criteria Generation Agent
+
+
+class RelevanceCriterion(BaseModel):
+    """A single relevance criterion for evaluating repositories."""
+
+    name: str = Field(
+        ..., description="Short identifier in snake_case (e.g., 'data_processing', 'machine_learning_models')"
+    )
+    description: str = Field(
+        ..., description="Clear description of what makes a repository relevant for this criterion"
+    )
+
+
+class DynamicRelevanceCriteriaAgentInputSchema(InputSchema):
+    """Input schema for the Dynamic Relevance Criteria Agent."""
+
+    query: str = Field(..., description="The search query for which to generate relevance criteria")
+    context: Optional[str] = Field(
+        default=None, description="Optional additional context about the search domain or requirements"
+    )
+
+
+class DynamicRelevanceCriteriaAgentOutputSchema(OutputSchema):
+    """
+    Output schema for dynamically generated relevance criteria.
+
+    This schema represents query-specific criteria that will be used to evaluate
+    and rank code repositories based on their relevance to the search query.
+    """
+
+    required_relevance_criteria: List[RelevanceCriterion] = Field(
+        ...,
+        description=(
+            "Core criteria that repositories MUST address to be considered relevant. "
+            "These represent the essential requirements extracted from the query."
+        ),
+    )
+    nice_to_have_relevance_criteria: List[RelevanceCriterion] = Field(
+        default_factory=list,
+        description=(
+            "Optional bonus criteria for additional value. "
+            "Repositories satisfying these provide extra relevance beyond core requirements."
+        ),
+    )
+    query_intent_summary: str = Field(..., description="Brief summary of the overall query intent and search objective")
+    reasoning_steps: List[str] = Field(
+        ..., description="Step-by-step reasoning for the generation of the relevance criteria"
+    )
+
+
+class DynamicRelevanceCriteriaAgent(
+    LiteLLMInstructorBaseAgent[DynamicRelevanceCriteriaAgentInputSchema, DynamicRelevanceCriteriaAgentOutputSchema]
+):
+    """
+    Agent that dynamically generates query-specific relevance criteria for code repository search.
+
+    This agent analyzes search queries to extract both required and optional relevance criteria
+    that capture the query's intent and domain-specific requirements. Rather than applying a
+    fixed rubric, it creates tailored evaluation criteria for each unique query.
+
+    For code repository search, criteria might include:
+    - Implementation of specific algorithms or methodologies
+    - Addressing particular scientific domains or use cases
+    - Providing certain functionality or features
+    - Demonstrating relevant technical approaches
+    - Supporting specific data types or formats
+    - Integration with particular tools or frameworks
+
+    The system distinguishes between:
+    - Required criteria: Repositories must address these to be considered relevant
+    - Nice-to-have criteria: Provide bonus scoring for additional value
+
+    This dynamic approach enables the relevance assessment framework to adapt to each
+    query's nuances, such as whether a repository should focus on data processing versus
+    modeling, visualization versus analysis, or simulation versus observational data handling.
+    """
+
+    input_schema = DynamicRelevanceCriteriaAgentInputSchema
+    output_schema = DynamicRelevanceCriteriaAgentOutputSchema
