@@ -1,6 +1,6 @@
 import asyncio
 from abc import abstractmethod
-from typing import Any, Callable, overload
+from typing import Any, Callable, get_type_hints, overload
 
 from pydantic import BaseModel, Field
 
@@ -125,35 +125,70 @@ class ParamExposureMixin:
         Returns:
             Dict mapping parameter name to metadata containing:
                 - description: Human readable description
-                - type: Python type name
+                - type: Python type name (from type hints or runtime value)
                 - editable: Whether the parameter has a setter
                 - extra: Additional metadata (if present)
                 - current_value: Current value (if include_values=True)
         """
+
+        def __get_type_from_hints(attr: property) -> str:
+            """Extract type from property type hints. Priority: fget return > fset param."""
+            # Try fget return type
+            try:
+                hints = get_type_hints(attr.fget)
+                if "return" in hints:
+                    return getattr(hints["return"], "__name__", str(hints["return"]))
+            except Exception:
+                pass
+
+            # Try fset parameter type
+            if attr.fset:
+                try:
+                    hints = get_type_hints(attr.fset)
+                    params = [k for k in hints.keys() if k != "return"]
+                    if params:
+                        return getattr(hints[params[0]], "__name__", str(hints[params[0]]))
+                except Exception:
+                    pass
+
+            return "unknown"
+
         exposed = {}
         for attr_name in dir(self):
             attr = getattr(type(self), attr_name, None)
-            if isinstance(attr, property) and hasattr(attr.fget, "_exposed_meta"):
-                meta = attr.fget._exposed_meta
+            if not (isinstance(attr, property) and hasattr(attr.fget, "_exposed_meta")):
+                continue
+
+            meta = attr.fget._exposed_meta
+
+            # Get type from hints, fallback to runtime value
+            param_type = __get_type_from_hints(attr)
+            current_value = None
+
+            if param_type == "unknown":
                 try:
                     current_value = getattr(self, attr_name)
                     param_type = type(current_value).__name__
                 except Exception:
                     param_type = "unknown"
+
+            # Get current value if requested and not already fetched
+            if include_values and current_value is None:
+                try:
+                    current_value = getattr(self, attr_name)
+                except Exception:
                     current_value = None
 
-                exposed[attr_name] = {
-                    "description": meta.description,
-                    "type": param_type,
-                    "editable": attr.fset is not None,
-                }
+            exposed[attr_name] = {
+                "description": meta.description,
+                "type": param_type,
+                "editable": attr.fset is not None,
+            }
 
-                # Add extra metadata if present
-                if meta.extra:
-                    exposed[attr_name]["extra"] = meta.extra
+            if meta.extra:
+                exposed[attr_name]["extra"] = meta.extra
 
-                # Add current value if requested
-                if include_values:
-                    exposed[attr_name]["current_value"] = current_value
+            if include_values:
+                exposed[attr_name]["current_value"] = current_value
 
         return exposed
