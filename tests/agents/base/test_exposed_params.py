@@ -1,6 +1,6 @@
 """Test cases for exposed parameter functionality."""
 
-from akd._base.utils import exposed_param
+from akd._base import exposed_param
 
 from .conftest import TestInstructorBaseAgent
 
