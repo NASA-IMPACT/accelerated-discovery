@@ -258,3 +258,27 @@ class TestExposedParamFunctionality:
 
         assert exposed1["max_iterations"].current_value == 15
         assert exposed2["max_iterations"].current_value == 5
+
+    def test_exposed_param_type_validation(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test that setters automatically validate types."""
+        agent = TestAgentWithExposedParams()
+
+        # Valid assignments should work
+        agent.max_iterations = 10
+        assert agent.max_iterations == 10
+
+        # Invalid type should raise TypeError
+        import pytest
+
+        with pytest.raises(TypeError, match="expects int, got str"):
+            agent.max_iterations = "invalid"
+
+        with pytest.raises(TypeError, match="expects float, got str"):
+            agent.temperature_override = "invalid"
+
+        with pytest.raises(TypeError, match="expects str, got int"):
+            agent.clarification_prompt = 123
