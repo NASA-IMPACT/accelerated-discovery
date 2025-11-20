@@ -2,6 +2,7 @@ import asyncio
 from abc import abstractmethod
 from typing import Any, Callable, get_type_hints, overload
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 
@@ -52,12 +53,40 @@ class AsyncRunMixin:
 
 
 class ExposedParam(BaseModel):
-    """Metadata for exposed paramters."""
+    """Metadata for exposed parameters."""
 
-    description: str = Field(default="", description="Human readable description")
+    name: str = Field(
+        description="Parameter name",
+    )
+    description: str = Field(
+        default="",
+        description="Human readable description",
+    )
     extra: dict[str, Any] | None = Field(
         default_factory=dict,
         description="Additional metadata for the parameter",
+    )
+
+
+class ExposedParamRuntimeInfo(ExposedParam):
+    """Complete runtime information about an exposed parameter.
+
+    Inherits name, description, and extra from ExposedParam.
+    Adds runtime-specific fields like type, editability, and current value.
+    """
+
+    type_: str = Field(
+        description="Parameter type as string (e.g., 'str', 'int', 'float')",
+    )
+    type_source: str = Field(
+        description="Source of type inference: 'fget' (getter annotation), 'fset' (setter annotation), 'runtime' (inferred from value), or 'none' (unknown)",
+    )
+    editable: bool = Field(
+        description="Whether the parameter has a setter and can be modified",
+    )
+    current_value: Any | None = Field(
+        default=None,
+        description="Current runtime value of the parameter (only populated when include_values=True)",
     )
 
 
@@ -101,6 +130,7 @@ def exposed_param[F: Callable](
         final_description = description or (func.__doc__ or "").strip() or func.__name__.replace("_", " ").title()
 
         func._exposed_meta = ExposedParam(  # type: ignore[attr-defined]
+            name=func.__name__,
             description=final_description,
             extra=kwargs or {},
         )
@@ -115,7 +145,7 @@ def exposed_param[F: Callable](
 class ParamExposureMixin:
     """Mixin to add parameter exposure capabilities to agents."""
 
-    def get_exposed_params(self, include_values: bool = False) -> dict[str, dict[str, Any]]:
+    def get_exposed_params(self, include_values: bool = False) -> list[ExposedParamRuntimeInfo]:
         """
         Get metadata about exposed parameters.
 
@@ -123,23 +153,25 @@ class ParamExposureMixin:
             include_values: If True, include current runtime values in the output
 
         Returns:
-            Dict mapping parameter name to metadata containing:
+            List of ExposedParamRuntimeInfo objects, each containing:
+                - name: Parameter name
                 - description: Human readable description
-                - type: Python type name (from type hints or runtime value)
+                - type_: Python type name (from type hints or runtime value)
+                - type_source: Source of type inference
                 - editable: Whether the parameter has a setter
-                - extra: Additional metadata (if present)
+                - extra: Additional metadata from decorator
                 - current_value: Current value (if include_values=True)
         """
 
-        def __get_type_from_hints(attr: property) -> str:
-            """Extract type from property type hints. Priority: fget return > fset param."""
+        def _get_type_from_hints(attr: property) -> tuple[str, str]:
+            """Extract type and source from property type hints. Priority: fget return > fset param."""
             # Try fget return type
             try:
                 hints = get_type_hints(attr.fget)
                 if "return" in hints:
-                    return getattr(hints["return"], "__name__", str(hints["return"]))
-            except Exception:
-                pass
+                    return getattr(hints["return"], "__name__", str(hints["return"])), "fget"
+            except Exception as e:
+                logger.warning(f"Failed to get type hints from fget (getter) for {attr}: {e}")
 
             # Try fset parameter type
             if attr.fset:
@@ -147,13 +179,13 @@ class ParamExposureMixin:
                     hints = get_type_hints(attr.fset)
                     params = [k for k in hints.keys() if k != "return"]
                     if params:
-                        return getattr(hints[params[0]], "__name__", str(hints[params[0]]))
-                except Exception:
-                    pass
+                        return getattr(hints[params[0]], "__name__", str(hints[params[0]])), "fset"
+                except Exception as e:
+                    logger.warning(f"Failed to get type hints from fset (setter) for {attr}: {e}")
 
-            return "unknown"
+            return "unknown", "none"
 
-        exposed = {}
+        exposed = []
         for attr_name in dir(self):
             attr = getattr(type(self), attr_name, None)
             if not (isinstance(attr, property) and hasattr(attr.fget, "_exposed_meta")):
@@ -162,13 +194,14 @@ class ParamExposureMixin:
             meta = attr.fget._exposed_meta
 
             # Get type from hints, fallback to runtime value
-            param_type = __get_type_from_hints(attr)
+            param_type, type_source = _get_type_from_hints(attr)
             current_value = None
 
             if param_type == "unknown":
                 try:
                     current_value = getattr(self, attr_name)
                     param_type = type(current_value).__name__
+                    type_source = "runtime"
                 except Exception:
                     param_type = "unknown"
 
@@ -179,16 +212,16 @@ class ParamExposureMixin:
                 except Exception:
                     current_value = None
 
-            exposed[attr_name] = {
-                "description": meta.description,
-                "type": param_type,
-                "editable": attr.fset is not None,
-            }
-
-            if meta.extra:
-                exposed[attr_name]["extra"] = meta.extra
-
-            if include_values:
-                exposed[attr_name]["current_value"] = current_value
+            exposed.append(
+                ExposedParamRuntimeInfo(
+                    name=attr_name,
+                    description=meta.description,
+                    type_=param_type,
+                    type_source=type_source,
+                    editable=attr.fset is not None,
+                    extra=meta.extra,
+                    current_value=current_value if include_values else None,
+                ),
+            )
 
         return exposed
