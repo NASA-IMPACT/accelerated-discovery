@@ -24,7 +24,7 @@ def get_type_from_property(prop: property) -> tuple[Any | None, str]:
         if "return" in hints:
             return hints["return"], "fget"
     except Exception as e:
-        logger.debug(f"Failed to get type hints from fget (getter) for {prop}: {e}")
+        logger.warning(f"Failed to get type hints from fget (getter) for {prop}: {e}")
 
     # Try setter parameter type
     if prop.fset:
@@ -34,7 +34,7 @@ def get_type_from_property(prop: property) -> tuple[Any | None, str]:
             if params:
                 return hints[params[0]], "fset"
         except Exception as e:
-            logger.debug(f"Failed to get type hints from fset (setter) for {prop}: {e}")
+            logger.warning(f"Failed to get type hints from fset (setter) for {prop}: {e}")
 
     return None, "none"
 
