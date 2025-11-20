@@ -1,6 +1,7 @@
 import asyncio
+import types
 from abc import abstractmethod
-from typing import Any, Callable, get_type_hints, overload
+from typing import Any, Callable, get_args, get_type_hints, overload
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -90,6 +91,73 @@ class ExposedParamRuntimeInfo(ExposedParam):
     )
 
 
+class ValidatedProperty(property):
+    """Property subclass that automatically validates setter arguments against type hints.
+
+    When a setter is added via the .setter() method, it's automatically wrapped
+    with type validation logic that checks the value against type annotations.
+    """
+
+    def setter(self, fset):
+        """Override setter to add automatic type validation."""
+        original_fset = fset
+
+        def validated_setter(instance, value):
+            # Get expected type from getter or setter type hints
+            expected_type = None
+
+            # Try getter return type first
+            try:
+                hints = get_type_hints(self.fget)
+                if "return" in hints:
+                    expected_type = hints["return"]
+            except Exception:
+                pass
+
+            # Try setter parameter type if getter didn't have type
+            if expected_type is None:
+                try:
+                    hints = get_type_hints(original_fset)
+                    params = [k for k in hints.keys() if k != "return"]
+                    if params:
+                        expected_type = hints[params[0]]
+                except Exception:
+                    pass
+
+            # Validate type if we found one
+            if expected_type is not None:
+                # Get origin type for generics (List[int] -> list)
+                origin = getattr(expected_type, "__origin__", None)
+
+                # Check if it's a Union type (typing.Union or Python 3.10+ int | str)
+                is_union = origin is not None or isinstance(expected_type, types.UnionType)
+
+                if is_union:
+                    # Handle Union types (e.g., Union[int, str] or int | str)
+                    type_args = get_args(expected_type)
+                    if type_args and not isinstance(value, type_args):
+                        param_name = getattr(self.fget, "_exposed_meta", None)
+                        name = param_name.name if param_name else "parameter"
+                        type_names = ", ".join(t.__name__ if hasattr(t, "__name__") else str(t) for t in type_args)
+                        raise TypeError(
+                            f"Parameter '{name}' expects one of [{type_names}], got {type(value).__name__}",
+                        )
+                else:
+                    # Simple type check
+                    if not isinstance(value, expected_type):
+                        param_name = getattr(self.fget, "_exposed_meta", None)
+                        name = param_name.name if param_name else "parameter"
+                        type_name = getattr(expected_type, "__name__", str(expected_type))
+                        raise TypeError(
+                            f"Parameter '{name}' expects {type_name}, got {type(value).__name__}",
+                        )
+
+            # Call original setter
+            return original_fset(instance, value)
+
+        return super().setter(validated_setter)
+
+
 @overload
 def exposed_param[F: Callable](_func: F, /) -> property: ...
 
@@ -134,7 +202,7 @@ def exposed_param[F: Callable](
             description=final_description,
             extra=kwargs or {},
         )
-        return property(func)  # type: ignore[return-value]
+        return ValidatedProperty(func)  # type: ignore[return-value]
 
     if _func is not None:
         return decorator(_func)
