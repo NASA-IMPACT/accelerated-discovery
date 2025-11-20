@@ -10,7 +10,7 @@ from ._base import (
     OutputSchema,
     UnrestrictedAbstractBase,
 )
-from .utils import ParamExposureMixin, exposed_param
+from .exposure import ParamExposureMixin, exposed_param
 
 __all__ = [
     # Base classes
