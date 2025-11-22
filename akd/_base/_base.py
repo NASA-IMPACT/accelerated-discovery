@@ -203,10 +203,17 @@ class AbstractBase[
             """Create a property that references a config field."""
 
             def getter(self):
+                # If config doesn't exist yet, fall back to instance attribute
+                if not hasattr(self, "config") or self.config is None:
+                    return self.__dict__.get(fname)
                 return getattr(self.config, fname)
 
             def setter(self, value):
-                setattr(self.config, fname, value)
+                # If config doesn't exist yet, set as instance attribute
+                if not hasattr(self, "config") or self.config is None:
+                    self.__dict__[fname] = value
+                else:
+                    setattr(self.config, fname, value)
 
             return property(getter, setter)
 
@@ -214,6 +221,9 @@ class AbstractBase[
             """Create a read-only property for computed config field."""
 
             def getter(self):
+                # If config doesn't exist yet, fall back to instance attribute
+                if not hasattr(self, "config") or self.config is None:
+                    return self.__dict__.get(fname)
                 return getattr(self.config, fname)
 
             return property(getter)
