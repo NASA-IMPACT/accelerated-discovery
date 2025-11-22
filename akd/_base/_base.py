@@ -232,7 +232,7 @@ class AbstractBase[
         # This ensures agent.field_name and agent.config.field_name reference the same value
         for field_name in type(self.config).model_fields.keys():
             # Skip if already a property (from exposed params or previous instance)
-            if isinstance(getattr(type(self), field_name, None), property):
+            if isinstance(type(self).__dict__.get(field_name), property):
                 continue
             # Set property on the class (affects all instances)
             setattr(type(self), field_name, _make_config_property(field_name))
@@ -243,7 +243,7 @@ class AbstractBase[
         if hasattr(type(self.config), "model_computed_fields"):
             for field_name in type(self.config).model_computed_fields.keys():
                 # Skip if already a property
-                if isinstance(getattr(type(self), field_name, None), property):
+                if isinstance(type(self).__dict__.get(field_name), property):
                     continue
                 setattr(type(self), field_name, _make_computed_property(field_name))
 
