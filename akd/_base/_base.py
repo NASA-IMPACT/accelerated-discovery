@@ -197,20 +197,45 @@ class AbstractBase[
     def __set_attrs_from_config(self):
         if self.config is None:
             return
-        # Iterate over model fields directly to preserve nested Pydantic models
-        # Using model_dump() would convert nested BaseModel instances to dicts
-        # Access model_fields from the class to avoid deprecation warning
-        for field_name in type(self.config).model_fields.keys():
-            value = getattr(self.config, field_name)
-            setattr(self, field_name, value)
 
-        # Also copy computed fields (properties decorated with @computed_field)
+        # Define factory functions once (outside loops, inside method)
+        def _make_config_property(fname):
+            """Create a property that references a config field."""
+
+            def getter(self):
+                return getattr(self.config, fname)
+
+            def setter(self, value):
+                setattr(self.config, fname, value)
+
+            return property(getter, setter)
+
+        def _make_computed_property(fname):
+            """Create a read-only property for computed config field."""
+
+            def getter(self):
+                return getattr(self.config, fname)
+
+            return property(getter)
+
+        # Create properties that reference self.config.field_name instead of copying values
+        # This ensures agent.field_name and agent.config.field_name reference the same value
+        for field_name in type(self.config).model_fields.keys():
+            # Skip if already a property (from exposed params or previous instance)
+            if isinstance(getattr(type(self), field_name, None), property):
+                continue
+            # Set property on the class (affects all instances)
+            setattr(type(self), field_name, _make_config_property(field_name))
+
+        # Also create properties for computed fields (read-only)
         # These are in model_computed_fields, not model_fields
         # Pydantic 2.x supports model_computed_fields
         if hasattr(type(self.config), "model_computed_fields"):
             for field_name in type(self.config).model_computed_fields.keys():
-                value = getattr(self.config, field_name)
-                setattr(self, field_name, value)
+                # Skip if already a property
+                if isinstance(getattr(type(self), field_name, None), property):
+                    continue
+                setattr(type(self), field_name, _make_computed_property(field_name))
 
     @property
     def _input_schema_info(self) -> str:
