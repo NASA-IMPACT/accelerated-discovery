@@ -48,7 +48,6 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
         default="1XwH4N-HJeak4Pfp6r0Nhdz0d5tQD99jE",
         description="Google Drive file ID for repository database, uses gte-large embeddings",
     )
-    use_division_filter_local: bool = Field(default=False, description="Enable division filter for local search")
 
     # SDE search configuration
     sde_base_url: str = Field(
@@ -57,7 +56,6 @@ class CodeSearchAgentConfig(ControlledSearchAgentConfig):
     )
     sde_search_type: Literal["vector", "hybrid", "keyword"] = Field(default="vector", description="SDE search type")
     sde_page_size: int = Field(default=100, description="SDE search page size")
-    use_division_filter_sde: bool = Field(default=True, description="Enable division filter for SDE search")
 
     # Tool selection
     use_local_search: bool = Field(default=True, description="Enable local repository search")
@@ -117,10 +115,7 @@ class CodeSearchAgent(ControlledSearchAgent):
             return None
 
         try:
-            local_config = LocalRepoCodeSearchToolConfig(
-                embedding_model_name=self.config.embedding_model_name,
-                use_division=self.config.use_division_filter_local,
-            )
+            local_config = LocalRepoCodeSearchToolConfig(embedding_model_name=self.config.embedding_model_name)
 
             if self.config.data_file:
                 if not os.path.exists(self.config.data_file):
@@ -165,7 +160,6 @@ class CodeSearchAgent(ControlledSearchAgent):
                 debug=self.config.debug,
                 search_mode=self.config.sde_search_type,
                 page_size=self.config.sde_page_size,
-                use_division=self.config.use_division_filter_sde,
             )
             return SDECodeSearchTool(config=sde_config)
 
