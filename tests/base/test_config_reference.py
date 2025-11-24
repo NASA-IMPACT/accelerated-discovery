@@ -325,7 +325,7 @@ def test_config_attributes_are_properties():
     config = RefTestAgentConfig(temperature=0.5)
     agent = RefTestAgent(config=config)
 
-    # The attribute should be a property on the class
-    assert isinstance(type(agent).__dict__.get("temperature"), property)
-    assert isinstance(type(agent).__dict__.get("max_tokens"), property)
-    assert isinstance(type(agent).__dict__.get("system_prompt"), property)
+    # The attribute should be a property on the class (may be on parent class)
+    assert isinstance(getattr(type(agent), "temperature", None), property)
+    assert isinstance(getattr(type(agent), "max_tokens", None), property)
+    assert isinstance(getattr(type(agent), "system_prompt", None), property)
