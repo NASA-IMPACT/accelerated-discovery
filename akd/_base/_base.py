@@ -87,13 +87,104 @@ class OutputSchema(IOSchema):
         return ""
 
 
+def _make_config_property(field_name: str):
+    """Create a property that references a config field.
+
+    This factory function creates properties at class definition time that delegate
+    to self.config.field_name, maintaining reference semantics between agent.x and
+    agent.config.x. Includes fallback to instance __dict__ for pre-init access.
+
+    Args:
+        field_name: Name of the config field to create a property for
+
+    Returns:
+        property: A property descriptor with getter/setter
+    """
+
+    def getter(self):
+        # If config doesn't exist yet, fall back to instance attribute
+        if not hasattr(self, "config") or self.config is None:
+            return self.__dict__.get(field_name)
+        return getattr(self.config, field_name)
+
+    def setter(self, value):
+        # If config doesn't exist yet, set as instance attribute
+        if not hasattr(self, "config") or self.config is None:
+            self.__dict__[field_name] = value
+        else:
+            setattr(self.config, field_name, value)
+
+    return property(getter, setter)
+
+
+def _make_computed_property(field_name: str):
+    """Create a read-only property for a computed config field.
+
+    Computed fields (decorated with @computed_field) are read-only and
+    dynamically calculated from other config values.
+
+    Args:
+        field_name: Name of the computed field
+
+    Returns:
+        property: A read-only property descriptor
+    """
+
+    def getter(self):
+        # If config doesn't exist yet, fall back to instance attribute
+        if not hasattr(self, "config") or self.config is None:
+            return self.__dict__.get(field_name)
+        return getattr(self.config, field_name)
+
+    return property(getter)
+
+
 class AbstractBaseMeta(ABCMeta):
-    """Metaclass that validates required schema attributes."""
+    """Metaclass that validates required schema attributes and creates config properties."""
+
+    @staticmethod
+    def _create_config_properties(target_class, dct):
+        """Create properties for config fields at class definition time.
+
+        This creates properties that reference self.config.field_name, maintaining
+        reference semantics between agent.x and agent.config.x.
+
+        Args:
+            target_class: The class being created
+            dct: The class dictionary from __new__
+        """
+        if not hasattr(target_class, "config_schema") or target_class.config_schema is None:
+            return
+
+        # Create properties for regular model fields
+        if hasattr(target_class.config_schema, "model_fields"):
+            for field_name in target_class.config_schema.model_fields.keys():
+                # Skip if explicitly defined in this class's dict
+                if field_name in dct:
+                    continue
+                # Skip if already a property (from parent or exposed params)
+                if isinstance(getattr(target_class, field_name, None), property):
+                    continue
+                # Create property that references self.config.field_name
+                setattr(target_class, field_name, _make_config_property(field_name))
+
+        # Create read-only properties for computed fields
+        if hasattr(target_class.config_schema, "model_computed_fields"):
+            for field_name in target_class.config_schema.model_computed_fields.keys():
+                if field_name in dct:
+                    continue
+                if isinstance(getattr(target_class, field_name, None), property):
+                    continue
+                setattr(target_class, field_name, _make_computed_property(field_name))
 
     def __new__(mcs, name, bases, dct):
         cls = super().__new__(mcs, name, bases, dct)
 
-        # Skip validation for the base class itself
+        # Create config properties at class definition time for ALL classes
+        # This must happen before early return to ensure base classes get properties too
+        AbstractBaseMeta._create_config_properties(cls, dct)
+
+        # Skip schema validation for base classes
         if name in [
             "AbstractBase",
             "UnrestrictedAbstractBase",
@@ -178,8 +269,10 @@ class AbstractBase[
         Post-initialization hook to perform any additional setup after
         the instance has been initialized.
         This can be overridden by subclasses for custom behavior.
+
+        Note: Config properties are created by AbstractBaseMeta at class definition time,
+        not during instance initialization.
         """
-        self.__set_attrs_from_config()
         for key, value in self._kwargs.items():
             setattr(self, key, value)
 
@@ -193,24 +286,6 @@ class AbstractBase[
             _out_schema = self._output_schema_info
             if _out_schema:
                 self.description += f"\n\nOUTPUT FIELD DESCRIPTIONS:\n{_out_schema}"
-
-    def __set_attrs_from_config(self):
-        if self.config is None:
-            return
-        # Iterate over model fields directly to preserve nested Pydantic models
-        # Using model_dump() would convert nested BaseModel instances to dicts
-        # Access model_fields from the class to avoid deprecation warning
-        for field_name in type(self.config).model_fields.keys():
-            value = getattr(self.config, field_name)
-            setattr(self, field_name, value)
-
-        # Also copy computed fields (properties decorated with @computed_field)
-        # These are in model_computed_fields, not model_fields
-        # Pydantic 2.x supports model_computed_fields
-        if hasattr(type(self.config), "model_computed_fields"):
-            for field_name in type(self.config).model_computed_fields.keys():
-                value = getattr(self.config, field_name)
-                setattr(self, field_name, value)
 
     @property
     def _input_schema_info(self) -> str:
@@ -339,7 +414,7 @@ class AbstractBase[
 class UnrestrictedAbstractBase[
     InSchema: BaseModel,
     OutSchema: BaseModel,
-](AsyncRunMixin, ABC):
+](AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
@@ -381,16 +456,12 @@ class UnrestrictedAbstractBase[
         Post-initialization hook to perform any additional setup after
         the instance has been initialized.
         This can be overridden by subclasses for custom behavior.
+
+        Note: Config properties are created by AbstractBaseMeta at class definition time,
+        not during instance initialization.
         """
-        self.__set_attrs_from_config()
         for key, value in self._kwargs.items():
             setattr(self, key, value)
-
-    def __set_attrs_from_config(self):
-        if self.config is None:
-            return
-        for attr, value in self.config.model_dump().items():
-            setattr(self, attr, value)
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> UnrestrictedAbstractBase:
@@ -463,3 +534,13 @@ class UnrestrictedAbstractBase[
             OutSchema: The output from the agent after processing the input.
         """
         raise NotImplementedError()
+
+
+__all__ = [
+    "AbstractBase",
+    "BaseConfig",
+    "IOSchema",
+    "InputSchema",
+    "OutputSchema",
+    "UnrestrictedAbstractBase",
+]
