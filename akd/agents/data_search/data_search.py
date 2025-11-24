@@ -14,7 +14,6 @@ from typing import Any
 from pydantic import Field
 
 from akd.agents._base import BaseAgentConfig
-from akd.utils.serialization import safe_model_dump
 
 from ._base import (
     BaseDataSearchAgent,
@@ -188,7 +187,7 @@ class DataSearchAgent(BaseDataSearchAgent):
     ) -> DecompositionResult:
         """Create result for external data sources."""
         return DecompositionResult(
-            decomposition=safe_model_dump(decomposition),
+            decomposition=decomposition.model_dump(exclude_none=True),
             repository=route.repository,
             query_approaches=[],
             searchable_queries=[],
@@ -205,7 +204,7 @@ class DataSearchAgent(BaseDataSearchAgent):
     ) -> DecompositionResult:
         """Create result for NASA repositories with stub handlers."""
         return DecompositionResult(
-            decomposition=safe_model_dump(decomposition),
+            decomposition=decomposition.model_dump(exclude_none=True),
             repository=route.repository,
             query_approaches=[],
             searchable_queries=[],
@@ -223,7 +222,7 @@ class DataSearchAgent(BaseDataSearchAgent):
     ) -> DecompositionResult:
         """Create result for handler errors."""
         return DecompositionResult(
-            decomposition=safe_model_dump(decomposition),
+            decomposition=decomposition.model_dump(exclude_none=True),
             repository=route.repository,
             query_approaches=[],
             searchable_queries=[],
@@ -349,8 +348,7 @@ class DataSearchAgent(BaseDataSearchAgent):
                 topics_to_process = [topics_output.topics[0]]
                 if self.config.debug:
                     print(
-                        f"Single-path mode: Processing topic[0], "
-                        f"skipping {len(topics_output.topics) - 1} others",
+                        f"Single-path mode: Processing topic[0], skipping {len(topics_output.topics) - 1} others",
                     )
             else:
                 topics_to_process = topics_output.topics
@@ -369,7 +367,7 @@ class DataSearchAgent(BaseDataSearchAgent):
                 if isinstance(result, Exception):
                     # Create error result
                     error_result = TopicResult(
-                        topic=safe_model_dump(topics_output.topics[i]),
+                        topic=topics_output.topics[i].model_dump(exclude_none=True),
                         decomposition_results=[],
                         total_cmr_results=0,
                         total_filtered_results=0,
@@ -381,9 +379,7 @@ class DataSearchAgent(BaseDataSearchAgent):
 
             # Calculate totals - aggregate across all topics
             total_cmr_all = sum(tr.total_cmr_results for tr in final_topic_results)
-            total_filtered_all = sum(
-                tr.total_filtered_results for tr in final_topic_results
-            )
+            total_filtered_all = sum(tr.total_filtered_results for tr in final_topic_results)
 
             search_duration = (datetime.now() - search_start_time).total_seconds()
 
@@ -466,8 +462,7 @@ class DataSearchAgent(BaseDataSearchAgent):
             decompositions_to_process = [decomp_output.decompositions[0]]
             if self.config.debug:
                 print(
-                    f"Single-path mode: Processing decomp[0], "
-                    f"skipping {len(decomp_output.decompositions) - 1} others",
+                    f"Single-path mode: Processing decomp[0], skipping {len(decomp_output.decompositions) - 1} others",
                 )
         else:
             decompositions_to_process = decomp_output.decompositions
@@ -491,7 +486,7 @@ class DataSearchAgent(BaseDataSearchAgent):
         for i, result in enumerate(decomp_results):
             if isinstance(result, Exception):
                 error_result = DecompositionResult(
-                    decomposition=safe_model_dump(decomp_output.decompositions[i]),
+                    decomposition=decomp_output.decompositions[i].model_dump(exclude_none=True),
                     repository=None,
                     query_approaches=[],
                     searchable_queries=[],
@@ -509,7 +504,7 @@ class DataSearchAgent(BaseDataSearchAgent):
         total_filtered = sum(dr.total_results_after_filtering for dr in final_results)
 
         return TopicResult(
-            topic=safe_model_dump(topic),
+            topic=topic.model_dump(exclude_none=True),
             decomposition_results=final_results,
             total_cmr_results=total_cmr,
             total_filtered_results=total_filtered,

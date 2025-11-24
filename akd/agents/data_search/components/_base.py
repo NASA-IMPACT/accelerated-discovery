@@ -93,8 +93,12 @@ class BaseDataSearchComponent(
                 prompts_dir=prompts_dir,
             )
 
-        # Set temperature
-        if not hasattr(config, "temperature") or config.temperature is None:
+        # Set temperature based on model support
+        # GPT-5 models only support temperature=1.0, override if needed
+        if config.model_name and "gpt-5" in config.model_name.lower():
+            if config.temperature == 0.0:
+                config.temperature = 1.0
+        elif not hasattr(config, "temperature") or config.temperature is None:
             config.temperature = self.default_temperature
 
         # Call parent init
@@ -132,13 +136,15 @@ class BaseDataSearchComponent(
         """
         if not self.retry_enabled:
             # No retry - execute directly
-            return await self.get_response_async()
+            messages = [self._default_system_message()] + self.memory
+            return await self.get_response_async(messages=messages)
 
         error_prefix = custom_error_prefix or f"Failed to {operation_name}"
 
         for attempt in range(self.max_retries + 1):
             try:
-                response = await self.get_response_async()
+                messages = [self._default_system_message()] + self.memory
+                response = await self.get_response_async(messages=messages)
 
                 if self.debug:
                     logger.debug(f"{operation_name} completed successfully")
@@ -148,18 +154,14 @@ class BaseDataSearchComponent(
             except Exception as e:
                 # Check if we've exhausted retries
                 if attempt == self.max_retries:
-                    error_msg = (
-                        f"{error_prefix} after {self.max_retries + 1} attempts: {e}"
-                    )
+                    error_msg = f"{error_prefix} after {self.max_retries + 1} attempts: {e}"
                     logger.error(error_msg)
                     raise RuntimeError(error_msg) from e
 
                 # Check if it's a retryable error (rate limit or timeout)
                 error_str = str(e)
                 is_rate_limit = "429" in error_str or "rate" in error_str.lower()
-                is_timeout = (
-                    isinstance(e, asyncio.TimeoutError) or "LLM timeout" in error_str
-                )
+                is_timeout = isinstance(e, asyncio.TimeoutError) or "LLM timeout" in error_str
 
                 if is_rate_limit or is_timeout:
                     delay = self.retry_base_delay * (2**attempt)
@@ -167,8 +169,7 @@ class BaseDataSearchComponent(
 
                     if self.debug:
                         logger.warning(
-                            f"{error_type} hit, retrying in {delay}s "
-                            f"(attempt {attempt + 1}/{self.max_retries + 1})",
+                            f"{error_type} hit, retrying in {delay}s (attempt {attempt + 1}/{self.max_retries + 1})",
                         )
                     await asyncio.sleep(delay)
                 else:
@@ -217,18 +218,14 @@ class BaseDataSearchComponent(
             except Exception as e:
                 # Check if we've exhausted retries
                 if attempt == self.max_retries:
-                    error_msg = (
-                        f"{error_prefix} after {self.max_retries + 1} attempts: {e}"
-                    )
+                    error_msg = f"{error_prefix} after {self.max_retries + 1} attempts: {e}"
                     logger.error(error_msg)
                     raise RuntimeError(error_msg) from e
 
                 # Check if it's a retryable error (rate limit or timeout)
                 error_str = str(e)
                 is_rate_limit = "429" in error_str or "rate" in error_str.lower()
-                is_timeout = (
-                    isinstance(e, asyncio.TimeoutError) or "LLM timeout" in error_str
-                )
+                is_timeout = isinstance(e, asyncio.TimeoutError) or "LLM timeout" in error_str
 
                 if is_rate_limit or is_timeout:
                     delay = self.retry_base_delay * (2**attempt)
@@ -236,8 +233,7 @@ class BaseDataSearchComponent(
 
                     if self.debug:
                         logger.warning(
-                            f"{error_type} hit, retrying in {delay}s "
-                            f"(attempt {attempt + 1}/{self.max_retries + 1})",
+                            f"{error_type} hit, retrying in {delay}s (attempt {attempt + 1}/{self.max_retries + 1})",
                         )
                     await asyncio.sleep(delay)
                 else:

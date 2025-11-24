@@ -118,12 +118,8 @@ class SharedKnownParametersComponent(
         """Format the user prompt with research context."""
         # Get min/max values from output schema
         # metadata[0] = MinLen, metadata[1] = MaxLen
-        min_approaches = (
-            self.output_schema.model_fields["query_approaches"].metadata[0].min_length
-        )
-        max_approaches = (
-            self.output_schema.model_fields["query_approaches"].metadata[1].max_length
-        )
+        min_approaches = self.output_schema.model_fields["query_approaches"].metadata[0].min_length
+        max_approaches = self.output_schema.model_fields["query_approaches"].metadata[1].max_length
 
         return load_and_format_prompt(
             f"{self.template_name}_user",
@@ -266,10 +262,7 @@ class SharedSearchableParametersComponent(
                 index,
             )
 
-        approach_tasks = [
-            process_approach_isolated(approach, i)
-            for i, approach in enumerate(query_approaches)
-        ]
+        approach_tasks = [process_approach_isolated(approach, i) for i, approach in enumerate(query_approaches)]
 
         # Execute in parallel
         approach_results = await asyncio.gather(*approach_tasks, return_exceptions=True)
@@ -308,7 +301,8 @@ class SharedSearchableParametersComponent(
                 original_output_schema = self.output_schema
                 self.output_schema = SearchVariations
 
-                variations_response = await self.get_response_async()
+                messages = [self._default_system_message()] + self.memory
+                variations_response = await self.get_response_async(messages=messages)
 
                 # Restore original output schema
                 self.output_schema = original_output_schema
@@ -353,12 +347,8 @@ class SharedSearchableParametersComponent(
 
         # Extract min/max variations from SearchVariations schema
         # metadata[0] = MinLen, metadata[1] = MaxLen
-        min_variations = (
-            SearchVariations.model_fields["search_strings"].metadata[0].min_length
-        )
-        max_variations = (
-            SearchVariations.model_fields["search_strings"].metadata[1].max_length
-        )
+        min_variations = SearchVariations.model_fields["search_strings"].metadata[0].min_length
+        max_variations = SearchVariations.model_fields["search_strings"].metadata[1].max_length
 
         return load_and_format_prompt(
             f"{self.template_name}_user",

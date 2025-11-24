@@ -15,7 +15,6 @@ from akd.agents.data_search._base import DataSearchAgentInputSchema, Decompositi
 from akd.agents.data_search.components import ScientificDecomposition, Topic
 from akd.agents.data_search.utils.cmr_enum_validator import CMREnumValidator
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
-from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 
 from .._base import BaseHandler
 from .components import (
@@ -212,19 +211,15 @@ class CMRHandler(BaseHandler):
         all_corrections = []
 
         for approach in known_params_output.query_approaches:
-            corrected_approach, corrections_metadata = (
-                self.enum_validator.validate_approach(
-                    approach,
-                )
+            corrected_approach, corrections_metadata = self.enum_validator.validate_approach(
+                approach,
             )
             validated_approaches.append(corrected_approach)
             all_corrections.append(corrections_metadata)
 
         # Log summary of corrections
         if self.debug:
-            total_corrections = sum(
-                1 for c in all_corrections if c["corrections_applied"]
-            )
+            total_corrections = sum(1 for c in all_corrections if c["corrections_applied"])
             if total_corrections > 0:
                 logger.info(
                     f"Applied enum corrections to {total_corrections}/{len(validated_approaches)} approaches",
@@ -243,8 +238,7 @@ class CMRHandler(BaseHandler):
             approaches_to_use = [known_params_output.query_approaches[0]]
             if self.debug:
                 print(
-                    f"Single-path mode: Using approach[0], "
-                    f"generated {len(known_params_output.query_approaches)} total",
+                    f"Single-path mode: Using approach[0], generated {len(known_params_output.query_approaches)} total",
                 )
         else:
             approaches_to_use = known_params_output.query_approaches
@@ -260,9 +254,7 @@ class CMRHandler(BaseHandler):
         # Select queries based on execution mode
         if self.single_path_mode and searchable_output.searchable_queries:
             # In single-path mode, prefer a query with search string over one without
-            queries_with_search_strings = [
-                q for q in searchable_output.searchable_queries if q.search_string
-            ]
+            queries_with_search_strings = [q for q in searchable_output.searchable_queries if q.search_string]
 
             if queries_with_search_strings:
                 queries_to_execute = [queries_with_search_strings[0]]
@@ -325,20 +317,18 @@ class CMRHandler(BaseHandler):
         # )
 
         result = DecompositionResult(
-            decomposition=safe_model_dump(decomposition),
+            decomposition=decomposition.model_dump(exclude_none=True),
             repository="CMR",
-            query_approaches=safe_model_dump_list(
-                approaches_to_use,
-            ),  # Use actual approaches (includes keyword-only)
+            query_approaches=[
+                a.model_dump(exclude_none=True) for a in approaches_to_use
+            ],  # Use actual approaches (includes keyword-only)
             searchable_queries=augmented_queries,  # Now includes execution metadata
             all_collections_from_cmr=all_collections_unranked,  # NEW: ALL retrieved collections
             data_results=ranked_collections,  # Final ranked collections (subset of all_collections)
             total_results_from_cmr=total_cmr,
             total_results_after_filtering=len(ranked_collections),
             enum_corrections=all_corrections,  # Instrument/platform corrections metadata
-            ranking_fallbacks=ranking_metadata
-            if ranking_metadata
-            else None,  # Fallback metadata
+            ranking_fallbacks=ranking_metadata if ranking_metadata else None,  # Fallback metadata
             note=None,
         )
 
@@ -393,9 +383,7 @@ class CMRHandler(BaseHandler):
 
                     # Get collections from this page
                     page_collections = (
-                        result.collections
-                        if hasattr(result, "collections") and result.collections
-                        else []
+                        result.collections if hasattr(result, "collections") and result.collections else []
                     )
 
                     if not page_collections:
@@ -428,9 +416,7 @@ class CMRHandler(BaseHandler):
                     total_hits = result.total_hits
 
             # Limit collections for ranking pipeline
-            collections_for_ranking = all_collections_retrieved[
-                : self.config.collections_per_query
-            ]
+            collections_for_ranking = all_collections_retrieved[: self.config.collections_per_query]
 
             print(
                 f"DEBUG: Using {len(collections_for_ranking)} collections for ranking (from {len(all_collections_retrieved)} retrieved) for approach {approach_idx}",
@@ -566,7 +552,7 @@ class CMRHandler(BaseHandler):
         total_cmr = 0
 
         for query in searchable_queries:
-            query_dict = safe_model_dump(query)
+            query_dict = query.model_dump(exclude_none=True)
 
             # Find matching execution log (match by query object identity)
             matching_log = next(
@@ -577,9 +563,7 @@ class CMRHandler(BaseHandler):
             if matching_log:
                 metadata = matching_log["metadata"]
                 query_dict["mcp_parameters_sent"] = metadata["mcp_parameters_sent"]
-                query_dict["cmr_collections_returned"] = metadata[
-                    "cmr_collections_returned"
-                ]
+                query_dict["cmr_collections_returned"] = metadata["cmr_collections_returned"]
                 total_cmr += metadata["cmr_collections_returned"]
 
             # Add enum corrections for this query's approach
@@ -654,11 +638,7 @@ class CMRHandler(BaseHandler):
                     concept_id = collection.get("concept_id")
 
                     # Skip if seen globally or within this approach
-                    if (
-                        concept_id
-                        and concept_id not in global_seen_ids
-                        and concept_id not in approach_seen_ids
-                    ):
+                    if concept_id and concept_id not in global_seen_ids and concept_id not in approach_seen_ids:
                         global_seen_ids.add(concept_id)
                         approach_seen_ids.add(concept_id)
                         deduplicated_query.append(collection)
@@ -820,11 +800,7 @@ class CMRHandler(BaseHandler):
                 )
 
             # Extract selected collections using the list of indexes
-            selected = [
-                collections[idx]
-                for idx in result.selected_item_indexes
-                if 0 <= idx < len(collections)
-            ]
+            selected = [collections[idx] for idx in result.selected_item_indexes if 0 <= idx < len(collections)]
 
             print(
                 f"DEBUG: Approach {approach_idx} extracted {len(selected)} selected collections",
@@ -997,9 +973,7 @@ class CMRHandler(BaseHandler):
 
             # Map ranked indexes to full collection objects (already in ranked order)
             final_ranked = [
-                all_filtered[idx]
-                for idx in final_result.ranked_item_indexes
-                if 0 <= idx < len(all_filtered)
+                all_filtered[idx] for idx in final_result.ranked_item_indexes if 0 <= idx < len(all_filtered)
             ]
 
             print(f"DEBUG: Final ranking returned {len(final_ranked)} collections")
@@ -1016,9 +990,7 @@ class CMRHandler(BaseHandler):
             print("DEBUG: Using round-robin fallback across approaches")
 
             # Build list of approach results in sorted order
-            approach_lists = [
-                filtered_by_approach[idx] for idx in sorted(filtered_by_approach.keys())
-            ]
+            approach_lists = [filtered_by_approach[idx] for idx in sorted(filtered_by_approach.keys())]
 
             fallback = self._round_robin_select(
                 approach_lists,

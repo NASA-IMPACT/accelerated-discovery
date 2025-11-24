@@ -35,10 +35,6 @@ class BaseAgentConfig(BaseConfig):
         description="Sampling temperature",
     )
     system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
-    llm_timeout: float | None = Field(
-        default=180.0,
-        description="Timeout in seconds for individual LLM API calls. Set to None to disable. Timeouts trigger retry with exponential backoff.",
-    )
     stateless: bool = Field(
         default=True,
         description="Whether to maintain conversation history/state",
@@ -272,190 +268,17 @@ class InstructorBaseAgent[
         Returns:
             Type[BaseModel]: The response from the language model.
         """
-        import asyncio
-        import time
-
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
 
-        messages = [
-            {
-                "role": "system",
-                "content": self.system_prompt,
-            },
-        ] + self.memory
+        response = await self.client.chat.completions.create(
+            messages=messages,
+            model=self.model_name,
+            temperature=self.temperature,
+            response_model=instructor_model,
+        )
 
-        # GPT-5 series only supports temperature=1, override if needed
-        temperature = 1.0 if self.model_name and self.model_name.startswith("gpt-5") else self.temperature
-
-        # Debug logging with detailed metrics
-        if self.debug:
-            import json
-
-            task = asyncio.current_task()
-            task_name = task.get_name() if task else "unknown"
-            from loguru import logger
-
-            # Calculate prompt size (approximate token count)
-            prompt_text = json.dumps(messages)
-            prompt_chars = len(prompt_text)
-            prompt_tokens_est = prompt_chars // 4  # Rough estimate: 1 token ≈ 4 chars
-
-            logger.debug(
-                f"[{task_name}] LLM call starting: model={self.model_name}, schema={response_model.__name__}, memory_msgs={len(self.memory)}, prompt_tokens~{prompt_tokens_est}",
-            )
-
-        start_time = time.time()
-        api_call_start = None
-
-        # Create timeout warning task
-        async def log_slow_request():
-            """Log warnings if request takes too long."""
-            thresholds = [5, 10, 30, 60, 120, 300]  # seconds
-            for threshold in thresholds:
-                await asyncio.sleep(threshold)
-                elapsed = time.time() - start_time
-                if self.debug:
-                    from loguru import logger
-
-                    logger.warning(
-                        f"[{task_name}] ⏱️  LLM call still running after {elapsed:.0f}s (threshold: {threshold}s)",
-                    )
-
-        # Start timeout warning task (will be cancelled when request completes)
-        timeout_task = asyncio.create_task(log_slow_request())
-
-        try:
-            api_call_start = time.time()
-
-            # Log the actual API call details
-            if self.debug:
-                from loguru import logger
-
-                logger.debug(
-                    f"[{task_name}] 🌐 Making OpenAI API call: base_url={self.base_url}, model={self.model_name}",
-                )
-
-            # Get timeout from config
-            timeout = getattr(self.config, "llm_timeout", 45.0)
-
-            # Use rate limiter to prevent OpenAI throttling of concurrent requests
-            from akd.agents.data_search.utils.rate_limiter import get_rate_limiter
-
-            rate_limiter = get_rate_limiter(max_concurrent_requests=2)
-
-            if self.debug:
-                from loguru import logger
-
-                available = rate_limiter.available_slots()
-                timeout_str = f"{timeout}s" if timeout is not None else "∞"
-                logger.debug(
-                    f"[{task_name}] 🚦 Rate limiter: {available}/{rate_limiter.max_concurrent} slots available, timeout={timeout_str}",
-                )
-
-            # Define API call as async function for timeout wrapping
-            async def make_api_call():
-                async with rate_limiter:
-                    return await self.client.chat.completions.create(
-                        messages=messages,
-                        model=self.model_name,
-                        temperature=temperature,
-                        response_model=instructor_model,
-                    )
-
-            # Apply timeout if configured
-            if timeout is not None:
-                try:
-                    response = await asyncio.wait_for(make_api_call(), timeout=timeout)
-                except asyncio.TimeoutError:
-                    # Re-raise with clear marker for retry logic
-                    elapsed = time.time() - start_time
-                    raise RuntimeError(
-                        f"LLM timeout: Call exceeded {timeout}s limit (elapsed: {elapsed:.1f}s, model: {self.model_name})",
-                    )
-            else:
-                response = await make_api_call()
-
-            # Cancel timeout warning task
-            timeout_task.cancel()
-
-            api_call_duration = time.time() - api_call_start
-
-            if self.debug:
-                from loguru import logger
-
-                # Get response metadata if available
-                response_tokens = (
-                    getattr(response, "usage", {}).get("completion_tokens", "N/A")
-                    if hasattr(response, "usage")
-                    else "N/A"
-                )
-                request_id = getattr(response, "id", "N/A") if hasattr(response, "id") else "N/A"
-                total_duration = time.time() - start_time
-
-                # Log completion with metadata
-                logger.debug(
-                    f"[{task_name}] LLM call completed: api_time={api_call_duration:.2f}s, total={total_duration:.2f}s, response_tokens~{response_tokens}",
-                )
-
-                # Log request ID for support tickets
-                if request_id != "N/A":
-                    logger.debug(f"[{task_name}] OpenAI request_id: {request_id}")
-
-                # Warn if request was unusually slow
-                if api_call_duration > 10:
-                    logger.warning(
-                        f"[{task_name}] ⚠️  Unusually slow API call: {api_call_duration:.1f}s (>10s threshold)",
-                    )
-
-        except asyncio.CancelledError:
-            # Timeout warning task cancelled, this is expected
-            timeout_task.cancel()
-            raise
-        except Exception as e:
-            # Cancel timeout warning task
-            timeout_task.cancel()
-
-            duration = time.time() - start_time
-            if self.debug:
-                from loguru import logger
-
-                error_type = type(e).__name__
-                error_msg = str(e)
-
-                # Check for rate limit errors
-                if "rate_limit" in error_msg.lower() or "rate limit" in error_msg.lower():
-                    logger.error(
-                        f"[{task_name}] 🚫 RATE LIMIT ERROR after {duration:.2f}s: {error_msg}",
-                    )
-                elif "timeout" in error_msg.lower():
-                    logger.error(
-                        f"[{task_name}] ⏱️  TIMEOUT ERROR after {duration:.2f}s: {error_msg}",
-                    )
-                elif "connection" in error_msg.lower():
-                    logger.error(
-                        f"[{task_name}] 🔌 CONNECTION ERROR after {duration:.2f}s: {error_msg}",
-                    )
-                else:
-                    logger.error(
-                        f"[{task_name}] LLM call failed after {duration:.2f}s: {error_type}: {error_msg}",
-                    )
-            raise
-
-        # Parse and validate response
-        parse_start = time.time()
         response_data = response.model_dump()
-
-        # Log validation and parsing time
-        if self.debug:
-            from loguru import logger
-
-            parse_duration = time.time() - parse_start
-            response_size = len(str(response_data))
-            logger.debug(
-                f"[{task_name}] Response parsed: parse_time={parse_duration:.3f}s, response_size={response_size}b, fields={list(response_data.keys())}",
-            )
-
         response = response_model(**response_data)
         return cast(OutSchema, response)
 

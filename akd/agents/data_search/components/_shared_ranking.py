@@ -44,8 +44,7 @@ class SharedApproachFilteringComponent(
 
         if self.debug:
             logger.info(
-                f"Filtering {len(data_items)} items for approach "
-                f"(max_items: {max_items})",
+                f"Filtering {len(data_items)} items for approach (max_items: {max_items})",
             )
 
         # Prepare item summaries (limit metadata for token efficiency)
@@ -59,16 +58,8 @@ class SharedApproachFilteringComponent(
 
         # Get min/max values from output schema
         # metadata[0] = MinLen, metadata[1] = MaxLen
-        min_items = (
-            self.output_schema.model_fields["selected_item_indexes"]
-            .metadata[0]
-            .min_length
-        )
-        max_items_schema = (
-            self.output_schema.model_fields["selected_item_indexes"]
-            .metadata[1]
-            .max_length
-        )
+        min_items = self.output_schema.model_fields["selected_item_indexes"].metadata[0].min_length
+        max_items_schema = self.output_schema.model_fields["selected_item_indexes"].metadata[1].max_length
 
         # Format user prompt
         user_prompt = self._format_user_prompt_from_template(
@@ -93,13 +84,13 @@ class SharedApproachFilteringComponent(
         )
 
         self._add_user_message(user_prompt)
-        result = await self.get_response_async()
+        messages = [self._default_system_message()] + self.memory
+        result = await self.get_response_async(messages=messages)
 
         if self.debug:
             selected_count = len(result.selected_item_indexes)
             logger.info(
-                f"Approach filtering complete: {selected_count} "
-                f"selected from {len(data_items)} reviewed",
+                f"Approach filtering complete: {selected_count} selected from {len(data_items)} reviewed",
             )
 
         return result
@@ -127,18 +118,12 @@ class SharedApproachFilteringComponent(
             summary_parts.append(f"   Title: {item['title']}")
 
         if item.get("abstract"):
-            abstract = (
-                item["abstract"][:750] + "..."
-                if len(item["abstract"]) > 750
-                else item["abstract"]
-            )
+            abstract = item["abstract"][:750] + "..." if len(item["abstract"]) > 750 else item["abstract"]
             summary_parts.append(f"   Abstract: {abstract}")
 
         # Key metadata for filtering
         if item.get("time_start") or item.get("time_end"):
-            temporal = (
-                f"{item.get('time_start', 'N/A')} to {item.get('time_end', 'N/A')}"
-            )
+            temporal = f"{item.get('time_start', 'N/A')} to {item.get('time_end', 'N/A')}"
             summary_parts.append(f"   Temporal: {temporal}")
 
         if item.get("boxes"):
@@ -181,23 +166,18 @@ class SharedApproachFilteringComponent(
                 {
                     "approach_instrument": approach.instrument or "Not specified",
                     "approach_platform": approach.platform or "Not specified",
-                    "approach_processing_level": approach.processing_level
-                    or "Not specified",
+                    "approach_processing_level": approach.processing_level or "Not specified",
                     "approach_temporal_range": approach.temporal or "Not specified",
                     "approach_spatial_bounds": approach.bounding_box or "Not specified",
-                    "approach_temporal_resolution": approach.temporal_resolution
-                    or "Not specified",
-                    "approach_spatial_resolution": approach.spatial_resolution
-                    or "Not specified",
+                    "approach_temporal_resolution": approach.temporal_resolution or "Not specified",
+                    "approach_spatial_resolution": approach.spatial_resolution or "Not specified",
                 },
             )
 
         # Handle search string separately (may come from params)
         if hasattr(params, "approach_search_string"):
             search_string = params.approach_search_string
-            context["approach_search_string"] = (
-                search_string if search_string else "None"
-            )
+            context["approach_search_string"] = search_string if search_string else "None"
 
         return context
 
@@ -257,7 +237,8 @@ class SharedFinalRankingComponent(
         )
 
         self._add_user_message(user_prompt)
-        result = await self.get_response_async()
+        messages = [self._default_system_message()] + self.memory
+        result = await self.get_response_async(messages=messages)
 
         if self.debug:
             ranked_count = len(result.ranked_item_indexes)
@@ -286,11 +267,7 @@ class SharedFinalRankingComponent(
             summary += f"\n   Title: {item['title']}"
 
         if item.get("abstract"):
-            abstract = (
-                item["abstract"][:300] + "..."
-                if len(item["abstract"]) > 300
-                else item["abstract"]
-            )
+            abstract = item["abstract"][:300] + "..." if len(item["abstract"]) > 300 else item["abstract"]
             summary += f"\n   Abstract: {abstract}"
 
         # Include key distinguishing features
