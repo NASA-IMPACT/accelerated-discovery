@@ -180,11 +180,15 @@ class CriterionEvaluation(BaseModel):
     )
 
 
-class RelevancyCriterion(BaseModel):
-    """A relevance criterion with its scoring rubric."""
+class RelevanceCriterion(BaseModel):
+    """A single relevance criterion for evaluating repositories."""
 
-    name: str = Field(..., description="Criterion identifier")
-    description: str = Field(..., description="What this criterion evaluates")
+    name: str = Field(
+        ..., description="Short identifier in snake_case (e.g., 'data_processing', 'machine_learning_models')"
+    )
+    description: str = Field(
+        ..., description="Clear description of what makes a repository relevant for this criterion"
+    )
     is_required: bool = Field(..., description="Whether this is a required criterion or nice-to-have")
 
 
@@ -199,10 +203,10 @@ class RelevancyScoringAgentInputSchema(InputSchema):
             "containing all relevant repository information (title, description, README, etc.)"
         ),
     )
-    required_criteria: List[RelevancyCriterion] = Field(
+    required_criteria: List[RelevanceCriterion] = Field(
         ..., description="Required relevance criteria that must be addressed"
     )
-    nice_to_have_criteria: List[RelevancyCriterion] = Field(
+    nice_to_have_criteria: List[RelevanceCriterion] = Field(
         default_factory=list, description="Optional nice-to-have criteria for bonus scoring"
     )
 
