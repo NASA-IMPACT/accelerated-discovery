@@ -165,6 +165,7 @@ class RelevanceCriterion(BaseModel):
     description: str = Field(
         ..., description="Clear description of what makes a repository relevant for this criterion"
     )
+    is_required: bool = Field(..., description="Whether this is a required criterion or nice-to-have")
 
 
 class DynamicRelevanceCriteriaAgentInputSchema(InputSchema):
