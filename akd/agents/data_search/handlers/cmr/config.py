@@ -1,9 +1,11 @@
 """Configuration for CMR repository handler."""
-
 from pydantic import Field
 
 from akd.configs.mcp_config import get_mcp_endpoint
 from akd.tools.data_search._base import DataSearchToolConfig
+
+
+from akd.tools.reranker import LLMRerankerToolConfig
 
 
 class CMRHandlerConfig(DataSearchToolConfig):
@@ -87,4 +89,24 @@ class CMRHandlerConfig(DataSearchToolConfig):
     final_ranking_model: str = Field(
         default="gpt-5-mini",
         description="Model to use for final cross-approach ranking",
+    )
+
+    # Reranker configuration
+    use_llm_reranker: bool = Field(
+        default=False,
+        description="Use LLM-based reranker instead of old ranking system. When True, uses LLMRerankerTool with configurable criteria. When False, uses legacy LLM-based ranking components.",
+    )
+    llm_reranker_model: str = Field(
+        default="gpt-4o-mini",
+        description="Model to use for LLM reranker scoring (only used if custom_llm_reranker_config is None)",
+    )
+    llm_reranker_temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        description="Temperature for LLM reranker (only used if custom_llm_reranker_config is None)",
+    )
+    custom_llm_reranker_config: LLMRerankerToolConfig | None = Field(
+        default=None,
+        description="Optional custom LLMRerankerToolConfig with custom scoring criteria, field descriptions, and weights. If provided, completely overrides default config. If None, uses default CMR criteria with llm_reranker_model and llm_reranker_temperature.",
     )

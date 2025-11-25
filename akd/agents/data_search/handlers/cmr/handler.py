@@ -8,13 +8,21 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List
 
+from akd.utils import safe_model_dump
 from loguru import logger
 
 from akd.agents._base import BaseAgentConfig
 from akd.agents.data_search._base import DataSearchAgentInputSchema, DecompositionResult
 from akd.agents.data_search.components import ScientificDecomposition, Topic
 from akd.agents.data_search.utils.cmr_enum_validator import CMREnumValidator
+from akd.structures import SearchResultItem
 from akd.tools.data_search import CMRCollectionSearchTool, CMRGranuleSearchTool
+from akd.tools.reranker import (
+    LLMRerankerToolConfig,
+    ScoringCategory,
+    ScoringCriterion,
+    create_reranker,
+)
 
 from .._base import BaseHandler
 from .components import (
@@ -93,6 +101,160 @@ class CMRHandler(BaseHandler):
             debug=debug,
         )
 
+        # Initialize LLM reranker if configured
+        self.reranker = None
+        if config.use_llm_reranker:
+            # Use custom config if provided, otherwise create default config
+            if config.custom_llm_reranker_config:
+                reranker_config = config.custom_llm_reranker_config
+                if debug:
+                    logger.info(
+                        f"Initialized LLM reranker with custom config (model: {reranker_config.model_name}, "
+                        f"{len(reranker_config.scoring_criteria)} criteria)",
+                    )
+            else:
+                reranker_config = self._create_llm_reranker_config()
+                if debug:
+                    logger.info(f"Initialized LLM reranker with default CMR config (model: {config.llm_reranker_model})")
+
+            self.reranker = create_reranker(
+                reranker_type="llm",
+                config=reranker_config,
+                debug=debug,
+            )
+
+    def _create_llm_reranker_config(self) -> LLMRerankerToolConfig:
+        """
+        Create LLM reranker configuration with CMR-specific scoring criteria.
+
+        Based on the criteria from run_llm_reranker.py example.
+        """
+        return LLMRerankerToolConfig(
+            model_name=self.config.llm_reranker_model,
+            temperature=self.config.llm_reranker_temperature,
+            fields_to_evaluate={
+                "title": "The title or name of the dataset (Entry Title in CMR)",
+                "content": "Description or abstract of the dataset",
+                "spatial_resolution": "Ground sampling distance - lower values (e.g., 30m) are higher resolution",
+                "temporal_resolution": "Revisit time or frequency of data collection (e.g., daily, monthly)",
+                "processing_level": "Data processing level (L0/1A=raw, L1/1B=calibrated/geolocated, L2+=derived products with corrections)",
+                "bounding_box": "Spatial extent of the dataset",
+                "temporal": "Temporal coverage range of the dataset",
+            },
+            scoring_criteria=[
+                ScoringCriterion(
+                    name="Variable Accuracy",
+                    description="This criterion assesses whether a dataset directly measures or derives the targeted variable (e.g., sea surface temperature, soil moisture, vegetation indices). The dataset should actually measure what is specified in the query.",
+                    weight=0.25,  # 25% weight
+                    scoring_categories=[
+                        ScoringCategory(
+                            name="Direct Measurement",
+                            description="The dataset directly measures the variable specified in the query",
+                            value=3.0,
+                        ),
+                        ScoringCategory(
+                            name="Indirectly Related",
+                            description="The dataset measures a parameter that can be converted or correlated to the desired variable with additional processing",
+                            value=2.0,
+                        ),
+                        ScoringCategory(
+                            name="Unrelated",
+                            description="The dataset measures unrelated phenomena",
+                            value=1.0,
+                        ),
+                    ],
+                ),
+                ScoringCriterion(
+                    name="Resolution",
+                    description="Resolution considers both spatial and temporal resolution and how well they match the scale and dynamics of the scientific question. Higher spatial resolution (smaller pixel size) captures finer details. Temporal resolution (revisit time) determines how frequently data are collected; dynamic processes (e.g., wildfires, flooding) require daily or sub-daily observations. Unless otherwise specified, prefer higher spatial (30m-500m) and temporal (daily) resolutions.",
+                    weight=0.20,  # 20% weight
+                    scoring_categories=[
+                        ScoringCategory(
+                            name="Appropriate Spatial & Temporal Resolution",
+                            description="The dataset's spatial and temporal resolution align with the scale of the scientific question. Resolution is sufficient to capture features of interest without being overly fine",
+                            value=3.0,
+                        ),
+                        ScoringCategory(
+                            name="Acceptable but Not Optimal",
+                            description="The dataset's resolution falls within a usable range. Spatial resolution may be too fine (data overload) or too coarse but still usable; temporal sampling may miss short-term events",
+                            value=2.0,
+                        ),
+                        ScoringCategory(
+                            name="Too Coarse or Too Infrequent",
+                            description="The spatial or temporal resolution is insufficient to capture the phenomenon",
+                            value=1.0,
+                        ),
+                    ],
+                ),
+                ScoringCriterion(
+                    name="Processing Level",
+                    description="Processing level reflects how much pre-processing has been applied to transform raw instrument data into geophysical variables. Higher levels (2-4) generally include calibration, georeferencing, atmospheric corrections and aggregation onto grids, making the data easier to use. Unless the user's scientific goal requires raw or unprocessed data, always prefer high processing levels (Level 2 or greater).",
+                    weight=0.15,  # 15% weight
+                    scoring_categories=[
+                        ScoringCategory(
+                            name="High Processing Level",
+                            description="Level 2 or above. Data is calibrated, geolocated and often atmospherically corrected or aggregated onto grids",
+                            value=3.0,
+                        ),
+                        ScoringCategory(
+                            name="Moderate Processing Level",
+                            description="Level 1 or 1B. Data is calibrated but not atmospherically corrected; users must derive their own geophysical variables",
+                            value=2.0,
+                        ),
+                        ScoringCategory(
+                            name="Raw",
+                            description="Level 0 or 1A. Raw data requiring extensive processing",
+                            value=1.0,
+                        ),
+                    ],
+                ),
+                ScoringCriterion(
+                    name="Cross-Cutting Potential",
+                    description="Cross-cutting potential measures whether a dataset can be combined with other datasets to answer multi-facet scientific queries. Datasets that complement one another in spatial, temporal or spectral characteristics enable more comprehensive analysis. Prefer collections which are capable of addressing multiple research questions or topics.",
+                    weight=0.10,  # 10% weight
+                    scoring_categories=[
+                        ScoringCategory(
+                            name="High Synergy",
+                            description="The dataset complements other instruments in spatial or temporal coverage, enabling integrated analysis",
+                            value=3.0,
+                        ),
+                        ScoringCategory(
+                            name="Moderate Synergy",
+                            description="The dataset can be combined with others but requires significant processing, such as reprojection or resampling",
+                            value=2.0,
+                        ),
+                        ScoringCategory(
+                            name="Limited Synergy",
+                            description="The dataset is unique or incompatible with others and offers little benefit when combined",
+                            value=1.0,
+                        ),
+                    ],
+                ),
+                ScoringCriterion(
+                    name="Ease of Use",
+                    description="Ease of use evaluates how simple it is to discover, access and work with a dataset. Factors include direct download availability, intuitive user interfaces, comprehensive documentation, and high-quality metadata. Prefer collections where the raw data is easy to access, and which have available supplementary files and good documentation.",
+                    weight=0.10,  # 10% weight
+                    scoring_categories=[
+                        ScoringCategory(
+                            name="Easy Access and Well-Documented",
+                            description="Data can be downloaded directly through standard protocols and is accompanied by user guides, quality information and comprehensive metadata",
+                            value=3.0,
+                        ),
+                        ScoringCategory(
+                            name="Moderate Usability",
+                            description="Data are available but require authentication, subsetting tools or specialized software to access",
+                            value=2.0,
+                        ),
+                        ScoringCategory(
+                            name="Difficult Access/Poor Documentation",
+                            description="Data require special requests, proprietary software or have incomplete/broken metadata or links, making them effectively inaccessible",
+                            value=1.0,
+                        ),
+                    ],
+                ),
+            ],
+        )
+
     @property
     def known_parameters_component(self):
         """
@@ -126,6 +288,100 @@ class CMRHandler(BaseHandler):
             debug=self.debug,
             prompts_dir=self.cmr_prompts_dir,
         )
+
+    def _convert_collections_to_search_results(
+        self,
+        collections: List[Dict[str, Any]],
+        query: str,
+    ) -> List[SearchResultItem]:
+        """
+        Convert CMR collections to SearchResultItem format for reranker.
+
+        Args:
+            collections: List of CMR collection dictionaries
+            query: The search query
+
+        Returns:
+            List of SearchResultItem objects
+        """
+        results = []
+        for coll in collections:
+            # Extract fields from collection
+            title = coll.get("entry_title", "")
+            summary = coll.get("summary", "")
+            concept_id = coll.get("concept_id", "")
+
+            # Prepare extra fields for reranker evaluation
+            extra = {"concept_id": concept_id}
+
+            # Add fields from query_approach_info if available
+            query_approach_info = coll.get("query_approach_info", {})
+            if query_approach_info:
+                for field in ["spatial_resolution", "temporal_resolution", "processing_level", "bounding_box", "temporal"]:
+                    if field in query_approach_info and query_approach_info[field]:
+                        extra[field] = query_approach_info[field]
+
+            # Also check collection itself for these fields (fallback)
+            if not extra.get("processing_level"):
+                processing_level = coll.get("processing_level_id", "") or coll.get("processing_level", "")
+                if processing_level:
+                    extra["processing_level"] = processing_level
+
+            for field in ["spatial_resolution", "temporal_resolution", "bounding_box", "temporal"]:
+                if field not in extra and coll.get(field):
+                    extra[field] = coll[field]
+
+            # Add any additional fields from the collection
+            for key in ["approach_index", "query_index", "instrument", "platform"]:
+                if key in coll:
+                    extra[key] = coll[key]
+
+            # CMR concept URL format
+            url = f"https://cmr.earthdata.nasa.gov/search/concepts/{concept_id}.html"
+
+            result = SearchResultItem(
+                query=query,
+                title=title,
+                content=summary,
+                url=url,
+                extra=extra,
+            )
+            results.append(result)
+
+        return results
+
+    def _convert_search_results_to_collections(
+        self,
+        results: List[SearchResultItem],
+        original_collections: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Convert SearchResultItem objects back to CMR collection format.
+
+        Args:
+            results: List of reranked SearchResultItem objects
+            original_collections: Original collection dictionaries
+
+        Returns:
+            List of CMR collection dictionaries in reranked order
+        """
+        # Build mapping from concept_id to original collection
+        concept_id_map = {coll.get("concept_id"): coll for coll in original_collections}
+
+        # Convert results back to collections
+        ranked_collections = []
+        for result in results:
+            concept_id = result.extra.get("concept_id")
+            if concept_id and concept_id in concept_id_map:
+                coll = concept_id_map[concept_id]
+                # Preserve LLM reranker scores in the collection
+                if "llm_reranker" in result.extra:
+                    coll["llm_reranker"] = result.extra["llm_reranker"]
+                if hasattr(result, "score"):
+                    coll["reranker_score"] = result.score
+                ranked_collections.append(coll)
+
+        return ranked_collections
 
     def _maybe_add_keyword_only_approach(self, llm_approaches):
         """
@@ -296,6 +552,7 @@ class CMRHandler(BaseHandler):
             decomposition,
             approaches_to_use,
             run_id,
+            # searchable_output.searchable_queries,  # Re-enable this line
         )
 
         print(
@@ -889,6 +1146,142 @@ class CMRHandler(BaseHandler):
             )
 
             return all_collections, ranking_metadata
+
+        # LLM Reranker Path (NEW)
+        if self.config.use_llm_reranker and self.reranker:
+            logger.info(
+                f"[{run_id}] Using LLM reranker instead of legacy ranking system",
+            )
+
+            # Deduplicate approach collections and enrich with query approach info
+            deduplicated_flat = {}
+            for approach_idx, collections in approach_collections.items():
+                seen_ids = set()
+                deduped = []
+                for coll in collections:
+                    concept_id = coll.get("concept_id")
+                    if concept_id and concept_id not in seen_ids:
+                        seen_ids.add(concept_id)
+
+                        # Enrich collection with query approach information
+                        if query_approaches and approach_idx < len(query_approaches):
+                            approach = query_approaches[approach_idx]
+                            coll["query_approach_info"] = approach.dict()
+                        deduped.append(coll)
+                deduplicated_flat[approach_idx] = deduped
+
+            # Flatten all approaches into single list
+            all_collections = []
+            for approach_idx in sorted(deduplicated_flat.keys()):
+                all_collections.extend(deduplicated_flat[approach_idx])
+
+            print(
+                f"DEBUG: LLM reranker - processing {len(all_collections)} deduplicated collections",
+            )
+
+            # Convert to SearchResultItem format
+            search_results = self._convert_collections_to_search_results(
+                all_collections,
+                query=original_query,
+            )
+
+            # Run reranker
+            reranker_input = self.reranker.input_schema(
+                query=original_query,
+                results=search_results,
+            )
+            reranked_output = await self.reranker.arun(reranker_input)
+
+            # Convert back to collection format
+            ranked_collections = self._convert_search_results_to_collections(
+                reranked_output.results,
+                all_collections,
+            )
+
+            # Limit to final_collection_count
+            # ranked_collections = ranked_collections[: self.config.final_collection_count]
+
+            print(
+                f"DEBUG: LLM reranker - returning {len(ranked_collections)} ranked collections",
+            )
+
+            ranking_metadata = {
+                "reranker_type": "llm",
+                "reranker_model": self.config.llm_reranker_model,
+                "total_before_reranking": len(all_collections),
+                "total_after_reranking": len(ranked_collections),
+            }
+
+            logger.info(
+                f"[{run_id}] LLM reranker processed {len(all_collections)} → {len(ranked_collections)} collections",
+            )
+
+            return ranked_collections, ranking_metadata
+
+        # This was used for logging all_collection_ids --- recover recover 
+        # all_collection_ids = {}
+
+        # all_collection_ids["decomp"] = safe_model_dump(decomp)
+        # all_collection_ids["topic"] = safe_model_dump(topic)
+        # all_collection_ids["original_query"] = original_query
+        # all_collection_ids["collections"] = []
+
+        # # Build a mapping from (approach_idx, query_idx) to searchable query
+        # # Each approach can have multiple searchable queries (variations)
+        # query_map = {}
+        # if searchable_queries:
+        #     for sq in searchable_queries:
+        #         approach_idx = sq.approach_index
+        #         # Count how many queries we've seen for this approach so far
+        #         query_idx = sum(1 for k in query_map.keys() if k[0] == approach_idx)
+        #         query_map[(approach_idx, query_idx)] = sq
+
+        # # save the entry title and summary of each collection along with concept id
+
+        # for approach_idx, query_groups in approach_collections_by_query.items():
+        #     for query_idx, query_colls in enumerate(query_groups):
+        #         # Get the searchable query info for this specific query
+        #         searchable_query_info = None
+        #         if (approach_idx, query_idx) in query_map:
+        #             sq = query_map[(approach_idx, query_idx)]
+        #             searchable_query_info = sq.model_dump(exclude_none=True)
+
+        #         for coll in query_colls:
+        #             concept_id = coll.get("concept_id")
+        #             title = coll.get("entry_title")
+        #             summary = coll.get("summary")
+        #             print(title, summary)
+        #             if concept_id:
+        #                 coll_data = {
+        #                     "concept_id": concept_id,
+        #                     "approach_index": approach_idx,
+        #                     "query_index": query_idx,
+        #                     "title": title,
+        #                     "abstract": summary,
+        #                 }
+
+        #                 # Add query approach info (base approach parameters)
+        #                 if approach_idx < len(query_approaches):
+        #                     coll_data["query_approach_info"] = query_approaches[approach_idx].dict()
+
+        #                 # Add searchable query info (includes search_string and all parameters)
+        #                 if searchable_query_info:
+        #                     coll_data["searchable_query_info"] = searchable_query_info
+
+        #                 all_collection_ids["collections"].append(coll_data)
+
+
+        # # save all_collection_ids to a json file named with teh original_query_name
+        # import json
+        # safe_query_name = "".join(c if c.isalnum() else "_" for c in original_query)[:50]
+
+        # output_dir = Path(f"evaluations/single_query_results/query_results_with_query_approach_info/{all_collection_ids['original_query']}")
+
+        # if not output_dir.exists():
+        #     output_dir.mkdir(parents=True, exist_ok=True)
+
+        # with open(output_dir / f"{decomp.title}.json", "w") as f:
+        #     json.dump(all_collection_ids, f, indent=2)
 
         # Stage 1: Per-approach deduplication (preserving query grouping)
         deduplicated_grouped = self._deduplicate_approach_collections_grouped(

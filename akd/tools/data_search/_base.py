@@ -241,11 +241,12 @@ class BaseDataSearchTool[
 
         for attempt in range(config.max_retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=config.timeout_seconds) as client:
+                async with httpx.AsyncClient(timeout=config.timeout_seconds, follow_redirects=True) as client:
                     response = await client.post(
                         str(config.mcp_endpoint),
                         json=request_data,
                         headers=headers,
+                        
                     )
 
                     if response.status_code == 200:
