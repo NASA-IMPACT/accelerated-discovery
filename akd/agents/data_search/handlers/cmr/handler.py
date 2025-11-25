@@ -1072,217 +1072,121 @@ class CMRHandler(BaseHandler):
 
         return filtered_by_approach, approach_fallbacks
 
-    async def _rank_collections(
+    async def _rank_collections_with_llm_reranker(
+        self,
+        approach_collections: Dict[int, List[Dict[str, Any]]],
+        original_query: str,
+        query_approaches: List[Any],
+        run_id: str = None,
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Rank collections using LLM reranker.
+
+        Args:
+            approach_collections: Collections grouped by approach index
+            original_query: Original user query
+            query_approaches: List of query approach objects
+            run_id: Run ID for logging
+
+        Returns:
+            Tuple of (ranked_collections, ranking_metadata)
+        """
+        logger.info(
+            f"[{run_id}] Using LLM reranker instead of legacy ranking system",
+        )
+
+        # Deduplicate approach collections and enrich with query approach info
+        deduplicated_flat = {}
+        for approach_idx, collections in approach_collections.items():
+            seen_ids = set()
+            deduped = []
+            for coll in collections:
+                concept_id = coll.get("concept_id")
+                if concept_id and concept_id not in seen_ids:
+                    seen_ids.add(concept_id)
+
+                    # Enrich collection with query approach information
+                    if query_approaches and approach_idx < len(query_approaches):
+                        approach = query_approaches[approach_idx]
+                        coll["query_approach_info"] = approach.dict()
+                    deduped.append(coll)
+            deduplicated_flat[approach_idx] = deduped
+
+        # Flatten all approaches into single list
+        all_collections = []
+        for approach_idx in sorted(deduplicated_flat.keys()):
+            all_collections.extend(deduplicated_flat[approach_idx])
+
+        print(
+            f"DEBUG: LLM reranker - processing {len(all_collections)} deduplicated collections",
+        )
+
+        # Convert to SearchResultItem format
+        search_results = self._convert_collections_to_search_results(
+            all_collections,
+            query=original_query,
+        )
+
+        # Run reranker
+        reranker_input = self.reranker.input_schema(
+            query=original_query,
+            results=search_results,
+        )
+        reranked_output = await self.reranker.arun(reranker_input)
+
+        # Convert back to collection format
+        ranked_collections = self._convert_search_results_to_collections(
+            reranked_output.results,
+            all_collections,
+        )
+
+        print(
+            f"DEBUG: LLM reranker - returning {len(ranked_collections)} ranked collections",
+        )
+
+        ranking_metadata = {
+            "reranker_type": "llm",
+            "reranker_model": self.config.llm_reranker_model,
+            "total_before_reranking": len(all_collections),
+            "total_after_reranking": len(ranked_collections),
+        }
+
+        logger.info(
+            f"[{run_id}] LLM reranker processed {len(all_collections)} → {len(ranked_collections)} collections",
+        )
+
+        return ranked_collections, ranking_metadata
+
+    async def _rank_collections_legacy(
         self,
         approach_collections: Dict[int, List[Dict[str, Any]]],
         approach_collections_by_query: Dict[int, List[List[Dict[str, Any]]]],
         original_query: str,
         topic: Topic,
         decomp: ScientificDecomposition,
-        query_approaches: List[Any] = None,
+        query_approaches: List[Any],
         run_id: str = None,
     ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """
-        Rank collections using approach-aware pipeline.
+        Rank collections using legacy approach-aware pipeline.
 
         Pipeline:
         1. Per-approach deduplication (preserving query grouping)
         2. Per-approach filtering and ranking (parallel, with round-robin fallback)
         3. Final cross-approach ranking (with round-robin fallback)
 
+        Args:
+            approach_collections: Collections grouped by approach index (flat lists)
+            approach_collections_by_query: Collections grouped by approach and query
+            original_query: Original user query
+            topic: Topic object
+            decomp: Scientific decomposition
+            query_approaches: List of query approach objects
+            run_id: Run ID for logging
+
         Returns:
             Tuple of (ranked_collections, ranking_metadata)
-            - ranked_collections: Final ranked list of collections
-            - ranking_metadata: Dictionary with fallback information for both stages
         """
-        print(
-            f"DEBUG: _rank_collections called with {len(approach_collections)} approaches",
-        )
-        if not approach_collections:
-            print("DEBUG: No approach_collections, returning empty list")
-            return [], {}
-
-        # Early exit if ranking/filtering disabled
-        if self.config.skip_ranking_and_filtering:
-            logger.info(
-                f"[{run_id}] Skipping ranking/filtering (skip_ranking_and_filtering=True) - "
-                f"using all deduplicated collections from CMR pagination",
-            )
-
-            # Deduplicate approach collections (keep this step)
-            deduplicated_flat = {}
-            for approach_idx, collections in approach_collections.items():
-                seen_ids = set()
-                deduped = []
-                for coll in collections:
-                    concept_id = coll.get("concept_id")
-                    if concept_id and concept_id not in seen_ids:
-                        seen_ids.add(concept_id)
-                        deduped.append(coll)
-                deduplicated_flat[approach_idx] = deduped
-
-            # Flatten all approaches into single list (no ranking)
-            all_collections = []
-            for approach_idx in sorted(deduplicated_flat.keys()):
-                all_collections.extend(deduplicated_flat[approach_idx])
-
-            # Return ALL deduplicated collections (no limit)
-            ranking_metadata = {
-                "approach_filtering": {
-                    "enabled": False,
-                    "reason": "skip_ranking_and_filtering=True",
-                },
-                "final_ranking": {
-                    "enabled": False,
-                    "reason": "skip_ranking_and_filtering=True",
-                },
-                "total_before_filtering": len(all_collections),
-                "total_after_filtering": len(all_collections),
-                "total_after_ranking": len(all_collections),
-            }
-
-            logger.info(
-                f"[{run_id}] Returning {len(all_collections)} deduplicated collections (unranked)",
-            )
-
-            return all_collections, ranking_metadata
-
-        # LLM Reranker Path (NEW)
-        if self.config.use_llm_reranker and self.reranker:
-            logger.info(
-                f"[{run_id}] Using LLM reranker instead of legacy ranking system",
-            )
-
-            # Deduplicate approach collections and enrich with query approach info
-            deduplicated_flat = {}
-            for approach_idx, collections in approach_collections.items():
-                seen_ids = set()
-                deduped = []
-                for coll in collections:
-                    concept_id = coll.get("concept_id")
-                    if concept_id and concept_id not in seen_ids:
-                        seen_ids.add(concept_id)
-
-                        # Enrich collection with query approach information
-                        if query_approaches and approach_idx < len(query_approaches):
-                            approach = query_approaches[approach_idx]
-                            coll["query_approach_info"] = approach.dict()
-                        deduped.append(coll)
-                deduplicated_flat[approach_idx] = deduped
-
-            # Flatten all approaches into single list
-            all_collections = []
-            for approach_idx in sorted(deduplicated_flat.keys()):
-                all_collections.extend(deduplicated_flat[approach_idx])
-
-            print(
-                f"DEBUG: LLM reranker - processing {len(all_collections)} deduplicated collections",
-            )
-
-            # Convert to SearchResultItem format
-            search_results = self._convert_collections_to_search_results(
-                all_collections,
-                query=original_query,
-            )
-
-            # Run reranker
-            reranker_input = self.reranker.input_schema(
-                query=original_query,
-                results=search_results,
-            )
-            reranked_output = await self.reranker.arun(reranker_input)
-
-            # Convert back to collection format
-            ranked_collections = self._convert_search_results_to_collections(
-                reranked_output.results,
-                all_collections,
-            )
-
-            # Limit to final_collection_count
-            # ranked_collections = ranked_collections[: self.config.final_collection_count]
-
-            print(
-                f"DEBUG: LLM reranker - returning {len(ranked_collections)} ranked collections",
-            )
-
-            ranking_metadata = {
-                "reranker_type": "llm",
-                "reranker_model": self.config.llm_reranker_model,
-                "total_before_reranking": len(all_collections),
-                "total_after_reranking": len(ranked_collections),
-            }
-
-            logger.info(
-                f"[{run_id}] LLM reranker processed {len(all_collections)} → {len(ranked_collections)} collections",
-            )
-
-            return ranked_collections, ranking_metadata
-
-        # This was used for logging all_collection_ids --- recover recover 
-        # all_collection_ids = {}
-
-        # all_collection_ids["decomp"] = safe_model_dump(decomp)
-        # all_collection_ids["topic"] = safe_model_dump(topic)
-        # all_collection_ids["original_query"] = original_query
-        # all_collection_ids["collections"] = []
-
-        # # Build a mapping from (approach_idx, query_idx) to searchable query
-        # # Each approach can have multiple searchable queries (variations)
-        # query_map = {}
-        # if searchable_queries:
-        #     for sq in searchable_queries:
-        #         approach_idx = sq.approach_index
-        #         # Count how many queries we've seen for this approach so far
-        #         query_idx = sum(1 for k in query_map.keys() if k[0] == approach_idx)
-        #         query_map[(approach_idx, query_idx)] = sq
-
-        # # save the entry title and summary of each collection along with concept id
-
-        # for approach_idx, query_groups in approach_collections_by_query.items():
-        #     for query_idx, query_colls in enumerate(query_groups):
-        #         # Get the searchable query info for this specific query
-        #         searchable_query_info = None
-        #         if (approach_idx, query_idx) in query_map:
-        #             sq = query_map[(approach_idx, query_idx)]
-        #             searchable_query_info = sq.model_dump(exclude_none=True)
-
-        #         for coll in query_colls:
-        #             concept_id = coll.get("concept_id")
-        #             title = coll.get("entry_title")
-        #             summary = coll.get("summary")
-        #             print(title, summary)
-        #             if concept_id:
-        #                 coll_data = {
-        #                     "concept_id": concept_id,
-        #                     "approach_index": approach_idx,
-        #                     "query_index": query_idx,
-        #                     "title": title,
-        #                     "abstract": summary,
-        #                 }
-
-        #                 # Add query approach info (base approach parameters)
-        #                 if approach_idx < len(query_approaches):
-        #                     coll_data["query_approach_info"] = query_approaches[approach_idx].dict()
-
-        #                 # Add searchable query info (includes search_string and all parameters)
-        #                 if searchable_query_info:
-        #                     coll_data["searchable_query_info"] = searchable_query_info
-
-        #                 all_collection_ids["collections"].append(coll_data)
-
-
-        # # save all_collection_ids to a json file named with teh original_query_name
-        # import json
-        # safe_query_name = "".join(c if c.isalnum() else "_" for c in original_query)[:50]
-
-        # output_dir = Path(f"evaluations/single_query_results/query_results_with_query_approach_info/{all_collection_ids['original_query']}")
-
-        # if not output_dir.exists():
-        #     output_dir.mkdir(parents=True, exist_ok=True)
-
-        # with open(output_dir / f"{decomp.title}.json", "w") as f:
-        #     json.dump(all_collection_ids, f, indent=2)
-
         # Stage 1: Per-approach deduplication (preserving query grouping)
         deduplicated_grouped = self._deduplicate_approach_collections_grouped(
             approach_collections_by_query,
@@ -1410,6 +1314,97 @@ class CMRHandler(BaseHandler):
                 "final_ranking": final_fallback,
             }
             return fallback, ranking_metadata
+
+    async def _rank_collections(
+        self,
+        approach_collections: Dict[int, List[Dict[str, Any]]],
+        approach_collections_by_query: Dict[int, List[List[Dict[str, Any]]]],
+        original_query: str,
+        topic: Topic,
+        decomp: ScientificDecomposition,
+        query_approaches: List[Any] = None,
+        run_id: str = None,
+    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """
+        Rank collections using approach-aware pipeline.
+
+        Routes to either LLM reranker or legacy ranking system based on configuration.
+
+        Returns:
+            Tuple of (ranked_collections, ranking_metadata)
+            - ranked_collections: Final ranked list of collections
+            - ranking_metadata: Dictionary with fallback information for both stages
+        """
+        print(
+            f"DEBUG: _rank_collections called with {len(approach_collections)} approaches",
+        )
+        if not approach_collections:
+            print("DEBUG: No approach_collections, returning empty list")
+            return [], {}
+
+        # Early exit if ranking/filtering disabled
+        if self.config.skip_ranking_and_filtering:
+            logger.info(
+                f"[{run_id}] Skipping ranking/filtering (skip_ranking_and_filtering=True) - "
+                f"using all deduplicated collections from CMR pagination",
+            )
+
+            # Deduplicate approach collections (keep this step)
+            deduplicated_flat = {}
+            for approach_idx, collections in approach_collections.items():
+                seen_ids = set()
+                deduped = []
+                for coll in collections:
+                    concept_id = coll.get("concept_id")
+                    if concept_id and concept_id not in seen_ids:
+                        seen_ids.add(concept_id)
+                        deduped.append(coll)
+                deduplicated_flat[approach_idx] = deduped
+
+            # Flatten all approaches into single list (no ranking)
+            all_collections = []
+            for approach_idx in sorted(deduplicated_flat.keys()):
+                all_collections.extend(deduplicated_flat[approach_idx])
+
+            # Return ALL deduplicated collections (no limit)
+            ranking_metadata = {
+                "approach_filtering": {
+                    "enabled": False,
+                    "reason": "skip_ranking_and_filtering=True",
+                },
+                "final_ranking": {
+                    "enabled": False,
+                    "reason": "skip_ranking_and_filtering=True",
+                },
+                "total_before_filtering": len(all_collections),
+                "total_after_filtering": len(all_collections),
+                "total_after_ranking": len(all_collections),
+            }
+
+            logger.info(
+                f"[{run_id}] Returning {len(all_collections)} deduplicated collections (unranked)",
+            )
+
+            return all_collections, ranking_metadata
+
+        # Route to LLM reranker or legacy system
+        if self.config.use_llm_reranker and self.reranker:
+            return await self._rank_collections_with_llm_reranker(
+                approach_collections,
+                original_query,
+                query_approaches,
+                run_id,
+            )
+        else:
+            return await self._rank_collections_legacy(
+                approach_collections,
+                approach_collections_by_query,
+                original_query,
+                topic,
+                decomp,
+                query_approaches,
+                run_id,
+            )
 
     async def _search_granules_for_single_collection(
         self,
