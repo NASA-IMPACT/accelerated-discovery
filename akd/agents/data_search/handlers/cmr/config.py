@@ -46,7 +46,11 @@ class CMRHandlerConfig(DataSearchToolConfig):
     )
     final_collection_count: int = Field(
         default=25,
-        description="Maximum collections in final ranked output",
+        description="Maximum collections in final ranked output (only applied if apply_final_collection_limit=True)",
+    )
+    apply_final_collection_limit: bool = Field(
+        default=True,
+        description="Whether to apply final_collection_count limit to final ranked output. When False, returns all ranked collections for recall evaluation. Note: Per-approach limits (max_collections_per_approach) are still applied in legacy ranking.",
     )
 
     # Performance tuning

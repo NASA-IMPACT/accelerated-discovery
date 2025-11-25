@@ -8,6 +8,7 @@ from .components import (
 )
 from .config import CMRHandlerConfig
 from .handler import CMRHandler
+from .llm_reranker_adapter import LLMRerankerAdapter
 from .schemas import (
     CMRApproachCollectionFilteringInputSchema,
     CMRApproachCollectionFilteringOutput,
@@ -26,6 +27,8 @@ __all__ = [
     # Handler and config
     "CMRHandler",
     "CMRHandlerConfig",
+    # LLM Reranker Adapter
+    "LLMRerankerAdapter",
     # Components
     "CMRKnownParametersComponent",
     "CMRSearchableParametersComponent",
