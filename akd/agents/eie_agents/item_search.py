@@ -13,7 +13,7 @@ from akd.agents.eie_agents.collection_search import STACSearchAgentConfig
 class ItemSearchInputSchema(InputSchema):
     """Input schema for Item Search agent"""
 
-    bbox: List = Field(
+    bbox: Optional[List[float]] = Field(
         default=None,
         description="A GeoJSON string representing the bounding box coordinates of the location passed from extraction agent",
     )
@@ -59,7 +59,7 @@ class ItemSearchAgent(BaseAgent):
         }
 
         if params.bbox:
-            base_query["bbox"] = params.bbox
+            base_query["bbox"] = ",".join(str(x) for x in params.bbox)
 
         if params.temporal_extent and "dates" in params.temporal_extent:
             start = params.temporal_extent["dates"].get("start")
@@ -119,6 +119,6 @@ class ItemSearchAgent(BaseAgent):
                 logger.info(f"Fetching items from root {root} for collections {coll_list}")
                 items = await self._fetch_items(client, root, coll_list, params)
                 for k, v in items.items():
-                    final_results.setdefault(k, []).extend(v)
+                    final_results.setdefault(k, []).extend(v[:5])
 
         return ItemSearchOutputSchema(items=final_results)

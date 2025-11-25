@@ -4,7 +4,7 @@ from akd.agents.eie_agents.item_search import ItemSearchAgent, ItemSearchInputSc
 
 agent = ItemSearchAgent()
 params = ItemSearchInputSchema(
-    bbox="",
+    bbox=[-125.0011, 24.9493, -66.9326, 49.5904],
     frequency="",
     temporal_extent={"dates": {"start": "2019-01-01T00:00:00Z", "end": "2019-01-20T00:00:00Z"}},
     collections=[

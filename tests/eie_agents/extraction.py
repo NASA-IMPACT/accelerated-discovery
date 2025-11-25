@@ -3,7 +3,7 @@ import asyncio
 from akd.agents.eie_agents.eie_extraction import ExtractAgent, ExtractInputSchema
 
 agent = ExtractAgent()
-params = ExtractInputSchema(query="daily methane data for the USA between 2020 and 2025")
+params = ExtractInputSchema(query="Extract all types of night light data for the USA from 2020 to 2025.")
 
 
 async def main():

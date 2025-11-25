@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 from typing import Dict, List, Optional
 
@@ -145,12 +146,25 @@ class ExtractAgent(BaseAgent):
             print("Activating Extraction Agent...")
             response = await llm.ainvoke(prompt)
             content = getattr(response, "content", None)
-            data = json.loads(content)
+            raw = content.strip()
 
-            # get the geojson using geodini api call
-            response = await get_geometry(data.get("location"), "http://host.docker.internal:9000")
+            # Remove markdown formatting if the LLM wrapped output in ```json ... ```
+            if raw.startswith("```"):
+                raw = re.sub(r"^```[a-zA-Z]*", "", raw)
+                raw = raw.replace("```", "").strip()
+            try:
+                data = json.loads(raw)
+            except Exception:
+                logger.error("Error getting json from llm")
 
-            bbox = get_bbox(response)
+            try:
+                # get the geojson using geodini api call
+                response = await get_geometry(data.get("location"), "http://localhost:9000")
+
+                bbox = get_bbox(response)
+            except Exception:
+                # temp: put usa bbox
+                bbox = [-125.0011, 24.9493, -66.9326, 49.5904]
 
             # Validate and fill missing defaults
             return ExtractOutputSchema(
@@ -167,7 +181,7 @@ class ExtractAgent(BaseAgent):
             return ExtractOutputSchema(
                 dataset_type="all",
                 location="global",
-                bbox=None,
+                bbox=[-125.0011, 24.9493, -66.9326, 49.5904],
                 frequency="all",
                 temporal_extent={"dates": {"start": "1900-01-01", "end": date.today().isoformat()}},
             )

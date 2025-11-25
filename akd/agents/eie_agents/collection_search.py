@@ -17,7 +17,7 @@ class CollectionSearchInputSchema(InputSchema):
 
     dataset_type: str = Field(..., description="Dataset type passed from extraction agent")
     location: str = Field(..., description="Location passed from extraction agent")
-    bbox: List = Field(
+    bbox: Optional[List[float]] = Field(
         default=None,
         description="A GeoJSON string representing the bounding box coordinates of the location passed from extraction agent",
     )
