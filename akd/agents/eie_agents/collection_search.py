@@ -165,6 +165,7 @@ class CollectionSearchAgent(BaseAgent):
                                 "title": c.get("title"),
                                 "description": c.get("description", ""),
                                 "collection_url": collection_url,
+                                "periodicity": c.get("dashboard:time_density", ""),
                             },
                         )
 
@@ -212,6 +213,7 @@ class CollectionSearchAgent(BaseAgent):
 
             The user is looking for datasets matching:
             - dataset_type: {params.dataset_type}
+            - periodicity: {params.frequency}
 
             You have access to several STAC collections across multiple STAC roots.
             Each collection has the following fields:
