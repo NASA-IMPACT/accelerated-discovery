@@ -1,6 +1,7 @@
 import types
 from dataclasses import dataclass
 from dataclasses import field as dc_field
+from enum import StrEnum
 from typing import (
     Any,
     Callable,
@@ -14,8 +15,18 @@ from typing import (
 from loguru import logger
 from pydantic import BaseModel
 
+_EXPOSED_META_VAR_NAME = "_exposed_meta"
 
-def get_type_from_property(prop: property) -> tuple[Any | None, str]:
+
+class ExposedParamTypeSource(StrEnum):
+    FGET = "fget"
+    FSET = "fset"
+    ANNOTATED = "annotated"
+    RUNTIME = "runtime"
+    NONE = "none"
+
+
+def get_type_from_property(prop: property) -> tuple[Any | None, ExposedParamTypeSource]:
     """Extract type annotation from property.
 
     Tries getter return type first, then setter parameter type.
@@ -32,7 +43,7 @@ def get_type_from_property(prop: property) -> tuple[Any | None, str]:
     try:
         hints = get_type_hints(prop.fget)
         if "return" in hints:
-            return hints["return"], "fget"
+            return hints["return"], ExposedParamTypeSource.FGET
     except Exception as e:
         logger.warning(f"Failed to get type hints from fget (getter) for {prop}: {e}")
 
@@ -42,11 +53,11 @@ def get_type_from_property(prop: property) -> tuple[Any | None, str]:
             hints = get_type_hints(prop.fset)
             params = [k for k in hints.keys() if k != "return"]
             if params:
-                return hints[params[0]], "fset"
+                return hints[params[0]], ExposedParamTypeSource.FSET
         except Exception as e:
             logger.warning(f"Failed to get type hints from fset (setter) for {prop}: {e}")
 
-    return None, "none"
+    return None, ExposedParamTypeSource.NONE
 
 
 @dataclass
@@ -62,17 +73,16 @@ class ExposedParam:
         extra: Additional metadata for the parameter
         expose: Whether to create a property for external control
         persistent: Whether this is persistent state (True) or transient data (False)
-        guardrails: List of guardrail validators to run when value is set
         type_hint: Type hint captured from annotations (e.g., str, int, list[str])
     """
 
     name: str = ""
     description: str = ""
-    extra: dict[str, Any] = dc_field(default_factory=dict)
     expose: bool = True
     persistent: bool = True
-    guardrails: list[Any] = dc_field(default_factory=list)
     type_hint: Any = None
+    type_source: ExposedParamTypeSource | None = None
+    extra: dict[str, Any] = dc_field(default_factory=dict)
 
 
 @dataclass
@@ -90,7 +100,6 @@ class ExposedParamRuntimeInfo(ExposedParam):
     """
 
     type_: str = "unknown"
-    type_source: str = "none"
     editable: bool = False
     current_value: Any | None = None
 
@@ -101,7 +110,6 @@ class ExposedParamRuntimeInfo(ExposedParam):
 def Exposed(
     name: str | None = None,
     description: str | None = None,
-    guardrails: list | None = None,
     **extra,
 ) -> ExposedParam:
     """Create metadata for persistent, exposed config parameters.
@@ -109,12 +117,10 @@ def Exposed(
     Use this in Annotated type hints to mark config fields that should be:
     - Exposed as properties on the class
     - Externally controllable (via UI, API, etc.)
-    - Validated with optional guardrails
 
     Args:
         name: Explicit parameter name (defaults to field name if not provided)
         description: Human readable description of the parameter
-        guardrails: List of guardrail validators to run when value is set
         **extra: Additional metadata stored in the 'extra' field
 
     Returns:
@@ -125,7 +131,6 @@ def Exposed(
         class MyConfig(BaseModel):
             temperature: Annotated[float, Exposed(
                 description="LLM temperature",
-                guardrails=[RangeGuardrail(0.0, 2.0)]
             )] = 0.7
         ```
     """
@@ -134,7 +139,6 @@ def Exposed(
         description=description or "",
         expose=True,
         persistent=True,
-        guardrails=guardrails or [],
         extra=extra,
     )
 
@@ -142,19 +146,16 @@ def Exposed(
 def Validated(
     name: str | None = None,
     description: str | None = None,
-    guardrails: list | None = None,
     **extra,
 ) -> ExposedParam:
     """Create metadata for transient, validated parameters (input/output schemas).
 
     Use this for input/output schema fields that should be:
-    - Validated with guardrails during schema validation
     - NOT exposed as instance properties (transient data)
 
     Args:
         name: Explicit parameter name (defaults to field name if not provided)
         description: Human readable description of the parameter
-        guardrails: List of guardrail validators to run during validation
         **extra: Additional metadata stored in the 'extra' field
 
     Returns:
@@ -165,7 +166,6 @@ def Validated(
         class MyInput(BaseModel):
             query: Annotated[str, Validated(
                 description="Search query",
-                guardrails=[LengthGuardrail(max=500)]
             )]
         ```
     """
@@ -174,7 +174,6 @@ def Validated(
         description=description or "",
         expose=False,
         persistent=False,
-        guardrails=guardrails or [],
         extra=extra,
     )
 
@@ -206,7 +205,6 @@ def ReadOnly(name: str | None = None, description: str | None = None, **extra) -
         description=description or "",
         expose=True,
         persistent=True,
-        guardrails=[],
         extra=extra_with_editable,
     )
 
@@ -248,7 +246,7 @@ class ValidatedProperty(property):
                     # Handle Union types (e.g., Union[int, str] or int | str)
                     type_args = get_args(expected_type)
                     if type_args and not isinstance(value, type_args):
-                        param_name = getattr(self.fget, "_exposed_meta", None)
+                        param_name = getattr(self.fget, _EXPOSED_META_VAR_NAME, None)
                         name = param_name.name if param_name else "parameter"
                         type_names = ", ".join(t.__name__ if hasattr(t, "__name__") else str(t) for t in type_args)
                         raise TypeError(
@@ -257,7 +255,7 @@ class ValidatedProperty(property):
                 else:
                     # Simple type check
                     if not isinstance(value, expected_type):
-                        param_name = getattr(self.fget, "_exposed_meta", None)
+                        param_name = getattr(self.fget, _EXPOSED_META_VAR_NAME, None)
                         name = param_name.name if param_name else "parameter"
                         type_name = getattr(expected_type, "__name__", str(expected_type))
                         raise TypeError(
@@ -267,6 +265,8 @@ class ValidatedProperty(property):
             # Call original setter
             return original_fset(instance, value)
 
+        # preserve original annotations
+        validated_setter.__annotations__ = original_fset.__annotations__.copy()
         return super().setter(validated_setter)
 
 
@@ -286,6 +286,7 @@ def exposed_param[F: Callable](
     _func: F | None = None,
     /,
     *,
+    name: str | None = None,
     description: str = "",
     **kwargs,
 ) -> property | Callable[[F], property]:
@@ -309,10 +310,25 @@ def exposed_param[F: Callable](
         # Priority: explicit description > function docstring > prettified function name
         final_description = description or (func.__doc__ or "").strip() or func.__name__.replace("_", " ").title()
 
-        func._exposed_meta = ExposedParam(  # type: ignore[attr-defined]
-            name=func.__name__,
-            description=final_description,
-            extra=kwargs or {},
+        # Extract type hint from getter return annotation
+        type_hint = None
+        try:
+            hints = get_type_hints(func)
+            if "return" in hints:
+                type_hint = hints["return"]
+        except Exception:
+            pass
+
+        setattr(
+            func,
+            _EXPOSED_META_VAR_NAME,
+            ExposedParam(  # type: ignore[attr-defined]
+                name=name or func.__name__,
+                description=final_description,
+                extra=kwargs or {},
+                type_hint=type_hint,
+                type_source=ExposedParamTypeSource.FGET if type_hint is not None else None,
+            ),
         )
         return ValidatedProperty(func)  # type: ignore[return-value]
 
@@ -380,8 +396,14 @@ def _extract_exposed_params_from_schema(schema_class: type, debug: bool = False)
                                     extra=arg.extra,
                                     expose=arg.expose,
                                     persistent=arg.persistent,
-                                    guardrails=arg.guardrails,
+                                    type_hint=args[0],  # Capture type hint
+                                    type_source=ExposedParamTypeSource.ANNOTATED,
                                 )
+
+                        # Ensure type_hint is set even if we didn't recreate the object
+                        if arg.type_hint is None:
+                            arg.type_hint = args[0]
+                            arg.type_source = ExposedParamTypeSource.ANNOTATED
 
                         result[field_name] = (args[0], arg)  # (actual_type, metadata)
                         break
@@ -454,7 +476,8 @@ def _scan_annotated_fields_recursive(
                 extra=metadata.extra,
                 expose=metadata.expose,
                 persistent=metadata.persistent,
-                guardrails=metadata.guardrails,
+                type_hint=field_type,  # Capture type hint
+                type_source=ExposedParamTypeSource.ANNOTATED,
             )
 
         result[flat_name] = (path_parts, metadata, field_type)
@@ -524,7 +547,8 @@ def _scan_annotated_fields_recursive(
                         extra=metadata.extra,
                         expose=metadata.expose,
                         persistent=metadata.persistent,
-                        guardrails=metadata.guardrails,
+                        type_hint=field_type,  # Capture type hint
+                        type_source=ExposedParamTypeSource.ANNOTATED,
                     )
 
                 result[flat_name] = (path_parts, metadata, field_type)
@@ -606,8 +630,8 @@ def _extract_exposed_from_annotations(
                             extra=metadata.extra,
                             expose=metadata.expose,
                             persistent=metadata.persistent,
-                            guardrails=metadata.guardrails,
                             type_hint=actual_type,
+                            type_source=ExposedParamTypeSource.ANNOTATED,
                         )
 
                         exposed_fields[field_name] = enriched
@@ -624,7 +648,7 @@ def _extract_exposed_from_annotations(
     return exposed_fields
 
 
-def _create_guarded_property(
+def _create_property(
     cls: type,
     flat_name: str,
     path_parts: list[str],
@@ -654,15 +678,8 @@ def _create_guarded_property(
 
         return getter
 
-    def make_setter(path: list[str], guardrails: list):
+    def make_setter(path: list[str]):
         def setter(self, value):
-            # Run guardrails first
-            for guardrail in guardrails:
-                if hasattr(guardrail, "validate"):
-                    guardrail.validate(value)
-                elif callable(guardrail):
-                    guardrail(value)
-
             # Navigate to parent object and set the final attribute
             obj = self
             try:
@@ -684,12 +701,14 @@ def _create_guarded_property(
         # Read-only property
         prop = property(getter)
     else:
-        # Read-write property with guardrails
-        setter = make_setter(path_parts, metadata.guardrails)
+        # Read-write property
+        setter = make_setter(path_parts)
         prop = ValidatedProperty(getter)
         prop = prop.setter(setter)
 
     # Attach metadata
+    if metadata.type_hint is None:
+        metadata.type_hint = type_hint
     prop.fget._exposed_meta = metadata  # type: ignore[attr-defined]
 
     # Set the property on the class
@@ -753,7 +772,7 @@ class ParamExposureMixin:
 
                 if not is_exposed_property:
                     # Create/overwrite with property (overwrites class attributes)
-                    _create_guarded_property(cls, flat_name, path_parts, metadata, type_hint)
+                    _create_property(cls, flat_name, path_parts, metadata, type_hint)
                 else:
                     logger.debug(
                         f"Skipping auto-creation of property '{flat_name}' on {cls.__name__} - already exposed via decorator",
@@ -799,34 +818,39 @@ class ParamExposureMixin:
         # STEP 1: Collect from properties with @exposed_param decorator
         for attr_name in dir(self):
             attr = getattr(type(self), attr_name, None)
-            if not (isinstance(attr, property) and hasattr(attr.fget, "_exposed_meta")):
+            if not (isinstance(attr, property) and hasattr(attr.fget, _EXPOSED_META_VAR_NAME)):
                 continue
 
-            meta = attr.fget._exposed_meta
+            meta = getattr(attr.fget, _EXPOSED_META_VAR_NAME)
 
-            # Apply filter
-            if filter_by == "exposed" and not meta.expose:
-                continue
-            elif filter_by == "persistent" and not meta.persistent:
-                continue
-            # "all" includes everything
+            # Get type from metadata if available, otherwise try property inspection
+            type_hint = getattr(meta, "type_hint", None)
+            type_source = getattr(meta, "type_source", ExposedParamTypeSource.NONE)
 
-            # Get type from hints using shared utility
-            type_hint, type_source = get_type_from_property(attr)
+            # If still None, try fget (legacy/fallback)
+            if type_hint is None:
+                t, s = get_type_from_property(attr)
+                if t is not None:
+                    type_hint = t
+                    type_source = s
+
             current_value = None
 
             # Convert type hint to string name
             if type_hint is not None:
                 param_type = getattr(type_hint, "__name__", str(type_hint))
+                if type_source is ExposedParamTypeSource.NONE:
+                    type_source = ExposedParamTypeSource.ANNOTATED
             else:
                 param_type = "unknown"
+                type_source = ExposedParamTypeSource.NONE
 
             # Fallback to runtime value if no type hint
             if param_type == "unknown":
                 try:
                     current_value = getattr(self, attr_name)
                     param_type = type(current_value).__name__
-                    type_source = "runtime"
+                    type_source = ExposedParamTypeSource.RUNTIME
                 except Exception:
                     param_type = "unknown"
 
@@ -844,7 +868,6 @@ class ParamExposureMixin:
                     extra=meta.extra,
                     expose=meta.expose,
                     persistent=meta.persistent,
-                    guardrails=meta.guardrails,
                     type_hint=getattr(meta, "type_hint", None),
                     type_=param_type,
                     type_source=type_source,
@@ -881,15 +904,15 @@ class ParamExposureMixin:
                 # Use type_hint from registry (captured at compile time)
                 if metadata.type_hint is not None:
                     param_type = getattr(metadata.type_hint, "__name__", str(metadata.type_hint))
-                    type_source = "annotation"
+                    type_source = ExposedParamTypeSource.ANNOTATED
                 else:
                     # Fallback to runtime value if type not in metadata
                     param_type = "unknown"
-                    type_source = "none"
+                    type_source = ExposedParamTypeSource.NONE
                     try:
                         current_value = getattr(self, registry_key)
                         param_type = type(current_value).__name__
-                        type_source = "runtime"
+                        type_source = ExposedParamTypeSource.RUNTIME
                     except AttributeError:
                         pass
 
@@ -908,7 +931,6 @@ class ParamExposureMixin:
                     extra=metadata.extra,
                     expose=metadata.expose,
                     persistent=metadata.persistent,
-                    guardrails=metadata.guardrails,
                     type_hint=metadata.type_hint,
                     type_=param_type,
                     type_source=type_source,
@@ -949,10 +971,9 @@ class ParamExposureMixin:
                     extra=metadata.extra,
                     expose=metadata.expose,
                     persistent=metadata.persistent,
-                    guardrails=metadata.guardrails,
                     type_hint=type_hint,
                     type_=param_type,
-                    type_source="annotation",
+                    type_source=ExposedParamTypeSource.ANNOTATED,
                     editable=is_editable,
                     current_value=current_value,
                 ),
