@@ -1,3 +1,4 @@
+import sys
 import types
 from dataclasses import dataclass
 from dataclasses import field as dc_field
@@ -5,6 +6,7 @@ from enum import StrEnum
 from typing import (
     Any,
     Callable,
+    ForwardRef,
     Literal,
     get_args,
     get_origin,
@@ -379,10 +381,10 @@ def _extract_exposed_params_from_schema(schema_class: type, debug: bool = False)
                 # Look for ExposedParam in the metadata (args after the first one)
                 for i, arg in enumerate(args[1:], 1):  # Skip first arg (the actual type)
                     if debug:
-                        logger.debug(f"    Arg[{i}]: {arg} (type: {type(arg).__name__})")
+                        logger.debug(f"\tArg[{i}]: {arg} (type: {type(arg).__name__})")
                     if isinstance(arg, ExposedParam):
                         if debug:
-                            logger.debug(f"    ✓ Found ExposedParam for {field_name}")
+                            logger.debug(f"\tFound ExposedParam for {field_name}")
 
                         # If description is empty, try to get it from Pydantic Field
                         if not arg.description and field_name in pydantic_fields:
@@ -588,7 +590,30 @@ def _extract_exposed_from_annotations(
     skip_fields = skip_fields or set()
 
     try:
-        hints = get_type_hints(source_class, include_extras=True)
+        # Use __annotations__ directly to get only THIS class's annotations (not inherited)
+        # This avoids issues with base class type annotations that we don't need
+        raw_annotations = getattr(source_class, "__annotations__", {})
+
+        if not raw_annotations:
+            return exposed_fields
+
+        # Get module namespace for resolving forward references in THIS class's annotations
+        module = sys.modules.get(source_class.__module__)
+        globalns = vars(module) if module else {}
+
+        # Manually evaluate annotations with proper namespace
+        hints = {}
+        for name, annotation in raw_annotations.items():
+            try:
+                # Use eval_str=True in Python 3.10+ to handle stringified annotations
+                if isinstance(annotation, str):
+                    annotation = ForwardRef(annotation)
+                if isinstance(annotation, ForwardRef):
+                    annotation = annotation._evaluate(globalns, globalns, frozenset())
+                hints[name] = annotation
+            except:  # noqa: E722
+                # If evaluation fails, use the raw annotation
+                hints[name] = annotation
 
         for field_name, type_hint in hints.items():
             # Skip specified fields
@@ -637,13 +662,14 @@ def _extract_exposed_from_annotations(
                         exposed_fields[field_name] = enriched
                         break
 
-    except NameError:
-        # Skip classes with unresolved generic type parameters (e.g., InSchema, OutSchema)
-        # This is expected for generic base classes and should be silently ignored
-        pass
+    except NameError as e:
+        # Log classes with unresolved type references for debugging
+        logger.debug(
+            f"Could not extract exposed params from {source_class.__name__}: unresolved type reference - {e}",
+        )
     except Exception as e:
         # Log other unexpected errors at debug level
-        logger.debug(f"Could not extract exposed params from {source_class}: {e}")
+        logger.debug(f"Could not extract exposed params from {source_class.__name__}: {e}")
 
     return exposed_fields
 
