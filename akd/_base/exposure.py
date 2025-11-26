@@ -112,6 +112,7 @@ class ExposedParamRuntimeInfo(ExposedParam):
 def Exposed(
     name: str | None = None,
     description: str | None = None,
+    expose: bool = True,
     **extra,
 ) -> ExposedParam:
     """Create metadata for persistent, exposed config parameters.
@@ -139,7 +140,7 @@ def Exposed(
     return ExposedParam(
         name=name or "",
         description=description or "",
-        expose=True,
+        expose=expose,
         persistent=True,
         extra=extra,
     )
@@ -180,7 +181,7 @@ def Validated(
     )
 
 
-def ReadOnly(name: str | None = None, description: str | None = None, **extra) -> ExposedParam:
+def ReadOnly(name: str | None = None, description: str | None = None, expose: bool = True, **extra) -> ExposedParam:
     """Create metadata for read-only exposed parameters.
 
     Use this for config fields that should be:
@@ -205,7 +206,7 @@ def ReadOnly(name: str | None = None, description: str | None = None, **extra) -
     return ExposedParam(
         name=name or "",
         description=description or "",
-        expose=True,
+        expose=expose,
         persistent=True,
         extra=extra_with_editable,
     )
@@ -735,7 +736,7 @@ def _create_property(
     # Attach metadata
     if metadata.type_hint is None:
         metadata.type_hint = type_hint
-    prop.fget._exposed_meta = metadata  # type: ignore[attr-defined]
+    setattr(prop.fget, _EXPOSED_META_VAR_NAME, metadata)
 
     # Set the property on the class
     setattr(cls, flat_name, prop)
@@ -793,7 +794,7 @@ class ParamExposureMixin:
                 existing_attr = getattr(cls, flat_name, None)
                 is_exposed_property = isinstance(existing_attr, property) and hasattr(
                     existing_attr.fget,
-                    "_exposed_meta",
+                    _EXPOSED_META_VAR_NAME,
                 )
 
                 if not is_exposed_property:
