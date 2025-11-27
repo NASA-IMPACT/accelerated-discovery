@@ -742,6 +742,75 @@ def _create_property(
     setattr(cls, flat_name, prop)
 
 
+class _ExposureHelper:
+    """Private helper utilities for parameter exposure collection.
+
+    This class groups static utility methods used by ParamExposureMixin
+    to extract type information from properties and metadata.
+    """
+
+    @staticmethod
+    def get_type_info_from_property(prop: property) -> tuple[Any | None, str, ExposedParamTypeSource]:
+        """Extract type information from a property's annotations or metadata.
+
+        Args:
+            prop: Property to extract type from
+
+        Returns:
+            Tuple of (type_hint, type_name_str, type_source)
+        """
+        # Try to get type from property's stored metadata first
+        if hasattr(prop.fget, _EXPOSED_META_VAR_NAME):
+            meta = getattr(prop.fget, _EXPOSED_META_VAR_NAME)
+            type_hint = getattr(meta, "type_hint", None)
+            type_source = getattr(meta, "type_source", ExposedParamTypeSource.NONE)
+
+            if type_hint is not None:
+                type_name = getattr(type_hint, "__name__", str(type_hint))
+                if type_source is ExposedParamTypeSource.NONE:
+                    type_source = ExposedParamTypeSource.ANNOTATED
+                return type_hint, type_name, type_source
+
+        # Fall back to inspecting property annotations
+        type_hint, type_source = get_type_from_property(prop)
+        if type_hint is not None:
+            type_name = getattr(type_hint, "__name__", str(type_hint))
+            return type_hint, type_name, type_source
+
+        return None, "unknown", ExposedParamTypeSource.NONE
+
+    @staticmethod
+    def get_type_info_from_metadata(metadata: ExposedParam) -> tuple[Any | None, str, ExposedParamTypeSource]:
+        """Extract type information from ExposedParam metadata.
+
+        Args:
+            metadata: ExposedParam metadata object
+
+        Returns:
+            Tuple of (type_hint, type_name_str, type_source)
+        """
+        if metadata.type_hint is not None:
+            type_name = getattr(metadata.type_hint, "__name__", str(metadata.type_hint))
+            return metadata.type_hint, type_name, ExposedParamTypeSource.ANNOTATED
+
+        return None, "unknown", ExposedParamTypeSource.NONE
+
+    @staticmethod
+    def get_type_info_from_value(value: Any) -> tuple[Any | None, str, ExposedParamTypeSource]:
+        """Infer type information from runtime value as fallback.
+
+        Args:
+            value: Runtime value to infer type from
+
+        Returns:
+            Tuple of (type_hint, type_name_str, type_source)
+        """
+        if value is not None:
+            value_type = type(value)
+            return value_type, value_type.__name__, ExposedParamTypeSource.RUNTIME
+        return None, "unknown", ExposedParamTypeSource.NONE
+
+
 class ParamExposureMixin:
     """Mixin to add parameter exposure capabilities to agents.
 
@@ -805,6 +874,188 @@ class ParamExposureMixin:
                         f"Skipping auto-creation of property '{flat_name}' on {cls.__name__} - already exposed via decorator",
                     )
 
+    def _collect_from_decorated_properties(
+        self,
+        include_values: bool = False,
+    ) -> list[ExposedParamRuntimeInfo]:
+        """Collect exposed params from @exposed_param decorated properties.
+
+        Args:
+            include_values: Whether to include current runtime values
+
+        Returns:
+            List of ExposedParamRuntimeInfo objects
+        """
+        exposed = []
+
+        for attr_name in dir(self):
+            attr = getattr(type(self), attr_name, None)
+            if not (isinstance(attr, property) and hasattr(attr.fget, _EXPOSED_META_VAR_NAME)):
+                continue
+
+            meta = getattr(attr.fget, _EXPOSED_META_VAR_NAME)
+
+            # Get type info from property using helper
+            type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_property(attr)
+
+            # Fallback to runtime value if type is still unknown
+            current_value = None
+            if param_type == "unknown":
+                current_value = getattr(self, attr_name, None)
+                if current_value is not None:
+                    type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_value(current_value)
+
+            # Get current value if requested and not already fetched
+            if include_values and current_value is None:
+                current_value = getattr(self, attr_name, None)
+
+            exposed.append(
+                ExposedParamRuntimeInfo(
+                    name=attr_name,
+                    description=meta.description,
+                    extra=meta.extra,
+                    expose=meta.expose,
+                    persistent=meta.persistent,
+                    type_hint=type_hint,
+                    type_=param_type,
+                    type_source=type_source,
+                    editable=attr.fset is not None,
+                    current_value=current_value if include_values else None,
+                ),
+            )
+
+        return exposed
+
+    def _collect_from_registry(
+        self,
+        exposed_names: set[str] | None = None,
+        include_values: bool = False,
+        filter_by: Literal["exposed", "persistent", "all"] = "exposed",
+    ) -> list[ExposedParamRuntimeInfo]:
+        """Collect exposed params from registry (config-level fields).
+
+        Args:
+            exposed_names: Optional set of already-collected param names to skip (for deduplication)
+            include_values: Whether to include current runtime values
+            filter_by: Filter criteria for parameters
+
+        Returns:
+            List of ExposedParamRuntimeInfo objects
+        """
+        if exposed_names is None:
+            exposed_names = set()
+
+        exposed = []
+        registry = getattr(type(self), "_exposure_registry", {})
+
+        for registry_key, metadata in registry.items():
+            # Skip if already exposed via decorator (decorator has priority)
+            if registry_key in exposed_names:
+                continue
+
+            # Apply filter
+            if filter_by == "exposed" and not metadata.expose:
+                continue
+            elif filter_by == "persistent" and not metadata.persistent:
+                continue
+
+            # Check if a property was created for this registry entry
+            attr = getattr(type(self), registry_key, None)
+            if isinstance(attr, property):
+                # Property exists, get type from it
+                type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_property(attr)
+                editable = attr.fset is not None
+            else:
+                # No property - use type from registry metadata
+                editable = metadata.extra.get("editable", True)
+                type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_metadata(metadata)
+
+                # Fallback to runtime value if type still unknown
+                if param_type == "unknown":
+                    current_value = getattr(self, registry_key, None)
+                    if current_value is not None:
+                        type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_value(current_value)
+
+            # Get current value if requested
+            current_value = None
+            if include_values:
+                current_value = getattr(self, registry_key, None)
+
+            exposed.append(
+                ExposedParamRuntimeInfo(
+                    name=metadata.name or registry_key,
+                    description=metadata.description,
+                    extra=metadata.extra,
+                    expose=metadata.expose,
+                    persistent=metadata.persistent,
+                    type_hint=type_hint,
+                    type_=param_type,
+                    type_source=type_source,
+                    editable=editable,
+                    current_value=current_value if include_values else None,
+                ),
+            )
+
+        return exposed
+
+    def _collect_from_annotated_fields(
+        self,
+        exposed_names: set[str] | None = None,
+        include_values: bool = False,
+        filter_by: Literal["exposed", "persistent", "all"] = "exposed",
+    ) -> list[ExposedParamRuntimeInfo]:
+        """Collect exposed params from direct Annotated fields.
+
+        Args:
+            exposed_names: Optional set of already-collected param names to skip (for deduplication)
+            include_values: Whether to include current runtime values
+            filter_by: Filter criteria for parameters
+
+        Returns:
+            List of ExposedParamRuntimeInfo objects
+        """
+        if exposed_names is None:
+            exposed_names = set()
+
+        exposed = []
+        discovered = _scan_annotated_fields_recursive(type(self))
+
+        for flat_name, (path_parts, metadata, type_hint) in discovered.items():
+            if flat_name in exposed_names:
+                continue  # Already added as property or from registry
+
+            # Apply filter
+            if filter_by == "exposed" and not metadata.expose:
+                continue
+            elif filter_by == "persistent" and not metadata.persistent:
+                continue
+
+            # Get current value if requested
+            current_value = None
+            if include_values:
+                current_value = getattr(self, flat_name, None)
+
+            # Get type name
+            param_type = getattr(type_hint, "__name__", str(type_hint))
+            is_editable = metadata.extra.get("editable", True)
+
+            exposed.append(
+                ExposedParamRuntimeInfo(
+                    name=metadata.name or flat_name,
+                    description=metadata.description,
+                    extra=metadata.extra,
+                    expose=metadata.expose,
+                    persistent=metadata.persistent,
+                    type_hint=type_hint,
+                    type_=param_type,
+                    type_source=ExposedParamTypeSource.ANNOTATED,
+                    editable=is_editable,
+                    current_value=current_value,
+                ),
+            )
+
+        return exposed
+
     def get_exposed_params(
         self,
         include_values: bool = False,
@@ -839,171 +1090,15 @@ class ParamExposureMixin:
                 - extra: Additional metadata (including expose, persistent, guardrails)
                 - current_value: Current value (if include_values=True)
         """
-        exposed = []
-        exposed_names = set()
+        # STEP 1: Collect from @exposed_param decorated properties
+        exposed = self._collect_from_decorated_properties(include_values)
+        exposed_names = {p.name for p in exposed}
 
-        # STEP 1: Collect from properties with @exposed_param decorator
-        for attr_name in dir(self):
-            attr = getattr(type(self), attr_name, None)
-            if not (isinstance(attr, property) and hasattr(attr.fget, _EXPOSED_META_VAR_NAME)):
-                continue
+        # STEP 2: Collect from registry (config-level fields)
+        exposed.extend(self._collect_from_registry(exposed_names, include_values, filter_by))
+        exposed_names = {p.name for p in exposed}
 
-            meta = getattr(attr.fget, _EXPOSED_META_VAR_NAME)
-
-            # Get type from metadata if available, otherwise try property inspection
-            type_hint = getattr(meta, "type_hint", None)
-            type_source = getattr(meta, "type_source", ExposedParamTypeSource.NONE)
-
-            # If still None, try fget (legacy/fallback)
-            if type_hint is None:
-                t, s = get_type_from_property(attr)
-                if t is not None:
-                    type_hint = t
-                    type_source = s
-
-            current_value = None
-
-            # Convert type hint to string name
-            if type_hint is not None:
-                param_type = getattr(type_hint, "__name__", str(type_hint))
-                if type_source is ExposedParamTypeSource.NONE:
-                    type_source = ExposedParamTypeSource.ANNOTATED
-            else:
-                param_type = "unknown"
-                type_source = ExposedParamTypeSource.NONE
-
-            # Fallback to runtime value if no type hint
-            if param_type == "unknown":
-                try:
-                    current_value = getattr(self, attr_name)
-                    param_type = type(current_value).__name__
-                    type_source = ExposedParamTypeSource.RUNTIME
-                except Exception:
-                    param_type = "unknown"
-
-            # Get current value if requested and not already fetched
-            if include_values and current_value is None:
-                try:
-                    current_value = getattr(self, attr_name)
-                except Exception:
-                    current_value = None
-
-            exposed.append(
-                ExposedParamRuntimeInfo(
-                    name=attr_name,
-                    description=meta.description,
-                    extra=meta.extra,
-                    expose=meta.expose,
-                    persistent=meta.persistent,
-                    type_hint=getattr(meta, "type_hint", None),
-                    type_=param_type,
-                    type_source=type_source,
-                    editable=attr.fset is not None,
-                    current_value=current_value if include_values else None,
-                ),
-            )
-            exposed_names.add(attr_name)
-
-        # STEP 2: Consult registry for config-level fields
-        registry = getattr(type(self), "_exposure_registry", {})
-        for registry_key, metadata in registry.items():
-            # Skip if already exposed via decorator (decorator has priority)
-            if registry_key in exposed_names:
-                continue
-
-            # Apply filter
-            if filter_by == "exposed" and not metadata.expose:
-                continue
-            elif filter_by == "persistent" and not metadata.persistent:
-                continue
-
-            # Check if a property was created for this registry entry
-            attr = getattr(type(self), registry_key, None)
-            if isinstance(attr, property):
-                # Property exists, get type from it
-                type_hint, type_source = get_type_from_property(attr)
-                param_type = getattr(type_hint, "__name__", str(type_hint)) if type_hint else "unknown"
-                editable = attr.fset is not None
-            else:
-                # No property - use type from registry metadata
-                editable = metadata.extra.get("editable", True)
-
-                # Use type_hint from registry (captured at compile time)
-                if metadata.type_hint is not None:
-                    param_type = getattr(metadata.type_hint, "__name__", str(metadata.type_hint))
-                    type_source = ExposedParamTypeSource.ANNOTATED
-                else:
-                    # Fallback to runtime value if type not in metadata
-                    param_type = "unknown"
-                    type_source = ExposedParamTypeSource.NONE
-                    try:
-                        current_value = getattr(self, registry_key)
-                        param_type = type(current_value).__name__
-                        type_source = ExposedParamTypeSource.RUNTIME
-                    except AttributeError:
-                        pass
-
-            # Get current value if requested
-            current_value = None
-            if include_values:
-                try:
-                    current_value = getattr(self, registry_key)
-                except AttributeError:
-                    pass
-
-            exposed.append(
-                ExposedParamRuntimeInfo(
-                    name=metadata.name or registry_key,
-                    description=metadata.description,
-                    extra=metadata.extra,
-                    expose=metadata.expose,
-                    persistent=metadata.persistent,
-                    type_hint=metadata.type_hint,
-                    type_=param_type,
-                    type_source=type_source,
-                    editable=editable,
-                    current_value=current_value if include_values else None,
-                ),
-            )
-            exposed_names.add(registry_key)
-
-        # STEP 3: Scan for direct Annotated fields (not in registry or properties)
-        discovered = _scan_annotated_fields_recursive(type(self))
-        for flat_name, (path_parts, metadata, type_hint) in discovered.items():
-            if flat_name in exposed_names:
-                continue  # Already added as property or from registry
-
-            # Apply filter
-            if filter_by == "exposed" and not metadata.expose:
-                continue
-            elif filter_by == "persistent" and not metadata.persistent:
-                continue
-
-            # Get current value
-            current_value = None
-            if include_values:
-                try:
-                    current_value = getattr(self, flat_name)
-                except AttributeError:
-                    pass
-
-            # Get type name
-            param_type = getattr(type_hint, "__name__", str(type_hint))
-            is_editable = metadata.extra.get("editable", True)
-
-            exposed.append(
-                ExposedParamRuntimeInfo(
-                    name=metadata.name or flat_name,
-                    description=metadata.description,
-                    extra=metadata.extra,
-                    expose=metadata.expose,
-                    persistent=metadata.persistent,
-                    type_hint=type_hint,
-                    type_=param_type,
-                    type_source=ExposedParamTypeSource.ANNOTATED,
-                    editable=is_editable,
-                    current_value=current_value,
-                ),
-            )
+        # STEP 3: Collect from direct Annotated fields
+        exposed.extend(self._collect_from_annotated_fields(exposed_names, include_values, filter_by))
 
         return exposed
