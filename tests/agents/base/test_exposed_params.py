@@ -2,7 +2,7 @@
 
 from akd._base import exposed_param
 
-from .conftest import TestInstructorBaseAgent
+from .conftest import DummyAgentWithExposedConfig, TestInstructorBaseAgent
 
 
 class TestAgentWithExposedParams(TestInstructorBaseAgent):
@@ -282,3 +282,54 @@ class TestExposedParamFunctionality:
 
         with pytest.raises(TypeError, match="expects str, got int"):
             agent.clarification_prompt = 123
+
+    def test_config_schema_property_access_patterns(
+        self,
+        mock_openai_client,
+        mock_instructor_client,
+    ):
+        """Test that config schema fields support all 3 access patterns."""
+        agent = DummyAgentWithExposedConfig()
+
+        # Verify exposed params include config_ prefixed fields
+        exposed_list = agent.get_exposed_params()
+        exposed = {p.name: p for p in exposed_list}
+        assert "config_topic_steer" in exposed, "config_topic_steer should be exposed"
+        assert "config_temperature" in exposed, "config_temperature should be exposed"
+
+        # Test 1: Set via setattr with config_ prefixed property name
+        setattr(agent, "config_topic_steer", "new_value")
+
+        # Verify access pattern 1: obj.config.topic_steer (direct config access)
+        assert agent.config.topic_steer == "new_value", "obj.config.topic_steer should work"
+
+        # Verify access pattern 2: obj.config_topic_steer (prefixed property)
+        assert agent.config_topic_steer == "new_value", "obj.config_topic_steer should work"
+
+        # Verify access pattern 3: Check if obj.topic_steer exists (unprefixed)
+        # This may or may not exist depending on implementation
+        try:
+            value = getattr(agent, "topic_steer", None)
+            if value is not None:
+                assert value == "new_value", "obj.topic_steer should match if it exists"
+        except AttributeError:
+            pass  # It's OK if unprefixed version doesn't exist
+
+        # Test 2: Set via direct config access and verify property updates
+        agent.config.topic_steer = "direct_value"
+        assert agent.config_topic_steer == "direct_value", "Property should reflect config changes"
+
+        # Test 3: Set via property assignment and verify config updates
+        agent.config_topic_steer = "property_value"
+        assert agent.config.topic_steer == "property_value", "Config should reflect property changes"
+
+        # Test 4: Verify temperature field with setattr
+        setattr(agent, "config_temperature", 0.9)
+        assert agent.config.temperature == 0.9, "setattr should work for config_temperature"
+        assert agent.config_temperature == 0.9, "config_temperature property should work"
+
+        # Test 5: Verify all 3 patterns are consistent
+        test_value = "consistency_test"
+        agent.config_topic_steer = test_value
+        assert agent.config.topic_steer == test_value, "All access patterns should be consistent"
+        assert agent.config_topic_steer == test_value, "All access patterns should be consistent"

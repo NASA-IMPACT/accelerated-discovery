@@ -1,12 +1,13 @@
 """Shared fixtures and utilities for base agent tests."""
 
-from typing import Any, Dict
+from typing import Annotated, Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
+from akd._base.exposure import Exposed
 from akd.agents._base import (
     BaseAgentConfig,
     InstructorBaseAgent,
@@ -79,9 +80,27 @@ class TestLiteLLMAgent(
     output_schema = LiteLLMTestOutputSchema
 
 
+class DummyExposedConfigSchema(BaseAgentConfig):
+    """Dummy config schema with exposed parameters for testing."""
+
+    topic_steer: Annotated[str, Exposed(description="Topic steering parameter")] = "default"
+    temperature: Annotated[float, Exposed(description="Temperature setting")] = 0.7
+
+
+class DummyAgentWithExposedConfig(
+    LiteLLMInstructorBaseAgent[AgentTestInputSchema, AgentTestOutputSchema],
+):
+    """Dummy agent with exposed config schema fields for testing."""
+
+    input_schema = AgentTestInputSchema
+    output_schema = AgentTestOutputSchema
+    config_schema = DummyExposedConfigSchema
+
+
 # Prevent pytest from collecting test classes as tests themselves
 TestInstructorBaseAgent.__test__ = False
 TestLiteLLMAgent.__test__ = False
+DummyAgentWithExposedConfig.__test__ = False
 
 
 # Shared fixtures
