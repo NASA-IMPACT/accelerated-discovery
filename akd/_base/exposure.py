@@ -2,6 +2,7 @@ import sys
 import types
 from dataclasses import dataclass
 from dataclasses import field as dc_field
+from dataclasses import replace as dc_replace
 from enum import StrEnum
 from typing import (
     Any,
@@ -843,7 +844,8 @@ class ParamExposureMixin:
             # Add config_ prefix to field names for registry keys (full path naming)
             for field_name, metadata in config_exposed.items():
                 registry_key = f"config_{field_name}"
-                cls._exposure_registry[registry_key] = metadata
+                # Update metadata.name to match registry_key for consistency
+                cls._exposure_registry[registry_key] = dc_replace(metadata, name=registry_key)
 
         # NEW: Extract and store class-level annotated fields
         # Skip schema attributes to avoid conflicts
