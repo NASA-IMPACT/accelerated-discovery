@@ -345,79 +345,138 @@ def exposed_param[F: Callable](
 # Helper functions for Annotated-based parameter scanning and property creation
 
 
-def _extract_exposed_params_from_schema(schema_class: type, debug: bool = False) -> dict[str, tuple[Any, ExposedParam]]:
-    """Extract Annotated[T, ExposedParam] fields from a schema class.
+def _extract_annotated_fields(
+    source_class: type,
+    skip_fields: set[str] | None = None,
+    debug: bool = False,
+) -> dict[str, ExposedParam]:
+    """Extract Annotated[T, ExposedParam] fields from a class.
+
+    Unified method that combines the functionality of the previous
+    _extract_exposed_params_from_schema() and _extract_exposed_from_annotations().
+
+    Uses __annotations__ directly to avoid NameError issues with generic type parameters,
+    with proper handling of:
+    - Forward references (manual resolution)
+    - Pydantic Field description fallback
+    - Optional field filtering
 
     Args:
-        schema_class: A class (typically Pydantic BaseModel) to scan for annotated fields
+        source_class: Class to extract from (BaseModel, config schema, or any class)
+        skip_fields: Optional set of field names to skip
+        debug: Enable debug logging
 
     Returns:
-        Dict mapping field names to (type_hint, ExposedParam) tuples
+        Dict mapping field names to ExposedParam (with type_hint populated)
     """
     result = {}
-    try:
-        # Get type hints with Annotated metadata
-        hints = get_type_hints(schema_class, include_extras=True)
-        if debug:
-            logger.debug(f"Scanning {schema_class.__name__}: found {len(hints)} type hints")
+    skip_fields = skip_fields or set()
 
-        # Try to get Pydantic v2 field info if available
+    try:
+        # Use __annotations__ directly to avoid NameError with generic type parameters
+        raw_annotations = getattr(source_class, "__annotations__", {})
+
+        if not raw_annotations:
+            if debug:
+                logger.debug(f"{source_class.__name__} has no annotations")
+            return result
+
+        if debug:
+            logger.debug(f"Scanning {source_class.__name__}: found {len(raw_annotations)} annotations")
+
+        # Get module namespace for resolving forward references
+        module = sys.modules.get(source_class.__module__)
+        globalns = vars(module) if module else {}
+
+        # Manually evaluate annotations with proper namespace
+        hints = {}
+        for name, annotation in raw_annotations.items():
+            try:
+                # Handle stringified annotations and forward references
+                if isinstance(annotation, str):
+                    annotation = ForwardRef(annotation)
+                if isinstance(annotation, ForwardRef):
+                    # Python 3.11+ has recursive_guard with default=frozenset()
+                    annotation = annotation._evaluate(globalns, globalns)
+                hints[name] = annotation
+            except Exception:
+                # If evaluation fails, use the raw annotation
+                hints[name] = annotation
+
+        # Try to get Pydantic v2 field info if available for description fallback
         pydantic_fields = {}
         try:
-            if issubclass(schema_class, BaseModel):
-                pydantic_fields = schema_class.model_fields
+            if issubclass(source_class, BaseModel):
+                pydantic_fields = source_class.model_fields
         except (TypeError, AttributeError):
             pass
 
         for field_name, type_hint in hints.items():
-            # Skip generic type parameters (InSchema, OutSchema, etc.)
-            if field_name in ("InSchema", "OutSchema"):
+            # Skip specified fields
+            if field_name in skip_fields:
+                if debug:
+                    logger.debug(f"  Skipping {field_name} (in skip_fields)")
                 continue
 
             # Check if this has args (Annotated types have args)
+            origin = get_origin(type_hint)
             args = get_args(type_hint)
+
             if debug:
-                logger.debug(f"  Field {field_name}: type={type_hint}, args={args}")
+                logger.debug(f"  Field {field_name}: type={type_hint}, origin={origin}, args={args}")
 
             if args:
                 # Look for ExposedParam in the metadata (args after the first one)
-                for i, arg in enumerate(args[1:], 1):  # Skip first arg (the actual type)
+                for i, metadata in enumerate(args[1:], 1):  # Skip first arg (the actual type)
                     if debug:
-                        logger.debug(f"\tArg[{i}]: {arg} (type: {type(arg).__name__})")
-                    if isinstance(arg, ExposedParam):
+                        logger.debug(f"\tArg[{i}]: {metadata} (type: {type(metadata).__name__})")
+
+                    if isinstance(metadata, ExposedParam):
                         if debug:
                             logger.debug(f"\tFound ExposedParam for {field_name}")
 
-                        # If description is empty, try to get it from Pydantic Field
-                        if not arg.description and field_name in pydantic_fields:
+                        # Resolve description priority:
+                        # 1. Explicit Exposed(description=...)
+                        # 2. Pydantic Field(description=...)
+                        # 3. Prettified field name
+                        final_description = metadata.description
+
+                        if not final_description and field_name in pydantic_fields:
                             field_info = pydantic_fields[field_name]
                             pydantic_description = getattr(field_info, "description", None)
                             if pydantic_description:
-                                # Create new ExposedParam with Pydantic description
-                                arg = ExposedParam(
-                                    name=arg.name,
-                                    description=pydantic_description,
-                                    extra=arg.extra,
-                                    expose=arg.expose,
-                                    persistent=arg.persistent,
-                                    type_hint=args[0],  # Capture type hint
-                                    type_source=ExposedParamTypeSource.ANNOTATED,
-                                )
+                                final_description = pydantic_description
 
-                        # Ensure type_hint is set even if we didn't recreate the object
-                        if arg.type_hint is None:
-                            arg.type_hint = args[0]
-                            arg.type_source = ExposedParamTypeSource.ANNOTATED
+                        if not final_description:
+                            final_description = field_name.replace("_", " ").title()
 
-                        result[field_name] = (args[0], arg)  # (actual_type, metadata)
+                        # Extract actual type (first arg in Annotated[T, ...])
+                        actual_type = args[0]
+
+                        # Create enriched ExposedParam with resolved description and type
+                        enriched = ExposedParam(
+                            name=metadata.name or field_name,
+                            description=final_description,
+                            extra=metadata.extra,
+                            expose=metadata.expose,
+                            persistent=metadata.persistent,
+                            type_hint=actual_type,
+                            type_source=ExposedParamTypeSource.ANNOTATED,
+                        )
+
+                        result[field_name] = enriched
                         break
+
     except NameError as e:
-        # Skip classes with unresolved generic type parameters
+        # Log classes with unresolved type references for debugging
         if debug:
-            logger.debug(f"Skipping {schema_class.__name__} due to generic types: {e}")
+            logger.debug(
+                f"Could not extract exposed params from {source_class.__name__}: unresolved type reference - {e}",
+            )
     except Exception as e:
+        # Log other unexpected errors at debug level
         if debug:
-            logger.debug(f"Could not extract type hints from {schema_class}: {e}")
+            logger.debug(f"Could not extract exposed params from {source_class}: {e}")
 
     return result
 
@@ -429,7 +488,7 @@ def _scan_annotated_fields_recursive(
     max_depth: int = 5,
     visited: set[type] | None = None,
     debug: bool = False,
-) -> dict[str, tuple[list[str], ExposedParam, Any]]:
+) -> dict[str, tuple[list[str], ExposedParam]]:
     """Recursively scan class for Annotated[T, ExposedParam] fields.
 
     Scans all type-annotated attributes and recursively descends into
@@ -443,12 +502,12 @@ def _scan_annotated_fields_recursive(
         visited: Set of already-visited types to prevent circular references
 
     Returns:
-        Dict mapping flattened names to (path_parts, ExposedParam, type_hint) tuples
+        Dict mapping flattened names to (path_parts, ExposedParam) tuples.
+        The type_hint is accessible via ExposedParam.type_hint.
         Example: {
             "config_temperature": (
                 ["config", "temperature"],
-                ExposedParam(...),
-                float
+                ExposedParam(..., type_hint=float),
             )
         }
     """
@@ -462,8 +521,8 @@ def _scan_annotated_fields_recursive(
     result = {}
 
     # First, extract Annotated fields directly from this class
-    direct_fields = _extract_exposed_params_from_schema(cls, debug=debug)
-    for field_name, (field_type, metadata) in direct_fields.items():
+    direct_fields = _extract_annotated_fields(cls, debug=debug)
+    for field_name, metadata in direct_fields.items():
         # Build the path (just the field name for direct fields)
         if prefix:
             path_parts = prefix.split("_") + [field_name]
@@ -480,11 +539,11 @@ def _scan_annotated_fields_recursive(
                 extra=metadata.extra,
                 expose=metadata.expose,
                 persistent=metadata.persistent,
-                type_hint=field_type,  # Capture type hint
+                type_hint=metadata.type_hint,  # Type hint already populated
                 type_source=ExposedParamTypeSource.ANNOTATED,
             )
 
-        result[flat_name] = (path_parts, metadata, field_type)
+        result[flat_name] = (path_parts, metadata)
 
     # Build dict of all attributes to scan (from type hints + class attributes)
     attrs_to_scan = {}
@@ -531,9 +590,9 @@ def _scan_annotated_fields_recursive(
 
         # If the attribute's type is a class, scan it for Annotated fields
         if isinstance(actual_type, type):
-            exposed_fields = _extract_exposed_params_from_schema(actual_type, debug=debug)
+            exposed_fields = _extract_annotated_fields(actual_type, debug=debug)
 
-            for field_name, (field_type, metadata) in exposed_fields.items():
+            for field_name, metadata in exposed_fields.items():
                 # Build the path
                 if prefix:
                     path_parts = prefix.split("_") + [attr_name, field_name]
@@ -551,11 +610,11 @@ def _scan_annotated_fields_recursive(
                         extra=metadata.extra,
                         expose=metadata.expose,
                         persistent=metadata.persistent,
-                        type_hint=field_type,  # Capture type hint
+                        type_hint=metadata.type_hint,  # Type hint already populated
                         type_source=ExposedParamTypeSource.ANNOTATED,
                     )
 
-                result[flat_name] = (path_parts, metadata, field_type)
+                result[flat_name] = (path_parts, metadata)
 
             # Recursively scan the nested type
             new_prefix = f"{prefix}_{attr_name}" if prefix else attr_name
@@ -572,116 +631,11 @@ def _scan_annotated_fields_recursive(
     return result
 
 
-def _extract_exposed_from_annotations(
-    source_class: type,
-    skip_fields: set[str] | None = None,
-) -> dict[str, ExposedParam]:
-    """Extract Exposed() markers from class annotations for registry storage.
-
-    This function extracts ExposedParam metadata from Annotated type hints.
-    Works for both config schemas (BaseModel) and regular classes.
-
-    Args:
-        source_class: Class to extract from (can be BaseModel or any class)
-        skip_fields: Optional set of field names to skip (e.g., schema attributes)
-
-    Returns:
-        Dict mapping field_name -> ExposedParam with type_hint and description resolved
-    """
-    exposed_fields = {}
-    skip_fields = skip_fields or set()
-
-    try:
-        # Use __annotations__ directly to get only THIS class's annotations (not inherited)
-        # This avoids issues with base class type annotations that we don't need
-        raw_annotations = getattr(source_class, "__annotations__", {})
-
-        if not raw_annotations:
-            return exposed_fields
-
-        # Get module namespace for resolving forward references in THIS class's annotations
-        module = sys.modules.get(source_class.__module__)
-        globalns = vars(module) if module else {}
-
-        # Manually evaluate annotations with proper namespace
-        hints = {}
-        for name, annotation in raw_annotations.items():
-            try:
-                # Use eval_str=True in Python 3.10+ to handle stringified annotations
-                if isinstance(annotation, str):
-                    annotation = ForwardRef(annotation)
-                if isinstance(annotation, ForwardRef):
-                    annotation = annotation._evaluate(globalns, globalns, frozenset())
-                hints[name] = annotation
-            except:  # noqa: E722
-                # If evaluation fails, use the raw annotation
-                hints[name] = annotation
-
-        for field_name, type_hint in hints.items():
-            # Skip specified fields
-            if field_name in skip_fields:
-                continue
-
-            # Check if this has args (Annotated types have args)
-            origin = get_origin(type_hint)
-            if origin is not None:
-                args = get_args(type_hint)
-                if not args:
-                    continue
-
-                # Look for ExposedParam in the metadata
-                for metadata in args[1:]:  # Skip first arg (the actual type)
-                    if isinstance(metadata, ExposedParam):
-                        # Resolve description priority:
-                        # 1. Exposed(description=...)
-                        # 2. Field(description=...) - works for both BaseModel and class attributes
-                        # 3. Prettified field name
-                        final_description = metadata.description
-
-                        if not final_description:
-                            if hasattr(source_class, "model_fields"):
-                                field_info = source_class.model_fields.get(field_name)
-                                if field_info and field_info.description:
-                                    final_description = field_info.description
-
-                        if not final_description:
-                            final_description = field_name.replace("_", " ").title()
-
-                        # Extract actual type (first arg in Annotated[T, ...])
-                        actual_type = args[0]
-
-                        # Create enriched metadata with resolved description and type
-                        enriched = ExposedParam(
-                            name=metadata.name or field_name,
-                            description=final_description,
-                            extra=metadata.extra,
-                            expose=metadata.expose,
-                            persistent=metadata.persistent,
-                            type_hint=actual_type,
-                            type_source=ExposedParamTypeSource.ANNOTATED,
-                        )
-
-                        exposed_fields[field_name] = enriched
-                        break
-
-    except NameError as e:
-        # Log classes with unresolved type references for debugging
-        logger.debug(
-            f"Could not extract exposed params from {source_class.__name__}: unresolved type reference - {e}",
-        )
-    except Exception as e:
-        # Log other unexpected errors at debug level
-        logger.debug(f"Could not extract exposed params from {source_class.__name__}: {e}")
-
-    return exposed_fields
-
-
 def _create_property(
     cls: type,
     flat_name: str,
     path_parts: list[str],
     metadata: ExposedParam,
-    type_hint: Any,
 ) -> None:
     """Create a property with getter/setter on the class that traverses a nested path.
 
@@ -689,8 +643,7 @@ def _create_property(
         cls: Class to add the property to
         flat_name: Flattened property name (e.g., "component_config_temperature")
         path_parts: Path to traverse (e.g., ["component", "config", "temperature"])
-        metadata: ExposedParam metadata
-        type_hint: Expected type for validation
+        metadata: ExposedParam metadata (with type_hint already populated)
     """
 
     def make_getter(path: list[str]):
@@ -734,9 +687,7 @@ def _create_property(
         prop = ValidatedProperty(getter)
         prop = prop.setter(setter)
 
-    # Attach metadata
-    if metadata.type_hint is None:
-        metadata.type_hint = type_hint
+    # Attach metadata (type_hint already populated in metadata)
     setattr(prop.fget, _EXPOSED_META_VAR_NAME, metadata)
 
     # Set the property on the class
@@ -840,7 +791,7 @@ class ParamExposureMixin:
 
         # NEW: Extract and store metadata from config_schema
         if hasattr(cls, "config_schema") and cls.config_schema is not None:
-            config_exposed = _extract_exposed_from_annotations(cls.config_schema)
+            config_exposed = _extract_annotated_fields(cls.config_schema)
             # Add config_ prefix to field names for registry keys (full path naming)
             for field_name, metadata in config_exposed.items():
                 registry_key = f"config_{field_name}"
@@ -850,7 +801,7 @@ class ParamExposureMixin:
         # NEW: Extract and store class-level annotated fields
         # Skip schema attributes to avoid conflicts
         skip_fields = {"InSchema", "OutSchema", "input_schema", "output_schema", "config_schema"}
-        class_exposed = _extract_exposed_from_annotations(cls, skip_fields=skip_fields)
+        class_exposed = _extract_annotated_fields(cls, skip_fields=skip_fields)
         # No prefix for class-level fields
         cls._exposure_registry.update(class_exposed)
 
@@ -858,7 +809,7 @@ class ParamExposureMixin:
         discovered = _scan_annotated_fields_recursive(cls)
 
         # Create properties for fields that should be exposed
-        for flat_name, (path_parts, metadata, type_hint) in discovered.items():
+        for flat_name, (path_parts, metadata) in discovered.items():
             # Only create properties for persistent, exposed fields
             if metadata.expose and metadata.persistent:
                 # Check if it's already a property with _exposed_meta (from @exposed_param decorator)
@@ -870,7 +821,7 @@ class ParamExposureMixin:
 
                 if not is_exposed_property:
                     # Create/overwrite with property (overwrites class attributes)
-                    _create_property(cls, flat_name, path_parts, metadata, type_hint)
+                    _create_property(cls, flat_name, path_parts, metadata)
                 else:
                     logger.debug(
                         f"Skipping auto-creation of property '{flat_name}' on {cls.__name__} - already exposed via decorator",
@@ -1022,7 +973,7 @@ class ParamExposureMixin:
         exposed = []
         discovered = _scan_annotated_fields_recursive(type(self))
 
-        for flat_name, (path_parts, metadata, type_hint) in discovered.items():
+        for flat_name, (path_parts, metadata) in discovered.items():
             if flat_name in exposed_names:
                 continue  # Already added as property or from registry
 
@@ -1037,8 +988,8 @@ class ParamExposureMixin:
             if include_values:
                 current_value = getattr(self, flat_name, None)
 
-            # Get type name
-            param_type = getattr(type_hint, "__name__", str(type_hint))
+            # Get type name from metadata
+            param_type = getattr(metadata.type_hint, "__name__", str(metadata.type_hint))
             is_editable = metadata.extra.get("editable", True)
 
             exposed.append(
@@ -1048,7 +999,7 @@ class ParamExposureMixin:
                     extra=metadata.extra,
                     expose=metadata.expose,
                     persistent=metadata.persistent,
-                    type_hint=type_hint,
+                    type_hint=metadata.type_hint,
                     type_=param_type,
                     type_source=ExposedParamTypeSource.ANNOTATED,
                     editable=is_editable,
