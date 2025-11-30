@@ -83,7 +83,7 @@ class ExposedParam:
     description: str = ""
     expose: bool = True
     persistent: bool = True
-    type_hint: Any = None
+    type_hint: Any | None = None
     type_source: ExposedParamTypeSource | None = None
     extra: dict[str, Any] = dc_field(default_factory=dict)
 
@@ -666,7 +666,13 @@ def _create_property(
             try:
                 for part in path[:-1]:
                     obj = getattr(obj, part)
-                setattr(obj, path[-1], value)
+
+                # If obj is still self, use object.__setattr__ to avoid recursion
+                # (happens when path has only one element)
+                if obj is self:
+                    object.__setattr__(obj, path[-1], value)
+                else:
+                    setattr(obj, path[-1], value)
             except AttributeError as e:
                 logger.warning(f"Could not set {'.'.join(path)}: {e}")
 
@@ -812,6 +818,11 @@ class ParamExposureMixin:
         for flat_name, (path_parts, metadata) in discovered.items():
             # Only create properties for persistent, exposed fields
             if metadata.expose and metadata.persistent:
+                # Skip class-level attributes (single-element paths) - they work fine as-is
+                # Only create properties for nested paths that need traversal (e.g., config.temperature)
+                if len(path_parts) == 1:
+                    continue
+
                 # Check if it's already a property with _exposed_meta (from @exposed_param decorator)
                 existing_attr = getattr(cls, flat_name, None)
                 is_exposed_property = isinstance(existing_attr, property) and hasattr(
@@ -820,7 +831,7 @@ class ParamExposureMixin:
                 )
 
                 if not is_exposed_property:
-                    # Create/overwrite with property (overwrites class attributes)
+                    # Create property for nested path (e.g., config_temperature -> config.temperature)
                     _create_property(cls, flat_name, path_parts, metadata)
                 else:
                     logger.debug(
