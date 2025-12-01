@@ -5,7 +5,6 @@ from typing import (
     Any,
     Callable,
     ForwardRef,
-    Literal,
     get_args,
     get_origin,
     get_type_hints,
@@ -751,14 +750,12 @@ class ParamExposureMixin:
         self,
         exposed_names: set[str] | None = None,
         include_values: bool = False,
-        filter_by: Literal["exposed", "persistent", "all"] = "exposed",
     ) -> list[ExposedParamRuntimeInfo]:
         """Collect exposed params from registry (config-level fields).
 
         Args:
             exposed_names: Optional set of already-collected param names to skip (for deduplication)
             include_values: Whether to include current runtime values
-            filter_by: Filter criteria for parameters
 
         Returns:
             List of ExposedParamRuntimeInfo objects
@@ -772,12 +769,6 @@ class ParamExposureMixin:
         for registry_key, metadata in registry.items():
             # Skip if already exposed via decorator (decorator has priority)
             if registry_key in exposed_names:
-                continue
-
-            # Apply filter
-            if filter_by == "exposed" and not metadata.expose:
-                continue
-            elif filter_by == "persistent" and not metadata.persistent:
                 continue
 
             # Check if a property was created for this registry entry
@@ -819,10 +810,109 @@ class ParamExposureMixin:
 
         return exposed
 
+    def _collect_from_runtime(
+        self,
+        include_values: bool = False,
+        already_exposed: set[str] | None = None,
+    ) -> list[ExposedParamRuntimeInfo]:
+        """Scan instance attributes at runtime for components with exposed fields.
+
+        This method discovers components that were created at runtime (in __init__)
+        but weren't declared as class-level type annotations. It scans all instance
+        attributes and checks if they have any Annotated[T, Exposed()] fields.
+
+        Args:
+            include_values: Whether to include current runtime values
+            already_exposed: Set of already-exposed param names to skip
+
+        Returns:
+            List of ExposedParamRuntimeInfo objects for runtime-discovered component fields
+        """
+        if already_exposed is None:
+            already_exposed = set()
+
+        exposed = []
+
+        # Scan instance attributes
+        for attr_name in dir(self):
+            # Skip private, dunder, and already-exposed attributes
+            if attr_name.startswith("_") or attr_name in already_exposed:
+                continue
+
+            # Skip if it's a class attribute or method
+            if hasattr(type(self), attr_name):
+                cls_attr = getattr(type(self), attr_name)
+                # Skip properties, methods, classmethods, staticmethods
+                if isinstance(cls_attr, (property, type(lambda: None), classmethod, staticmethod)):
+                    continue
+
+            # Get the instance attribute
+            try:
+                attr_value = getattr(self, attr_name)
+            except Exception:
+                continue
+
+            # Skip None, primitives, and built-in types
+            if attr_value is None or isinstance(attr_value, (str, int, float, bool, list, dict, tuple, set)):
+                continue
+
+            # Check if this object has a class with Annotated fields
+            attr_type = type(attr_value)
+            component_fields = _extract_annotated_fields(attr_type)
+
+            if not component_fields:
+                continue
+
+            # Found a component! Process its exposed fields
+            for field_name, metadata in component_fields.items():
+                # Build flattened name
+                flat_name = f"{attr_name}_{field_name}"
+
+                # Skip if already exposed
+                if flat_name in already_exposed:
+                    continue
+
+                # Get field value
+                try:
+                    field_value = getattr(attr_value, field_name)
+                except Exception:
+                    field_value = None
+
+                # Get type info
+                type_hint = metadata.type_hint
+                if type_hint is not None:
+                    param_type = getattr(type_hint, "__name__", str(type_hint))
+                    type_source = ExposedParamTypeSource.ANNOTATED
+                elif field_value is not None:
+                    type_hint = type(field_value)
+                    param_type = type_hint.__name__
+                    type_source = ExposedParamTypeSource.RUNTIME
+                else:
+                    type_hint = None
+                    param_type = "unknown"
+                    type_source = ExposedParamTypeSource.NONE
+
+                exposed.append(
+                    ExposedParamRuntimeInfo(
+                        name=flat_name,
+                        description=metadata.description,
+                        extra=metadata.extra,
+                        expose=metadata.expose,
+                        persistent=metadata.persistent,
+                        type_hint=type_hint,
+                        type_=param_type,
+                        type_source=type_source,
+                        editable=False,  # Runtime components don't have auto-generated setters
+                        current_value=field_value if include_values else None,
+                    ),
+                )
+
+        return exposed
+
     def get_exposed_params(
         self,
         include_values: bool = False,
-        filter_by: Literal["exposed", "persistent", "all"] = "exposed",
+        include_runtime_components: bool = False,
     ) -> list[ExposedParamRuntimeInfo]:
         """
         Get metadata about exposed parameters from decorator and registry sources.
@@ -830,17 +920,17 @@ class ParamExposureMixin:
         This method discovers parameters exposed via:
         1. @exposed_param decorator on properties (highest priority)
         2. Registry entries for Annotated fields (populated at class creation time)
+        3. Runtime component scanning (if include_runtime_components=True)
 
         Priority resolution:
         - Decorator metadata (@exposed_param) takes precedence over registry
         - Registry contains all Annotated[T, Exposed()] fields discovered at class creation
+        - Runtime scanning finds components created in __init__ without class-level declarations
 
         Args:
             include_values: If True, include current runtime values in the output
-            filter_by: Filter which parameters to return:
-                - "exposed": Only externally controllable params (expose=True, default)
-                - "persistent": Only persistent state params (persistent=True)
-                - "all": All parameters with ExposedParam metadata
+            include_runtime_components: If True, scan instance attributes for components
+                with exposed fields (useful for components not declared at class level)
 
         Returns:
             List of ExposedParamRuntimeInfo objects, each containing:
@@ -857,6 +947,13 @@ class ParamExposureMixin:
         exposed_names = {p.name for p in exposed}
 
         # STEP 2: Collect from registry (contains all Annotated fields)
-        exposed.extend(self._collect_from_registry(exposed_names, include_values, filter_by))
+        exposed.extend(self._collect_from_registry(exposed_names, include_values))
+        exposed_names = {p.name for p in exposed}
+
+        # STEP 3: Optional runtime component scanning
+        if include_runtime_components:
+            exposed.extend(
+                self._collect_from_runtime(include_values, exposed_names),
+            )
 
         return exposed
