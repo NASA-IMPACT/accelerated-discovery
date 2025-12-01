@@ -400,9 +400,22 @@ def _scan_annotated_fields_recursive(
         if debug:
             logger.debug(f"Found {len(attrs_to_scan)} type hints in {cls.__name__}")
     except NameError as e:
-        # Skip classes with unresolved generic type parameters
+        # Fall back to __annotations__ when generic type parameters can't be resolved
+        # This ensures we still discover regular type-annotated attributes like `component: SomeClass`
         if debug:
-            logger.debug(f"Skipping type hints for {cls.__name__} due to generic types: {e}")
+            logger.debug(
+                f"get_type_hints() failed for {cls.__name__} due to generic types: {e}. "
+                f"Falling back to __annotations__",
+            )
+        raw_annotations = getattr(cls, "__annotations__", {})
+        # Filter out generic type parameters and schema fields
+        attrs_to_scan = {
+            k: v
+            for k, v in raw_annotations.items()
+            if k not in ("InSchema", "OutSchema", "input_schema", "output_schema", "config_schema")
+        }
+        if debug:
+            logger.debug(f"Found {len(attrs_to_scan)} annotations in {cls.__name__} via __annotations__")
     except Exception as e:
         if debug:
             logger.debug(f"Could not get type hints for {cls.__name__}: {e}")
