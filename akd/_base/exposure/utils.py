@@ -553,8 +553,8 @@ class _ExposureHelper:
 
             # Process exposed fields if any
             for field_name, metadata in component_fields.items():
-                # Build flattened name with prefix
-                flat_name = f"{prefix}_{attr_name}_{field_name}" if prefix else f"{attr_name}_{field_name}"
+                # Build name with dot notation for prefix
+                flat_name = f"{prefix}.{attr_name}.{field_name}" if prefix else f"{attr_name}.{field_name}"
 
                 # Skip if already exposed
                 if flat_name in already_exposed:
@@ -597,7 +597,7 @@ class _ExposureHelper:
                 already_exposed.add(flat_name)
 
             # Recurse into component's instance attributes
-            new_prefix = f"{prefix}_{attr_name}" if prefix else attr_name
+            new_prefix = f"{prefix}.{attr_name}" if prefix else attr_name
             nested = _ExposureHelper.scan_instance_recursively(
                 attr_value,
                 include_values,
