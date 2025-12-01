@@ -371,7 +371,7 @@ class ParamExposureMixin:
     def get_exposed_params(
         self,
         include_values: bool = False,
-        include_runtime_components: bool = True,
+        scan_runtime: bool = True,
         runtime_max_depth: int = 3,
     ) -> list[ExposedParamRuntimeInfo]:
         """
@@ -412,7 +412,7 @@ class ParamExposureMixin:
         exposed_names = {p.name for p in exposed}
 
         # STEP 3: Optional runtime component scanning (with recursion)
-        if include_runtime_components:
+        if scan_runtime:
             exposed.extend(
                 self._collect_exposed_from_runtime(include_values, exposed_names, runtime_max_depth),
             )
