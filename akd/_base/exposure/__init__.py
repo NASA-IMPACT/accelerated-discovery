@@ -8,13 +8,7 @@ in agents and tools through both decorator-based and annotation-based approaches
 from .core import ParamExposureMixin, exposed_param
 
 # Public API: metadata helpers and data structures
-from .structures import (
-    Exposed,
-    ExposedParam,
-    ExposedParamRuntimeInfo,
-    ReadOnly,
-    Validated,
-)
+from .structures import Exposed, ExposedParam, ExposedParamRuntimeInfo
 
 __all__ = [
     # Core data structures
@@ -22,8 +16,6 @@ __all__ = [
     "ExposedParamRuntimeInfo",
     # Metadata helpers (main public API)
     "Exposed",
-    "Validated",
-    "ReadOnly",
     # Decorator
     "exposed_param",
     # Mixin (main class to inherit from)
