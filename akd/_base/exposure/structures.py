@@ -5,6 +5,9 @@ from dataclasses import field as dc_field
 from enum import StrEnum
 from typing import Any
 
+# Constant for metadata attribute name used across exposure system
+_EXPOSED_META_VAR_NAME = "_exposed_meta"  # noqa
+
 
 class ExposedParamTypeSource(StrEnum):
     """Source of type information for exposed parameters."""
