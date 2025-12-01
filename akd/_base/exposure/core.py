@@ -420,7 +420,55 @@ class ParamExposureMixin:
         return exposed
 
     def __getitem__(self, key: str) -> Any:
+        """Get exposed parameter value using dict-like syntax.
+
+        Args:
+            key: Dot-separated path to the parameter (e.g., 'component.config.temperature')
+
+        Returns:
+            The value at the specified path
+
+        Raises:
+            AttributeError: If the path doesn't exist
+
+        Example:
+            >>> value = agent['component.config.temperature']
+        """
         return rgetattr(self, key)
 
     def __setitem__(self, key: str, value: Any) -> None:
+        """Set exposed parameter value using dict-like syntax.
+
+        Args:
+            key: Dot-separated path to the parameter (e.g., 'component.config.temperature')
+            value: The value to set
+
+        Raises:
+            AttributeError: If the path doesn't exist
+
+        Example:
+            >>> agent['component.config.temperature'] = 0.8
+        """
         rsetattr(self, key, value)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get exposed parameter value with optional default.
+
+        Dict-like interface that returns a default value if the key doesn't exist,
+        rather than raising an exception.
+
+        Args:
+            key: Dot-separated path to the parameter (e.g., 'component.config.temperature')
+            default: Value to return if the path doesn't exist (default: None)
+
+        Returns:
+            The value at the specified path, or default if not found
+
+        Example:
+            >>> temp = agent.get('component.config.temperature', 0.7)
+            >>> missing = agent.get('nonexistent.path', 'default_value')
+        """
+        try:
+            return rgetattr(self, key)
+        except AttributeError:
+            return default

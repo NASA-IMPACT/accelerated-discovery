@@ -196,7 +196,7 @@ def parse_date(date_input: str | int | None) -> datetime | None:
 
 
 ### Recursive attribute access ####
-def rgetattr(obj: Any, attr: str, default: Any = None) -> Any:
+def rgetattr(obj: Any, attr: str) -> Any:
     """
     Recursive GetAttr: Gets a nested attribute using a dot-separated string.
 
@@ -206,16 +206,15 @@ def rgetattr(obj: Any, attr: str, default: Any = None) -> Any:
         >>> rgetattr(obj, 'a.b.c')
         # equivalent to obj.a.b.c
 
-        >>> rgetattr(obj, 'a.b.c', default=0)
-        # returns 0 if any attribute in the path doesn't exist
-
     Args:
         obj: The object to get the attribute from
         attr: Dot-separated attribute path (e.g., 'component.config.temperature')
-        default: Default value to return if attribute doesn't exist
 
     Returns:
-        The value of the nested attribute, or default if not found
+        The value of the nested attribute
+
+    Raises:
+        AttributeError: If any attribute in the path doesn't exist
     """
     return operator.attrgetter(attr)(obj)
 
