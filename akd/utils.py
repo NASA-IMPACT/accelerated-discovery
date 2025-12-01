@@ -1,4 +1,6 @@
 import asyncio
+import functools
+import operator
 import time
 from datetime import datetime
 from pathlib import Path
@@ -191,3 +193,58 @@ def parse_date(date_input: str | int | None) -> datetime | None:
         parsed_date = dateparser.parse(date_input)
 
     return parsed_date
+
+
+### Recursive attribute access ####
+def rgetattr(obj: Any, attr: str, default: Any = None) -> Any:
+    """
+    Recursive GetAttr: Gets a nested attribute using a dot-separated string.
+
+    Uses operator.attrgetter for clean, efficient attribute access.
+
+    Example:
+        >>> rgetattr(obj, 'a.b.c')
+        # equivalent to obj.a.b.c
+
+        >>> rgetattr(obj, 'a.b.c', default=0)
+        # returns 0 if any attribute in the path doesn't exist
+
+    Args:
+        obj: The object to get the attribute from
+        attr: Dot-separated attribute path (e.g., 'component.config.temperature')
+        default: Default value to return if attribute doesn't exist
+
+    Returns:
+        The value of the nested attribute, or default if not found
+    """
+    return operator.attrgetter(attr)(obj)
+
+
+def rsetattr(obj: Any, attr: str, val: Any) -> None:
+    """
+    Recursive SetAttr: Sets a nested attribute using a dot-separated string.
+
+    Example:
+        >>> rsetattr(obj, 'a.b.c', 10)
+        # equivalent to obj.a.b.c = 10
+
+    Args:
+        obj: The object to set the attribute on
+        attr: Dot-separated attribute path (e.g., 'component.config.temperature')
+        val: The value to set
+
+    Raises:
+        AttributeError: If any intermediate attribute in the path doesn't exist
+    """
+    pre, _, post = attr.rpartition(".")
+
+    # If there is a dot (nested path)
+    if pre:
+        # Traverse down to the parent object (e.g., go to obj.a.b)
+        parent = functools.reduce(getattr, pre.split("."), obj)
+        # Set the attribute on that parent
+        setattr(parent, post, val)
+
+    # If there is no dot (simple attribute)
+    else:
+        setattr(obj, attr, val)
