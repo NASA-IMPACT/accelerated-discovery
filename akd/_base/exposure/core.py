@@ -1,8 +1,10 @@
 import types
 from dataclasses import replace as dc_replace
-from typing import Callable, get_args, get_type_hints, overload
+from typing import Any, Callable, get_args, get_type_hints, overload
 
 from loguru import logger
+
+from akd.utils import rgetattr, rsetattr
 
 from .structures import (
     _EXPOSED_META_VAR_NAME,
@@ -369,8 +371,8 @@ class ParamExposureMixin:
     def get_exposed_params(
         self,
         include_values: bool = False,
-        include_runtime_components: bool = False,
-        runtime_max_depth: int = 2,
+        include_runtime_components: bool = True,
+        runtime_max_depth: int = 3,
     ) -> list[ExposedParamRuntimeInfo]:
         """
         Get metadata about exposed parameters from decorator and registry sources.
@@ -389,7 +391,7 @@ class ParamExposureMixin:
             include_values: If True, include current runtime values in the output
             include_runtime_components: If True, scan instance attributes for components
                 with exposed fields (useful for components not declared at class level)
-            runtime_max_depth: Maximum recursion depth for runtime component scanning (default: 2)
+            runtime_max_depth: Maximum recursion depth for runtime component scanning (default: 3)
 
         Returns:
             List of ExposedParamRuntimeInfo objects, each containing:
@@ -416,3 +418,9 @@ class ParamExposureMixin:
             )
 
         return exposed
+
+    def __getitem__(self, key: str) -> Any:
+        return rgetattr(self, key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        rsetattr(self, key, value)
