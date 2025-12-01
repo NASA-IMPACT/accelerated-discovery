@@ -962,80 +962,21 @@ class ParamExposureMixin:
 
         return exposed
 
-    def _collect_from_annotated_fields(
-        self,
-        exposed_names: set[str] | None = None,
-        include_values: bool = False,
-        filter_by: Literal["exposed", "persistent", "all"] = "exposed",
-    ) -> list[ExposedParamRuntimeInfo]:
-        """Collect exposed params from direct Annotated fields.
-
-        Args:
-            exposed_names: Optional set of already-collected param names to skip (for deduplication)
-            include_values: Whether to include current runtime values
-            filter_by: Filter criteria for parameters
-
-        Returns:
-            List of ExposedParamRuntimeInfo objects
-        """
-        if exposed_names is None:
-            exposed_names = set()
-
-        exposed = []
-        discovered = _scan_annotated_fields_recursive(type(self))
-
-        for flat_name, (path_parts, metadata) in discovered.items():
-            if flat_name in exposed_names:
-                continue  # Already added as property or from registry
-
-            # Apply filter
-            if filter_by == "exposed" and not metadata.expose:
-                continue
-            elif filter_by == "persistent" and not metadata.persistent:
-                continue
-
-            # Get current value if requested
-            current_value = None
-            if include_values:
-                current_value = getattr(self, flat_name, None)
-
-            # Get type name from metadata
-            param_type = getattr(metadata.type_hint, "__name__", str(metadata.type_hint))
-            is_editable = metadata.extra.get("editable", True)
-
-            exposed.append(
-                ExposedParamRuntimeInfo(
-                    name=metadata.name or flat_name,
-                    description=metadata.description,
-                    extra=metadata.extra,
-                    expose=metadata.expose,
-                    persistent=metadata.persistent,
-                    type_hint=metadata.type_hint,
-                    type_=param_type,
-                    type_source=ExposedParamTypeSource.ANNOTATED,
-                    editable=is_editable,
-                    current_value=current_value,
-                ),
-            )
-
-        return exposed
-
     def get_exposed_params(
         self,
         include_values: bool = False,
         filter_by: Literal["exposed", "persistent", "all"] = "exposed",
     ) -> list[ExposedParamRuntimeInfo]:
         """
-        Get metadata about exposed parameters from decorator, annotation, and registry sources.
+        Get metadata about exposed parameters from decorator and registry sources.
 
         This method discovers parameters exposed via:
         1. @exposed_param decorator on properties (highest priority)
-        2. Annotated[T, Exposed()] fields in schemas (auto-created properties)
-        3. Registry entries for config-level Annotated fields
+        2. Registry entries for Annotated fields (populated at class creation time)
 
         Priority resolution:
         - Decorator metadata (@exposed_param) takes precedence over registry
-        - Registry provides metadata for fields that may not have properties yet
+        - Registry contains all Annotated[T, Exposed()] fields discovered at class creation
 
         Args:
             include_values: If True, include current runtime values in the output
@@ -1058,11 +999,7 @@ class ParamExposureMixin:
         exposed = self._collect_from_decorated_properties(include_values)
         exposed_names = {p.name for p in exposed}
 
-        # STEP 2: Collect from registry (config-level fields)
+        # STEP 2: Collect from registry (contains all Annotated fields)
         exposed.extend(self._collect_from_registry(exposed_names, include_values, filter_by))
-        exposed_names = {p.name for p in exposed}
-
-        # STEP 3: Collect from direct Annotated fields
-        exposed.extend(self._collect_from_annotated_fields(exposed_names, include_values, filter_by))
 
         return exposed
