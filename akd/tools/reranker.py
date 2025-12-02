@@ -11,7 +11,7 @@ from sentence_transformers import CrossEncoder
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
-from akd.structures import SearchResultItem
+from akd.structures import BaseCriterion, SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.search.utils import deduplicate_results, sort_results
 
@@ -167,11 +167,9 @@ class ScoringCategory(BaseModel):
     value: float = Field(..., description="Numeric score for this category")
 
 
-class ScoringCriterion(BaseModel):
+class ScoringCriterion(BaseCriterion):
     """Individual criterion for evaluating results."""
 
-    name: str = Field(..., description="Criterion name (e.g., 'Relevancy', 'Processing Level', 'Ease of Use')")
-    description: str = Field(..., description="Detailed description of what this criterion evaluates")
     weight: float = Field(default=1.0, ge=0.0, le=1.0, description="Weight for this criterion (0.0 to 1.0)")
     scoring_categories: list[ScoringCategory] = Field(
         default_factory=lambda: [

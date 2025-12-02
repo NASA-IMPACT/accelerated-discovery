@@ -242,6 +242,13 @@ class PaperDataItem(BaseModel):
     )
 
 
+class BaseCriterion(BaseModel):
+    """Base class for criteria used in reranking."""
+
+    name: str = Field(..., description="Criterion name")
+    description: str = Field(..., description="Detailed description of what this criterion evaluates")
+
+
 # =============================================================================
 # Extraction Schemas
 # =============================================================================
@@ -331,6 +338,7 @@ class ToolSearchResult(BaseModel):
 # Type alias for semantic clarity in literature search contexts
 LitSearchResult = SearchResultItem
 
+
 __all__ = [
     # Search and Data Models
     "SearchResult",
@@ -342,4 +350,5 @@ __all__ = [
     "SingleEstimation",
     # Tool Models
     "ToolSearchResult",
+    "BaseCriterion",
 ]
