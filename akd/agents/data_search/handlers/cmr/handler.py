@@ -874,15 +874,16 @@ class CMRHandler(BaseHandler):
             seen_ids = set()
             deduped = []
             for coll in collections:
-                concept_id = coll.get("concept_id")
+                col1_copy = coll.copy()
+                concept_id = col1_copy.get("concept_id")
                 if concept_id and concept_id not in seen_ids:
                     seen_ids.add(concept_id)
 
                     # Enrich collection with query approach information
                     if query_approaches and approach_idx < len(query_approaches):
                         approach = query_approaches[approach_idx]
-                        coll["query_approach_info"] = approach.dict()
-                    deduped.append(coll)
+                        col1_copy["query_approach_info"] = approach.dict()
+                    deduped.append(col1_copy)
             deduplicated_flat[approach_idx] = deduped
 
         # Flatten all approaches into single list
