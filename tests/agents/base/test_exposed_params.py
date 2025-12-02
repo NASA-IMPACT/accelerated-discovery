@@ -333,3 +333,258 @@ class TestExposedParamFunctionality:
         agent.config_topic_steer = test_value
         assert agent.config.topic_steer == test_value, "All access patterns should be consistent"
         assert agent.config_topic_steer == test_value, "All access patterns should be consistent"
+
+
+class TestParameterDiscovery:
+    """Tests for parameter discovery with nested components via scan_runtime."""
+
+    def test_scan_runtime_disabled(self, exposed_simple_agent):
+        """Test that scan_runtime=False doesn't discover runtime components."""
+        params = exposed_simple_agent.get_exposed_params(scan_runtime=False)
+        param_names = {p.name for p in params}
+
+        # Should NOT include runtime-discovered component fields
+        assert "component.value" not in param_names
+
+    def test_scan_runtime_enabled(self, exposed_simple_agent):
+        """Test that scan_runtime=True discovers nested component fields."""
+        params = exposed_simple_agent.get_exposed_params(scan_runtime=True)
+        param_names = {p.name for p in params}
+
+        # Should include runtime-discovered component fields
+        assert "component.value" in param_names
+
+    def test_nested_config_discovery(self, exposed_complex_agent):
+        """Test runtime scanning discovers deeply nested config parameters."""
+        params = exposed_complex_agent.get_exposed_params(scan_runtime=True)
+        param_names = {p.name for p in params}
+
+        assert "component.name" in param_names
+        assert "component.config.temperature" in param_names
+        assert "component.config.max_tokens" in param_names
+
+    def test_multiple_components_discovery(self, exposed_multi_agent):
+        """Test runtime scanning with multiple nested components."""
+        params = exposed_multi_agent.get_exposed_params(scan_runtime=True)
+        param_names = {p.name for p in params}
+
+        assert "simple.value" in param_names
+        assert "complex.name" in param_names
+        assert "complex.config.temperature" in param_names
+
+    def test_metadata_extraction(self, exposed_complex_agent):
+        """Test that metadata is correctly extracted from Exposed annotations."""
+        params = exposed_complex_agent.get_exposed_params(scan_runtime=True)
+        param_dict = {p.name: p for p in params}
+
+        # Check descriptions
+        assert param_dict["component.name"].description == "Component name"
+        assert param_dict["component.config.temperature"].description == "Temperature parameter"
+
+        # Check types
+        assert param_dict["component.name"].type_ == "str"
+        assert param_dict["component.config.temperature"].type_ == "float"
+        assert param_dict["component.config.max_tokens"].type_ == "int"
+
+    def test_include_values_false(self, exposed_simple_agent):
+        """Test that include_values=False doesn't populate current_value."""
+        params = exposed_simple_agent.get_exposed_params(
+            scan_runtime=True,
+            include_values=False,
+        )
+
+        for p in params:
+            assert p.current_value is None
+
+    def test_include_values_true(self, exposed_complex_agent):
+        """Test that include_values=True populates current_value."""
+        params = exposed_complex_agent.get_exposed_params(
+            scan_runtime=True,
+            include_values=True,
+        )
+        param_dict = {p.name: p for p in params}
+
+        assert param_dict["component.name"].current_value == "component"
+        assert param_dict["component.config.temperature"].current_value == 0.7
+        assert param_dict["component.config.max_tokens"].current_value == 100
+
+
+class TestAttributeAccess:
+    """Tests for dict-like attribute access ([], get()) with nested components."""
+
+    # __getitem__ tests
+    def test_getitem_simple_path(self, exposed_simple_agent):
+        """Test __getitem__ with simple path."""
+        value = exposed_simple_agent["component.value"]
+        assert value == "default"
+
+    def test_getitem_nested_path(self, exposed_complex_agent):
+        """Test __getitem__ with nested path."""
+        value = exposed_complex_agent["component.config.temperature"]
+        assert value == 0.7
+
+    def test_getitem_intermediate_object(self, exposed_complex_agent):
+        """Test __getitem__ can access intermediate objects."""
+        from .conftest import ExposedNestedConfig
+
+        config = exposed_complex_agent["component.config"]
+        assert isinstance(config, ExposedNestedConfig)
+        assert config.temperature == 0.7
+
+    def test_getitem_multiple_paths(self, exposed_multi_agent):
+        """Test __getitem__ with multiple component paths."""
+        assert exposed_multi_agent["simple.value"] == "default"
+        assert exposed_multi_agent["complex.name"] == "component"
+        assert exposed_multi_agent["complex.config.temperature"] == 0.7
+
+    def test_getitem_missing_raises(self, exposed_simple_agent):
+        """Test that __getitem__ raises AttributeError for missing path."""
+        import pytest
+
+        with pytest.raises(AttributeError):
+            _ = exposed_simple_agent["nonexistent.path"]
+
+    def test_getitem_partial_missing_raises(self, exposed_complex_agent):
+        """Test that __getitem__ raises AttributeError for partial missing path."""
+        import pytest
+
+        with pytest.raises(AttributeError):
+            _ = exposed_complex_agent["component.missing.field"]
+
+    # __setitem__ tests
+    def test_setitem_simple_path(self, exposed_simple_agent):
+        """Test __setitem__ with simple path."""
+        exposed_simple_agent["component.value"] = "new_value"
+        assert exposed_simple_agent.component.value == "new_value"
+
+    def test_setitem_nested_path(self, exposed_complex_agent):
+        """Test __setitem__ with nested path."""
+        exposed_complex_agent["component.config.temperature"] = 0.9
+        assert exposed_complex_agent.component.config.temperature == 0.9
+
+    def test_setitem_multiple_updates(self, exposed_complex_agent):
+        """Test multiple __setitem__ operations."""
+        exposed_complex_agent["component.name"] = "updated"
+        exposed_complex_agent["component.config.temperature"] = 0.5
+        exposed_complex_agent["component.config.max_tokens"] = 200
+
+        assert exposed_complex_agent.component.name == "updated"
+        assert exposed_complex_agent.component.config.temperature == 0.5
+        assert exposed_complex_agent.component.config.max_tokens == 200
+
+    def test_setitem_missing_raises(self, exposed_simple_agent):
+        """Test that __setitem__ raises AttributeError for missing path."""
+        import pytest
+
+        with pytest.raises(AttributeError):
+            exposed_simple_agent["nonexistent.path"] = "value"
+
+    # get() method tests
+    def test_get_existing_path(self, exposed_simple_agent):
+        """Test get() method returns value for existing path."""
+        value = exposed_simple_agent.get("component.value", "fallback")
+        assert value == "default"  # The actual value, not the fallback
+
+    def test_get_nested_path(self, exposed_complex_agent):
+        """Test get() method with nested path."""
+        value = exposed_complex_agent.get("component.config.temperature", 0.0)
+        assert value == 0.7
+
+    def test_get_missing_with_default(self, exposed_simple_agent):
+        """Test get() method returns default for missing path."""
+        value = exposed_simple_agent.get("nonexistent.path", "fallback")
+        assert value == "fallback"
+
+    def test_get_missing_none_default(self, exposed_simple_agent):
+        """Test get() method with None as default."""
+        value = exposed_simple_agent.get("nonexistent.path")
+        assert value is None
+
+    def test_get_vs_getitem_missing_key(self, exposed_complex_agent):
+        """Test that get() doesn't raise but __getitem__ does for missing keys."""
+        import pytest
+
+        # get() returns default
+        value = exposed_complex_agent.get("missing.key", "default")
+        assert value == "default"
+
+        # __getitem__ raises
+        with pytest.raises(AttributeError):
+            _ = exposed_complex_agent["missing.key"]
+
+
+class TestIntegration:
+    """Integration tests for mixed operations and round-trip scenarios."""
+
+    def test_round_trip_simple(self, exposed_simple_agent):
+        """Test setting and getting via dict interface."""
+        exposed_simple_agent["component.value"] = "updated"
+
+        # Via dict interface
+        assert exposed_simple_agent["component.value"] == "updated"
+        # Via direct access
+        assert exposed_simple_agent.component.value == "updated"
+
+    def test_round_trip_nested(self, exposed_complex_agent):
+        """Test round-trip with nested paths."""
+        exposed_complex_agent["component.name"] = "new_name"
+        exposed_complex_agent["component.config.temperature"] = 0.85
+
+        # Via dict interface
+        assert exposed_complex_agent["component.name"] == "new_name"
+        assert exposed_complex_agent["component.config.temperature"] == 0.85
+
+        # Via direct access
+        assert exposed_complex_agent.component.name == "new_name"
+        assert exposed_complex_agent.component.config.temperature == 0.85
+
+    def test_round_trip_multiple_components(self, exposed_multi_agent):
+        """Test round-trip with multiple components."""
+        exposed_multi_agent["simple.value"] = "simple_updated"
+        exposed_multi_agent["complex.name"] = "complex_updated"
+        exposed_multi_agent["complex.config.temperature"] = 0.95
+
+        assert exposed_multi_agent["simple.value"] == "simple_updated"
+        assert exposed_multi_agent["complex.name"] == "complex_updated"
+        assert exposed_multi_agent["complex.config.temperature"] == 0.95
+
+    def test_modify_via_dict_check_via_params(self, exposed_complex_agent):
+        """Test modifying via dict interface and checking via get_exposed_params."""
+        # Modify via dict interface
+        exposed_complex_agent["component.config.temperature"] = 0.99
+
+        # Check via get_exposed_params with values
+        params = exposed_complex_agent.get_exposed_params(
+            scan_runtime=True,
+            include_values=True,
+        )
+        temp_param = next(p for p in params if p.name == "component.config.temperature")
+
+        assert temp_param.current_value == 0.99
+
+    def test_get_for_safe_access(self, exposed_multi_agent):
+        """Test using get() for safe access to potentially missing paths."""
+        # Existing paths
+        assert exposed_multi_agent.get("simple.value") == "default"
+        assert exposed_multi_agent.get("complex.name") == "component"
+
+        # Non-existing paths don't raise
+        assert exposed_multi_agent.get("nonexistent") is None
+        assert exposed_multi_agent.get("also.missing", "fallback") == "fallback"
+
+    def test_mixed_access_methods(self, exposed_complex_agent):
+        """Test mixing direct access, dict access, and get() method."""
+        # Set via dict interface
+        exposed_complex_agent["component.name"] = "dict_set"
+
+        # Get via direct access
+        assert exposed_complex_agent.component.name == "dict_set"
+
+        # Get via get() method
+        assert exposed_complex_agent.get("component.name") == "dict_set"
+
+        # Set via direct access
+        exposed_complex_agent.component.config.temperature = 0.6
+
+        # Get via dict interface
+        assert exposed_complex_agent["component.config.temperature"] == 0.6

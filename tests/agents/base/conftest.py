@@ -97,10 +97,80 @@ class DummyAgentWithExposedConfig(
     config_schema = DummyExposedConfigSchema
 
 
+# ============================================================================
+# Exposure Testing Components
+# ============================================================================
+
+
+class ExposedSimpleComponent:
+    """Simple component with exposed field for testing."""
+
+    value: Annotated[str, Exposed(description="Simple value")] = "default"
+
+
+class ExposedNestedConfig(BaseAgentConfig):
+    """Nested configuration with exposed parameters."""
+
+    temperature: Annotated[float, Exposed(description="Temperature parameter")] = 0.7
+    max_tokens: Annotated[int, Exposed(description="Maximum tokens")] = 100
+
+
+class ExposedComplexComponent:
+    """Complex component with nested configuration for testing."""
+
+    name: Annotated[str, Exposed(description="Component name")] = "component"
+
+    def __init__(self):
+        self.config = ExposedNestedConfig()
+
+
+class ExposedAgentWithSimpleComponent(
+    LiteLLMInstructorBaseAgent[AgentTestInputSchema, AgentTestOutputSchema],
+):
+    """Agent with simple nested component for exposure testing."""
+
+    input_schema = AgentTestInputSchema
+    output_schema = AgentTestOutputSchema
+
+    def __init__(self, config: BaseAgentConfig | None = None):
+        super().__init__(config)
+        self.component = ExposedSimpleComponent()
+
+
+class ExposedAgentWithComplexComponent(
+    LiteLLMInstructorBaseAgent[AgentTestInputSchema, AgentTestOutputSchema],
+):
+    """Agent with complex nested component for exposure testing."""
+
+    input_schema = AgentTestInputSchema
+    output_schema = AgentTestOutputSchema
+
+    def __init__(self, config: BaseAgentConfig | None = None):
+        super().__init__(config)
+        self.component = ExposedComplexComponent()
+
+
+class ExposedAgentWithMultipleComponents(
+    LiteLLMInstructorBaseAgent[AgentTestInputSchema, AgentTestOutputSchema],
+):
+    """Agent with multiple nested components for exposure testing."""
+
+    input_schema = AgentTestInputSchema
+    output_schema = AgentTestOutputSchema
+
+    def __init__(self, config: BaseAgentConfig | None = None):
+        super().__init__(config)
+        self.simple = ExposedSimpleComponent()
+        self.complex = ExposedComplexComponent()
+
+
 # Prevent pytest from collecting test classes as tests themselves
 TestInstructorBaseAgent.__test__ = False
 TestLiteLLMAgent.__test__ = False
 DummyAgentWithExposedConfig.__test__ = False
+ExposedAgentWithSimpleComponent.__test__ = False
+ExposedAgentWithComplexComponent.__test__ = False
+ExposedAgentWithMultipleComponents.__test__ = False
 
 
 # Shared fixtures
@@ -173,6 +243,25 @@ def litellm_expected_output() -> LiteLLMTestOutputSchema:
         response="Test response",
         confidence=0.9,
     )
+
+
+# Exposure testing fixtures
+@pytest.fixture
+def exposed_simple_agent(default_config: BaseAgentConfig) -> ExposedAgentWithSimpleComponent:
+    """Create agent with simple nested component for exposure testing."""
+    return ExposedAgentWithSimpleComponent(default_config)
+
+
+@pytest.fixture
+def exposed_complex_agent(default_config: BaseAgentConfig) -> ExposedAgentWithComplexComponent:
+    """Create agent with complex nested component for exposure testing."""
+    return ExposedAgentWithComplexComponent(default_config)
+
+
+@pytest.fixture
+def exposed_multi_agent(default_config: BaseAgentConfig) -> ExposedAgentWithMultipleComponents:
+    """Create agent with multiple nested components for exposure testing."""
+    return ExposedAgentWithMultipleComponents(default_config)
 
 
 # Mock fixtures
