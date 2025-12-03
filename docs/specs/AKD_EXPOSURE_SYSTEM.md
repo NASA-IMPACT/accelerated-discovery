@@ -209,6 +209,8 @@ When a class inherits from `ParamExposureMixin` (via base agent classes):
 
 The pipe operator approach enables runtime parameter exposure using Python's `__ror__` operator. This is the only strategy that works for values created in `__init__`, where Python erases type annotations.
 
+> **Why Pipe Operator is Needed**: Python's type annotations in function bodies (including `__init__`) are compile-time only and not available at runtime. When you write `self.field: Annotated[str, Exposed(...)] = "value"` inside `__init__`, Python discards the annotation after type checking - it doesn't store it in `__annotations__`. This is why the pipe operator is necessary for runtime exposure of instance-level attributes.
+
 ### Basic Example
 
 ```python
@@ -281,6 +283,46 @@ Built-in types (str, int, float, list, dict, etc.) get special subclasses that p
 - **Runtime Discovery**: Found via `scan_runtime=True`
 - **LRU Cached**: Metadata preserved across scans even if value changes
 
+### Critical Limitation: Constructor-Only Initialization
+
+**IMPORTANT**: Values exposed via pipe operator **must be initialized with `| Exposed()` in the constructor (`__init__`)**. Any mutation outside the constructor will lose the exposure metadata:
+
+```python
+class Component:
+    def __init__(self):
+        # ✅ Correct: Initialize with pipe operator in constructor
+        self.rate_limit = 5.0 | Exposed(description="API rate limit")
+
+    def update_rate_limit(self, new_value: float):
+        # ❌ Wrong: This loses the Exposed metadata!
+        self.rate_limit = new_value
+
+        # The metadata is gone - get_exposed_params() won't find it anymore
+        # (unless LRU cache still has it from first scan)
+
+# What happens:
+component = Component()
+params = component.get_exposed_params(scan_runtime=True)
+# "rate_limit" is found ✓
+
+component.update_rate_limit(10.0)  # Reassigns without | Exposed()
+params = component.get_exposed_params(scan_runtime=True)
+# "rate_limit" might still appear due to LRU cache
+# But the actual value is no longer an AnnotatedFloat - just a regular float
+```
+
+**Why this happens**:
+- When you assign `self.rate_limit = new_value` (without the pipe operator), you're replacing the `AnnotatedFloat` instance with a regular `float`
+- The new `float` has no `_exposed_metadata` attribute
+- The runtime scanner won't detect it on fresh scans
+- LRU cache may preserve the metadata temporarily, but the value itself is no longer exposed
+
+**Solution**: Don't mutate pipe-exposed values outside `__init__`. Use one of these alternatives:
+
+1. **Preferred**: Use class-level `Annotated` + constructor initialization (see "Alternative to Pipe Operator" above)
+2. **If you must use pipe**: Keep the original annotated instance and modify it in-place (for mutable types only)
+3. **Best for mutable state**: Use `@exposed_param` decorator with proper getter/setter
+
 ### When to Use
 
 - Components created dynamically in `__init__`
@@ -300,6 +342,33 @@ Built-in types (str, int, float, list, dict, etc.) get special subclasses that p
 - Type mutation (`type(x) == str` fails, but `isinstance(x, str)` works)
 - Requires runtime discovery (`scan_runtime=True`)
 - Slightly less discoverable than class-level annotations
+
+### Alternative to Pipe Operator
+
+**Preferred Alternative**: Instead of using the pipe operator, consider defining class-level `Annotated` attributes and initializing them in the constructor:
+
+```python
+class Component:
+    # Declare at class level (visible to type checkers and framework)
+    rate_limit: Annotated[float, Exposed(description="API rate limit")] = 5.0
+
+    def __init__(self):
+        # Initialize or override in constructor
+        self.rate_limit = 10.0  # Can customize per instance
+```
+
+This approach:
+- ✅ Uses standard `Annotated` syntax (more discoverable)
+- ✅ No type mutation (`type(self.rate_limit) == float`)
+- ✅ Works with static type checkers
+- ✅ Discovered at class creation time (no runtime scanning needed)
+
+**When Pipe Operator is Actually Needed**:
+- Dynamic values computed at runtime that can't be class attributes
+- Third-party components you can't modify
+- Truly instance-specific compositions
+
+For most cases, prefer class-level declarations with constructor initialization over the pipe operator.
 
 ---
 
@@ -746,6 +815,112 @@ for param in agent.get_exposed_params():
 
 # ... (more parameters)
 ```
+
+---
+
+## Best Practices and Important Notes
+
+### For Deeply Nested Parameters: Use Decorators
+
+When exposing deeply nested parameters (3+ levels deep), **strongly prefer the decorator-based approach** (`@exposed_param`) over automatic scanning:
+
+```python
+class Agent:
+    def __init__(self):
+        self.component = ComplexComponent()
+        # This creates a deeply nested structure:
+        # self.component.sub_component.config.nested_param
+
+    # ❌ Avoid: Relying on runtime scanning for deep nesting
+    # Requires scan_runtime=True with high runtime_max_depth
+    # Performance overhead and less explicit
+
+    # ✅ Prefer: Explicit decorator exposure
+    @exposed_param(description="Nested configuration parameter")
+    def nested_config_param(self) -> str:
+        return self.component.sub_component.config.nested_param
+
+    @nested_config_param.setter
+    def nested_config_param(self, val: str) -> None:
+        self.component.sub_component.config.nested_param = val
+```
+
+**Why Decorators for Deep Nesting:**
+- **Performance**: No recursive scanning overhead
+- **Explicitness**: Clear what's exposed, easier to maintain
+- **Control**: Add validation, logging, or side effects
+- **Discoverability**: Visible in agent class definition
+- **Type Safety**: Full type checking in getter/setter
+
+**When Automatic Scanning is OK:**
+- Shallow nesting (1-2 levels: `component.field`)
+- Development/prototyping
+- Components with many similar fields
+
+### Avoid Over-Using the Pipe Operator
+
+The pipe operator (`|`) is convenient but should be used sparingly:
+
+**Don't use pipe operator when**:
+- Class-level `Annotated` declarations work fine
+- You're creating many similar fields
+- The component structure is stable
+
+**Do use pipe operator only when**:
+- Annotations genuinely don't work (`__init__` only)
+- Dynamic runtime composition is required
+- Working with third-party components
+- **AND** the value won't be reassigned after initialization
+
+**Remember**:
+- Class-level `Annotated` + constructor initialization is almost always better than pipe operator
+- Pipe-exposed values **must not be reassigned** outside `__init__` or metadata is lost
+- If you need mutable exposed parameters, use `@exposed_param` decorator instead
+
+### Runtime Scanning Performance
+
+Runtime scanning (`scan_runtime=True`) has performance implications:
+
+- **Caching**: Results are LRU cached, but first scan traverses entire object graph
+- **Depth Limit**: Keep `runtime_max_depth` low (default: 3) to avoid deep traversal
+- **Circular References**: Framework detects cycles, but deep graphs still slow
+
+**For production agents**:
+- Use decorators and annotations for known parameters
+- Reserve `scan_runtime=True` for dynamic/plugin components
+- Consider disabling runtime scanning if not needed
+
+### Type Mutation with Pipe Operator
+
+The pipe operator creates annotated subclasses:
+
+```python
+value = "text" | Exposed(...)
+type(value).__name__  # "AnnotatedStr", not "str"
+isinstance(value, str)  # True ✅
+```
+
+**Implications**:
+- `type(x) == str` checks will fail
+- `isinstance(x, str)` checks work fine
+- Operations return base type: `value.upper()` → regular `str`
+- Acceptable for stored attributes, but be aware for serialization
+
+### Serialization and Pickling
+
+Annotated subclasses from pipe operator may have serialization quirks:
+
+```python
+# Standard serialization works
+import json
+json.dumps(value)  # Works - AnnotatedStr is str subclass
+
+# Pickle works but loses metadata
+import pickle
+pickled = pickle.dumps(value)  # Metadata might be lost
+```
+
+If you need to serialize exposed parameters, use `get_exposed_params()` to extract metadata separately.
 
 ---
 
