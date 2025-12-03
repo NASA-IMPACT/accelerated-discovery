@@ -190,22 +190,6 @@ class PDS4QueryApproach(BaseModel):
         description="All instrument URNs extracted and ranked (top 3, used in collection search combinations)"
     )
 
-    # Legacy single URN fields (DEPRECATED - kept for backward compatibility, excluded from serialization)
-    investigation_urn: Optional[str] = Field(
-        None,
-        description="[DEPRECATED] Top investigation URN - use investigation_urns[0] instead"
-    )
-
-    target_urn: Optional[str] = Field(
-        None,
-        description="[DEPRECATED] Top target URN - use target_urns[0] instead"
-    )
-
-    instrument_urn: Optional[str] = Field(
-        None,
-        description="[DEPRECATED] Top instrument URN - use instrument_urns[0] instead"
-    )
-
     def get_context_search_params(self) -> Dict[str, Any]:
         """
         Get parameters for context discovery tools.
@@ -287,6 +271,100 @@ class PDS4ParameterExtractionOutput(BaseModel):
 
 
 # ============================================================================
+# Context Search URN Filtering Component Schemas
+# ============================================================================
+
+class PDS4ContextSearchURNFilteringInput(InputSchema):
+    """
+    Input for LLM-based URN filtering component.
+
+    This component uses an LLM to intelligently filter URNs from context searches
+    based on keyword relevance rather than simple keyword scoring.
+    """
+
+    # Full context chain for understanding user intent
+    original_query: str = Field(
+        ...,
+        description="The initial user query"
+    )
+
+    topic: str = Field(
+        ...,
+        description="The specific topic from topic splitting"
+    )
+
+    decomposition: str = Field(
+        ...,
+        description="The scientific decomposition text"
+    )
+
+    strategy_description: str = Field(
+        ...,
+        description="Tool sequence and parameters from parameter extraction"
+    )
+
+    # Context search keywords (primary filtering criteria)
+    investigation_keywords: List[str] = Field(
+        default_factory=list,
+        description="Keywords used for investigation context search"
+    )
+
+    target_keywords: List[str] = Field(
+        default_factory=list,
+        description="Keywords used for target context search"
+    )
+
+    instrument_keywords: List[str] = Field(
+        default_factory=list,
+        description="Keywords used for instrument context search"
+    )
+
+    # Context search results
+    investigation_results: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Investigation search results with URN, title, description"
+    )
+
+    target_results: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Target search results with URN, title, description"
+    )
+
+    instrument_results: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Instrument search results with URN, title, description"
+    )
+
+
+class PDS4ContextSearchURNFilteringOutput(BaseModel):
+    """
+    Output from LLM-based URN filtering component.
+
+    Contains the LLM-selected URNs and reasoning for selections.
+    """
+
+    selected_investigation_urns: List[str] = Field(
+        default_factory=list,
+        description="URNs selected by LLM for investigations (0 to unlimited)"
+    )
+
+    selected_target_urns: List[str] = Field(
+        default_factory=list,
+        description="URNs selected by LLM for targets (0 to unlimited)"
+    )
+
+    selected_instrument_urns: List[str] = Field(
+        default_factory=list,
+        description="URNs selected by LLM for instruments (0 to unlimited)"
+    )
+
+    reasoning: str = Field(
+        ...,
+        description="LLM's explanation for URN selections and keyword matches"
+    )
+
+
+# ============================================================================
 # Approach Filtering Component Schemas
 # ============================================================================
 
@@ -329,21 +407,6 @@ class PDS4ApproachCollectionFilteringInputSchema(BaseApproachFilteringInputSchem
     instrument_urns: List[str] = Field(
         default_factory=list,
         description="All instrument URNs used in collection searches (top 3, used in combinations)",
-    )
-
-    # Legacy single URN fields (DEPRECATED - use plural fields above)
-    # These will be removed from serialization
-    investigation_urn: Optional[str] = Field(
-        None,
-        description="[DEPRECATED] Top investigation URN - use investigation_urns instead",
-    )
-    target_urn: Optional[str] = Field(
-        None,
-        description="[DEPRECATED] Top target URN - use target_urns instead",
-    )
-    instrument_urn: Optional[str] = Field(
-        None,
-        description="[DEPRECATED] Top instrument URN - use instrument_urns instead",
     )
 
     # Use base class fields (data_items, max_items) and provide PDS4-specific aliases
