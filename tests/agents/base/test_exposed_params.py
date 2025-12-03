@@ -513,6 +513,97 @@ class TestAttributeAccess:
             _ = exposed_complex_agent["missing.key"]
 
 
+class TestPipeOperatorExposure:
+    """Tests for pipe operator instance-level parameter exposure."""
+
+    def test_pipe_operator_basic_exposure(self, exposed_multi_agent):
+        """Test that pipe operator exposes instance-level parameters."""
+        params = exposed_multi_agent.get_exposed_params(scan_runtime=True)
+        param_names = {p.name for p in params}
+
+        # Should discover pipe operator exposed fields
+        assert "pipe_mixed.instance_field" in param_names
+        assert "pipe_mixed.nested.nested_field" in param_names
+
+    def test_pipe_operator_mixed_with_class_level(self, exposed_multi_agent):
+        """Test mixing class-level and pipe operator exposure."""
+        params = exposed_multi_agent.get_exposed_params(scan_runtime=True)
+        param_dict = {p.name: p for p in params}
+
+        # Both class-level and instance-level should be exposed
+        assert "pipe_mixed.class_field" in param_dict
+        assert "pipe_mixed.instance_field" in param_dict
+
+        # Check descriptions
+        assert param_dict["pipe_mixed.class_field"].description == "Class-level field"
+        assert param_dict["pipe_mixed.instance_field"].description == "Instance field via pipe"
+
+    def test_pipe_operator_nested_discovery(self, exposed_multi_agent):
+        """Test deep nesting with pipe operator."""
+        params = exposed_multi_agent.get_exposed_params(
+            scan_runtime=True,
+            include_values=True,
+        )
+        param_dict = {p.name: p for p in params}
+
+        # Should discover deeply nested pipe-exposed field
+        assert "pipe_mixed.nested.nested_field" in param_dict
+        assert param_dict["pipe_mixed.nested.nested_field"].description == "Nested field via pipe"
+        assert param_dict["pipe_mixed.nested.nested_field"].current_value == "deeply nested value"
+
+    def test_pipe_operator_type_preservation(self, exposed_multi_agent):
+        """Test that pipe operator preserves isinstance() behavior."""
+        # The value should still behave like a string
+        value = exposed_multi_agent.pipe_mixed.instance_field
+
+        # isinstance should work (AnnotatedStr is subclass of str)
+        assert isinstance(value, str)
+
+        # String operations should work
+        assert value.upper() == "INSTANCE_VALUE"
+
+    def test_pipe_operator_cache_preservation(self, exposed_multi_agent):
+        """Test that LRU cache preserves pipe metadata across scans."""
+        # First scan
+        params1 = exposed_multi_agent.get_exposed_params(scan_runtime=True)
+        param_names1 = {p.name for p in params1}
+
+        # Reassign value without pipe operator (metadata lost in value)
+        exposed_multi_agent.pipe_mixed.instance_field = "new_value"
+
+        # Second scan should still find it due to LRU cache
+        params2 = exposed_multi_agent.get_exposed_params(scan_runtime=True)
+        param_names2 = {p.name for p in params2}
+
+        # Both scans should find the same exposed params
+        assert "pipe_mixed.instance_field" in param_names1
+        assert "pipe_mixed.instance_field" in param_names2
+
+    def test_pipe_operator_type_annotation(self, exposed_multi_agent):
+        """Test that pipe operator exposed params have correct type info."""
+        params = exposed_multi_agent.get_exposed_params(scan_runtime=True)
+        param_dict = {p.name: p for p in params}
+
+        # Check type is AnnotatedStr (from dynamic subclass)
+        pipe_param = param_dict["pipe_mixed.instance_field"]
+        assert "Annotated" in pipe_param.type_ or pipe_param.type_ == "str"
+
+        # Check type source is runtime
+        assert pipe_param.type_source.value == "runtime"
+
+    def test_pipe_operator_with_values(self, exposed_multi_agent):
+        """Test pipe operator with include_values=True."""
+        params = exposed_multi_agent.get_exposed_params(
+            scan_runtime=True,
+            include_values=True,
+        )
+        param_dict = {p.name: p for p in params}
+
+        assert param_dict["pipe_mixed.instance_field"].current_value == "instance_value"
+        assert param_dict["pipe_mixed.class_field"].current_value == "class_value"
+        assert param_dict["pipe_mixed.nested.nested_field"].current_value == "deeply nested value"
+
+
 class TestIntegration:
     """Integration tests for mixed operations and round-trip scenarios."""
 

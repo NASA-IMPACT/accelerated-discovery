@@ -162,6 +162,31 @@ class ExposedAgentWithMultipleComponents(
         super().__init__(config)
         self.simple = ExposedSimpleComponent()
         self.complex = ExposedComplexComponent()
+        self.pipe_mixed = PipeMixedComponent()
+
+
+# ============================================================================
+# Pipe Operator Testing Components (Instance-Level Exposure)
+# ============================================================================
+
+
+class PipeNestedComponent:
+    """Nested component using pipe operator for instance-level exposure."""
+
+    def __init__(self):
+        self.nested_field = "deeply nested value" | Exposed(
+            description="Nested field via pipe",
+        )
+
+
+class PipeMixedComponent:
+    """Component mixing class-level annotations and pipe operator."""
+
+    class_field: Annotated[str, Exposed(description="Class-level field")] = "class_value"
+
+    def __init__(self):
+        self.instance_field = "instance_value" | Exposed(description="Instance field via pipe")
+        self.nested = PipeNestedComponent()
 
 
 # Prevent pytest from collecting test classes as tests themselves
