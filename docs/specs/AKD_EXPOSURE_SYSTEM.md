@@ -33,9 +33,9 @@ The decorator-based approach provides the highest level of control over paramete
 
 ```python
 from akd._base import exposed_param
-from akd.agents._base import InstructorBaseAgent
+from akd.agents._base import LiteLLMInstructorBaseAgent
 
-class QueryAgent(InstructorBaseAgent):
+class QueryAgent(LiteLLMInstructorBaseAgent):
     def __init__(self, config=None):
         super().__init__(config=config)
         self._clarification_prompt = "Default clarification prompt"
