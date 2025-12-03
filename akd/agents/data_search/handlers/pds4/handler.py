@@ -25,6 +25,7 @@ from akd.utils.serialization import safe_model_dump, safe_model_dump_list
 from .._base import BaseHandler
 from .components import (
     PDS4ApproachCollectionFilteringComponent,
+    PDS4ContextSearchURNFilteringComponent,
     PDS4FinalCollectionRankingComponent,
     PDS4ParameterExtractionComponent,
 )
@@ -96,10 +97,14 @@ class PDS4Handler(BaseHandler):
         # Get PDS4 prompts directory
         self.pds4_prompts_dir = Path(__file__).parent / "prompts"
 
-        # Store component config for creating per-call instances
+        # Store component configs for creating per-call instances
         # This prevents race conditions when processing multiple decompositions in parallel
         self.parameter_extraction_config = BaseAgentConfig(
             model_name=config.parameter_extraction_model,
+        )
+        self.context_search_urn_filtering_config = BaseAgentConfig(
+            model_name=config.context_search_urn_filtering_model,
+            llm_timeout=config.context_search_urn_filtering_timeout,
         )
 
     @property
@@ -172,6 +177,9 @@ class PDS4Handler(BaseHandler):
         ) = await self._execute_query_approaches(
             approaches_to_use,
             params,
+            original_query,
+            topic,
+            decomposition,
         )
         total_collections = sum(len(c) for c in strategy_collections.values())
 
@@ -516,6 +524,9 @@ class PDS4Handler(BaseHandler):
         approach: PDS4QueryApproach,
         params: DataSearchAgentInputSchema,
         approach_idx: int,
+        original_query: str,
+        topic,
+        decomposition,
     ) -> Dict[str, Any]:
         """
         Execute a single query approach and return results.
@@ -531,6 +542,9 @@ class PDS4Handler(BaseHandler):
             approach: Query approach to execute
             params: Search parameters
             approach_idx: Index of the approach
+            original_query: Original user query
+            topic: Topic from topic splitting
+            decomposition: Scientific decomposition
 
         Returns:
             Dictionary with approach_idx, collections, and execution metadata
@@ -594,28 +608,104 @@ class PDS4Handler(BaseHandler):
                 execution_metadata["context_searches_executed"].append("instrument")
                 execution_metadata["urns_extracted"]["instrument"] = instrument_urns
 
-            # Store URN lists in approach for use in filtering (top 3 used in combinations)
-            max_inv_urns = self.config.max_investigation_urns_per_approach
-            max_tgt_urns = self.config.max_target_urns_per_approach
-            max_inst_urns = self.config.max_instrument_urns_per_approach
+            # Filter URNs using LLM or fallback to keyword-based (top 3) approach
+            llm_filtering_failed = False
 
-            approach.investigation_urns = investigation_urns[:max_inv_urns]
-            approach.target_urns = target_urns[:max_tgt_urns]
-            approach.instrument_urns = instrument_urns[:max_inst_urns]
+            if self.config.enable_llm_urn_filtering:
+                # LLM-based URN filtering (new approach)
+                if self.debug:
+                    logger.debug("Using LLM-based URN filtering...")
 
-            # Store first URN for backward compatibility (DEPRECATED - use plural fields)
-            if investigation_urns:
-                approach.investigation_urn = investigation_urns[0]
-            if target_urns:
-                approach.target_urn = target_urns[0]
-            if instrument_urns:
-                approach.instrument_urn = instrument_urns[0]
+                try:
+                    # Create URN filtering component instance
+                    urn_filtering_component = PDS4ContextSearchURNFilteringComponent(
+                        config=self.context_search_urn_filtering_config,
+                        debug=self.debug,
+                        prompts_dir=self.pds4_prompts_dir,
+                    )
+
+                    # Limit context results to prevent excessive prompt size
+                    max_results = self.config.context_search_urn_filtering_max_results
+                    limited_investigations = investigations[:max_results] if len(investigations) > max_results else investigations
+                    limited_targets = targets[:max_results] if len(targets) > max_results else targets
+                    limited_instruments = instruments[:max_results] if len(instruments) > max_results else instruments
+
+                    if self.debug and (len(investigations) > max_results or len(targets) > max_results or len(instruments) > max_results):
+                        logger.debug(
+                            f"Limiting context results for URN filtering: "
+                            f"{len(investigations)}->{len(limited_investigations)} investigations, "
+                            f"{len(targets)}->{len(limited_targets)} targets, "
+                            f"{len(instruments)}->{len(limited_instruments)} instruments"
+                        )
+
+                    # Call LLM to filter URNs
+                    filtering_result = await urn_filtering_component.process(
+                        original_query=original_query,
+                        topic=topic.title if hasattr(topic, 'title') else str(topic),
+                        decomposition=decomposition.title if hasattr(decomposition, 'title') else str(decomposition),
+                        strategy_description=approach.approach_description,
+                        investigation_keywords=approach.investigation_keywords,
+                        target_keywords=approach.target_keywords,
+                        instrument_keywords=approach.instrument_keywords,
+                        investigation_results=limited_investigations,
+                        target_results=limited_targets,
+                        instrument_results=limited_instruments,
+                    )
+
+                    # Use LLM-selected URNs
+                    investigation_urns_filtered = filtering_result.selected_investigation_urns
+                    target_urns_filtered = filtering_result.selected_target_urns
+                    instrument_urns_filtered = filtering_result.selected_instrument_urns
+
+                    if self.debug:
+                        logger.debug(
+                            f"LLM filtered URNs: {len(investigation_urns_filtered)} investigations, "
+                            f"{len(target_urns_filtered)} targets, {len(instrument_urns_filtered)} instruments"
+                        )
+                        logger.debug(f"Filtering reasoning: {filtering_result.reasoning[:200]}...")
+
+                    # Store filtered URNs
+                    approach.investigation_urns = investigation_urns_filtered
+                    approach.target_urns = target_urns_filtered
+                    approach.instrument_urns = instrument_urns_filtered
+
+                    execution_metadata["urn_filtering_method"] = "llm"
+                    execution_metadata["urn_filtering_reasoning"] = filtering_result.reasoning
+
+                except Exception as e:
+                    # LLM filtering failed (timeout or other error) - fallback to keyword-based
+                    error_msg = str(e)
+                    llm_filtering_failed = True
+
+                    if self.debug:
+                        logger.warning(
+                            f"LLM URN filtering failed ({error_msg}), falling back to keyword-based filtering"
+                        )
+
+                    # Fall through to keyword-based filtering below
+
+            if not self.config.enable_llm_urn_filtering or llm_filtering_failed:
+                # Keyword-based filtering (legacy approach) - limit to top 3
+                if self.debug:
+                    logger.debug("Using keyword-based URN filtering (top 3)...")
+
+                max_inv_urns = self.config.max_investigation_urns_per_approach
+                max_tgt_urns = self.config.max_target_urns_per_approach
+                max_inst_urns = self.config.max_instrument_urns_per_approach
+
+                approach.investigation_urns = investigation_urns[:max_inv_urns]
+                approach.target_urns = target_urns[:max_tgt_urns]
+                approach.instrument_urns = instrument_urns[:max_inst_urns]
+
+                execution_metadata["urn_filtering_method"] = "keyword_based_fallback" if llm_filtering_failed else "keyword_based"
+                if llm_filtering_failed:
+                    execution_metadata["urn_filtering_error"] = error_msg
 
             # Step 2: Generate URN combinations and execute collection searches
             urn_combinations = self._generate_urn_combinations(
-                investigation_urns,
-                target_urns,
-                instrument_urns,
+                approach.investigation_urns,
+                approach.target_urns,
+                approach.instrument_urns,
             )
 
             # Track combination-specific metadata
@@ -698,6 +788,8 @@ class PDS4Handler(BaseHandler):
         except Exception as e:
             if self.debug:
                 logger.error(f"Approach {approach_idx} execution failed: {e}")
+                import traceback
+                logger.error(f"Traceback:\n{traceback.format_exc()}")
 
             return {
                 "approach_idx": approach_idx,
@@ -710,6 +802,9 @@ class PDS4Handler(BaseHandler):
         self,
         query_approaches: List[PDS4QueryApproach],
         params: DataSearchAgentInputSchema,
+        original_query: str,
+        topic,
+        decomposition,
     ) -> tuple[Dict[int, List[Dict[str, Any]]], List[Dict[str, Any]]]:
         """
         Execute query approaches in parallel and return collections grouped by approach.
@@ -717,6 +812,9 @@ class PDS4Handler(BaseHandler):
         Args:
             query_approaches: Approaches to execute
             params: Search parameters
+            original_query: Original user query
+            topic: Topic from topic splitting
+            decomposition: Scientific decomposition
 
         Returns:
             Tuple of (strategy_collections, execution_logs)
@@ -731,6 +829,9 @@ class PDS4Handler(BaseHandler):
                     approach,
                     params,
                     approach.approach_index,
+                    original_query,
+                    topic,
+                    decomposition,
                 )
                 approach_tasks.append(task)
 
@@ -744,6 +845,9 @@ class PDS4Handler(BaseHandler):
                     approach,
                     params,
                     approach.approach_index,
+                    original_query,
+                    topic,
+                    decomposition,
                 )
                 results.append(result)
 
@@ -795,12 +899,7 @@ class PDS4Handler(BaseHandler):
         total_pds4 = 0
 
         for approach in query_approaches:
-            # Exclude deprecated singular URN fields from serialization
-            # (plural URN fields contain the complete information)
-            approach_dict = safe_model_dump(
-                approach,
-                exclude={"investigation_urn", "target_urn", "instrument_urn"},
-            )
+            approach_dict = safe_model_dump(approach)
 
             # Find matching execution log
             matching_log = next(
@@ -904,10 +1003,6 @@ class PDS4Handler(BaseHandler):
                 investigation_urns=approach.investigation_urns,
                 target_urns=approach.target_urns,
                 instrument_urns=approach.instrument_urns,
-                # Legacy singular URNs (deprecated)
-                investigation_urn=approach.investigation_urn,
-                target_urn=approach.target_urn,
-                instrument_urn=approach.instrument_urn,
                 data_items=collections,
                 max_items=self.config.max_collections_per_strategy,
             )

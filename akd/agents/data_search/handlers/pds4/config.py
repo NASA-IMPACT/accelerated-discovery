@@ -39,19 +39,19 @@ class PDS4HandlerConfig(DataSearchToolConfig):
     # URN combination strategy
     max_investigation_urns_per_approach: int = Field(
         default=3,
-        description="Maximum number of investigation URNs to use per base approach",
+        description="[DEPRECATED when LLM filtering enabled] Safety limit for investigation URNs per approach (LLM decides actual count)",
     )
     max_target_urns_per_approach: int = Field(
         default=3,
-        description="Maximum number of target URNs to use per base approach",
+        description="[DEPRECATED when LLM filtering enabled] Safety limit for target URNs per approach (LLM decides actual count)",
     )
     max_instrument_urns_per_approach: int = Field(
         default=3,
-        description="Maximum number of instrument URNs to use per base approach",
+        description="[DEPRECATED when LLM filtering enabled] Safety limit for instrument URNs per approach (LLM decides actual count)",
     )
     max_approach_combinations: int = Field(
-        default=27,
-        description="Maximum total URN combinations to generate per base approach (3×3×3 for 3-way combinations)",
+        default=100,
+        description="Maximum total URN combinations to generate per base approach (safety limit when LLM filtering enabled)",
     )
 
     # Ranking pipeline configuration
@@ -96,10 +96,14 @@ class PDS4HandlerConfig(DataSearchToolConfig):
         description="Enable parallel execution of tool strategies",
     )
 
-    # Component model configuration (3 models for 3 components)
+    # Component model configuration (4 models for 4 components)
     parameter_extraction_model: str = Field(
         default="gpt-5-mini",
         description="Model to use for unified parameter extraction (tool strategies)",
+    )
+    context_search_urn_filtering_model: str = Field(
+        default="gpt-5-mini",
+        description="Model to use for LLM-based URN filtering from context searches",
     )
     strategy_filtering_model: str = Field(
         default="gpt-5-mini",
@@ -114,6 +118,18 @@ class PDS4HandlerConfig(DataSearchToolConfig):
     max_strategies: int = Field(
         default=4,
         description="Maximum number of tool strategies to generate and execute",
+    )
+    enable_llm_urn_filtering: bool = Field(
+        default=True,
+        description="Enable LLM-based URN filtering (vs keyword-based scoring). Set to False for backward compatibility.",
+    )
+    context_search_urn_filtering_timeout: float = Field(
+        default=600.0,
+        description="Timeout in seconds for LLM-based URN filtering calls (default 600s, 10 minutes)",
+    )
+    context_search_urn_filtering_max_results: int = Field(
+        default=15,
+        description="Maximum number of context results to send to LLM for URN filtering (per context type)",
     )
     enable_bundle_supplementary_search: bool = Field(
         default=True,
