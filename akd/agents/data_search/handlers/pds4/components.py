@@ -16,6 +16,8 @@ from akd.agents.data_search.utils.prompt_loader import load_and_format_prompt
 from .schemas import (
     PDS4ApproachCollectionFilteringInputSchema,
     PDS4ApproachCollectionFilteringOutput,
+    PDS4ContextSearchURNFilteringInput,
+    PDS4ContextSearchURNFilteringOutput,
     PDS4FinalCollectionRankingInputSchema,
     PDS4FinalCollectionRankingOutput,
     PDS4ParameterExtractionInputSchema,
@@ -132,6 +134,181 @@ class PDS4ParameterExtractionComponent(
                     logger.debug(f"  Approach {idx}: {approach.approach_description}")
 
         return result
+
+
+class PDS4ContextSearchURNFilteringComponent(
+    BaseDataSearchComponent[
+        PDS4ContextSearchURNFilteringInput,
+        PDS4ContextSearchURNFilteringOutput,
+    ],
+):
+    """
+    LLM-based URN filtering component for PDS4 context search results.
+
+    This component replaces keyword-based scoring with LLM judgment to select
+    relevant URNs from investigation, target, and instrument context searches.
+
+    The LLM evaluates URNs based on:
+    - Keyword matching against context search keywords (primary criterion)
+    - Relevance to user query, topic, and decomposition
+    - Compatibility across investigation/target/instrument combinations
+
+    Unlike the old approach which selected exactly 3 URNs per type, the LLM
+    has complete freedom to select 0 to unlimited URNs based on relevance.
+    """
+
+    input_schema = PDS4ContextSearchURNFilteringInput
+    output_schema = PDS4ContextSearchURNFilteringOutput
+
+    # Base class configuration
+    template_name = "context_search_urn_filtering"
+    default_temperature = 0.1  # Low temperature for consistent filtering decisions
+
+    def __init__(
+        self,
+        config: Optional[BaseAgentConfig] = None,
+        debug: bool = False,
+        prompts_dir: Optional[Path] = None,
+        run_id: Optional[str] = None,
+    ):
+        """Initialize the PDS4 context search URN filtering component."""
+        super().__init__(
+            config=config,
+            debug=debug,
+            template_name=self.template_name,
+            prompts_dir=prompts_dir,
+            run_id=run_id,
+        )
+
+    async def process(
+        self,
+        original_query: str,
+        topic: str,
+        decomposition: str,
+        strategy_description: str,
+        investigation_keywords: List[str],
+        target_keywords: List[str],
+        instrument_keywords: List[str],
+        investigation_results: List[Dict[str, Any]],
+        target_results: List[Dict[str, Any]],
+        instrument_results: List[Dict[str, Any]],
+    ) -> PDS4ContextSearchURNFilteringOutput:
+        """
+        Filter URNs from context search results using LLM judgment.
+
+        Args:
+            original_query: Original research query for context
+            topic: Topic being processed
+            decomposition: Scientific decomposition text
+            strategy_description: Tool sequence and parameters
+            investigation_keywords: Keywords used in investigation search
+            target_keywords: Keywords used in target search
+            instrument_keywords: Keywords used in instrument search
+            investigation_results: Investigation search results
+            target_results: Target search results
+            instrument_results: Instrument search results
+
+        Returns:
+            PDS4ContextSearchURNFilteringOutput with selected URNs and reasoning
+        """
+        if self.debug:
+            logger.debug(
+                f"Filtering URNs for strategy: '{strategy_description[:100]}...'",
+            )
+            logger.debug(
+                f"Context results: {len(investigation_results)} investigations, "
+                f"{len(target_results)} targets, {len(instrument_results)} instruments"
+            )
+
+        # Format keywords for prompt (lists → comma-separated strings)
+        formatted_investigation_keywords = ", ".join(investigation_keywords) if investigation_keywords else "None"
+        formatted_target_keywords = ", ".join(target_keywords) if target_keywords else "None"
+        formatted_instrument_keywords = ", ".join(instrument_keywords) if instrument_keywords else "None"
+
+        # Format context search results for LLM
+        formatted_investigation_results = self._format_context_results(
+            investigation_results, "investigation"
+        )
+        formatted_target_results = self._format_context_results(
+            target_results, "target"
+        )
+        formatted_instrument_results = self._format_context_results(
+            instrument_results, "instrument"
+        )
+
+        # Format user prompt
+        user_prompt = load_and_format_prompt(
+            template_name=f"{self.template_name}_user",
+            prompts_dir=self.prompts_dir,
+            original_query=original_query,
+            topic=topic,
+            decomposition=decomposition,
+            strategy_description=strategy_description,
+            investigation_keywords=formatted_investigation_keywords,
+            target_keywords=formatted_target_keywords,
+            instrument_keywords=formatted_instrument_keywords,
+            investigation_results=formatted_investigation_results,
+            target_results=formatted_target_results,
+            instrument_results=formatted_instrument_results,
+        )
+
+        # Save prompt for debugging
+        self._save_prompt_to_file(
+            user_prompt,
+            "context_search_urn_filtering",
+            f"{decomposition[:50]}",
+        )
+
+        # Get LLM response
+        self._add_user_message(user_prompt)
+        result = await self.get_response_async()
+
+        if self.debug:
+            logger.debug(
+                f"Selected URNs: {len(result.selected_investigation_urns)} investigations, "
+                f"{len(result.selected_target_urns)} targets, "
+                f"{len(result.selected_instrument_urns)} instruments"
+            )
+            logger.debug(f"Reasoning: {result.reasoning[:200]}...")
+
+        return result
+
+    def _format_context_results(
+        self,
+        results: List[Dict[str, Any]],
+        context_type: str,
+    ) -> str:
+        """
+        Format context search results for LLM consumption.
+
+        Args:
+            results: List of context search results
+            context_type: Type of context (investigation/target/instrument)
+
+        Returns:
+            Formatted string representation of results
+        """
+        if not results:
+            return f"No {context_type} results found."
+
+        formatted_lines = []
+        for idx, result in enumerate(results, 1):
+            # Extract key fields
+            urn = result.get("urn", result.get("id", "Unknown URN"))
+            title = result.get("title", "No title")
+            description = result.get("description", "No description")
+
+            # Truncate description if too long
+            if len(description) > 200:
+                description = description[:200] + "..."
+
+            formatted_lines.append(
+                f"{idx}. URN: {urn}\n"
+                f"   Title: {title}\n"
+                f"   Description: {description}"
+            )
+
+        return "\n\n".join(formatted_lines)
 
 
 class PDS4ApproachCollectionFilteringComponent(
