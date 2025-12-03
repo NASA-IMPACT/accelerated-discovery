@@ -41,10 +41,27 @@ CMR_MAX_SEARCHABLE_QUERIES = (
 )  # = 5 * 3 = 15
 
 # ============================================================================
-# PDS4 HANDLER LIMITS (Placeholder - not yet implemented)
+# PDS4 HANDLER LIMITS
 # ============================================================================
 
-# When PDS4 is implemented, add similar constants here:
-# PDS4_MAX_LLM_APPROACHES = 4
-# PDS4_MAX_SEARCH_VARIATIONS_PER_APPROACH = 3
-# etc.
+# Strategy Generation (per decomposition)
+PDS4_MAX_STRATEGIES = 4
+PDS4_MIN_STRATEGIES = 1
+
+# URN Filtering (per strategy)
+# NOTE: URN counts are now dynamically determined by LLM filtering component
+# The following are safety limits, not hard limits passed to the LLM
+PDS4_MAX_INVESTIGATION_URNS_PER_STRATEGY = 3  # Safety limit (deprecated when LLM filtering enabled)
+PDS4_MAX_TARGET_URNS_PER_STRATEGY = 3  # Safety limit (deprecated when LLM filtering enabled)
+PDS4_MAX_INSTRUMENT_URNS_PER_STRATEGY = 3  # Safety limit (deprecated when LLM filtering enabled)
+
+# URN Combination Safety Limit
+# Maximum total combinations to prevent combinatorial explosion when LLM selects many URNs
+PDS4_MAX_URN_COMBINATIONS_PER_STRATEGY = 100  # Safety limit (increased from 27 for LLM flexibility)
+
+# Collection Filtering (per strategy)
+PDS4_MAX_COLLECTIONS_PER_STRATEGY = 5
+PDS4_MIN_COLLECTIONS_PER_STRATEGY = 0
+
+# Final Ranking (cross-strategy)
+PDS4_FINAL_COLLECTION_COUNT = 25
