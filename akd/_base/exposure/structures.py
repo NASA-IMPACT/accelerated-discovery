@@ -1,5 +1,6 @@
 """Core data structures for parameter exposure system."""
 
+import functools
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from enum import StrEnum
@@ -7,6 +8,57 @@ from typing import Any
 
 # Constant for metadata attribute name used across exposure system
 _EXPOSED_META_VAR_NAME = "_exposed_meta"  # noqa
+_BUILTIN_TYPES = (str, int, float, bytes, tuple, frozenset, list, dict, set)
+
+
+@functools.cache
+def get_annotated_type(base_type: type, prefix: str = "Annotated") -> type:
+    """Create annotated subclass for any type."""
+
+    class_name = f"{prefix}{base_type.__name__.capitalize()}"
+
+    # Immutable built-in types
+    if base_type in (str, int, float, bytes, tuple, frozenset):
+
+        def __new__(cls, value, metadata=None):
+            instance = base_type.__new__(cls, value)
+            return instance
+
+        def __init__(self, value, metadata=None):
+            if metadata is not None:
+                object.__setattr__(self, _EXPOSED_META_VAR_NAME, metadata)
+
+        return type(
+            class_name,
+            (base_type,),
+            {
+                "__new__": __new__,
+                "__init__": __init__,
+            },
+        )
+
+    # Mutable built-in types
+    elif base_type in (list, dict, set):
+
+        def __init__(self, value, metadata=None):
+            base_type.__init__(self, value)
+            if metadata is not None:
+                setattr(self, _EXPOSED_META_VAR_NAME, metadata)
+
+        return type(
+            class_name,
+            (base_type,),
+            {
+                "__init__": __init__,
+            },
+        )
+
+    # Custom types - empty subclass (will use __class__ swap)
+    return type(
+        class_name,
+        (base_type,),
+        {"__module__": base_type.__module__},
+    )
 
 
 class ExposedParamTypeSource(StrEnum):
@@ -43,6 +95,16 @@ class ExposedParam:
     type_hint: Any | None = None
     type_source: ExposedParamTypeSource | None = None
     extra: dict[str, Any] = dc_field(default_factory=dict)
+
+    def __ror__[T](self, value: T) -> T:
+        base_type = type(value)
+        annotated_cls = get_annotated_type(base_type, prefix="Annotated")
+        if base_type in _BUILTIN_TYPES:
+            # built-in types - create new instance
+            return annotated_cls(value, metadata=self)  # type: ignore
+        value.__class__ = annotated_cls  # type: ignore
+        setattr(value, _EXPOSED_META_VAR_NAME, self)
+        return value
 
 
 @dataclass

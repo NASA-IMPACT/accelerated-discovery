@@ -489,6 +489,55 @@ class _ExposureHelper:
         return None, "unknown", ExposedParamTypeSource.NONE
 
     @staticmethod
+    def _extract_pipe_exposed_param(
+        attr_value: Any,
+        attr_name: str,
+        prefix: str,
+        already_exposed: set[str],
+        include_values: bool,
+    ) -> ExposedParamRuntimeInfo | None:
+        """Extract exposed parameter from pipe operator usage.
+
+        Checks if attr_value has _exposed_meta attribute and extracts metadata.
+
+        Args:
+            attr_value: Attribute value to check
+            attr_name: Name of the attribute
+            prefix: Path prefix for nested components
+            already_exposed: Set of already-discovered param names
+            include_values: Whether to include current value
+
+        Returns:
+            ExposedParamRuntimeInfo if exposed param found, None otherwise
+        """
+        # Check if value has _exposed_meta attribute
+        if not hasattr(attr_value, _EXPOSED_META_VAR_NAME):
+            return None
+
+        metadata = getattr(attr_value, _EXPOSED_META_VAR_NAME)
+        flat_name = f"{prefix}.{attr_name}" if prefix else attr_name
+
+        # Skip if already exposed or invalid metadata
+        if flat_name in already_exposed or not isinstance(metadata, ExposedParam):
+            return None
+
+        # Get type info
+        value_type = type(attr_value)
+
+        return ExposedParamRuntimeInfo(
+            name=flat_name,
+            description=metadata.description,
+            extra=metadata.extra,
+            expose=metadata.expose,
+            persistent=metadata.persistent,
+            type_hint=value_type,
+            type_=value_type.__name__,
+            type_source=ExposedParamTypeSource.RUNTIME,
+            editable=False,
+            current_value=attr_value if include_values else None,
+        )
+
+    @staticmethod
     def scan_instance_recursively(
         instance: Any,
         include_values: bool,
@@ -536,6 +585,19 @@ class _ExposureHelper:
                 attr_value = getattr(instance, attr_name)
             except Exception:
                 continue
+
+            # Check for pipe operator exposed params (value | Exposed(...))
+            pipe_exposed = _ExposureHelper._extract_pipe_exposed_param(
+                attr_value,
+                attr_name,
+                prefix,
+                already_exposed,
+                include_values,
+            )
+            if pipe_exposed is not None:
+                exposed.append(pipe_exposed)
+                already_exposed.add(pipe_exposed.name)
+                continue  # Don't recurse into primitives
 
             # Skip None, primitives, and built-in types
             if attr_value is None or isinstance(attr_value, (str, int, float, bool, list, dict, tuple, set)):

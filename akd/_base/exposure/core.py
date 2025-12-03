@@ -1,3 +1,4 @@
+import functools
 import types
 from dataclasses import replace as dc_replace
 from typing import Any, Callable, get_args, get_type_hints, overload
@@ -337,31 +338,33 @@ class ParamExposureMixin:
 
         return exposed
 
+    @functools.lru_cache
     def _collect_exposed_from_runtime(
         self,
         include_values: bool = False,
-        already_exposed: set[str] | None = None,
+        already_exposed: frozenset[str] | None = None,
         max_depth: int = 2,
     ) -> list[ExposedParamRuntimeInfo]:
         """Scan instance attributes at runtime for components with exposed fields.
 
         Recursively discovers nested runtime components up to max_depth.
+        Cached to preserve pipe operator metadata even if values change.
 
         Args:
             include_values: Whether to include current runtime values
-            already_exposed: Set of already-exposed param names to skip
+            already_exposed: Frozenset of already-exposed param names to skip
             max_depth: Maximum recursion depth (default: 2)
 
         Returns:
             List of ExposedParamRuntimeInfo objects for runtime-discovered component fields
         """
         if already_exposed is None:
-            already_exposed = set()
+            already_exposed = frozenset()
 
         return _ExposureHelper.scan_instance_recursively(
             instance=self,
             include_values=include_values,
-            already_exposed=already_exposed,
+            already_exposed=set(already_exposed),  # Convert to set for scanning
             prefix="",
             current_depth=0,
             max_depth=max_depth,
@@ -414,7 +417,7 @@ class ParamExposureMixin:
         # STEP 3: Optional runtime component scanning (with recursion)
         if scan_runtime:
             exposed.extend(
-                self._collect_exposed_from_runtime(include_values, exposed_names, runtime_max_depth),
+                self._collect_exposed_from_runtime(include_values, frozenset(exposed_names), runtime_max_depth),
             )
 
         return exposed
