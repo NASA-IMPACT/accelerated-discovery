@@ -50,7 +50,7 @@ class RelevantDataFilterAgent(LiteLLMInstructorBaseAgent[RelevantDataFilterAgent
   """
   input_schema = RelevantDataFilterAgentInputSchema
   output_schema = RelevantDataFilterAgentOutputSchema
-  config = RelevantDataFilterAgentConfig
+  config_schema = RelevantDataFilterAgentConfig
 
 async def get_relevant_data(api_key, literature_context: str, stac_data: List[CollectionItem]) -> List[CollectionItem]:
   inputs = RelevantDataFilterAgentInputSchema(
@@ -62,8 +62,9 @@ async def get_relevant_data(api_key, literature_context: str, stac_data: List[Co
       api_key=api_key,
       temperature = 0.3
   )
-  relevant_stac_agent: RelevantDataFilterAgent = RelevantDataFilterAgent(config=config)
+  relevant_stac_agent: RelevantDataFilterAgent = RelevantDataFilterAgent(config=config, debug=True)
   relevant_stac_agent_result: RelevantDataFilterAgentOutputSchema = await relevant_stac_agent.arun(inputs)
-  
+  # TODO: break down the implementation to check each stac_data with respect to literature.
+
   return relevant_stac_agent_result.stac_data
 
