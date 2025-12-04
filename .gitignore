@@ -1,5 +1,4 @@
 *.swp
-*.ipynb
 *.jpg
 *.jpeg
 *.png
@@ -25,6 +24,13 @@ __marimo__/
 .DS_Store
 .devcontainer
 .node_modules/
+
+# Evaluation Runs and Logs
+examples/captured_data/
+examples/testing/captured_data/
+filtering_messages/
+captured_data/
+evaluations/run*
 
 
 # dirs
@@ -198,3 +204,7 @@ coordination/orchestration/*
 claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
+
+
+# Planning
+planning_notes/

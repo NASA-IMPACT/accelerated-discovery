@@ -2,7 +2,7 @@ import asyncio
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Dict
 
 import dateparser
 import gdown
@@ -191,3 +191,28 @@ def parse_date(date_input: str | int | None) -> datetime | None:
         parsed_date = dateparser.parse(date_input)
 
     return parsed_date
+
+
+
+def safe_model_dump(obj: Any, exclude_none: bool = True) -> Dict[str, Any]:
+    """
+    Safely convert objects to dictionaries, handling both Pydantic models and regular objects.
+
+    Args:
+        obj: Object to convert to dictionary
+        exclude_none: Whether to exclude None values from Pydantic models
+
+    Returns:
+        Dictionary representation of the object
+    """
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(exclude_none=exclude_none)
+    elif isinstance(obj, dict):
+        return dict(obj)
+    elif hasattr(obj, "__dict__"):
+        return obj.__dict__
+    elif hasattr(obj, "_asdict"):  # namedtuple
+        return obj._asdict()
+    else:
+        # For simple types, wrap in a dict
+        return {"value": obj}

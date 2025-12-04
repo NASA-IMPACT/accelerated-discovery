@@ -1,0 +1,912 @@
+{
+  "queries": [
+    {
+      "query_number": 1,
+      "sme": "Nidhi",
+      "query_text": "How can we assess agricultural drought severity and its impact on crop productivity in the California United States?",
+      "topics": [
+        {
+          "topic": "Agricultural Drought",
+          "decomps": [
+            {
+              "decomp": "Soil Moisture (Surface)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2776463935-NSIDC_ECS"
+              ]
+            },
+            {
+              "decomp": "Soil Moisture (Root Zone)",
+              "minimum": false,
+              "cmr_concept_ids": [
+                "C3383993984-NSIDC_ECS"
+              ]
+            },
+            {
+              "decomp": "Precipitation",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2723754859-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "Evapotranspiration",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565791021-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Land Surface Temperature",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2269056084-LPCLOUD"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "Crop Productivity",
+          "decomps": [
+            {
+              "decomp": "Vegetation Health (NDVI, EVI)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565788901-LPCLOUD",
+                "C1748066515-LPCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 2,
+      "sme": "Nidhi",
+      "query_text": "What are the environmental conditions contributing to wildfire risk in Mediterranean forests during summer months?",
+      "topics": [
+        {
+          "topic": "Wildfire Risk",
+          "decomps": [
+            {
+              "decomp": "Active Fire Detection",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565791013-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Vegetation index (Dryness)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1748066515-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Soil Moisture",
+              "minimum": false,
+              "cmr_concept_ids": [
+                "C2776463935-NSIDC_ECS"
+              ]
+            },
+            {
+              "decomp": "Land Surface Temperature",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1748058432-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Forest Type/Land Cover",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2342343075-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Precipitation (Deficit)",
+              "minimum": false,
+              "cmr_concept_ids": [
+                "C2723754859-GES_DISC"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 3,
+      "sme": "Nidhi",
+      "query_text": "How can we predict and monitor flooding events in monsoon-affected regions of South Asia?",
+      "topics": [
+        {
+          "topic": "Flood Prediction",
+          "decomps": [
+            {
+              "decomp": "Precipitation (Intensity)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2723754859-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "Accumulated Rainfall",
+              "minimum": true,
+              "cmr_concept_ids": []
+            },
+            {
+              "decomp": "Topography",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1206487504-ASF"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "Flood Monitoring",
+          "decomps": [
+            {
+              "decomp": "Precipitation (Intensity)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2723754859-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "Accumulated Rainfall",
+              "minimum": true,
+              "cmr_concept_ids": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 4,
+      "sme": "Nidhi",
+      "query_text": "What is the rate and spatial pattern of tropical deforestation in the Amazon Basin over the past decade?",
+      "topics": [
+        {
+          "topic": "Deforestation",
+          "decomps": [
+            {
+              "decomp": "Land Cover Change (until 2019)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2763264675-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Land Cover Change (until 2021)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2484079608-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "NDVI (Forest Loss Detection)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1748066515-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "EVI (Vegetation Density)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565788901-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Forest Disturbance (Fire)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565791013-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Surface Reflectance",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1214611754-SCIOPS"
+              ]
+            },
+            {
+              "decomp": "NDVI (time series)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2764637520-ORNL_CLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 5,
+      "sme": "Nidhi",
+      "query_text": "How much irrigation water is needed for crops in semi-arid regions based on evapotranspiration and rainfall patterns?",
+      "topics": [
+        {
+          "topic": "irrigation water",
+          "decomps": [
+            {
+              "decomp": "Actual Evapotranspiration",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565791021-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Potential Evapotranspiration",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565791024-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Precipitation",
+              "minimum": true,
+              "cmr_concept_ids": []
+            },
+            {
+              "decomp": "Soil Moisture",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2776463935-NSIDC_ECS"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "crops",
+          "decomps": [
+            {
+              "decomp": "Crop Type",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3263433662-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Crop Signature",
+              "minimum": false,
+              "cmr_concept_ids": [
+                "C2565791024-LPCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 6,
+      "sme": "Nidhi",
+      "query_text": "What are the trends in Arctic sea ice extent and thickness in the Beaufort Sea region from 2010 to 2024?",
+      "topics": [
+        {
+          "topic": "Arctic Sea Ice",
+          "decomps": [
+            {
+              "decomp": "Sea Ice Concentration",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3228765563-NSIDC_CPRD"
+              ]
+            },
+            {
+              "decomp": "Sea Ice Thickness",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2670138092-NSIDC_CPRD"
+              ]
+            },
+            {
+              "decomp": "Snow Depth on Sea Ice",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1542606326-NSIDC_ECS"
+              ]
+            },
+            {
+              "decomp": "Sea Ice Extent and Surface Temperature",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3091270382-NSIDC_CPRD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 7,
+      "sme": "Nidhi",
+      "query_text": "How has carbon dioxide concentration changed over the Amazon rainforest from 2014 to 2024 due to deforestation?",
+      "topics": [
+        {
+          "topic": "carbon dioxide concentration",
+          "decomps": [
+            {
+              "decomp": "Atmospheric CO2",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1685783927-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "Carbon Emissions",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2237732007-GES_DISC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "Deforestation",
+          "decomps": [
+            {
+              "decomp": "Forest Structure",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2142776747-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Above-ground Biomass",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2237824918-ORNL_CLOUD"
+              ]
+            },
+            {
+              "decomp": "High-resolution Land Cover",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2021957295-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "Vegetation Greenness",
+              "minimum": false,
+              "cmr_concept_ids": [
+                "C2763377727-LPCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 8,
+      "sme": "Nidhi",
+      "query_text": "What is the relationship between drought conditions and dust storm frequency in the Sahel region of Africa from 2000 to 2023?",
+      "topics": [
+        {
+          "topic": "drought",
+          "decomps": [
+            {
+              "decomp": "Drought Frequency",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3550185878-ESDIS"
+              ]
+            },
+            {
+              "decomp": "Vegetation Productivity",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2759076389-ORNL_CLOUD"
+              ]
+            },
+            {
+              "decomp": "Precipitation",
+              "minimum": true,
+              "cmr_concept_ids": []
+            },
+            {
+              "decomp": "Soil Moisture",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3433987597-NSIDC_CPRD"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "Dust Storms",
+          "decomps": [
+            {
+              "decomp": "Dust Aerosol Index",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1000000120-OMINRT"
+              ]
+            },
+            {
+              "decomp": "Frequency of Dust Storm",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3372183299-GES_DISC"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 9,
+      "sme": "Nidhi",
+      "query_text": "How did California wildfires in 2018-2023 affect air quality and aerosol concentrations across the Western United States?",
+      "topics": [
+        {
+          "topic": "Air Quality",
+          "decomps": [
+            {
+              "decomp": "Carbon Monoxide",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1627516287-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "Nitrogen Dioxide",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3412185684-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "Formaldehyde",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1627516292-GES_DISC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "Wildfires (Smoke)",
+          "decomps": [
+            {
+              "decomp": "Aerosol Depth",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1607549631-ASIPS"
+              ]
+            },
+            {
+              "decomp": "Active Fire",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2763377735-LPCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 10,
+      "sme": "Nidhi",
+      "query_text": "What are the sea surface temperature anomalies and ocean color changes associated with coral bleaching events in the Great Barrier Reef from 2016 to 2024?",
+      "topics": [
+        {
+          "topic": "ocean color changes",
+          "decomps": [
+            {
+              "decomp": "Chlorophyll-a Concentration",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3380709124-OB_CLOUD"
+              ]
+            },
+            {
+              "decomp": "Ocean Color (True Color)",
+              "minimum": true,
+              "cmr_concept_ids": []
+            }
+          ]
+        },
+        {
+          "topic": "Coral Bleaching",
+          "decomps": [
+            {
+              "decomp": "Sea Surface Temperature",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1996881146-POCLOUD"
+              ]
+            },
+            {
+              "decomp": "SST Anomly, Coral Bleaching HotSpot",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2089386080-NOAA_NCEI"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "sea surface temperature",
+          "decomps": [
+            {
+              "decomp": "Heat Content",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1990404821-POCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 11,
+      "sme": "Emily",
+      "query_text": "How did sea-ice concentration and thickness in the Kara Sea change each March from 2020 to 2025?",
+      "topics": [
+        {
+          "topic": "sea-ice concentration",
+          "decomps": [
+            {
+              "decomp": "none (datasets already exist though it's called 'sea ice concentration' in GCMD)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3205181648-NSIDC_CPRD",
+                "C2399557265-NSIDC_ECS",
+                "C1542606326-NSIDC_ECS"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "sea-ice thickness",
+          "decomps": [
+            {
+              "decomp": "none (datasets already exist though it's called 'ice depth/thickness' in GCMD)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3205181648-NSIDC_CPRD",
+                "C3206550748-NSIDC_CPRD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 12,
+      "sme": "Emily",
+      "query_text": "What was the relationship between upwelling-favorable winds and SST fronts along the Peruvian coast in boreal summer 2022?",
+      "topics": [
+        {
+          "topic": "ocean upwelling",
+          "decomps": [
+            {
+              "decomp": "ocean surface windspeed/direction (vectors) (i.e. upwelling due to wind stress)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2916529935-POCLOUD",
+                "C2075141684-POCLOUD",
+                "C1276812838-GES_DISC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "sea surface temperature",
+          "decomps": [
+            {
+              "decomp": "none (SST datasets already exist) (gradients in SSTs will help determine location of cold water upwelling/fronts)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1276812838-GES_DISC",
+                "C1996881146-POCLOUD",
+                "C2147478146-POCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 13,
+      "sme": "Emily",
+      "query_text": "Assess inundation extent and persistence following Cyclone Mocha (May 2023) in western Myanmar using SAR and optical data",
+      "topics": [
+        {
+          "topic": "flood extent (SAR)",
+          "decomps": [
+            {
+              "decomp": "?? If using SAR data, there's not a SAR/flood-related dataset, so I'm not sure what counts as a decomp",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1214470488-ASF"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "flood extent (Optical)",
+          "decomps": [
+            {
+              "decomp": "Reflectance (can determine flood extent from)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2021957295-LPCLOUD"
+              ]
+            },
+            {
+              "decomp": "NDWI (can determine flood extent from)",
+              "minimum": false,
+              "cmr_concept_ids": [
+                "C3246892554-LPCLOUD"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "flood persistence",
+          "decomps": [
+            {
+              "decomp": "?? If you know flood extent you can determine flood persistence through time series. Does that count as a decomp?",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1214470488-ASF",
+                "C2021957295-LPCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 14,
+      "sme": "Emily",
+      "query_text": "Quantify changes in global lightning flash density (2001–2024) and relate to CAPE patterns",
+      "topics": [
+        {
+          "topic": "lightning flash density (since the query relates to CAPE, you need data that's more on a storm-scale timescale)",
+          "decomps": [
+            {
+              "decomp": "flash extent density",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2303212754-GHRC_DAAC",
+                "C2278812167-GHRC_DAAC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "CAPE",
+          "decomps": [
+            {
+              "decomp": "Vertical Temperature Profile",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1276812900-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "Vertical Humidity Profile (dewpoint or specific humidity)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1276812900-GES_DISC"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 15,
+      "sme": "Emily",
+      "query_text": "Are dry-season fire regimes shifting savanna–forest boundaries in northern Australia (2003–2024)?",
+      "topics": [
+        {
+          "topic": "Dry Season",
+          "decomps": [
+            {
+              "decomp": "Precipitation",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1342986035-GES_DISC",
+                "C1276812838-GES_DISC",
+                "C2723754864-GES_DISC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "Fire Regimes",
+          "decomps": [
+            {
+              "decomp": "Fire Occurence",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2734202914-LPCLOUD",
+                "C2545314536-LPCLOUD",
+                "C2278858993-LPCLOUD"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "Savanna Forest",
+          "decomps": [
+            {
+              "decomp": "NDVI",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1748066515-LPCLOUD",
+                "C2519127224-LPCLOUD",
+                "C2307290656-LPCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 16,
+      "sme": "Emily",
+      "query_text": "Did SMAP soil moisture indicate heightened flood susceptibility in Emilia-Romagna, Italy, in the two weeks preceding May 2023 floods?",
+      "topics": [
+        {
+          "topic": "Flood Susceptibility",
+          "decomps": [
+            {
+              "decomp": "soil moisture (is this the only decomp??)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3383993430-NSIDC_ECS",
+                "C2776463943-NSIDC_ECS",
+                "C3177836984-NSIDC_CPRD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 17,
+      "sme": "Emily",
+      "query_text": "Where and when did burn scars occur in the Peloponnese, Greece, during July–September 2021, and how did EVI recover through 2023?",
+      "topics": [
+        {
+          "topic": "burn scars",
+          "decomps": [
+            {
+              "decomp": "Burned Area",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C2565786756-LPCLOUD",
+                "C2847928673-LPCLOUD"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "EVI",
+          "decomps": [
+            {
+              "decomp": "none (EVI datasets already exist)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1748066515-LPCLOUD",
+                "C2519127224-LPCLOUD",
+                "C2565788905-LPCLOUD"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 18,
+      "sme": "Emily",
+      "query_text": "Compare total column ozone over Antarctica on October 1 in 2005, 2015, and 2024, and relate differences to stratospheric temperature.",
+      "topics": [
+        {
+          "topic": "total column ozone",
+          "decomps": [
+            {
+              "decomp": "none (column ozone data already exists)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1266136114-GES_DISC",
+                "C1239966794-GES_DISC",
+                "C1239966798-GES_DISC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "stratospheric temperature",
+          "decomps": [
+            {
+              "decomp": "none (upper air temperature exists)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1276812900-GES_DISC",
+                "C1443541366-LAADS"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 19,
+      "sme": "Emily",
+      "query_text": "How did heat index extremes overlap with socio-economic vulnerability across Maricopa County in July–August 2023?",
+      "topics": [
+        {
+          "topic": "heat index extremes",
+          "decomps": [
+            {
+              "decomp": "surface temperature (to calculate heat index)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1276812863-GES_DISC"
+              ]
+            },
+            {
+              "decomp": "surface dewpoint (to calculate heat index)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C1276812863-GES_DISC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "socio-economic vulnerability",
+          "decomps": [
+            {
+              "decomp": "socio-economic baseline",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3550186689-ESDIS"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "query_number": 20,
+      "sme": "Emily",
+      "query_text": "Are Saharan dust outbreaks (Earth) temporally correlated with exoplanet transit observation interruptions?",
+      "topics": [
+        {
+          "topic": "Saharan dust outbreaks",
+          "decomps": [
+            {
+              "decomp": "dust storm occurence (datasets exist for this, but can also detext storms using AOD)",
+              "minimum": true,
+              "cmr_concept_ids": [
+                "C3372183277-GES_DISC",
+                "C3372183299-GES_DISC"
+              ]
+            }
+          ]
+        },
+        {
+          "topic": "exoplanet transit observation interruptions",
+          "decomps": [
+            {
+              "decomp": "Mission observing logs",
+              "minimum": true,
+              "cmr_concept_ids": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
