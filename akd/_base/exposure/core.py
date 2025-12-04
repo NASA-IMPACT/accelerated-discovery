@@ -35,6 +35,7 @@ class ValidatedProperty(property):
         """Override setter to add automatic type validation."""
         original_fset = fset
 
+        @functools.wraps(original_fset)
         def validated_setter(instance, value):
             # Get expected type from property getter first
             expected_type, _ = get_type_from_property(self)
@@ -80,8 +81,6 @@ class ValidatedProperty(property):
             # Call original setter
             return original_fset(instance, value)
 
-        # preserve original annotations
-        validated_setter.__annotations__ = original_fset.__annotations__.copy()
         return super().setter(validated_setter)
 
 
