@@ -283,56 +283,41 @@ class TestExposedParamFunctionality:
         with pytest.raises(TypeError, match="expects str, got int"):
             agent.clarification_prompt = 123
 
-    def test_config_schema_property_access_patterns(
+    def test_config_schema_access_patterns(
         self,
         mock_openai_client,
         mock_instructor_client,
     ):
-        """Test that config schema fields support all 3 access patterns."""
+        """Test that config schema fields support direct and dict-like access patterns."""
         agent = DummyAgentWithExposedConfig()
 
-        # Verify exposed params include config_ prefixed fields
+        # Verify exposed params use dot notation (config.field_name)
         exposed_list = agent.get_exposed_params()
         exposed = {p.name: p for p in exposed_list}
-        assert "config_topic_steer" in exposed, "config_topic_steer should be exposed"
-        assert "config_temperature" in exposed, "config_temperature should be exposed"
+        assert "config.topic_steer" in exposed, "config.topic_steer should be exposed"
+        assert "config.temperature" in exposed, "config.temperature should be exposed"
 
-        # Test 1: Set via setattr with config_ prefixed property name
-        setattr(agent, "config_topic_steer", "new_value")
+        # Test 1: Direct config access (obj.config.topic_steer)
+        agent.config.topic_steer = "new_value"
+        assert agent.config.topic_steer == "new_value", "Direct config access should work"
 
-        # Verify access pattern 1: obj.config.topic_steer (direct config access)
-        assert agent.config.topic_steer == "new_value", "obj.config.topic_steer should work"
+        # Test 2: Dict-like access with dot notation (obj["config.topic_steer"])
+        agent["config.topic_steer"] = "dict_value"
+        assert agent["config.topic_steer"] == "dict_value", "Dict-like access should work"
+        assert agent.config.topic_steer == "dict_value", "Direct and dict access should be consistent"
 
-        # Verify access pattern 2: obj.config_topic_steer (prefixed property)
-        assert agent.config_topic_steer == "new_value", "obj.config_topic_steer should work"
+        # Test 3: Verify temperature field with dict-like access
+        agent["config.temperature"] = 0.9
+        assert agent.config.temperature == 0.9, "Dict-like access should work for config.temperature"
+        assert agent["config.temperature"] == 0.9, "Should be retrievable via dict-like access"
 
-        # Verify access pattern 3: Check if obj.topic_steer exists (unprefixed)
-        # This may or may not exist depending on implementation
-        try:
-            value = getattr(agent, "topic_steer", None)
-            if value is not None:
-                assert value == "new_value", "obj.topic_steer should match if it exists"
-        except AttributeError:
-            pass  # It's OK if unprefixed version doesn't exist
-
-        # Test 2: Set via direct config access and verify property updates
-        agent.config.topic_steer = "direct_value"
-        assert agent.config_topic_steer == "direct_value", "Property should reflect config changes"
-
-        # Test 3: Set via property assignment and verify config updates
-        agent.config_topic_steer = "property_value"
-        assert agent.config.topic_steer == "property_value", "Config should reflect property changes"
-
-        # Test 4: Verify temperature field with setattr
-        setattr(agent, "config_temperature", 0.9)
-        assert agent.config.temperature == 0.9, "setattr should work for config_temperature"
-        assert agent.config_temperature == 0.9, "config_temperature property should work"
-
-        # Test 5: Verify all 3 patterns are consistent
+        # Test 4: Round-trip via both access methods
         test_value = "consistency_test"
-        agent.config_topic_steer = test_value
-        assert agent.config.topic_steer == test_value, "All access patterns should be consistent"
-        assert agent.config_topic_steer == test_value, "All access patterns should be consistent"
+        agent.config.topic_steer = test_value
+        assert agent["config.topic_steer"] == test_value, "Direct and dict access should be consistent"
+
+        agent["config.temperature"] = 0.5
+        assert agent.config.temperature == 0.5, "Dict and direct access should be consistent"
 
 
 class TestParameterDiscovery:
