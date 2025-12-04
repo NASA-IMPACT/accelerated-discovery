@@ -12,11 +12,9 @@ from .schemas import (
     PDS4ApproachCollectionFilteringOutput,
     PDS4FinalCollectionRankingInputSchema,
     PDS4FinalCollectionRankingOutput,
-    PDS4InstrumentType,
     PDS4ParameterExtractionInputSchema,
     PDS4ParameterExtractionOutput,
     PDS4QueryApproach,
-    PDS4TargetType,
 )
 
 __all__ = [
@@ -35,7 +33,4 @@ __all__ = [
     "PDS4ApproachCollectionFilteringOutput",
     "PDS4FinalCollectionRankingInputSchema",
     "PDS4FinalCollectionRankingOutput",
-    # Enums
-    "PDS4TargetType",
-    "PDS4InstrumentType",
 ]

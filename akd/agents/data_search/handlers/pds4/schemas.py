@@ -11,7 +11,6 @@ are generated in a single component call.
 
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from enum import Enum
 
 from akd._base import InputSchema
 from akd.agents.data_search.components._base_ranking import (
@@ -20,67 +19,6 @@ from akd.agents.data_search.components._base_ranking import (
     BaseFinalRankingInputSchema,
     BaseFinalRankingOutput,
 )
-
-
-# ============================================================================
-# Enumerations (from PDS4 MCP Resources)
-# ============================================================================
-
-class PDS4TargetType(str, Enum):
-    """PDS4 target types from resource://target_type"""
-    PLANETARY_NEBULA = "Planetary Nebula"
-    GALAXY = "Galaxy"
-    CALIBRATOR = "Calibrator"
-    TRANS_NEPTUNIAN_OBJECT = "Trans-Neptunian Object"
-    PLANETARY_SYSTEM = "Planetary System"
-    SATELLITE = "Satellite"
-    CENTAUR = "Centaur"
-    ASTROPHYSICAL = "Astrophysical"
-    STAR_CLUSTER = "Star Cluster"
-    LABORATORY_ANALOG = "Laboratory Analog"
-    DUST = "Dust"
-    ASTEROID = "Asteroid"
-    COMET = "Comet"
-    EQUIPMENT = "Equipment"
-    STAR = "Star"
-    RING = "Ring"
-    DWARF_PLANET = "Dwarf Planet"
-    CALIBRATION_FIELD = "Calibration Field"
-    PLANET = "Planet"
-    PLASMA_CLOUD = "Plasma Cloud"
-    PLASMA_STREAM = "Plasma Stream"
-    MAGNETIC_FIELD = "Magnetic Field"
-    SUN = "Sun"
-
-
-class PDS4InstrumentType(str, Enum):
-    """PDS4 instrument types from resource://instrument_type"""
-    ENERGETIC_PARTICLE_DETECTOR = "Energetic Particle Detector"
-    PLASMA_ANALYZER = "Plasma Analyzer"
-    REGOLITH_PROPERTIES = "Regolith Properties"
-    SPECTROGRAPH = "Spectrograph"
-    IMAGER = "Imager"
-    ATMOSPHERIC_SCIENCES = "Atmospheric Sciences"
-    SPECTROMETER = "Spectrometer"
-    RADIO_RADAR = "Radio-Radar"
-    ULTRAVIOLET_SPECTROMETER = "Ultraviolet Spectrometer"
-    SMALL_BODIES_SCIENCES = "Small Bodies Sciences"
-    DUST = "Dust"
-    PARTICLE_DETECTOR = "Particle Detector"
-    PHOTOMETER = "Photometer"
-    POLARIMETER = "Polarimeter"
-    PLASMA_WAVE_SPECTROMETER = "Plasma Wave Spectrometer"
-
-
-class PDS4InstrumentHostType(str, Enum):
-    """PDS4 instrument host types from resource://instrument_host_type"""
-    ROVER = "Rover"
-    LANDER = "Lander"
-    SPACECRAFT = "Spacecraft"
-    EARTH_BASED = "Earth-based"
-    OBSERVATORY = "Observatory"
-    INSTRUMENT_HOST = "Instrument_host"
-    UNK = "Unk"
 
 
 # ============================================================================
