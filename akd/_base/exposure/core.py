@@ -3,8 +3,6 @@ import types
 from dataclasses import replace as dc_replace
 from typing import Any, Callable, get_args, get_type_hints, overload
 
-from loguru import logger
-
 from akd.utils import rgetattr, rsetattr
 
 from .structures import (
@@ -14,7 +12,6 @@ from .structures import (
     ExposedParamTypeSource,
 )
 from .utils import (
-    _create_property,
     _ExposureHelper,
     _extract_annotated_fields,
     _scan_annotated_fields_recursive,
@@ -164,13 +161,14 @@ class ParamExposureMixin:
     """
 
     def __init_subclass__(cls, **kwargs):
-        """Automatically discover and create properties for Annotated fields.
+        """Automatically discover and register Annotated fields.
 
         This hook is called when a class inherits from ParamExposureMixin.
-        It scans the class for Annotated[T, ExposedParam] fields and creates
-        properties with getters/setters that traverse nested paths.
+        It scans the class for Annotated[T, ExposedParam] fields and stores
+        them in the _exposure_registry with dot-notation keys.
 
-        Also builds the _exposure_registry for config-level fields.
+        Registry keys use dot notation (e.g., "config.temperature") for natural
+        access via rgetattr/rsetattr and dict-like interface.
         """
         super().__init_subclass__(**kwargs)
 
@@ -178,48 +176,27 @@ class ParamExposureMixin:
         if not hasattr(cls, "_exposure_registry"):
             cls._exposure_registry = {}
 
-        # NEW: Extract and store metadata from config_schema
+        # Extract and store metadata from config_schema
         if hasattr(cls, "config_schema") and cls.config_schema is not None:
             config_exposed = _extract_annotated_fields(cls.config_schema)
-            # Add config_ prefix to field names for registry keys (full path naming)
+            # Add config. prefix to field names for registry keys (dot notation)
             for field_name, metadata in config_exposed.items():
-                registry_key = f"config_{field_name}"
+                registry_key = f"config.{field_name}"
                 # Update metadata.name to match registry_key for consistency
                 cls._exposure_registry[registry_key] = dc_replace(metadata, name=registry_key)
 
-        # NEW: Extract and store class-level annotated fields
+        # Extract and store class-level annotated fields
         # Skip schema attributes to avoid conflicts
         skip_fields = {"InSchema", "OutSchema", "input_schema", "output_schema", "config_schema"}
         class_exposed = _extract_annotated_fields(cls, skip_fields=skip_fields)
         # No prefix for class-level fields
         cls._exposure_registry.update(class_exposed)
 
-        # Scan for annotated fields (including nested components)
+        # Scan for nested annotated fields (returns dict with dot-notation keys)
         discovered = _scan_annotated_fields_recursive(cls)
+        cls._exposure_registry.update(discovered)
 
-        # Create properties for fields that should be exposed
-        for flat_name, (path_parts, metadata) in discovered.items():
-            # Only create properties for persistent, exposed fields
-            if metadata.expose and metadata.persistent:
-                # Skip class-level attributes (single-element paths) - they work fine as-is
-                # Only create properties for nested paths that need traversal (e.g., config.temperature)
-                if len(path_parts) == 1:
-                    continue
-
-                # Check if it's already a property with _exposed_meta (from @exposed_param decorator)
-                existing_attr = getattr(cls, flat_name, None)
-                is_exposed_property = isinstance(existing_attr, property) and hasattr(
-                    existing_attr.fget,
-                    _EXPOSED_META_VAR_NAME,
-                )
-
-                if not is_exposed_property:
-                    # Create property for nested path (e.g., config_temperature -> config.temperature)
-                    _create_property(cls, flat_name, path_parts, metadata)
-                else:
-                    logger.debug(
-                        f"Skipping auto-creation of property '{flat_name}' on {cls.__name__} - already exposed via decorator",
-                    )
+        # No property creation! Registry keys use dot notation for natural access
 
     def _collect_exposed_from_decorated_properties(
         self,
@@ -298,31 +275,25 @@ class ParamExposureMixin:
             if registry_key in exposed_names:
                 continue
 
-            # Check if a property was created for this registry entry
-            attr = getattr(type(self), registry_key, None)
-            if isinstance(attr, property):
-                # Property exists, get type from it
-                type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_property(attr)
-                editable = attr.fset is not None
-            else:
-                # No property - use type from registry metadata
-                editable = metadata.extra.get("editable", True)
-                type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_metadata(metadata)
+            # Get type from registry metadata
+            editable = metadata.extra.get("editable", True)
+            type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_metadata(metadata)
 
-                # Fallback to runtime value if type still unknown
-                if param_type == "unknown":
-                    current_value = getattr(self, registry_key, None)
-                    if current_value is not None:
-                        type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_value(current_value)
-
-            # Get current value if requested
+            # Try to get current value using rgetattr (supports dot notation)
             current_value = None
-            if include_values:
-                current_value = getattr(self, registry_key, None)
+            try:
+                if include_values or param_type == "unknown":
+                    current_value = rgetattr(self, registry_key)
+            except AttributeError:
+                pass  # Path doesn't exist, leave as None
+
+            # Fallback to runtime value for type if unknown
+            if param_type == "unknown" and current_value is not None:
+                type_hint, param_type, type_source = _ExposureHelper.get_type_info_from_value(current_value)
 
             exposed.append(
                 ExposedParamRuntimeInfo(
-                    name=metadata.name or registry_key,
+                    name=registry_key,
                     description=metadata.description,
                     extra=metadata.extra,
                     expose=metadata.expose,

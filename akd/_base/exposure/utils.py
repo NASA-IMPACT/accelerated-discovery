@@ -191,7 +191,7 @@ def _scan_annotated_fields_recursive(
     max_depth: int = 5,
     visited: set[type] | None = None,
     debug: bool = False,
-) -> dict[str, tuple[list[str], ExposedParam]]:
+) -> dict[str, ExposedParam]:
     """Recursively scan class for Annotated[T, ExposedParam] fields.
 
     Scans all type-annotated attributes and recursively descends into
@@ -199,19 +199,17 @@ def _scan_annotated_fields_recursive(
 
     Args:
         cls: Class to scan
-        prefix: Current path prefix (for nested components)
+        prefix: Current path prefix (for nested components, dot-separated)
         current_depth: Current recursion depth
         max_depth: Maximum recursion depth to prevent infinite loops
         visited: Set of already-visited types to prevent circular references
 
     Returns:
-        Dict mapping flattened names to (path_parts, ExposedParam) tuples.
+        Dict mapping dot-notation paths to ExposedParam metadata.
         The type_hint is accessible via ExposedParam.type_hint.
         Example: {
-            "config_temperature": (
-                ["config", "temperature"],
-                ExposedParam(..., type_hint=float),
-            )
+            "config.temperature": ExposedParam(..., type_hint=float),
+            "component.field": ExposedParam(..., type_hint=str),
         }
     """
     if visited is None:
@@ -224,29 +222,26 @@ def _scan_annotated_fields_recursive(
     result = {}
 
     # First, extract Annotated fields directly from this class
-    direct_fields = _extract_annotated_fields(cls, debug=debug)
-    for field_name, metadata in direct_fields.items():
-        # Build the path (just the field name for direct fields)
-        if prefix:
-            path_parts = prefix.split("_") + [field_name]
-            flat_name = "_".join(path_parts)
-        else:
-            path_parts = [field_name]
-            flat_name = field_name
+    # But ONLY at the top level (no prefix) - for nested components, fields are
+    # extracted by the parent when it scans the attribute type (lines 305-326)
+    if not prefix:
+        direct_fields = _extract_annotated_fields(cls, debug=debug)
+        for field_name, metadata in direct_fields.items():
+            flat_name = field_name  # No prefix at top level
 
-        # Store with name filled in if not set
-        if not metadata.name:
-            metadata = ExposedParam(
-                name=flat_name,
-                description=metadata.description,
-                extra=metadata.extra,
-                expose=metadata.expose,
-                persistent=metadata.persistent,
-                type_hint=metadata.type_hint,  # Type hint already populated
-                type_source=ExposedParamTypeSource.ANNOTATED,
-            )
+            # Store with name filled in if not set
+            if not metadata.name:
+                metadata = ExposedParam(
+                    name=flat_name,
+                    description=metadata.description,
+                    extra=metadata.extra,
+                    expose=metadata.expose,
+                    persistent=metadata.persistent,
+                    type_hint=metadata.type_hint,
+                    type_source=ExposedParamTypeSource.ANNOTATED,
+                )
 
-        result[flat_name] = (path_parts, metadata)
+            result[flat_name] = metadata
 
     # Build dict of all attributes to scan (from type hints + class attributes)
     attrs_to_scan = {}
@@ -309,14 +304,11 @@ def _scan_annotated_fields_recursive(
             exposed_fields = _extract_annotated_fields(actual_type, debug=debug)
 
             for field_name, metadata in exposed_fields.items():
-                # Build the path
+                # Build the dot-notation path
                 if prefix:
-                    path_parts = prefix.split("_") + [attr_name, field_name]
+                    flat_name = f"{prefix}.{attr_name}.{field_name}"
                 else:
-                    path_parts = [attr_name, field_name]
-
-                # Create flattened name
-                flat_name = "_".join(path_parts)
+                    flat_name = f"{attr_name}.{field_name}"
 
                 # Store with name filled in if not set
                 if not metadata.name:
@@ -330,10 +322,10 @@ def _scan_annotated_fields_recursive(
                         type_source=ExposedParamTypeSource.ANNOTATED,
                     )
 
-                result[flat_name] = (path_parts, metadata)
+                result[flat_name] = metadata
 
             # Recursively scan the nested type
-            new_prefix = f"{prefix}_{attr_name}" if prefix else attr_name
+            new_prefix = f"{prefix}.{attr_name}" if prefix else attr_name
             nested_result = _scan_annotated_fields_recursive(
                 actual_type,
                 prefix=new_prefix,
@@ -345,78 +337,6 @@ def _scan_annotated_fields_recursive(
             result.update(nested_result)
 
     return result
-
-
-def _create_property(
-    cls: type,
-    flat_name: str,
-    path_parts: list[str],
-    metadata: ExposedParam,
-) -> None:
-    """Create a property with getter/setter on the class that traverses a nested path.
-
-    Args:
-        cls: Class to add the property to
-        flat_name: Flattened property name (e.g., "component_config_temperature")
-        path_parts: Path to traverse (e.g., ["component", "config", "temperature"])
-        metadata: ExposedParam metadata (with type_hint already populated)
-    """
-
-    def make_getter(path: list[str]):
-        def getter(self):
-            obj = self
-            try:
-                for part in path:
-                    obj = getattr(obj, part)
-                return obj
-            except AttributeError as e:
-                logger.warning(f"Could not access {'.'.join(path)}: {e}")
-                return None
-
-        return getter
-
-    def make_setter(path: list[str]):
-        def setter(self, value):
-            # Navigate to parent object and set the final attribute
-            obj = self
-            try:
-                for part in path[:-1]:
-                    obj = getattr(obj, part)
-
-                # If obj is still self, use object.__setattr__ to avoid recursion
-                # (happens when path has only one element)
-                if obj is self:
-                    object.__setattr__(obj, path[-1], value)
-                else:
-                    setattr(obj, path[-1], value)
-            except AttributeError as e:
-                logger.warning(f"Could not set {'.'.join(path)}: {e}")
-
-        return setter
-
-    # Import ValidatedProperty here to avoid circular imports
-    from .core import ValidatedProperty
-
-    # Create the property
-    getter = make_getter(path_parts)
-
-    # Check if it should be read-only
-    is_read_only = metadata.extra.get("editable") is False
-
-    if is_read_only:
-        # Read-only property
-        prop = property(getter)
-    else:
-        # Read-write property
-        setter = make_setter(path_parts)
-        prop = ValidatedProperty(getter)
-        prop = prop.setter(setter)
-
-    # Attach metadata (type_hint already populated in metadata)
-    setattr(prop.fget, _EXPOSED_META_VAR_NAME, metadata)
-
-    # Set the property on the class
-    setattr(cls, flat_name, prop)
 
 
 class _ExposureHelper:
