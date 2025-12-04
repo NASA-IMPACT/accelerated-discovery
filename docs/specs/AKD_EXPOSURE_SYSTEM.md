@@ -148,7 +148,7 @@ class ExposedComplexComponent:
 
 ### Access Patterns for Config Fields
 
-Config schema fields support three equivalent access patterns:
+Config schema fields support two access patterns:
 
 ```python
 agent = DummyAgentWithExposedConfig()
@@ -156,13 +156,10 @@ agent = DummyAgentWithExposedConfig()
 # Pattern 1: Direct config access
 agent.config.topic_steer = "new_value"
 
-# Pattern 2: Prefixed property (auto-created by __init_subclass__)
-agent.config_topic_steer = "new_value"
-
-# Pattern 3: Dict-like access (see section 6)
+# Pattern 2: Dict-like access with dot notation
 agent["config.topic_steer"] = "new_value"
 
-# All three are equivalent and stay in sync
+# Both patterns are equivalent and stay in sync
 ```
 
 ### How It Works
@@ -170,16 +167,16 @@ agent["config.topic_steer"] = "new_value"
 When a class inherits from `ParamExposureMixin` (via base agent classes):
 
 1. `__init_subclass__` scans for `Annotated[T, Exposed()]` fields
-2. Auto-creates properties for nested paths (e.g., `config_temperature` → `config.temperature`)
-3. Stores metadata in the class `_exposure_registry`
-4. Properties provide getter/setter that traverse the nested path automatically
+2. Stores metadata in the class `_exposure_registry` with dot-notation keys (e.g., `"config.temperature"`)
+3. Registry keys represent the full access path used by `rgetattr`/`rsetattr` utilities
+4. Dict-like interface (`agent["config.temperature"]`) uses these paths directly
 
 ### Features
 
 - **Declarative**: Visible directly in class definition
-- **Automatic Property Creation**: Nested paths get properties automatically
+- **Dot Notation Paths**: Registry keys use natural paths like `"config.temperature"`
 - **Type Hints Preserved**: Full type safety with mypy/pyright
-- **No Manual Getters/Setters**: Framework handles traversal
+- **No Manual Getters/Setters**: Framework handles path traversal
 - **Class Creation Time**: Discovered via `__init_subclass__`, no runtime overhead
 
 ### When to Use
@@ -193,9 +190,9 @@ When a class inherits from `ParamExposureMixin` (via base agent classes):
 
 **Pros:**
 - Clean, declarative syntax
-- Automatic property creation for nested paths
 - Type hints fully preserved
 - No boilerplate getters/setters
+- Natural dot-notation access paths
 
 **Cons:**
 - Class-level only (doesn't work in `__init__`)
@@ -751,14 +748,14 @@ for p in params:
 # system_prompt: You are a research assistant (str)
 # verbose: False (bool)
 # status: Model: gpt-4, Temp: 0.7 (str)
-# config_temperature: 0.7 (float)
-# config_max_iterations: 10 (int)
-# config_model_name: gpt-4 (str)
+# config.temperature: 0.7 (float)
+# config.max_iterations: 10 (int)
+# config.model_name: gpt-4 (str)
 # tool.rate_limit: 5.0 (AnnotatedFloat)
 # tool.enabled: True (AnnotatedBool)
 
 # 2. Dict-like access works for ALL strategies
-agent["config_temperature"] = 0.9          # Strategy 2 (Annotated)
+agent["config.temperature"] = 0.9          # Strategy 2 (Annotated)
 agent["system_prompt"] = "New prompt"      # Strategy 1 (Decorator)
 agent["tool.rate_limit"] = 10.0            # Strategy 3 (Pipe operator)
 
@@ -768,11 +765,11 @@ agent.system_prompt = "Another prompt"
 agent.tool.rate_limit = 7.5
 
 # 4. Safe access with get()
-temp = agent.get("config_temperature", 0.7)
+temp = agent.get("config.temperature", 0.7)
 missing = agent.get("nonexistent.param", "default")
 
 # 5. All access patterns stay in sync
-assert agent["config_temperature"] == agent.config.temperature == 0.8
+assert agent["config.temperature"] == agent.config.temperature == 0.8
 assert agent["system_prompt"] == agent.system_prompt == "Another prompt"
 ```
 
@@ -807,7 +804,7 @@ for param in agent.get_exposed_params():
 #   Editable: False
 #   Source: fget
 
-# Parameter: config_temperature
+# Parameter: config.temperature
 #   Description: LLM temperature
 #   Type: float
 #   Editable: True
