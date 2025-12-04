@@ -4,6 +4,8 @@ from langchain_core.messages import AnyMessage
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
+from akd.structures import ClassifiedQuery
+
 # ---------------------------------------------------
 # Interview state helper functions
 # ---------------------------------------------------
@@ -95,6 +97,10 @@ class Queries(BaseModel):
 
     queries: List[str] = Field(
         description="Comprehensive list of search engine queries to answer the user's questions.",
+    )
+    classified_queries: Optional[List[ClassifiedQuery]] = Field(
+        default=None,
+        description="Optional classified version of queries with labels and reasoning",
     )
 
 

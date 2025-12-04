@@ -181,6 +181,8 @@ async def generate_answer(
     search_category: str = None,
     name: str = "Subject_Matter_Expert",
     max_ctx_len: int = 15000,
+    classifier_tool=None,
+    filter_classifications=None,
     **kwargs,
 ) -> Dict:
     """
@@ -191,8 +193,12 @@ async def generate_answer(
         state (InterviewState): Current interview state.
         llm (ChatOpenAI): Language model for generating queries and answers.
         search_tool (SearchTool): Tool for retrieving search results.
+        search_category (str, optional): Category for the search tool.
         name (str, optional): AI participant name. Defaults to "Subject_Matter_Expert".
         max_ctx_len (int, optional): Max context length for search data. Defaults to 15000.
+        classifier_tool (DecompClassifierTool, optional): Tool for classifying queries.
+        filter_classifications (List[DecompositionClassification], optional):
+            If set, only execute queries with these classifications.
 
     Returns:
         Dict: Generated answer message, cited references, and search results.
@@ -208,9 +214,34 @@ async def generate_answer(
     )
     swapped_state = swap_roles(state, name)
     queries = await gen_queries_chain.ainvoke(swapped_state)
+
+    # Classify queries if classifier is enabled
+    queries_to_execute = queries["parsed"].queries
+    if classifier_tool is not None:
+        # Extract original topic from the last editor question
+        last_question = state["messages"][-2].content if len(state["messages"]) >= 2 else "research topic"
+
+        # Classify all queries
+        classification_result = await classifier_tool.arun(
+            classifier_tool.input_schema(
+                original_topic=last_question,
+                queries=queries["parsed"].queries,
+            )
+        )
+
+        # Store classifications in the queries object
+        queries["parsed"].classified_queries = classification_result.classified_queries
+
+        # Filter queries if filter_classifications is set
+        if filter_classifications is not None:
+            queries_to_execute = [
+                cq.query for cq in classification_result.classified_queries
+                if cq.classification in filter_classifications
+            ]
+
     query_results = await search_tool.arun(
         search_tool.input_schema(
-            queries=queries["parsed"].queries,
+            queries=queries_to_execute,
             category=search_category,
         ),
     )

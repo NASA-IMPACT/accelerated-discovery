@@ -6,6 +6,7 @@ This module contains core data models, schemas, and type definitions
 organized into logical sections for better maintainability.
 """
 
+from enum import Enum
 from typing import Any
 
 from pydantic import (
@@ -21,6 +22,51 @@ from akd._base import IOSchema
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
+
+# =============================================================================
+# Classification Enums
+# =============================================================================
+
+
+class DecompositionClassification(str, Enum):
+    """
+    Classification categories for decomposed queries relative to original topic.
+
+    Categories are defined by their relationship to the research topic:
+    - EXACT: Direct measurement of the phenomenon ("That is the thing you asked for")
+    - CALCULATOR: Mechanistic input/driver that physically affects the topic
+    - PROXY: Surrogate/stand-in measurement used because it correlates with the topic
+    - TANGENTIAL: Weakly related, contextual information not core to the analysis
+
+    Examples:
+        - Fire risk → Fire Weather Index: EXACT
+        - Fire risk → soil moisture: CALCULATOR
+        - Phytoplankton biomass → chlorophyll-a: PROXY
+        - Fire risk → regional humidity: TANGENTIAL
+    """
+
+    EXACT = "exact"
+    CALCULATOR = "calculator"
+    PROXY = "proxy"
+    TANGENTIAL = "tangential"
+
+
+class ClassifiedQuery(BaseModel):
+    """
+    A decomposed query with its classification relative to the original topic.
+
+    Attributes:
+        query: The search query text
+        classification: Classification category (EXACT, CALCULATOR, PROXY, TANGENTIAL)
+        reasoning: Brief explanation for why this classification was assigned
+    """
+
+    query: str = Field(description="The search query text")
+    classification: DecompositionClassification = Field(
+        description="Classification of query relative to topic"
+    )
+    reasoning: str = Field(description="Brief explanation for the classification")
+
 
 # =============================================================================
 # Search and Data Models
@@ -340,6 +386,9 @@ LitSearchResult = SearchResultItem
 
 
 __all__ = [
+    # Classification
+    "DecompositionClassification",
+    "ClassifiedQuery",
     # Search and Data Models
     "SearchResult",
     "SearchResultItem",

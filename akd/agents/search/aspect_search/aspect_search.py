@@ -23,6 +23,8 @@ from akd.agents.search.aspect_search.structures import (
     update_references,
     update_search_results,
 )
+from akd.structures import DecompositionClassification
+from akd.tools.decomp_classifier import DecompClassifierConfig, DecompClassifierTool
 from akd.tools.search import SearchResultItem, SearxNGSearchTool
 
 
@@ -89,6 +91,23 @@ class AspectSearchConfig(BaseAgentConfig):
         description="Maximum length of the search result context during interviews.",
     )
 
+    # Query classification configuration
+    enable_query_classification: bool = Field(
+        default=False,
+        description="Whether to classify decomposed queries before execution",
+    )
+    classifier_config: Optional[DecompClassifierConfig] = Field(
+        default=None,
+        description="Configuration for the decomposition classifier tool",
+    )
+    filter_classifications: Optional[List[DecompositionClassification]] = Field(
+        default=None,
+        description=(
+            "If set, only execute queries with these classifications. "
+            "Example: [EXACT, CALCULATOR, PROXY] to skip TANGENTIAL queries"
+        ),
+    )
+
 
 class AspectSearchAgent(BaseAgent):
     input_schema = AspectSearchInputSchema
@@ -113,6 +132,19 @@ class AspectSearchAgent(BaseAgent):
 
         self.search_tool = self.config.search_tool
 
+        # Initialize query classifier if enabled
+        self.classifier_tool = None
+        if self.config.enable_query_classification:
+            classifier_config = self.config.classifier_config or DecompClassifierConfig()
+            self.classifier_tool = DecompClassifierTool(
+                config=classifier_config,
+                debug=self.debug,
+            )
+            if self.debug:
+                logger.debug(
+                    f"Query classification enabled with model: {classifier_config.model_name}"
+                )
+
         builder = StateGraph(InterviewState)
         builder.add_node(
             "ask_question",
@@ -126,6 +158,8 @@ class AspectSearchAgent(BaseAgent):
                 search_tool=self.search_tool,
                 search_category=self.config.category,
                 max_context_len=self.config.max_ctx_len,
+                classifier_tool=self.classifier_tool,
+                filter_classifications=self.config.filter_classifications,
             ),
             retry=RetryPolicy(max_attempts=self.config.retry_attempts),
         )
