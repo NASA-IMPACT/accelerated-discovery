@@ -36,18 +36,18 @@ class PDS4HandlerConfig(DataSearchToolConfig):
         description="Page size for context searches (investigations/targets/instruments)",
     )
 
-    # URN combination strategy
+    # URN combination strategy (safety limits to prevent combinatorial explosion)
     max_investigation_urns_per_approach: int = Field(
-        default=3,
-        description="[DEPRECATED when LLM filtering enabled] Safety limit for investigation URNs per approach (LLM decides actual count)",
+        default=5,
+        description="Maximum investigation URNs to use in combination generation (prevents combinatorial explosion, applies after LLM/keyword filtering)",
     )
     max_target_urns_per_approach: int = Field(
-        default=3,
-        description="[DEPRECATED when LLM filtering enabled] Safety limit for target URNs per approach (LLM decides actual count)",
+        default=5,
+        description="Maximum target URNs to use in combination generation (prevents combinatorial explosion, applies after LLM/keyword filtering)",
     )
     max_instrument_urns_per_approach: int = Field(
-        default=3,
-        description="[DEPRECATED when LLM filtering enabled] Safety limit for instrument URNs per approach (LLM decides actual count)",
+        default=5,
+        description="Maximum instrument URNs to use in combination generation (prevents combinatorial explosion, applies after LLM/keyword filtering)",
     )
     max_approach_combinations: int = Field(
         default=100,
