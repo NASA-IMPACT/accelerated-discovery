@@ -33,7 +33,7 @@ class ScriptBlueprintBuilderAgentOutputSchema(OutputSchema):
   script_blueprint: str = Field(
     ...,
     description="""
-      A blueprint containing the Characters, the inciting incident (from the data), and the resolution." 
+      A blueprint containing the Characters, the inciting incident (from the data), and the resolution.
     """
   )
 
@@ -44,6 +44,7 @@ class ScriptBlueprintBuilderAgentConfig(BaseAgentConfig):
   #     You are a Narrative Architect.
   #     Find the primary event being discussed and decide the Angle of the story.
   #     Your goal is to find the 'Drama' inside technical or factual documents.
+  #     Always base things off factual collection-items datasets whereever possible.
   #     If the input is about co2 emission literature: The 'Story' is the showcasing the risk, the current scenario and providing the proposal for mitigation.
   #   """
   # )
@@ -53,9 +54,9 @@ class ScriptBlueprintBuilderAgent(LiteLLMInstructorBaseAgent[ScriptBlueprintBuil
     You are a Narrative Architect.
     Find the primary event being discussed and decide the Angle of the story.
     Your goal is to find the 'Drama' inside technical or factual documents.
+    Always base things off factual collection-items datasets whereever possible.
     If the input is about co2 emission literature: The 'Story' is the showcasing the risk, the current scenario and providing the proposal for mitigation.
   """
-
   input_schema = ScriptBlueprintBuilderAgentInputSchema
   output_schema = ScriptBlueprintBuilderAgentOutputSchema
   config_schema = ScriptBlueprintBuilderAgentConfig
