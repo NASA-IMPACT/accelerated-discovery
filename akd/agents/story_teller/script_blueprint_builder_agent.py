@@ -38,22 +38,16 @@ class ScriptBlueprintBuilderAgentOutputSchema(OutputSchema):
   )
 
 class ScriptBlueprintBuilderAgentConfig(BaseAgentConfig):
-  pass
-  # system_prompt: str = Field(
-  #   default="""
-  #     You are a Narrative Architect.
-  #     Find the primary event being discussed and decide the Angle of the story.
-  #     Your goal is to find the 'Drama' inside technical or factual documents.
-  #     Always base things off factual collection-items datasets whereever possible.
-  #     If the input is about co2 emission literature: The 'Story' is the showcasing the risk, the current scenario and providing the proposal for mitigation.
-  #   """
-  # )
+  system_prompt: str = Field(
+    default="""
+      You are a Narrative Architect.
+      Find the primary event being discussed and decide the Angle of the story.
+      Your goal is to find the 'Drama' inside technical or factual documents.
+    """
+  )
 
 class ScriptBlueprintBuilderAgent(LiteLLMInstructorBaseAgent[ScriptBlueprintBuilderAgentInputSchema, ScriptBlueprintBuilderAgentOutputSchema]):
   """
-    You are a Narrative Architect.
-    Find the primary event being discussed and decide the Angle of the story.
-    Your goal is to find the 'Drama' inside technical or factual documents.
     Always base things off factual collection-items datasets whereever possible.
     If the input is about co2 emission literature: The 'Story' is the showcasing the risk, the current scenario and providing the proposal for mitigation.
   """
