@@ -4,7 +4,7 @@ import functools
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from enum import StrEnum
-from typing import Any
+from typing import Any, NamedTuple
 
 # Constant for metadata attribute name used across exposure system
 _EXPOSED_META_VAR_NAME = "_exposed_meta"  # noqa
@@ -70,6 +70,29 @@ class ExposedParamTypeSource(StrEnum):
     RUNTIME = "runtime"
     NONE = "none"
     UNKNOWN = "unknown"
+
+
+class TypeInfo(NamedTuple):
+    """Type information for exposed parameters.
+
+    A lightweight container for the three components of type information.
+    Can be unpacked as a tuple or accessed by name.
+
+    Attributes:
+        type_hint: Actual Python type object (e.g., str, int, float)
+        type_str: String representation for display (e.g., "str", "int")
+        type_source: Where the type info came from (ExposedParamTypeSource)
+
+    Example:
+        >>> info = TypeInfo(str, "str", ExposedParamTypeSource.ANNOTATED)
+        >>> hint, str_rep, source = info  # Tuple unpacking
+        >>> print(info.type_str)  # Named access
+        "str"
+    """
+
+    type_hint: Any | None
+    type_str: str
+    type_source: ExposedParamTypeSource
 
 
 @dataclass

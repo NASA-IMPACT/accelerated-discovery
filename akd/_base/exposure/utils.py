@@ -11,6 +11,7 @@ from .structures import (
     ExposedParam,
     ExposedParamRuntimeInfo,
     ExposedParamTypeSource,
+    TypeInfo,
 )
 
 
@@ -348,14 +349,14 @@ class _ExposureHelper:
     """
 
     @staticmethod
-    def get_type_info_from_property(prop) -> tuple[Any | None, str, ExposedParamTypeSource]:
+    def get_type_info_from_property(prop) -> TypeInfo:
         """Extract type information from a property object.
 
         Args:
             prop: Property to extract type from
 
         Returns:
-            Tuple of (type_hint, type_name_str, type_source)
+            TypeInfo with (type_hint, type_name_str, type_source)
         """
         # Try to get type from property's stored metadata first
         if hasattr(prop.fget, _EXPOSED_META_VAR_NAME):
@@ -367,46 +368,76 @@ class _ExposureHelper:
                 type_name = getattr(type_hint, "__name__", str(type_hint))
                 if type_source is ExposedParamTypeSource.NONE:
                     type_source = ExposedParamTypeSource.ANNOTATED
-                return type_hint, type_name, type_source
+                return TypeInfo(type_hint, type_name, type_source)
 
         # Fall back to inspecting property annotations
         type_hint, type_source = get_type_from_property(prop)
         if type_hint is not None:
             type_name = getattr(type_hint, "__name__", str(type_hint))
-            return type_hint, type_name, type_source
+            return TypeInfo(type_hint, type_name, type_source)
 
-        return None, "unknown", ExposedParamTypeSource.NONE
+        return TypeInfo(None, "unknown", ExposedParamTypeSource.NONE)
 
     @staticmethod
-    def get_type_info_from_metadata(metadata: ExposedParam) -> tuple[Any | None, str, ExposedParamTypeSource]:
+    def get_type_info_from_metadata(metadata: ExposedParam) -> TypeInfo:
         """Extract type information from ExposedParam metadata.
 
         Args:
             metadata: ExposedParam metadata object
 
         Returns:
-            Tuple of (type_hint, type_name_str, type_source)
+            TypeInfo with (type_hint, type_name_str, type_source)
         """
         if metadata.type_hint is not None:
             type_name = getattr(metadata.type_hint, "__name__", str(metadata.type_hint))
-            return metadata.type_hint, type_name, ExposedParamTypeSource.ANNOTATED
+            return TypeInfo(metadata.type_hint, type_name, ExposedParamTypeSource.ANNOTATED)
 
-        return None, "unknown", ExposedParamTypeSource.NONE
+        return TypeInfo(None, "unknown", ExposedParamTypeSource.NONE)
 
     @staticmethod
-    def get_type_info_from_value(value: Any) -> tuple[Any | None, str, ExposedParamTypeSource]:
+    def get_type_info_from_value(value: Any) -> TypeInfo:
         """Infer type information from runtime value as fallback.
 
         Args:
             value: Runtime value to infer type from
 
         Returns:
-            Tuple of (type_hint, type_name_str, type_source)
+            TypeInfo with (type_hint, type_name_str, type_source)
         """
         if value is not None:
             value_type = type(value)
-            return value_type, value_type.__name__, ExposedParamTypeSource.RUNTIME
-        return None, "unknown", ExposedParamTypeSource.NONE
+            return TypeInfo(value_type, value_type.__name__, ExposedParamTypeSource.RUNTIME)
+        return TypeInfo(None, "unknown", ExposedParamTypeSource.NONE)
+
+    @staticmethod
+    def get_type_info_from_metadata_or_value(
+        metadata: ExposedParam,
+        value: Any | None = None,
+    ) -> TypeInfo:
+        """Get type info from metadata, with fallback to runtime value.
+
+        Tries metadata.type_hint first, falls back to inferring from value.
+        This helper eliminates duplicated type inference logic by reusing
+        existing helper methods.
+
+        Args:
+            metadata: ExposedParam with potential type_hint
+            value: Optional runtime value to infer type from
+
+        Returns:
+            TypeInfo with type information from best available source
+        """
+        # Try metadata first
+        type_info = _ExposureHelper.get_type_info_from_metadata(metadata)
+        if type_info.type_str != "unknown":
+            return type_info
+
+        # Fallback to runtime value
+        if value is not None:
+            return _ExposureHelper.get_type_info_from_value(value)
+
+        # No type info available
+        return type_info  # Return the "unknown" TypeInfo from metadata
 
     @staticmethod
     def _extract_pipe_exposed_param(
@@ -548,19 +579,8 @@ class _ExposureHelper:
                 except Exception:
                     field_value = None
 
-                # Get type info
-                type_hint = metadata.type_hint
-                if type_hint is not None:
-                    param_type = getattr(type_hint, "__name__", str(type_hint))
-                    type_source = ExposedParamTypeSource.ANNOTATED
-                elif field_value is not None:
-                    type_hint = type(field_value)
-                    param_type = type_hint.__name__
-                    type_source = ExposedParamTypeSource.RUNTIME
-                else:
-                    type_hint = None
-                    param_type = "unknown"
-                    type_source = ExposedParamTypeSource.NONE
+                # Get type info using helper
+                type_info = _ExposureHelper.get_type_info_from_metadata_or_value(metadata, field_value)
 
                 exposed.append(
                     ExposedParamRuntimeInfo(
@@ -569,9 +589,9 @@ class _ExposureHelper:
                         extra=metadata.extra,
                         expose=metadata.expose,
                         persistent=metadata.persistent,
-                        type_hint=type_hint,
-                        type_=param_type,
-                        type_source=type_source,
+                        type_hint=type_info.type_hint,
+                        type_=type_info.type_str,
+                        type_source=type_info.type_source,
                         editable=False,  # Runtime components don't have auto-generated setters
                         current_value=field_value if include_values else None,
                     ),
