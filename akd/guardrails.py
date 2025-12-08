@@ -168,8 +168,7 @@ def add_guardrails(
                     io_type = "Input" if is_input else "Output"
                     for risk in detected_risks:
                         logger.warning(
-                            f"[{io_type} Guardrails] Detected {risk.risk_type.value} risk. "
-                            f"Snippet: '{risk.text_snippet}...'",
+                            f"[{io_type} Guardrails] Detected {risk.risk_type} risk. Snippet: '{risk.text_snippet}...'",
                         )
 
                 return detected_risks
@@ -180,7 +179,7 @@ def add_guardrails(
                 is_input: bool,
             ) -> None:
                 """Raise appropriate guardrail error."""
-                risk_names = [r.risk_type.value for r in detected_risks]
+                risk_names = [r.risk_type for r in detected_risks]
                 io_type = "input" if is_input else "output"
                 message = f"Guardrails detected risks in {io_type}: {risk_names}"
 
