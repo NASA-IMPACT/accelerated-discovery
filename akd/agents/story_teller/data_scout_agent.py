@@ -50,6 +50,8 @@ class DataScoutAgentConfig(BaseAgentConfig):
 class DataScoutAgent(BaseAgent):
   """
   The Data scout agent filters the relevant data and then produces evidences/relevant_collection.
+  Note: This agent is just a orcheastrator, the configuration is meaningless here. It doesnot use any LLM calls.
+  So the system calls, doc string for the io schema are not used.
   """
   input_schema = DataScoutAgentInputSchema
   output_schema = DataScoutAgentOutputSchema
