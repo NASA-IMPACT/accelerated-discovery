@@ -69,11 +69,9 @@ def add_guardrails(
                     input_guardrails,
                     output_guardrails,
                 )
-                # Store field preferences
-                self.input_fields = input_fields or self.guardrails_config.input_fields
-                self.output_fields = (
-                    output_fields or self.guardrails_config.output_fields
-                )
+                # Store field preferences (prefixed to avoid conflicts with agent attributes)
+                self.guarded_input_fields = input_fields or self.guardrails_config.input_fields
+                self.guarded_output_fields = output_fields or self.guardrails_config.output_fields
 
             def _setup_guardrails_validation(
                 self,
@@ -85,12 +83,8 @@ def add_guardrails(
                 self.guardrails_config = (config or GuardrailsConfig()).model_copy(
                     deep=True,
                 )
-                self.guardrails_config.input_risk_types = (
-                    input_guardrails or self.guardrails_config.input_risk_types
-                )
-                self.guardrails_config.output_risk_types = (
-                    output_guardrails or self.guardrails_config.output_risk_types
-                )
+                self.guardrails_config.input_risk_types = input_guardrails or self.guardrails_config.input_risk_types
+                self.guardrails_config.output_risk_types = output_guardrails or self.guardrails_config.output_risk_types
 
                 self.guardrails_tool = None
                 if self.guardrails_config.enabled:
@@ -110,11 +104,7 @@ def add_guardrails(
                 is_input: bool = True,
             ) -> bool:
                 """Validate text with Granite Guardian model."""
-                if (
-                    not self.guardrails_config.enabled
-                    or not self.guardrails_tool
-                    or not text
-                ):
+                if not self.guardrails_config.enabled or not self.guardrails_tool or not text:
                     return True
 
                 try:
@@ -276,9 +266,7 @@ def add_guardrails(
                                 visited,
                             )
                     elif (
-                        isinstance(obj, (dict, type(None)))
-                        or hasattr(obj, "model_fields")
-                        or hasattr(obj, "__dict__")
+                        isinstance(obj, (dict, type(None))) or hasattr(obj, "model_fields") or hasattr(obj, "__dict__")
                     ):
                         # Handle all object types with unified field iteration
                         for key, value in self._iterate_object_fields(obj):
@@ -305,7 +293,7 @@ def add_guardrails(
                 if self.guardrails_config.enabled:
                     input_text = self._extract_text_content(
                         params,
-                        self.input_fields,
+                        self.guarded_input_fields,
                     )
                     input_passed = await self._validate_with_guardrails(
                         input_text,
@@ -322,7 +310,7 @@ def add_guardrails(
                 if self.guardrails_config.enabled:
                     output_text = self._extract_text_content(
                         response,
-                        self.output_fields,
+                        self.guarded_output_fields,
                     )
                     output_passed = await self._validate_with_guardrails(
                         output_text,
@@ -468,8 +456,14 @@ def apply_guardrails(
         guarded_component = GuardedComponentClass.__new__(GuardedComponentClass)
         guarded_component.__dict__.update(component.__dict__)
 
-        # Initialize the guardrails system
-        GuardedComponentClass.__init__(guarded_component)
+        # Only setup guardrails, don't re-initialize (which would overwrite config)
+        guarded_component._setup_guardrails_validation(
+            config,
+            input_guardrails,
+            output_guardrails,
+        )
+        guarded_component.guarded_input_fields = input_fields or guarded_component.guardrails_config.input_fields
+        guarded_component.guarded_output_fields = output_fields or guarded_component.guardrails_config.output_fields
 
         logger.info(
             f"Guardrails applied to {component_name}. Now, it has become {guarded_component.__class__.__name__}",
