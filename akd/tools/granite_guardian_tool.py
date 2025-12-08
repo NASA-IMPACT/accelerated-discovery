@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
@@ -17,7 +17,7 @@ from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.search import SearchResultItem, SearchToolOutputSchema
 
 
-class RiskDefinition(Enum):
+class RiskDefinition(StrEnum):
     """
     Enumeration of possible risk definitions defined in Granite Guardian.
     """
@@ -34,7 +34,7 @@ class RiskDefinition(Enum):
     ANSWER_RELEVANCE = "answer_relevance"
 
 
-class GuardianModelID(Enum):
+class GuardianModelID(StrEnum):
     """
     Enumeration of Granite Guardian models
     """
@@ -44,7 +44,7 @@ class GuardianModelID(Enum):
     GUARDIAN_3_3_8B = "ibm/granite3.3-guardian:8b"
 
 
-class OllamaType(Enum):
+class OllamaType(StrEnum):
     """
     Enumeration of Ollama types (chat/server)
     """
@@ -169,9 +169,7 @@ class GraniteGuardianTool(
                 content = result["content"]
 
             try:
-                label = re.findall(r"\b(yes|no)\b", content, flags=re.IGNORECASE)[
-                    0
-                ].lower()
+                label = re.findall(r"\b(yes|no)\b", content, flags=re.IGNORECASE)[0].lower()
             except Exception as e:
                 logger.error(f"[GuardianTool] Ollama error: {e}")
                 return {"error": str(e)}
