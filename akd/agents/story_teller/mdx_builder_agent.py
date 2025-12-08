@@ -22,7 +22,7 @@ class MDXBuilderAgentOutputSchema(OutputSchema):
   story_mdx: str = Field(
     ...,
     description="""
-      The story in mdx format.
+      The story in mdx frontmatter format.
     """
   )
 
@@ -626,7 +626,7 @@ class MDXBuilderAgentConfig(BaseAgentConfig):
 
 class MDXBuilderAgent(LiteLLMInstructorBaseAgent[MDXBuilderAgentInputSchema, MDXBuilderAgentOutputSchema]):
   """
-    Your are a MDX expert.
+    Your are a MDX Fontmatter expert.
     You are well versed about the MDX components available in the veda-system.
     Your goal is to convert the xml related to data in story script and then replace that 
     with the veda MDX components. 

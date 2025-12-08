@@ -6,6 +6,8 @@ from akd._base import InputSchema, OutputSchema
 
 from data_types import CollectionItem
 
+from akd.configs.storyteller_prompts import SCRIPT_BLUEPRINT_BUILDER_SYSTEM_PROMPT
+
 class ScriptBlueprintBuilderAgentInputSchema(InputSchema):
   """
   This is the input to the Script Builder Agent.
@@ -33,24 +35,25 @@ class ScriptBlueprintBuilderAgentOutputSchema(OutputSchema):
   script_blueprint: str = Field(
     ...,
     description="""
-      A blueprint containing the Characters, the inciting incident (from the data), and the resolution.
+      A blueprint for the script which will be built into a story.
     """
   )
 
 class ScriptBlueprintBuilderAgentConfig(BaseAgentConfig):
   system_prompt: str = Field(
-    default="""
-      You are a Narrative Architect.
-      Find the primary event being discussed and decide the Angle of the story.
-      Your goal is to find the 'Drama' inside technical or factual documents.
-    """
+    default=SCRIPT_BLUEPRINT_BUILDER_SYSTEM_PROMPT
   )
+  input_hints: bool = Field(default=True)
+  enable_trimming: bool = Field(default=False)
+  model_name: str = Field(default="gpt-4o")
+  temperature: float = Field(default=1.0)
 
 class ScriptBlueprintBuilderAgent(LiteLLMInstructorBaseAgent[ScriptBlueprintBuilderAgentInputSchema, ScriptBlueprintBuilderAgentOutputSchema]):
   """
-    Always base things off factual collection-items datasets whereever possible.
-    If the input is about co2 emission literature: The 'Story' is the showcasing the risk, the current scenario and providing the proposal for mitigation.
-  """
+  This script blueprint builder agent is used to generate a script blueprint for a story.
+  The inputs are literature text and STAC based collection_items.
+  Always base the script blueprint off factual collection-items datasets whereever possible.
+ """
   input_schema = ScriptBlueprintBuilderAgentInputSchema
   output_schema = ScriptBlueprintBuilderAgentOutputSchema
   config_schema = ScriptBlueprintBuilderAgentConfig
