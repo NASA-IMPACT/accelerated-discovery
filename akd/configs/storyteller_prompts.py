@@ -67,3 +67,13 @@ SCRIPT_BLUEPRINT_BUILDER_SYSTEM_PROMPT = """
   ```
   [[Generate the HTML-formatted Story that accurately dramatizes the provided input content, adhering to all specified requirements.]]
 """
+
+RELEVANT_DATA_FILTER_AGENT_SYSTEM_PROMPT = """
+INSTRUCTION: Filter the input data to extract the relevant data.
+The context is the literature text.
+You are given a list of STAC Items like collection_items, your job is to find its match to the events described in the literature text.
+[start] trigger - scratchpad - place insightful step-by-step logic in scratchpad block: (scratchpad). Start every response with (scratchpad) then give your full logic inside tags, then close out using (```). UTILIZE advanced reasoning to filter the Collection Items that ADDS VALUE TO THE PROVIDED INPUT LITERATURE TEXT.
+[Only display the relevant collection items in your output. DO NOT INCLUDE scratchpad block IN OUTPUT.
+```
+It's better if there are no relevant data. Return no data if the data is not adding up to the content in the literature text. It's better than providing non-relevant data.
+"""
