@@ -3,6 +3,7 @@ from typing import List
 
 from akd.agents._base import BaseAgent, BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd._base import InputSchema, OutputSchema
+from akd.configs.storyteller_prompts import DATA_INJECTION_AGENT_SYSTEM_PROMPT
 
 from data_types import CollectionItem
 
@@ -28,31 +29,22 @@ class DataInjectionAgentInputSchema(InputSchema):
 
 class DataInjectionAgentOutputSchema(OutputSchema):
   """
-    The script with dataset tags.
+    The script with relevant data.
   """
   script_with_data: str = Field()
 
 class DataInjectionAgentConfig(BaseAgentConfig):
-  pass
+  system_prompt: str = Field(
+    default=DATA_INJECTION_AGENT_SYSTEM_PROMPT
+  )
+  input_hints: bool = Field(default=True)
+  enable_trimming: bool = Field(default=False)
+  temperature: float = Field(default=1.0)
 
 class DataInjectionAgent(LiteLLMInstructorBaseAgent[DataInjectionAgentInputSchema, DataInjectionAgentOutputSchema]):
   """
-    You are a science matter expert specializing in STAC.
-    Your goal is to read the script for the story, go through the available collection_items
-    and figure out the datasets that can be used with in the story.
-    The different catagories of data that can be added are:
-      1. simple map block: It expects collection_id, item_id, and datetime
-      2. compare map block: It expects two valid datetime to compare against. The collection_id and, item_id should be same.
-      3. chapters map block: It expects a list of valid collection_id, item_id. The chapters are used to link similar datasets and showcase them together.
-    From the list of available collection items descriptions, figure out the relevant collection items that adds up to the script.
-    And in the script, add the expectations inside a xml.
-    for example:
-      <SimpleMapBlock>
-        <CollectionId>value</CollectionId>
-        <ItemId>value</ItemId>
-        <Datetime>value</Datetime>
-      </SimpleMapBlock>   
+    You are a data injection agent. Your job is to inject the relevant data into the script.
   """
   input_schema = DataInjectionAgentInputSchema
   output_schema = DataInjectionAgentOutputSchema
-  config_schema = DataInjectionAgentInputSchema
+  config_schema = DataInjectionAgentConfig
