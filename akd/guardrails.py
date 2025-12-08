@@ -4,7 +4,7 @@ import copy
 from typing import List, Optional
 
 from loguru import logger
-from pydantic import BaseModel, Field, computed_field, create_model
+from pydantic import BaseModel, ConfigDict, Field, computed_field, create_model
 
 from akd.agents._base import BaseAgent
 from akd.configs.guardrails_config import GuardrailsConfig
@@ -20,6 +20,8 @@ from akd.tools.granite_guardian_tool import (
 
 class GuardrailResult(BaseModel):
     """Details about a detected guardrail violation."""
+
+    model_config = ConfigDict(use_enum_values=True)
 
     risk_type: RiskDefinition
     text_snippet: str = Field(default="")
