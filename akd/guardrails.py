@@ -367,6 +367,7 @@ def add_guardrails(
                 GuardrailedClass = create_model(
                     OriginalClass.__name__,
                     __base__=(GuardrailsMixin, OriginalClass),  # Mixin first for MRO
+                    __doc__=OriginalClass.__doc__,
                 )
 
                 # Create new instance with original data + guardrail data
