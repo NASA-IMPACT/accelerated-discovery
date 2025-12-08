@@ -68,10 +68,10 @@ async def test_field_prioritization():
         output_guardrails=[RiskDefinition.ANSWER_RELEVANCE],
     )
 
-    print(f"Default input fields: {guarded_agent_default.input_fields}")
-    print(f"Default output fields: {guarded_agent_default.output_fields}")
-    assert guarded_agent_default.input_fields == default_config.input_fields
-    assert guarded_agent_default.output_fields == default_config.output_fields
+    print(f"Default input fields: {guarded_agent_default.guarded_input_fields}")
+    print(f"Default output fields: {guarded_agent_default.guarded_output_fields}")
+    assert guarded_agent_default.guarded_input_fields == default_config.input_fields
+    assert guarded_agent_default.guarded_output_fields == default_config.output_fields
 
     # Test 2: Custom field priorities
     print("\n2. Testing custom field priorities...")
@@ -86,10 +86,10 @@ async def test_field_prioritization():
         output_fields=custom_output_fields,
     )
 
-    print(f"Custom input fields: {guarded_agent_custom.input_fields}")
-    print(f"Custom output fields: {guarded_agent_custom.output_fields}")
-    assert guarded_agent_custom.input_fields == custom_input_fields
-    assert guarded_agent_custom.output_fields == custom_output_fields
+    print(f"Custom input fields: {guarded_agent_custom.guarded_input_fields}")
+    print(f"Custom output fields: {guarded_agent_custom.guarded_output_fields}")
+    assert guarded_agent_custom.guarded_input_fields == custom_input_fields
+    assert guarded_agent_custom.guarded_output_fields == custom_output_fields
 
     # Test 3: Field extraction with different priorities
     print("\n3. Testing field extraction...")

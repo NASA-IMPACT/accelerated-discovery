@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from abc import abstractmethod
 from typing import Any, cast
 
@@ -211,6 +212,41 @@ class InstructorBaseAgent[
         # Initialize memory
         self._memory = []
 
+    def __deepcopy__(self, memo: dict[int, Any]) -> InstructorBaseAgent:
+        """Custom deepcopy that recreates the client instead of copying it.
+
+        The instructor/openai client contains httpx connections and async state
+        that cannot be properly deepcopied. We copy all other attributes and
+        recreate the client fresh.
+
+        Args:
+            memo: Dictionary of already copied objects (used by copy.deepcopy).
+
+        Returns:
+            A deep copy of this agent with a fresh client.
+        """
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Copy all attributes except the client
+        for k, v in self.__dict__.items():
+            if k == "client":
+                continue
+            setattr(result, k, copy.deepcopy(v, memo))
+
+        # Recreate the client fresh (api_key/base_url are dynamic properties from metaclass)
+        api_key = getattr(result, "api_key", None)
+        base_url = getattr(result, "base_url", None)
+        result.client = instructor.from_openai(
+            openai.AsyncOpenAI(
+                api_key=api_key,
+                base_url=str(base_url) if base_url else None,
+            ),
+        )
+
+        return result
+
     @property
     def memory(self) -> list[dict[str, str]]:
         return self._memory
@@ -339,33 +375,6 @@ class InstructorBaseAgent[
 
         return response
 
-    def __deepcopy__(self, memo):
-        """
-        Custom deepcopy implementation to handle unpickleable attributes.
-        """
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-
-        # Manually copy attributes, re-initializing the client
-        for k, v in self.__dict__.items():
-            if k == "client":
-                # Re-create the client instead of copying it
-                setattr(
-                    result,
-                    k,
-                    instructor.from_openai(
-                        openai.AsyncOpenAI(
-                            api_key=self.api_key,
-                            base_url=str(self.base_url),
-                        ),
-                    ),
-                )
-            else:
-                setattr(result, k, __import__("copy").deepcopy(v, memo))
-
-        return result
-
 
 class LiteLLMInstructorBaseAgent[
     InSchema: InputSchema,
@@ -388,6 +397,30 @@ class LiteLLMInstructorBaseAgent[
 
         # Replace instructor client with LiteLLM version
         self.client = instructor.from_litellm(acompletion)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> LiteLLMInstructorBaseAgent:
+        """Custom deepcopy that recreates the LiteLLM client instead of copying it.
+
+        Args:
+            memo: Dictionary of already copied objects (used by copy.deepcopy).
+
+        Returns:
+            A deep copy of this agent with a fresh LiteLLM client.
+        """
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+
+        # Copy all attributes except the client
+        for k, v in self.__dict__.items():
+            if k == "client":
+                continue
+            setattr(result, k, copy.deepcopy(v, memo))
+
+        # Recreate the LiteLLM client fresh
+        result.client = instructor.from_litellm(acompletion)
+
+        return result
 
     async def get_response_async(
         self,
