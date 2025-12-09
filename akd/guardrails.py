@@ -4,9 +4,11 @@ import copy
 from typing import List, Optional
 
 from loguru import logger
+from pydantic import BaseModel, ConfigDict, Field, computed_field, create_model
 
 from akd.agents._base import BaseAgent
 from akd.configs.guardrails_config import GuardrailsConfig
+from akd.errors import InputGuardrailTriggered, OutputGuardrailTriggered
 from akd.tools._base import BaseTool
 from akd.tools.granite_guardian_tool import (
     GraniteGuardianInputSchema,
@@ -14,6 +16,28 @@ from akd.tools.granite_guardian_tool import (
     GraniteGuardianToolConfig,
     RiskDefinition,
 )
+
+
+class GuardrailResult(BaseModel):
+    """Details about a detected guardrail violation."""
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    risk_type: RiskDefinition
+    text_snippet: str = Field(default="")
+
+
+class GuardrailsMixin(BaseModel):
+    """Mixin that adds guardrail tracking fields to response models."""
+
+    input_guardrails: list[GuardrailResult] = Field(default_factory=list)
+    output_guardrails: list[GuardrailResult] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def guardrails_passed(self) -> bool:
+        """Returns True if no guardrails were triggered."""
+        return len(self.input_guardrails) == 0 and len(self.output_guardrails) == 0
 
 
 def add_guardrails(
@@ -102,10 +126,12 @@ def add_guardrails(
                 text: str,
                 risk_types: List[RiskDefinition],
                 is_input: bool = True,
-            ) -> bool:
-                """Validate text with Granite Guardian model."""
+            ) -> list[GuardrailResult]:
+                """Validate text and return list of detected risks (empty = passed)."""
+                detected_risks: list[GuardrailResult] = []
+
                 if not self.guardrails_config.enabled or not self.guardrails_tool or not text:
-                    return True
+                    return []
 
                 try:
                     for risk_type in risk_types:
@@ -119,42 +145,48 @@ def add_guardrails(
 
                         for risk_result in result.risk_results:
                             if risk_result.get("is_risky", False):
-                                return self._handle_risk_detection(
-                                    text,
-                                    risk_type,
-                                    is_input,
+                                detected_risks.append(
+                                    GuardrailResult(
+                                        risk_type=risk_type,
+                                        text_snippet=text[: self.guardrails_config.snippet_n_chars],
+                                    ),
                                 )
 
-                    return True
-
                 except Exception as e:
-                    return self._handle_validation_error(e)
+                    if self.guardrails_config.fail_on_risk:
+                        raise e
+                    else:
+                        logger.error(f"[Guardrails] Validation error: {e}")
+                        return []  # Default to allowing on error
 
-            def _handle_risk_detection(
+                # Handle fail_on_risk after collecting all risks
+                if detected_risks and self.guardrails_config.fail_on_risk:
+                    self._raise_guardrail_error(detected_risks, is_input)
+
+                # Log warnings for detected risks (when not failing)
+                if detected_risks:
+                    io_type = "Input" if is_input else "Output"
+                    for risk in detected_risks:
+                        logger.warning(
+                            f"[{io_type} Guardrails] Detected {risk.risk_type} risk. Snippet: '{risk.text_snippet}...'",
+                        )
+
+                return detected_risks
+
+            def _raise_guardrail_error(
                 self,
-                text: str,
-                risk_type: RiskDefinition,
+                detected_risks: list[GuardrailResult],
                 is_input: bool,
-            ) -> bool:
-                """Handle detected risk based on configuration."""
-                text_type = "input" if is_input else "response"
-                snippet = text[: self.guardrails_config.snippet_n_chars]
-                io_type = "Input" if is_input else "Output"
-                message = f"Guardrails detected {risk_type.value} risk in {text_type}. Snippet: '{snippet}...'"
+            ) -> None:
+                """Raise appropriate guardrail error."""
+                risk_names = [r.risk_type for r in detected_risks]
+                io_type = "input" if is_input else "output"
+                message = f"Guardrails detected risks in {io_type}: {risk_names}"
 
-                if self.guardrails_config.fail_on_risk:
-                    raise ValueError(f"Guardrails validation failed: {message}")
+                if is_input:
+                    raise InputGuardrailTriggered(message, detected_risks)
                 else:
-                    logger.warning(f"[{io_type} Guardrails] {message}")
-                    return False
-
-            def _handle_validation_error(self, error: Exception) -> bool:
-                """Handle validation errors based on configuration."""
-                if self.guardrails_config.fail_on_risk:
-                    raise error
-                else:
-                    logger.error(f"[Guardrails] Validation error: {error}")
-                    return True  # Default to allowing on error
+                    raise OutputGuardrailTriggered(message, detected_risks)
 
             def _extract_text_content(self, obj, preferred_fields: List[str]) -> str:
                 """Extract text content with field prioritization and fallback to auto-extraction."""
@@ -289,19 +321,20 @@ def add_guardrails(
 
             async def _arun(self, params, **kwargs):
                 """Enhanced _arun with guardrails validation."""
+                input_risks: list[GuardrailResult] = []
+                output_risks: list[GuardrailResult] = []
+
                 # Input validation
                 if self.guardrails_config.enabled:
                     input_text = self._extract_text_content(
                         params,
                         self.guarded_input_fields,
                     )
-                    input_passed = await self._validate_with_guardrails(
+                    input_risks = await self._validate_with_guardrails(
                         input_text,
                         self.guardrails_config.input_risk_types,
                         is_input=True,
                     )
-                else:
-                    input_passed = True
 
                 # Run parent _arun
                 response = await super()._arun(params, **kwargs)
@@ -312,31 +345,37 @@ def add_guardrails(
                         response,
                         self.guarded_output_fields,
                     )
-                    output_passed = await self._validate_with_guardrails(
+                    output_risks = await self._validate_with_guardrails(
                         output_text,
                         self.guardrails_config.output_risk_types,
                         is_input=False,
                     )
-                else:
-                    output_passed = True
 
-                # Add guardrails status as computed field
-                self._add_guardrails_status(response, input_passed and output_passed)
-                return response
+                # Wrap response with guardrail fields (proper Pydantic model)
+                return self._wrap_response_with_guardrails(response, input_risks, output_risks)
 
-            def _add_guardrails_status(self, response, guardrails_passed: bool) -> None:
-                """Add guardrails validation status to response object."""
-                # Store the guardrails status in the object's __dict__ to bypass Pydantic validation
-                object.__setattr__(response, "_guardrails_passed", guardrails_passed)
+            def _wrap_response_with_guardrails(
+                self,
+                response,
+                input_risks: list[GuardrailResult],
+                output_risks: list[GuardrailResult],
+            ):
+                """Wrap response in a dynamic model with guardrail fields."""
+                OriginalClass = response.__class__
 
-                # Add a method to check guardrails validation status
-                def guardrails_validated():
-                    return getattr(response, "_guardrails_passed", True)
+                # Create dynamic model: inherits from Original + GuardrailsMixin
+                # Keeps original class name for consistency
+                GuardrailedClass = create_model(
+                    OriginalClass.__name__,
+                    __base__=(GuardrailsMixin, OriginalClass),  # Mixin first for MRO
+                    __doc__=OriginalClass.__doc__,
+                )
 
-                object.__setattr__(
-                    response,
-                    "guardrails_validated",
-                    guardrails_validated,
+                # Create new instance with original data + guardrail data
+                return GuardrailedClass(
+                    **response.model_dump(),
+                    input_guardrails=input_risks,
+                    output_guardrails=output_risks,
                 )
 
         # Preserve original class metadata

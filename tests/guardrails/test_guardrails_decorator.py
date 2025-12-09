@@ -1,7 +1,7 @@
 """Test guardrails decorator functionality."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import Field
@@ -9,7 +9,8 @@ from pydantic import Field
 from akd._base import InputSchema, OutputSchema
 from akd.agents import InstructorBaseAgent
 from akd.configs.guardrails_config import GuardrailsConfig
-from akd.guardrails import add_guardrails
+from akd.errors import InputGuardrailTriggered
+from akd.guardrails import GuardrailResult, add_guardrails
 from akd.tools._base import BaseTool
 from akd.tools.granite_guardian_tool import RiskDefinition
 
@@ -206,7 +207,7 @@ async def test_guardrails_validation_pass():
         [RiskDefinition.HARM],
         is_input=True,
     )
-    assert result is True
+    assert not len(result)
 
     # Test output validation
     result = await agent._validate_with_guardrails(
@@ -214,7 +215,7 @@ async def test_guardrails_validation_pass():
         [RiskDefinition.ANSWER_RELEVANCE],
         is_input=False,
     )
-    assert result is True
+    assert not len(result)
 
 
 @pytest.mark.asyncio
@@ -227,26 +228,29 @@ async def test_guardrails_validation_fail():
     mock_tool.arun.return_value = MagicMock(risk_results=[{"is_risky": True}])
     agent.guardrails_tool = mock_tool
 
-    # Test with fail_on_risk=False (default)
+    # Test with fail_on_risk=False (default) - returns list of GuardrailResult
     result = await agent._validate_with_guardrails(
         "risky content",
         [RiskDefinition.HARM],
         is_input=True,
     )
-    assert result is False
+    assert len(result) > 0  # Should have detected risks
+    assert isinstance(result[0], GuardrailResult)
+    assert result[0].risk_type == RiskDefinition.HARM
 
-    # Test with fail_on_risk=True
+    # Test with fail_on_risk=True - raises InputGuardrailTriggered
     agent_strict = TestAgentWithConfig()
     mock_tool_strict = AsyncMock()
     mock_tool_strict.arun.return_value = MagicMock(risk_results=[{"is_risky": True}])
     agent_strict.guardrails_tool = mock_tool_strict
 
-    with pytest.raises(ValueError, match="Guardrails validation failed"):
+    with pytest.raises(InputGuardrailTriggered) as exc_info:
         await agent_strict._validate_with_guardrails(
             "risky content",
             [RiskDefinition.HARM],
             is_input=True,
         )
+    assert len(exc_info.value.detected_risks) > 0
 
 
 @pytest.mark.asyncio
@@ -259,13 +263,13 @@ async def test_guardrails_validation_error_handling():
     mock_tool.arun.side_effect = Exception("Guardian tool error")
     agent.guardrails_tool = mock_tool
 
-    # Test with fail_on_risk=False (should log error and return True)
+    # Test with fail_on_risk=False (should log error and return empty list)
     result = await agent._validate_with_guardrails(
         "content",
         [RiskDefinition.HARM],
         is_input=True,
     )
-    assert result is True
+    assert result == []  # Empty list on error with fail_on_risk=False
 
     # Test with fail_on_risk=True (should re-raise exception)
     agent_strict = TestAgentWithConfig()
@@ -296,8 +300,13 @@ async def test_full_arun_with_guardrails():
     result = await agent.arun(test_input)
 
     assert result.response == "Processed: Test query"
-    assert hasattr(result, "guardrails_validated")
-    assert result.guardrails_validated() is True
+    # Check new guardrails fields
+    assert hasattr(result, "input_guardrails")
+    assert hasattr(result, "output_guardrails")
+    assert hasattr(result, "guardrails_passed")
+    assert result.guardrails_passed is True
+    assert result.input_guardrails == []
+    assert result.output_guardrails == []
 
     # Verify guardian tool was called for both input and output
     assert mock_tool.arun.call_count >= 2
@@ -309,21 +318,27 @@ async def test_guardrails_status_field():
     agent = TestAgent()
 
     # Mock guardian tool with mixed results
+    # TestAgent has input_guardrails=[JAILBREAK, HARM] and output_guardrails=[ANSWER_RELEVANCE]
+    # So we need 3 mock responses: 2 for input (both pass), 1 for output (fails)
     mock_tool = AsyncMock()
-    # First call (input validation) passes, second call (output validation) fails
     mock_tool.arun.side_effect = [
-        MagicMock(risk_results=[{"is_risky": False}]),
-        MagicMock(risk_results=[{"is_risky": True}]),
+        MagicMock(risk_results=[{"is_risky": False}]),  # JAILBREAK input check
+        MagicMock(risk_results=[{"is_risky": False}]),  # HARM input check
+        MagicMock(risk_results=[{"is_risky": True}]),  # ANSWER_RELEVANCE output check
     ]
     agent.guardrails_tool = mock_tool
 
     test_input = AgentInputSchema(query="Test query")
     result = await agent.arun(test_input)
 
-    assert hasattr(result, "guardrails_validated")
-    assert (
-        result.guardrails_validated() is False
-    )  # Should be False since output validation failed
+    # Check that guardrail fields are present and correct
+    assert hasattr(result, "input_guardrails")
+    assert hasattr(result, "output_guardrails")
+    assert hasattr(result, "guardrails_passed")
+    # Input passed (empty), output failed (has risks)
+    assert result.input_guardrails == []
+    assert len(result.output_guardrails) > 0
+    assert result.guardrails_passed is False  # Should be False since output had risks
 
 
 @pytest.mark.asyncio
@@ -331,20 +346,20 @@ async def test_empty_content_handling():
     """Test handling of empty content."""
     agent = TestAgent()
 
-    # Empty text should skip validation and return True
+    # Empty text should skip validation and return empty list (no risks)
     result = await agent._validate_with_guardrails(
         "",
         [RiskDefinition.HARM],
         is_input=True,
     )
-    assert result is True
+    assert result == []
 
     result = await agent._validate_with_guardrails(
         None,
         [RiskDefinition.HARM],
         is_input=True,
     )
-    assert result is True
+    assert result == []
 
 
 @pytest.mark.asyncio
@@ -365,25 +380,36 @@ async def test_multiple_risk_types():
         [RiskDefinition.HARM, RiskDefinition.JAILBREAK],
         is_input=True,
     )
-    assert result is False
+    # Should return list with detected risk (JAILBREAK was risky)
+    assert len(result) > 0
+    assert isinstance(result[0], GuardrailResult)
+    assert result[0].risk_type == RiskDefinition.JAILBREAK
 
 
 @pytest.mark.asyncio
 async def test_snippet_truncation():
-    """Test that long content is truncated in error messages."""
+    """Test that long content is truncated in GuardrailResult."""
     agent = TestAgent()
     agent.guardrails_config.snippet_n_chars = 10
 
     long_text = "This is a very long text that should be truncated"
-    risk_type = RiskDefinition.HARM
 
-    # Test that snippet is truncated
-    with patch.object(agent, "guardrails_config") as mock_config:
-        mock_config.snippet_n_chars = 10
-        mock_config.fail_on_risk = False
+    # Mock the guardian tool to return risky results
+    mock_tool = AsyncMock()
+    mock_tool.arun.return_value = MagicMock(risk_results=[{"is_risky": True}])
+    agent.guardrails_tool = mock_tool
 
-        result = agent._handle_risk_detection(long_text, risk_type, is_input=True)
-        assert result is False
+    result = await agent._validate_with_guardrails(
+        long_text,
+        [RiskDefinition.HARM],
+        is_input=True,
+    )
+
+    # Check that the result contains a truncated snippet
+    assert len(result) > 0
+    assert isinstance(result[0], GuardrailResult)
+    # Snippet should be truncated to snippet_n_chars
+    assert len(result[0].text_snippet) <= 10 + 3  # +3 for "..."
 
 
 def test_sync():
