@@ -93,7 +93,7 @@ def get_location_name(lat: float, lon: float) -> str:
 def help_def() -> str:
   return "this is a help text"
 
-def parse_stac_items_to_collection_items(stac_json: dict, stac_collection: dict = None) -> List[CollectionItem]:
+def parse_stac_items_to_collection_items(stac_items: List[dict], stac_collection: dict = None) -> List[CollectionItem]:
     """
     Parse STAC FeatureCollection JSON and convert features to CollectionItem objects.
     
@@ -110,7 +110,7 @@ def parse_stac_items_to_collection_items(stac_json: dict, stac_collection: dict 
     collection_description = stac_collection.get("description", "") if stac_collection else ""
     collection_title = stac_collection.get("title", "") if stac_collection else ""
     
-    for feature in stac_json.get("features", []):
+    for feature in stac_items:
         bbox = feature.get("bbox", [0, 0, 0, 0])
         center_lon = int((bbox[0] + bbox[2]) / 2)
         center_lat = int((bbox[1] + bbox[3]) / 2)
@@ -144,3 +144,81 @@ def parse_stac_items_to_collection_items(stac_json: dict, stac_collection: dict 
         collection_items.append(collection_item)
     
     return collection_items
+
+def download_stac_data(stac_url: str, stac_collection_id: str, output_dir: str = "./data") -> tuple[str, str, dict, list]:
+    """
+    Download STAC collection JSON and all its items.
+    
+    Args:
+        stac_url: Base URL of the STAC API
+        stac_collection_id: ID of the collection to download
+        output_dir: Directory to save the JSON files (default: ./data)
+    
+    Returns:
+        tuple: (collection_filepath, items_filepath, collection_data, items_list)
+    """
+    import json
+    from pathlib import Path
+    import requests
+    
+    # Create output directory
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Construct collection URL
+    collection_url = f"{stac_url.rstrip('/')}/collections/{stac_collection_id}"
+    
+    # Download collection JSON
+    print(f"Downloading STAC collection from: {collection_url}")
+    response = requests.get(collection_url)
+    response.raise_for_status()
+    collection_data = response.json()
+    
+    # Save collection JSON
+    collection_file = output_path / "stac_collection.json"
+    with open(collection_file, 'w') as f:
+        json.dump(collection_data, f, indent=2)
+    print(f"Saved collection to: {collection_file}")
+    
+    # Download all items
+    items = []
+    links = collection_data.get('links', [])
+    items_url = None
+    
+    # Look for items link
+    for link in links:
+        if link.get('rel') == 'items':
+            items_url = link.get('href')
+            break
+    
+    if items_url:
+        print(f"Downloading items from: {items_url}")
+        
+        # Handle pagination
+        while items_url:
+            response = requests.get(items_url)
+            response.raise_for_status()
+            items_data = response.json()
+            
+            if 'features' in items_data:
+                items.extend(items_data['features'])
+                print(f"  Downloaded {len(items_data['features'])} items (total: {len(items)})")
+            
+            # Check for next page
+            items_url = None
+            for link in items_data.get('links', []):
+                if link.get('rel') == 'next':
+                    items_url = link.get('href')
+                    break
+    else:
+        if 'features' in collection_data:
+            items = collection_data['features']
+            print(f"Found {len(items)} inline items")
+    
+    # Save items JSON
+    items_file = output_path / "stac_items.json"
+    with open(items_file, 'w') as f:
+        json.dump({"type": "FeatureCollection", "features": items}, f, indent=2)
+    print(f"Saved {len(items)} items to: {items_file}")
+    
+    return str(collection_file), str(items_file), collection_data, items
