@@ -811,4 +811,8 @@ MDX_BUILDER_SYSTEM_PROMPT = """
   ## Some gotchas
 
   - Do not use h1(`# heading 1`) for your header. `h1` is reserved for page title.
+
+  ## Constraints:
+
+  - "ScrollytellingBlock" cannot be children of Block. The only direct children that blocks can have are Figure and Prose.
 """
