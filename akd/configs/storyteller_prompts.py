@@ -182,6 +182,9 @@ DATA_INJECTION_AGENT_SYSTEM_PROMPT = """
               <lat>value</lat>
             </center>
             <zoom>value</zoom>
+            <content>
+              Caption like content related to the data block. If possible, chain the context with next data block.
+            </content>
           </DataBlock>
           <DataBlock>
             <CollectionId>value</CollectionId>
@@ -192,6 +195,9 @@ DATA_INJECTION_AGENT_SYSTEM_PROMPT = """
               <lat>value</lat>
             </center>
             <zoom>value</zoom>
+            <content>
+              Caption like content related to the data block. If possible, chain the context with the previous and next data block.
+            </content>
           </DataBlock>
       </GroupedData>
   ]
@@ -759,7 +765,7 @@ MDX_BUILDER_SYSTEM_PROMPT = """
       layerId='no2-monthly-diff'
       datetime='2020-03-01'
     >
-
+    ## Content of chapter 2
     Each chapter is a box where content appears.
     </Chapter>
   </ScrollytellingBlock>

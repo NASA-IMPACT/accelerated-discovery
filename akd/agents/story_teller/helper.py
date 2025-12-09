@@ -115,8 +115,16 @@ def parse_stac_items_to_collection_items(stac_items: List[dict], stac_collection
         center_lon = int((bbox[0] + bbox[2]) / 2)
         center_lat = int((bbox[1] + bbox[3]) / 2)
         
-        # Get datetime from properties
-        date = feature.get("properties", {}).get("datetime", "")
+        # Get datetime from properties and format to yyyy-mm-dd
+        date_str = feature.get("properties", {}).get("datetime", "") or feature.get("properties", {}).get("start_datetime", "")
+        date = ""
+        if date_str:
+            try:
+                from datetime import datetime
+                parsed_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                date = parsed_date.strftime("%Y-%m-%d")
+            except (ValueError, AttributeError):
+                date = date_str
         
         # Get collection info
         collection_id = feature.get("collection", "")
