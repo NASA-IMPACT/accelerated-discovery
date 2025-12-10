@@ -288,9 +288,13 @@ class GraniteGuardianTool(
             else:
                 is_risky = label == "yes"
 
+            # Include categories for consistent return type with multi-risk mode
+            categories = [self.risk_type] if is_risky else []
+
             return {
                 "risk_label": label,
                 "is_risky": is_risky,
+                "categories": categories,
                 "raw_response": result,
             }
         except Exception as e:
@@ -350,16 +354,6 @@ class GraniteGuardianTool(
                     risk_definition=HARM_RISK_DEFINITION,
                 )
                 res = self._call_multi_harm(prompt)
-                outputs.append(
-                    {
-                        "index": idx,
-                        "query": item.query,
-                        "snippet": item.content[: self.snippet_n_chars],
-                        "is_risky": res.get("is_risky"),
-                        "categories": res.get("categories", []),
-                        "raw_response": res.get("raw_response"),
-                    },
-                )
             else:
                 messages = [
                     {"role": "system", "content": self.risk_type},
@@ -367,16 +361,18 @@ class GraniteGuardianTool(
                     {"role": "assistant", "content": item.content},
                 ]
                 res = self._call_guardian(messages)
-                outputs.append(
-                    {
-                        "index": idx,
-                        "query": item.query,
-                        "snippet": item.content[: self.snippet_n_chars],
-                        "risk_label": res.get("risk_label"),
-                        "is_risky": res.get("is_risky"),
-                        "raw_response": res.get("raw_response"),
-                    },
-                )
+
+            outputs.append(
+                {
+                    "index": idx,
+                    "query": item.query,
+                    "snippet": item.content[: self.snippet_n_chars],
+                    "risk_label": res.get("risk_label"),
+                    "is_risky": res.get("is_risky"),
+                    "categories": res.get("categories", []),
+                    "raw_response": res.get("raw_response"),
+                },
+            )
         return outputs
 
     def _ollama_server_gen(self, messages):
@@ -426,6 +422,7 @@ class GraniteGuardianTool(
             )
 
             return {
+                "risk_label": "yes" if is_risky else "no",
                 "is_risky": is_risky,
                 "categories": categories,
                 "raw_response": content,
