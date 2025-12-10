@@ -20,6 +20,7 @@ from akd.tools.search import SearchResultItem, SearchToolOutputSchema
 class RiskDefinition(StrEnum):
     """
     Enumeration of possible risk definitions defined in Granite Guardian.
+    Used as INPUT to specify which risk type to check.
     """
 
     HARM = "harm"
@@ -34,6 +35,23 @@ class RiskDefinition(StrEnum):
     ANSWER_RELEVANCE = "answer_relevance"
 
 
+class HarmCategory(StrEnum):
+    """
+    Harm categories OUTPUT by multi-harm model.
+    These are the categories returned when using MultiHarmGuardianTool.
+    """
+
+    SOCIAL_BIAS = "Social Bias"
+    JAILBREAKING = "Jailbreaking"
+    VIOLENCE = "Violence"
+    PROFANITY = "Profanity"
+    SEXUAL_CONTENT = "Sexual Content"
+    UNETHICAL_BEHAVIOR = "Unethical Behavior"
+    HARMFUL = "Harmful"
+    NOT_HARMFUL_PROMPT = "Not harmful prompt"
+    NOT_HARMFUL_RESPONSE = "Not harmful response"
+
+
 class GuardianModelID(StrEnum):
     """
     Enumeration of Granite Guardian models
@@ -42,6 +60,7 @@ class GuardianModelID(StrEnum):
     GUARDIAN_2B = "granite3-guardian:2b"
     GUARDIAN_8B = "granite3-guardian:8b"
     GUARDIAN_3_3_8B = "ibm/granite3.3-guardian:8b"
+    GUARDIAN_MULTI_HARM = "hf.co/nishparadox/granite-guardian-3.2-5b-multi-harm-GGUF"
 
 
 class OllamaType(StrEnum):
@@ -51,6 +70,43 @@ class OllamaType(StrEnum):
 
     CHAT = "chat"
     SERVER = "server"
+
+
+# Prompt templates for multi-risk detection
+HARM_RISK_DEFINITION = "The 'User' message contains content that is harmful, unethical, or dangerous."
+
+MULTI_RISK_PROMPT_TEMPLATE = """You are a safety agent trying to help determine whether the last user message in the conversation is harmful according to the safety risk definition below.
+
+<start_of_conversation>
+User Message: {user_message}
+<end_of_conversation>
+
+Our safety risk definition is defined below:
+<start_of_risk_definition>
+* {risk_definition}
+<end_of_risk_definition>
+
+Is the last user message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.<|end_of_text|>
+<|start_of_role|>assistant<|end_of_role|>Yes
+<confidence> High </confidence><|end_of_text|>
+<categories>"""
+
+MULTI_RISK_RESPONSE_TEMPLATE = """You are a safety agent trying to help determine whether the last assistant message in the conversation is harmful according to the safety risk definition below.
+
+<start_of_conversation>
+User Message: {user_message}
+Assistant Message: {assistant_message}
+<end_of_conversation>
+
+Our safety risk definition is defined below:
+<start_of_risk_definition>
+* {risk_definition}
+<end_of_risk_definition>
+
+Is the last assistant message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.<|end_of_text|>
+<|start_of_role|>assistant<|end_of_role|>Yes
+<confidence> High </confidence><|end_of_text|>
+<categories>"""
 
 
 class GraniteGuardianInputSchema(InputSchema):
@@ -114,6 +170,10 @@ class GraniteGuardianToolConfig(BaseToolConfig):
         100,
         description="Number of characters to truncate the snippet to.",
     )
+    multi_risk: bool = Field(
+        default=False,
+        description="If True, use multi-harm model to detect all harm categories at once.",
+    )
 
 
 class GraniteGuardianTool(
@@ -136,6 +196,7 @@ class GraniteGuardianTool(
         self.default_risk_type = config.default_risk_type
         self.snippet_n_chars = config.snippet_n_chars
         self.ollama_type = config.ollama_type
+        self.multi_risk = config.multi_risk
 
     async def _arun(
         self,
@@ -189,19 +250,34 @@ class GraniteGuardianTool(
             return {"error": str(e)}
 
     def _process_singleturn(self, query: str) -> List[Dict[str, Any]]:
-        messages = [
-            {"role": "system", "content": self.risk_type},
-            {"role": "user", "content": query},
-        ]
-        return [self._call_guardian(messages)]
+        if self.multi_risk:
+            prompt = MULTI_RISK_PROMPT_TEMPLATE.format(
+                user_message=query,
+                risk_definition=HARM_RISK_DEFINITION,
+            )
+            return [self._call_multi_harm(prompt)]
+        else:
+            messages = [
+                {"role": "system", "content": self.risk_type},
+                {"role": "user", "content": query},
+            ]
+            return [self._call_guardian(messages)]
 
     def _process_multiturn(self, query: str, response: str) -> List[Dict[str, Any]]:
-        messages = [
-            {"role": "system", "content": self.risk_type},
-            {"role": "user", "content": query},
-            {"role": "assistant", "content": response},
-        ]
-        return [self._call_guardian(messages)]
+        if self.multi_risk:
+            prompt = MULTI_RISK_RESPONSE_TEMPLATE.format(
+                user_message=query,
+                assistant_message=response,
+                risk_definition=HARM_RISK_DEFINITION,
+            )
+            return [self._call_multi_harm(prompt)]
+        else:
+            messages = [
+                {"role": "system", "content": self.risk_type},
+                {"role": "user", "content": query},
+                {"role": "assistant", "content": response},
+            ]
+            return [self._call_guardian(messages)]
 
     def _process_search_results(
         self,
@@ -218,22 +294,41 @@ class GraniteGuardianTool(
                     },
                 )
                 continue
-            messages = [
-                {"role": "system", "content": self.risk_type},
-                {"role": "user", "content": item.query},
-                {"role": "assistant", "content": item.content},
-            ]
-            res = self._call_guardian(messages)
-            outputs.append(
-                {
-                    "index": idx,
-                    "query": item.query,
-                    "snippet": item.content[: self.snippet_n_chars],
-                    "risk_label": res.get("risk_label"),
-                    "is_risky": res.get("is_risky"),
-                    "raw_response": res.get("raw_response"),
-                },
-            )
+
+            if self.multi_risk:
+                prompt = MULTI_RISK_RESPONSE_TEMPLATE.format(
+                    user_message=item.query,
+                    assistant_message=item.content,
+                    risk_definition=HARM_RISK_DEFINITION,
+                )
+                res = self._call_multi_harm(prompt)
+                outputs.append(
+                    {
+                        "index": idx,
+                        "query": item.query,
+                        "snippet": item.content[: self.snippet_n_chars],
+                        "is_risky": res.get("is_risky"),
+                        "categories": res.get("categories", []),
+                        "raw_response": res.get("raw_response"),
+                    },
+                )
+            else:
+                messages = [
+                    {"role": "system", "content": self.risk_type},
+                    {"role": "user", "content": item.query},
+                    {"role": "assistant", "content": item.content},
+                ]
+                res = self._call_guardian(messages)
+                outputs.append(
+                    {
+                        "index": idx,
+                        "query": item.query,
+                        "snippet": item.content[: self.snippet_n_chars],
+                        "risk_label": res.get("risk_label"),
+                        "is_risky": res.get("is_risky"),
+                        "raw_response": res.get("raw_response"),
+                    },
+                )
         return outputs
 
     def _ollama_server_gen(self, messages):
@@ -267,3 +362,69 @@ class GraniteGuardianTool(
             if body.get("done", False):
                 message["content"] = output
                 return message
+
+    def _call_multi_harm(self, prompt: str) -> Dict[str, Any]:
+        """Call multi-harm model with pre-formatted prompt."""
+        try:
+            content = self._ollama_server_completion(prompt)
+            categories = self._parse_categories(content)
+
+            # Determine if risky based on categories
+            is_risky = (
+                not any(
+                    cat in [HarmCategory.NOT_HARMFUL_PROMPT, HarmCategory.NOT_HARMFUL_RESPONSE] for cat in categories
+                )
+                and len(categories) > 0
+            )
+
+            return {
+                "is_risky": is_risky,
+                "categories": categories,
+                "raw_response": content,
+            }
+        except Exception as e:
+            logger.error(f"[GuardianTool] Multi-harm error: {e}")
+            return {"error": str(e)}
+
+    def _ollama_server_completion(self, prompt: str) -> str:
+        """Raw completion endpoint for multi-risk prompt using /api/generate."""
+        url = urljoin(str(self.config.ollama_base_url), "/api/generate")
+        r = requests.post(
+            url,
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "num_ctx": 1024 * 8,
+                    "temperature": 0,
+                    "seed": 42,
+                    "stop": ["</categories>"],
+                },
+            },
+        )
+        r.raise_for_status()
+        return r.json().get("response", "")
+
+    def _parse_categories(self, content: str) -> List[HarmCategory]:
+        """Parse comma-separated categories from model output into HarmCategory enums."""
+        # Remove </categories> tag if present
+        content = content.replace("</categories>", "").strip()
+
+        if not content:
+            return []
+
+        # Split by comma and clean up
+        raw_categories = [cat.strip() for cat in content.split(",") if cat.strip()]
+
+        # Map to HarmCategory enums
+        categories = []
+        for raw_cat in raw_categories:
+            try:
+                categories.append(HarmCategory(raw_cat))
+            except ValueError:
+                logger.warning(f"[GuardianTool] Unknown harm category: {raw_cat}")
+                # Still include as string if not recognized
+                continue
+
+        return categories
