@@ -17,10 +17,31 @@ from akd.tools._base import BaseTool, BaseToolConfig
 from akd.tools.search import SearchResultItem, SearchToolOutputSchema
 
 
-class RiskDefinition(StrEnum):
+class GuardianRiskCategory:
     """
-    Enumeration of possible risk definitions defined in Granite Guardian.
-    Used as INPUT to specify which risk type to check.
+    Base marker class for all Guardian risk/harm category enums.
+
+    This provides a common type hierarchy for:
+    - RiskDefinition: Input categories for single-risk detection (snake_case)
+    - HarmCategory: Output categories from multi-harm model (Title Case)
+
+    Example:
+        def accepts_any_risk(category: GuardianRiskCategory) -> None:
+            ...
+
+        isinstance(RiskDefinition.VIOLENCE, GuardianRiskCategory)  # True
+        isinstance(HarmCategory.VIOLENCE, GuardianRiskCategory)    # True
+    """
+
+    pass
+
+
+class RiskDefinition(GuardianRiskCategory, StrEnum):
+    """
+    Risk types for SINGLE-RISK detection mode.
+
+    Used as INPUT to specify which risk to check with granite3-guardian models.
+    Values are snake_case strings expected by the model.
     """
 
     HARM = "harm"
@@ -35,10 +56,12 @@ class RiskDefinition(StrEnum):
     ANSWER_RELEVANCE = "answer_relevance"
 
 
-class HarmCategory(StrEnum):
+class HarmCategory(GuardianRiskCategory, StrEnum):
     """
-    Harm categories OUTPUT by multi-harm model.
-    These are the categories returned when using MultiHarmGuardianTool.
+    Harm categories from MULTI-HARM detection mode.
+
+    Returned as OUTPUT from the multi-harm model.
+    Values are Title Case strings as returned by the model.
     """
 
     SOCIAL_BIAS = "Social Bias"
@@ -54,12 +77,14 @@ class HarmCategory(StrEnum):
 
 class GuardianModelID(StrEnum):
     """
-    Enumeration of Granite Guardian models
+    Enumeration of Granite Guardian models.
     """
 
     GUARDIAN_2B = "granite3-guardian:2b"
     GUARDIAN_8B = "granite3-guardian:8b"
     GUARDIAN_3_3_8B = "ibm/granite3.3-guardian:8b"
+    GUARDIAN_3_2_5B_MULTI_HARM = "hf.co/nishparadox/granite-guardian-3.2-5b-multi-harm-GGUF"
+    # Backward compatibility alias (same value creates enum alias)
     GUARDIAN_MULTI_HARM = "hf.co/nishparadox/granite-guardian-3.2-5b-multi-harm-GGUF"
 
 
@@ -174,6 +199,29 @@ class GraniteGuardianToolConfig(BaseToolConfig):
         default=False,
         description="If True, use multi-harm model to detect all harm categories at once.",
     )
+
+    @model_validator(mode="after")
+    def validate_multi_risk_model(self) -> Self:
+        """Ensure multi_risk and model are consistent."""
+        multi_models = (
+            GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM,
+            GuardianModelID.GUARDIAN_MULTI_HARM,
+        )
+        is_multi_harm_model = self.model in multi_models
+
+        if self.multi_risk and not is_multi_harm_model:
+            raise ValueError(
+                f"multi_risk=True requires model to be one of {multi_models}, "
+                f"got {self.model}. Set model=GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM",
+            )
+
+        if is_multi_harm_model and not self.multi_risk:
+            logger.warning(
+                "[GraniteGuardianToolConfig] Multi-harm model selected but multi_risk=False. Setting multi_risk=True.",
+            )
+            self.multi_risk = True
+
+        return self
 
 
 class GraniteGuardianTool(
