@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -144,3 +144,23 @@ class GuardrailOutput(BaseModel):
     def triggered_risks(self) -> list[str]:
         """Risk IDs where risk was detected (filtered to requested risks)."""
         return [r.risk_id for r in self.results if r.is_risky]
+
+
+# --- Provider Protocol ---
+
+
+@runtime_checkable
+class GuardrailProtocol(Protocol):
+    """
+    Protocol for guardrail implementations (Granite, Atlas, etc.).
+
+    Any class implementing check() can be used as a guardrail.
+    """
+
+    def check(self, input: GuardrailInput) -> GuardrailOutput:
+        """Run guardrail check and return unified output."""
+        ...
+
+    async def acheck(self, input: GuardrailInput) -> GuardrailOutput:
+        """Async version of check."""
+        ...
