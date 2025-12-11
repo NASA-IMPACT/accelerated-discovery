@@ -41,6 +41,10 @@ class GuardrailOutput(OutputSchema):
         default_factory=list,
         description="Risk categories that were detected",
     )
+    risk_results: dict[RiskCategory, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Per-risk evaluation details (criteria, score, metadata)",
+    )
     extra: dict[str, Any] = Field(
         default_factory=dict,
         description="Provider-specific data (raw response, confidence, etc.)",

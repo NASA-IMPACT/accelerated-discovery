@@ -15,6 +15,7 @@ from pydantic import Field, HttpUrl, model_validator
 from typing_extensions import Self
 
 from akd.guardrails._base import GuardrailInput, GuardrailOutput
+from akd.guardrails.categories._base import RiskCategory
 from akd.guardrails.categories.granite import GraniteHarmCategory, GraniteRiskCategory
 from akd.tools._base import BaseTool, BaseToolConfig
 from akd.utils import async_lru_cache
@@ -155,13 +156,12 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
         tasks = [self._check_single_risk(params, cat) for cat in categories_to_check]
         results = await asyncio.gather(*tasks)
 
-        # Collect detected risks
+        # Collect detected risks and per-risk results
         detected_risks: list[GraniteRiskCategory] = []
-        all_results: list[dict[str, Any]] = []
+        risk_results: dict[RiskCategory, dict[str, Any]] = {}
 
         for cat, result in zip(categories_to_check, results):
-            result["category"] = cat.value
-            all_results.append(result)
+            risk_results[cat] = result
             if result.get("is_risky"):
                 detected_risks.append(cat)
 
@@ -173,7 +173,7 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
 
         return GuardrailOutput(
             detected_risks=detected_risks,
-            extra={"results": all_results},
+            risk_results=risk_results,
         )
 
     async def _check_single_risk(
@@ -324,8 +324,12 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
                 f"(filtered from {len(result.get('categories', []))}): {[r.value for r in detected]}",
             )
 
+        # Build per-risk results
+        risk_results: dict[RiskCategory, dict[str, Any]] = {cat: {"is_risky": True} for cat in detected}
+
         return GuardrailOutput(
             detected_risks=detected,
+            risk_results=risk_results,
             extra={
                 "raw_response": result.get("raw_response"),
                 "risk_label": result.get("risk_label"),
