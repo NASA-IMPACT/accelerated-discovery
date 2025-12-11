@@ -189,13 +189,20 @@ class RiskAgent(
         self,
         criteria_by_risk: dict[str, list[Criterion]],
         risk_weights: dict[str, float] | None = None,
-    ) -> DAGMetric:
-        """Build a DAGMetric from criteria grouped by risk."""
+    ) -> tuple[DAGMetric, dict[str, list[TaskNode]]]:
+        """Build a DAGMetric from criteria grouped by risk.
+
+        Returns:
+            Tuple of (DAGMetric, criterion_nodes_by_risk) where criterion_nodes_by_risk
+            maps risk_id to list of TaskNodes in same order as criteria.
+        """
         root_nodes: list[TaskNode] = []
         final_risk_nodes: list[TaskNode] = []
+        criterion_nodes_by_risk: dict[str, list[TaskNode]] = {}
 
         for risk_id, criteria in criteria_by_risk.items():
             child_nodes = []
+            criterion_nodes_by_risk[risk_id] = []
 
             # Create root nodes (binary True/False) with importance-aware labeling
             for i, criterion in enumerate(criteria):
@@ -217,6 +224,7 @@ class RiskAgent(
                 )
                 child_nodes.append((node, importance_str))
                 root_nodes.append(node)
+                criterion_nodes_by_risk[risk_id].append(node)
                 if self.debug:
                     logger.debug(
                         f"Created DAG root node for criterion: `{criterion}` for risk: {risk_id}",
@@ -333,7 +341,7 @@ class RiskAgent(
             dag=DeepAcyclicGraph(root_nodes=root_nodes),
             verbose_mode=True,
         )
-        return dag_metric
+        return dag_metric, criterion_nodes_by_risk
 
     async def _generate_criteria_for_risk(
         self,
@@ -398,7 +406,7 @@ Model Output: {content}
         criteria_by_risk: dict[str, list[Criterion]] = dict(results)
 
         # Build DAG metric from criteria
-        dag_metric = self._build_dag_from_criteria(
+        dag_metric, criterion_nodes_by_risk = self._build_dag_from_criteria(
             criteria_by_risk,
             risk_weights=risk_weights,
         )
@@ -415,11 +423,24 @@ Model Output: {content}
         raw_score = dag_metric.score or 0.0
         score = raw_score / 10.0  # DAGMetric scores are 0-10
 
-        # Build per-risk evaluation results (metadata accessible via key.metadata)
+        # Build per-risk evaluation results with criterion verdicts
         risk_results: dict[RiskCategory, dict[str, Any]] = {}
         for risk_category in risk_categories:
+            risk_id = risk_category.value
+            criteria_list = criteria_by_risk.get(risk_id, [])
+            nodes = criterion_nodes_by_risk.get(risk_id, [])
+
+            # Merge criterion data with verdicts from nodes
+            criteria_with_verdicts = []
+            for criterion, node in zip(criteria_list, nodes):
+                criterion_dict = criterion.model_dump()
+                # Parse verdict from node._output (e.g., "True" or "False")
+                verdict_str = node._output or ""
+                criterion_dict["verdict"] = verdict_str.strip().lower() == "true"
+                criteria_with_verdicts.append(criterion_dict)
+
             risk_results[risk_category] = {
-                "criteria": [c.model_dump() for c in criteria_by_risk.get(risk_category.value, [])],
+                "criteria": criteria_with_verdicts,
             }
 
         # Determine detected risks based on threshold
@@ -440,6 +461,7 @@ Model Output: {content}
                 "score": score,
                 "raw_score": raw_score,
                 "reason": dag_metric.reason,
+                "verbose_logs": dag_metric.verbose_logs,
             },
         )
 
