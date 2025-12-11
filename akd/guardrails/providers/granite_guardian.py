@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import json
+import asyncio
 import os
 import re
 from enum import StrEnum
 from typing import Any
 from urllib.parse import urljoin
 
-import requests
+import httpx
 from loguru import logger
 from pydantic import Field, HttpUrl, model_validator
 from typing_extensions import Self
@@ -17,6 +17,7 @@ from typing_extensions import Self
 from akd.guardrails._base import GuardrailInput, GuardrailOutput
 from akd.guardrails.categories.granite import GraniteHarmCategory, GraniteRiskCategory
 from akd.tools._base import BaseTool, BaseToolConfig
+from akd.utils import async_lru_cache
 
 
 class GuardianModelID(StrEnum):
@@ -90,6 +91,14 @@ class GraniteGuardianToolConfig(BaseToolConfig):
         default=GraniteRiskCategory.HARM,
         description="Default risk category to check.",
     )
+    max_concurrency: int = Field(
+        default=3,
+        description="Max concurrent requests to Ollama (prevents memory/compute overload).",
+    )
+    timeout: float = Field(
+        default=60.0,
+        description="HTTP request timeout in seconds.",
+    )
 
 
 class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
@@ -106,60 +115,127 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
     output_schema = GuardrailOutput
     config_schema = GraniteGuardianToolConfig
 
+    _client: httpx.AsyncClient | None = None
+    _semaphore: asyncio.Semaphore | None = None
+
+    def _post_init(self) -> None:
+        super()._post_init()
+        self._client = httpx.AsyncClient(timeout=self.config.timeout)
+        self._semaphore = asyncio.Semaphore(self.config.max_concurrency)
+        if self.debug:
+            logger.debug(
+                f"[{self.__class__.__name__}] Initialized with model={self.config.model}, "
+                f"max_concurrency={self.config.max_concurrency}, timeout={self.config.timeout}s",
+            )
+
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        if self._client:
+            await self._client.aclose()
+            if self.debug:
+                logger.debug(f"[{self.__class__.__name__}] HTTP client closed")
+
     async def _arun(self, params: GuardrailInput, **kwargs) -> GuardrailOutput:
-        """Run single-risk detection."""
-        # Determine which risk category to check
-        risk_category = params.risk_categories[0] if params.risk_categories else self.config.default_risk_category
-
-        # Convert to GraniteRiskCategory if string
-        if isinstance(risk_category, str):
-            risk_category = GraniteRiskCategory(risk_category)
-
-        # Build messages for Ollama
-        if params.context:
-            # Multi-turn: context is user query, content is assistant response
-            messages = [
-                {"role": "system", "content": risk_category.value},
-                {"role": "user", "content": params.context},
-                {"role": "assistant", "content": params.content},
-            ]
+        """Run risk detection for each requested category in parallel (with concurrency limit)."""
+        # Determine which risk categories to check
+        categories_to_check: list[GraniteRiskCategory] = []
+        if params.risk_categories:
+            for cat in params.risk_categories:
+                if isinstance(cat, str):
+                    categories_to_check.append(GraniteRiskCategory(cat))
+                elif isinstance(cat, GraniteRiskCategory):
+                    categories_to_check.append(cat)
         else:
-            # Single-turn: just content
-            messages = [
-                {"role": "system", "content": risk_category.value},
-                {"role": "user", "content": params.content},
-            ]
+            categories_to_check = [self.config.default_risk_category]
 
-        # Call guardian model
-        result = self._call_guardian(messages)
+        if self.debug:
+            logger.debug(
+                f"[{self.__class__.__name__}] Checking {len(categories_to_check)} risk categories: "
+                f"{[c.value for c in categories_to_check]}",
+            )
 
-        # Build output
+        # Run all category checks in parallel (limited by semaphore)
+        tasks = [self._check_single_risk(params, cat) for cat in categories_to_check]
+        results = await asyncio.gather(*tasks)
+
+        # Collect detected risks
         detected_risks: list[GraniteRiskCategory] = []
-        if result.get("is_risky"):
-            detected_risks.append(risk_category)
+        all_results: list[dict[str, Any]] = []
+
+        for cat, result in zip(categories_to_check, results):
+            result["category"] = cat.value
+            all_results.append(result)
+            if result.get("is_risky"):
+                detected_risks.append(cat)
+
+        if self.debug:
+            logger.debug(
+                f"[{self.__class__.__name__}] Detected {len(detected_risks)} risks: "
+                f"{[r.value for r in detected_risks]}",
+            )
 
         return GuardrailOutput(
             detected_risks=detected_risks,
-            extra={
-                "raw_response": result.get("raw_response"),
-                "risk_label": result.get("risk_label"),
-            },
+            extra={"results": all_results},
         )
 
-    def _call_guardian(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        """Call Ollama with guardian model."""
-        try:
-            if self.config.ollama_type == OllamaType.CHAT:
-                from ollama import chat
+    async def _check_single_risk(
+        self,
+        params: GuardrailInput,
+        risk_category: GraniteRiskCategory,
+    ) -> dict[str, Any]:
+        """Check a single risk category (with semaphore for concurrency control)."""
+        assert self._semaphore is not None, "Tool not initialized"
+        async with self._semaphore:
+            if self.debug:
+                logger.debug(f"[{self.__class__.__name__}] Checking risk: {risk_category.value}")
 
-                result = chat(model=self.config.model.value, messages=messages)
-                content = result.message.content
+            if params.context:
+                messages = (
+                    ("system", risk_category.value),
+                    ("user", params.context),
+                    ("assistant", params.content),
+                )
             else:
-                result = self._ollama_server_chat(messages)
-                content = result.get("content", "")
+                messages = (
+                    ("system", risk_category.value),
+                    ("user", params.content),
+                )
+            result = await self._call_guardian_cached(messages)
+
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Risk {risk_category.value}: is_risky={result.get('is_risky')}",
+                )
+            return result
+
+    @async_lru_cache(maxsize=256)
+    async def _call_guardian_cached(
+        self,
+        messages: tuple[tuple[str, str], ...],
+    ) -> dict[str, Any]:
+        """Call Ollama with guardian model (cached)."""
+        try:
+            # Convert tuple back to list of dicts for API
+            messages_list = [{"role": role, "content": content} for role, content in messages]
+
+            url = urljoin(str(self.config.ollama_base_url), "/api/chat")
+            response = await self._client.post(
+                url,
+                json={
+                    "model": self.config.model.value,
+                    "messages": messages_list,
+                    "stream": False,
+                    "options": {"num_ctx": 8192, "temperature": 0, "seed": 42},
+                },
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            content = data.get("message", {}).get("content", "")
 
             # Parse yes/no from response
-            match = re.search(r"\b(yes|no)\b", content, flags=re.IGNORECASE)
+            match = re.search(r"\b(yes|no)\b", content or "", flags=re.IGNORECASE)
             if not match:
                 return {"error": "Could not parse yes/no from response", "raw_response": content}
 
@@ -174,34 +250,6 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
         except Exception as e:
             logger.error(f"[GraniteGuardianTool] Error: {e}")
             return {"error": str(e)}
-
-    def _ollama_server_chat(self, messages: list[dict[str, str]]) -> dict[str, Any]:
-        """Call Ollama server /api/chat endpoint."""
-        url = urljoin(str(self.config.ollama_base_url), "/api/chat")
-        r = requests.post(
-            url,
-            json={
-                "model": self.config.model.value,
-                "messages": messages,
-                "stream": True,
-                "options": {"num_ctx": 8192, "temperature": 0, "seed": 42},
-            },
-            stream=False,
-        )
-        r.raise_for_status()
-
-        output = ""
-        for line in r.iter_lines():
-            body = json.loads(line)
-            if "error" in body:
-                raise Exception(body["error"])
-            if body.get("done") is False:
-                message = body.get("message", {})
-                output += message.get("content", "")
-            if body.get("done", False):
-                return {"content": output}
-
-        return {"content": output}
 
     # GuardrailProtocol implementation
     def check(self, params: GuardrailInput) -> GuardrailOutput:
@@ -232,7 +280,7 @@ class MultiHarmGraniteGuardianToolConfig(GraniteGuardianToolConfig):
         return self
 
 
-class MultiHarmGraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
+class MultiHarmGraniteGuardianTool(GraniteGuardianTool):
     """
     Multi-harm Granite Guardian tool.
 
@@ -242,13 +290,10 @@ class MultiHarmGraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
 
     name = "multi_harm_granite_guardian_tool"
     description = "Evaluates content for multiple harm categories using multi-harm model."
-    input_schema = GuardrailInput
-    output_schema = GuardrailOutput
     config_schema = MultiHarmGraniteGuardianToolConfig
 
     async def _arun(self, params: GuardrailInput, **kwargs) -> GuardrailOutput:
-        """Run multi-harm detection."""
-        # Build prompt based on single/multi-turn
+        """Run multi-harm detection (single call detects all harms)."""
         if params.context:
             prompt = MULTI_HARM_RESPONSE_TEMPLATE.format(
                 user_message=params.context,
@@ -261,8 +306,7 @@ class MultiHarmGraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
                 risk_definition=HARM_RISK_DEFINITION,
             )
 
-        # Call multi-harm model
-        result = self._call_multi_harm(prompt)
+        result = await self._call_multi_harm_cached(prompt)
 
         return GuardrailOutput(
             detected_risks=result.get("categories", []),
@@ -272,10 +316,28 @@ class MultiHarmGraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
             },
         )
 
-    def _call_multi_harm(self, prompt: str) -> dict[str, Any]:
-        """Call multi-harm model with completion endpoint."""
+    @async_lru_cache(maxsize=256)
+    async def _call_multi_harm_cached(self, prompt: str) -> dict[str, Any]:
+        """Call multi-harm model with completion endpoint (cached)."""
         try:
-            content = self._ollama_server_completion(prompt)
+            url = urljoin(str(self.config.ollama_base_url), "/api/generate")
+            response = await self._client.post(
+                url,
+                json={
+                    "model": self.config.model.value,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "num_ctx": 8192,
+                        "temperature": 0,
+                        "seed": 42,
+                        "stop": ["</categories>"],
+                    },
+                },
+            )
+            response.raise_for_status()
+
+            content = response.json().get("response", "")
             categories = self._parse_categories(content)
 
             # Filter out non-harmful markers
@@ -285,37 +347,15 @@ class MultiHarmGraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
                 if cat not in (GraniteHarmCategory.NOT_HARMFUL_PROMPT, GraniteHarmCategory.NOT_HARMFUL_RESPONSE)
             ]
 
-            is_risky = len(harmful_categories) > 0
-
             return {
-                "risk_label": "yes" if is_risky else "no",
-                "is_risky": is_risky,
+                "risk_label": "yes" if harmful_categories else "no",
+                "is_risky": len(harmful_categories) > 0,
                 "categories": harmful_categories,
                 "raw_response": content,
             }
         except Exception as e:
             logger.error(f"[MultiHarmGraniteGuardianTool] Error: {e}")
             return {"error": str(e), "categories": []}
-
-    def _ollama_server_completion(self, prompt: str) -> str:
-        """Call Ollama server /api/generate endpoint."""
-        url = urljoin(str(self.config.ollama_base_url), "/api/generate")
-        r = requests.post(
-            url,
-            json={
-                "model": self.config.model.value,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "num_ctx": 8192,
-                    "temperature": 0,
-                    "seed": 42,
-                    "stop": ["</categories>"],
-                },
-            },
-        )
-        r.raise_for_status()
-        return r.json().get("response", "")
 
     def _parse_categories(self, content: str) -> list[GraniteHarmCategory]:
         """Parse comma-separated categories from model output."""
@@ -333,12 +373,3 @@ class MultiHarmGraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
                 logger.warning(f"[MultiHarmGraniteGuardianTool] Unknown category: {raw_cat}")
 
         return categories
-
-    # GuardrailProtocol implementation
-    def check(self, params: GuardrailInput) -> GuardrailOutput:
-        """Sync guardrail check."""
-        return self.run(params)
-
-    async def acheck(self, params: GuardrailInput) -> GuardrailOutput:
-        """Async guardrail check."""
-        return await self.arun(params)
