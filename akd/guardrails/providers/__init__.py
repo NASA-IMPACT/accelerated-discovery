@@ -4,8 +4,8 @@ from akd.guardrails.providers.granite_guardian import (
     GraniteGuardianTool,
     GraniteGuardianToolConfig,
     GuardianModelID,
-    MultiHarmGraniteGuardianTool,
-    MultiHarmGraniteGuardianToolConfig,
+    MultiRiskGraniteGuardianTool,
+    MultiRiskGraniteGuardianToolConfig,
     OllamaType,
 )
 
@@ -13,7 +13,7 @@ __all__ = [
     "GraniteGuardianTool",
     "GraniteGuardianToolConfig",
     "GuardianModelID",
-    "MultiHarmGraniteGuardianTool",
-    "MultiHarmGraniteGuardianToolConfig",
+    "MultiRiskGraniteGuardianTool",
+    "MultiRiskGraniteGuardianToolConfig",
     "OllamaType",
 ]

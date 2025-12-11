@@ -73,23 +73,15 @@ Is the last assistant message harmful based on the risk definition? Your answer 
 <categories>"""
 
 
-class GraniteGuardianToolConfig(BaseToolConfig):
-    """Configuration for Granite Guardian Tool."""
+class GraniteGuardianBaseConfig(BaseToolConfig):
+    """Base configuration for Granite Guardian tools (shared fields)."""
 
     ollama_base_url: HttpUrl = Field(
         default=HttpUrl(os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")),
     )
-    model: GuardianModelID = Field(
-        default=GuardianModelID.GUARDIAN_8B,
-        description="Granite Guardian model to use.",
-    )
     ollama_type: OllamaType = Field(
         default=OllamaType.SERVER,
         description="Ollama connection type.",
-    )
-    default_risk_category: GraniteRiskCategory = Field(
-        default=GraniteRiskCategory.HARM,
-        description="Default risk category to check.",
     )
     max_concurrency: int = Field(
         default=3,
@@ -98,6 +90,19 @@ class GraniteGuardianToolConfig(BaseToolConfig):
     timeout: float = Field(
         default=60.0,
         description="HTTP request timeout in seconds.",
+    )
+
+
+class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
+    """Configuration for Granite Guardian Tool (single-risk mode)."""
+
+    model: GuardianModelID = Field(
+        default=GuardianModelID.GUARDIAN_8B,
+        description="Granite Guardian model to use.",
+    )
+    risk_categories: list[GraniteRiskCategory] = Field(
+        default_factory=lambda: list(GraniteRiskCategory),
+        description="Risk categories to check (defaults to all).",
     )
 
 
@@ -137,16 +142,8 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
 
     async def _arun(self, params: GuardrailInput, **kwargs) -> GuardrailOutput:
         """Run risk detection for each requested category in parallel (with concurrency limit)."""
-        # Determine which risk categories to check
-        categories_to_check: list[GraniteRiskCategory] = []
-        if params.risk_categories:
-            for cat in params.risk_categories:
-                if isinstance(cat, str):
-                    categories_to_check.append(GraniteRiskCategory(cat))
-                elif isinstance(cat, GraniteRiskCategory):
-                    categories_to_check.append(cat)
-        else:
-            categories_to_check = [self.config.default_risk_category]
+        # Input overrides config
+        categories_to_check = list(params.risk_categories or self.config.risk_categories)
 
         if self.debug:
             logger.debug(
@@ -261,36 +258,45 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
         return await self.arun(params)
 
 
-class MultiHarmGraniteGuardianToolConfig(GraniteGuardianToolConfig):
-    """Configuration for Multi-Harm Granite Guardian Tool."""
+class MultiRiskGraniteGuardianToolConfig(GraniteGuardianBaseConfig):
+    """Configuration for Multi-Risk Granite Guardian Tool."""
 
     model: GuardianModelID = Field(
         default=GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM,
-        description="Multi-harm model to use.",
+        description="Multi-risk model to use.",
+    )
+    risk_categories: list[GraniteHarmCategory] = Field(
+        default_factory=lambda: [
+            c
+            for c in GraniteHarmCategory
+            if c not in (GraniteHarmCategory.NOT_HARMFUL_PROMPT, GraniteHarmCategory.NOT_HARMFUL_RESPONSE)
+        ],
+        description="Harm categories to report (filters model output, defaults to all harmful).",
     )
 
     @model_validator(mode="after")
-    def validate_multi_harm_model(self) -> Self:
-        """Ensure model is multi-harm capable."""
+    def validate_multi_risk_model(self) -> Self:
+        """Ensure model is multi-risk capable."""
         if self.model != GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM:
             logger.warning(
-                f"[MultiHarmGraniteGuardianTool] Model {self.model} may not support multi-harm detection. "
+                f"[MultiRiskGraniteGuardianTool] Model {self.model} may not support multi-risk detection. "
                 f"Using {GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM} is recommended.",
             )
         return self
 
 
-class MultiHarmGraniteGuardianTool(GraniteGuardianTool):
+class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
     """
-    Multi-harm Granite Guardian tool.
+    Multi-risk Granite Guardian tool.
 
-    Uses granite-guardian-3.2-5b-multi-harm model to detect ALL harm categories at once.
+    Uses granite-guardian-3.2-5b-multi-harm model to detect ALL risk categories at once.
     Returns multiple detected risks in a single call.
     """
 
-    name = "multi_harm_granite_guardian_tool"
-    description = "Evaluates content for multiple harm categories using multi-harm model."
-    config_schema = MultiHarmGraniteGuardianToolConfig
+    name = "multi_risk_granite_guardian_tool"
+    description = "Evaluates content for multiple risk categories using multi-risk model."
+    config_schema = MultiRiskGraniteGuardianToolConfig
+    config: MultiRiskGraniteGuardianToolConfig  # type hint for pyright
 
     async def _arun(self, params: GuardrailInput, **kwargs) -> GuardrailOutput:
         """Run multi-harm detection (single call detects all harms)."""
@@ -308,11 +314,22 @@ class MultiHarmGraniteGuardianTool(GraniteGuardianTool):
 
         result = await self._call_multi_harm_cached(prompt)
 
+        # Filter to only include configured categories (input overrides config)
+        allowed_categories = set(params.risk_categories or self.config.risk_categories)
+        detected = [cat for cat in result.get("categories", []) if cat in allowed_categories]
+
+        if self.debug:
+            logger.debug(
+                f"[{self.__class__.__name__}] Detected {len(detected)} risks "
+                f"(filtered from {len(result.get('categories', []))}): {[r.value for r in detected]}",
+            )
+
         return GuardrailOutput(
-            detected_risks=result.get("categories", []),
+            detected_risks=detected,
             extra={
                 "raw_response": result.get("raw_response"),
                 "risk_label": result.get("risk_label"),
+                "unfiltered_categories": result.get("categories", []),
             },
         )
 

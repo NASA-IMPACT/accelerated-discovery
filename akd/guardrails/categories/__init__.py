@@ -8,7 +8,7 @@ from akd.guardrails.categories._base import (
     RiskCategory,
     RiskMetadata,
 )
-from akd.guardrails.categories.granite import GraniteRiskCategory
+from akd.guardrails.categories.granite import GraniteHarmCategory, GraniteRiskCategory
 
 # YAML-based categories - None if files don't exist
 try:
@@ -22,6 +22,7 @@ __all__ = [
     "RiskCategory",
     "RiskMetadata",
     "GraniteRiskCategory",
+    "GraniteHarmCategory",
     "AtlasRiskCategory",
     "ScienceRiskCategory",
     # IO schemas
