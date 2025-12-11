@@ -204,13 +204,13 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
         return {"content": output}
 
     # GuardrailProtocol implementation
-    def check(self, input: GuardrailInput) -> GuardrailOutput:
+    def check(self, params: GuardrailInput) -> GuardrailOutput:
         """Sync guardrail check."""
-        return self.run(input)
+        return self.run(params)
 
-    async def acheck(self, input: GuardrailInput) -> GuardrailOutput:
+    async def acheck(self, params: GuardrailInput) -> GuardrailOutput:
         """Async guardrail check."""
-        return await self.arun(input)
+        return await self.arun(params)
 
 
 class MultiHarmGraniteGuardianToolConfig(GraniteGuardianToolConfig):
@@ -335,10 +335,10 @@ class MultiHarmGraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
         return categories
 
     # GuardrailProtocol implementation
-    def check(self, input: GuardrailInput) -> GuardrailOutput:
+    def check(self, params: GuardrailInput) -> GuardrailOutput:
         """Sync guardrail check."""
-        return self.run(input)
+        return self.run(params)
 
-    async def acheck(self, input: GuardrailInput) -> GuardrailOutput:
+    async def acheck(self, params: GuardrailInput) -> GuardrailOutput:
         """Async guardrail check."""
-        return await self.arun(input)
+        return await self.arun(params)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import Field, computed_field
@@ -20,7 +21,7 @@ class GuardrailInput(InputSchema):
 
     content: str = Field(..., description="Content to check for risks")
     context: str | None = Field(None, description="Optional context (prior conversation, RAG docs)")
-    risk_categories: list[RiskCategory] = Field(
+    risk_categories: Sequence[RiskCategory] = Field(
         default_factory=list,
         description="Risk categories to check (empty = provider defaults)",
     )
@@ -36,7 +37,7 @@ class GuardrailOutput(OutputSchema):
 
     __response_field__ = "summary"
 
-    detected_risks: list[RiskCategory] = Field(
+    detected_risks: Sequence[RiskCategory] = Field(
         default_factory=list,
         description="Risk categories that were detected",
     )
@@ -67,11 +68,11 @@ class GuardrailProtocol(Protocol):
     Any class implementing check() can be used as a guardrail.
     """
 
-    def check(self, input: GuardrailInput) -> GuardrailOutput:
+    def check(self, params: GuardrailInput) -> GuardrailOutput:
         """Run guardrail check and return unified output."""
         ...
 
-    async def acheck(self, input: GuardrailInput) -> GuardrailOutput:
+    async def acheck(self, params: GuardrailInput) -> GuardrailOutput:
         """Async version of check."""
         ...
 
