@@ -16,6 +16,7 @@ from typing_extensions import Self
 
 from akd.guardrails._base import (
     GuardrailInput,
+    GuardrailOperatorMixin,
     GuardrailOutput,
     RiskCategoryValidationMixin,
 )
@@ -115,7 +116,11 @@ class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
     )
 
 
-class GraniteGuardianTool(RiskCategoryValidationMixin, BaseTool[GuardrailInput, GuardrailOutput]):
+class GraniteGuardianTool(
+    GuardrailOperatorMixin,
+    RiskCategoryValidationMixin,
+    BaseTool[GuardrailInput, GuardrailOutput],
+):
     """
     Granite Guardian tool for single-risk detection.
 

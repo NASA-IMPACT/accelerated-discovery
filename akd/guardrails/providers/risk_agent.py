@@ -27,6 +27,7 @@ from akd.agents._base import BaseAgentConfig
 from akd.configs.prompts import RISK_SYSTEM_PROMPT
 from akd.guardrails._base import (
     GuardrailInput,
+    GuardrailOperatorMixin,
     GuardrailOutput,
     RiskCategoryValidationMixin,
 )
@@ -101,6 +102,7 @@ class RiskAgentConfig(BaseAgentConfig):
 
 
 class RiskAgent(
+    GuardrailOperatorMixin,
     RiskCategoryValidationMixin,
     LiteLLMInstructorBaseAgent[GuardrailInput, GuardrailOutput],
 ):

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Protocol, get_args, get_origin, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, get_args, get_origin, runtime_checkable
+
+if TYPE_CHECKING:
+    from akd.guardrails.providers.composite import CompositeGuardrail
 
 from pydantic import Field, computed_field
 
@@ -151,9 +154,81 @@ class GuardrailProtocol(Protocol):
         ...
 
 
+class GuardrailOperatorMixin:
+    """Mixin to add &, |, and >> operators to guardrail implementations.
+
+    Operators:
+        g1 & g2  → CompositeGuardrail with mode=ALL (both must pass)
+        g1 | g2  → CompositeGuardrail with mode=ANY (at least one passes)
+        g1 >> g2 → CompositeGuardrail with mode=FAIL_FAST (sequential, stop on first fail)
+
+    Example:
+        granite = GraniteGuardianTool()
+        risk = RiskAgent()
+
+        combined = granite & risk          # Both must pass
+        combined = granite | risk          # Either passes
+        combined = granite >> risk         # Sequential, stop on first fail
+        combined = (granite >> risk) | fallback  # Nested composition
+    """
+
+    def __and__(self, other: GuardrailProtocol) -> "CompositeGuardrail":
+        """g1 & g2 → ALL mode (both must pass, parallel)."""
+        from akd.guardrails.providers.composite import (
+            CompositeGuardrail,
+            CompositeGuardrailMode,
+        )
+
+        # Flatten nested composites of same mode
+        if isinstance(self, CompositeGuardrail) and self.mode == CompositeGuardrailMode.ALL:
+            return CompositeGuardrail(
+                guardrails=[*self.guardrails, other],
+                mode=CompositeGuardrailMode.ALL,
+            )
+        return CompositeGuardrail(
+            guardrails=[self, other],
+            mode=CompositeGuardrailMode.ALL,
+        )
+
+    def __or__(self, other: GuardrailProtocol) -> "CompositeGuardrail":
+        """g1 | g2 → ANY mode (at least one must pass, parallel)."""
+        from akd.guardrails.providers.composite import (
+            CompositeGuardrail,
+            CompositeGuardrailMode,
+        )
+
+        if isinstance(self, CompositeGuardrail) and self.mode == CompositeGuardrailMode.ANY:
+            return CompositeGuardrail(
+                guardrails=[*self.guardrails, other],
+                mode=CompositeGuardrailMode.ANY,
+            )
+        return CompositeGuardrail(
+            guardrails=[self, other],
+            mode=CompositeGuardrailMode.ANY,
+        )
+
+    def __rshift__(self, other: GuardrailProtocol) -> "CompositeGuardrail":
+        """g1 >> g2 → FAIL_FAST mode (sequential, stop on first fail)."""
+        from akd.guardrails.providers.composite import (
+            CompositeGuardrail,
+            CompositeGuardrailMode,
+        )
+
+        if isinstance(self, CompositeGuardrail) and self.mode == CompositeGuardrailMode.FAIL_FAST:
+            return CompositeGuardrail(
+                guardrails=[*self.guardrails, other],
+                mode=CompositeGuardrailMode.FAIL_FAST,
+            )
+        return CompositeGuardrail(
+            guardrails=[self, other],
+            mode=CompositeGuardrailMode.FAIL_FAST,
+        )
+
+
 __all__ = [
     "GuardrailInput",
     "GuardrailOutput",
     "GuardrailProtocol",
+    "GuardrailOperatorMixin",
     "RiskCategoryValidationMixin",
 ]

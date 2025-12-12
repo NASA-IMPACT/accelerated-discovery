@@ -6,7 +6,12 @@ from enum import StrEnum
 
 from loguru import logger
 
-from akd.guardrails._base import GuardrailInput, GuardrailOutput, GuardrailProtocol
+from akd.guardrails._base import (
+    GuardrailInput,
+    GuardrailOperatorMixin,
+    GuardrailOutput,
+    GuardrailProtocol,
+)
 
 
 class CompositeGuardrailMode(StrEnum):
@@ -17,7 +22,7 @@ class CompositeGuardrailMode(StrEnum):
     FAIL_FAST = "fail_fast"  # Sequential, stop on first failure
 
 
-class CompositeGuardrail(GuardrailProtocol):
+class CompositeGuardrail(GuardrailOperatorMixin, GuardrailProtocol):
     """Composite guardrail combining multiple providers with AND/OR/fail_fast logic.
 
     Mode semantics:
