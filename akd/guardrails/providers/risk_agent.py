@@ -25,7 +25,11 @@ from akd._base import OutputSchema
 from akd.agents import LiteLLMInstructorBaseAgent
 from akd.agents._base import BaseAgentConfig
 from akd.configs.prompts import RISK_SYSTEM_PROMPT
-from akd.guardrails._base import GuardrailInput, GuardrailOutput
+from akd.guardrails._base import (
+    GuardrailInput,
+    GuardrailOutput,
+    RiskCategoryValidationMixin,
+)
 from akd.guardrails.categories._base import RiskCategory
 
 # Dynamically created from YAML - may be None if file doesn't exist
@@ -74,6 +78,10 @@ class RiskAgentConfig(BaseAgentConfig):
         default=0.9,
         description="Score threshold for passing (0.0-1.0).",
     )
+    validate_categories: bool = Field(
+        default=True,
+        description="Validate that input categories match supported types.",
+    )
     risk_categories: list[RiskCategory] = Field(
         default_factory=lambda: [
             ScienceRiskCategory.HALLUCINATION_IDENTIFICATION,
@@ -93,6 +101,7 @@ class RiskAgentConfig(BaseAgentConfig):
 
 
 class RiskAgent(
+    RiskCategoryValidationMixin,
     LiteLLMInstructorBaseAgent[GuardrailInput, GuardrailOutput],
 ):
     """
@@ -397,6 +406,9 @@ Model Output: {content}
                 provider=self.__class__.__name__,
                 extra={"score": 1.0, "reason": "No risk categories specified"},
             )
+
+        # Validate category types (if enabled)
+        self._validate_category_types(risk_categories)
 
         risk_weights = self._resolve_risk_weights(risk_categories)
 

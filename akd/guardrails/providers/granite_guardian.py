@@ -14,7 +14,11 @@ from loguru import logger
 from pydantic import Field, HttpUrl, model_validator
 from typing_extensions import Self
 
-from akd.guardrails._base import GuardrailInput, GuardrailOutput
+from akd.guardrails._base import (
+    GuardrailInput,
+    GuardrailOutput,
+    RiskCategoryValidationMixin,
+)
 from akd.guardrails.categories._base import RiskCategory
 from akd.guardrails.categories.granite import GraniteHarmCategory, GraniteRiskCategory
 from akd.tools._base import BaseTool, BaseToolConfig
@@ -92,6 +96,10 @@ class GraniteGuardianBaseConfig(BaseToolConfig):
         default=60.0,
         description="HTTP request timeout in seconds.",
     )
+    validate_categories: bool = Field(
+        default=True,
+        description="Validate that input categories match the tool's supported types.",
+    )
 
 
 class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
@@ -107,7 +115,7 @@ class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
     )
 
 
-class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
+class GraniteGuardianTool(RiskCategoryValidationMixin, BaseTool[GuardrailInput, GuardrailOutput]):
     """
     Granite Guardian tool for single-risk detection.
 
@@ -145,6 +153,9 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
         """Run risk detection for each requested category in parallel (with concurrency limit)."""
         # Input overrides config
         categories_to_check = list(params.risk_categories or self.config.risk_categories)
+
+        # Validate category types (if enabled)
+        self._validate_category_types(categories_to_check)
 
         if self.debug:
             logger.debug(
@@ -301,6 +312,10 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
 
     async def _arun(self, params: GuardrailInput, **kwargs) -> GuardrailOutput:
         """Run multi-harm detection (single call detects all harms)."""
+        # Input overrides config - validate early before model call
+        categories_to_check = list(params.risk_categories or self.config.risk_categories)
+        self._validate_category_types(categories_to_check)
+
         if params.context:
             prompt = MULTI_HARM_RESPONSE_TEMPLATE.format(
                 user_message=params.context,
@@ -315,9 +330,8 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
 
         result = await self._call_multi_harm_cached(prompt)
 
-        # Filter to only include configured categories (input overrides config)
-        allowed_categories = set(params.risk_categories or self.config.risk_categories)
-        detected = [cat for cat in result.get("categories", []) if cat in allowed_categories]
+        # Filter to only include configured categories
+        detected = [cat for cat in result.get("categories", []) if cat in categories_to_check]
 
         if self.debug:
             logger.debug(
