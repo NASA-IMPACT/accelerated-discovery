@@ -1,5 +1,6 @@
 """Guardrail providers implementing GuardrailProtocol."""
 
+from akd.guardrails.providers.composite import CompositeGuardrail
 from akd.guardrails.providers.granite_guardian import (
     GraniteGuardianTool,
     GraniteGuardianToolConfig,
@@ -16,6 +17,8 @@ from akd.guardrails.providers.risk_agent import (
 )
 
 __all__ = [
+    # Composite
+    "CompositeGuardrail",
     # Granite Guardian
     "GraniteGuardianTool",
     "GraniteGuardianToolConfig",
