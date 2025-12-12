@@ -30,7 +30,10 @@ from akd.guardrails.categories import (
 from akd.guardrails.categories.granite import GraniteHarmCategory
 
 # Composite guardrail
-from akd.guardrails.providers.composite import CompositeGuardrail
+from akd.guardrails.providers.composite import (
+    CompositeGuardrail,
+    CompositeGuardrailMode,
+)
 
 # Legacy backward compat
 add_guardrails = _legacy.add_guardrails
@@ -45,6 +48,7 @@ __all__ = [
     "GuardrailProtocol",
     # Composite
     "CompositeGuardrail",
+    "CompositeGuardrailMode",
     # Categories
     "RiskCategory",
     "RiskMetadata",
