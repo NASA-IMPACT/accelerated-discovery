@@ -230,3 +230,55 @@ def download_stac_data(stac_url: str, stac_collection_id: str, output_dir: str =
     print(f"Saved {len(items)} items to: {items_file}")
     
     return str(collection_file), str(items_file), collection_data, items
+
+def validate_mdx(mdx: str) -> bool:
+    mdx_blocks = get_mdx_blocks(mdx)
+    first_tag = next(mdx_blocks, None)
+    stack = [first_tag]
+    for block in mdx_blocks:
+        if self_closing_tag(sanitize_tag(block)):
+            continue
+        elif len(stack) == 0:
+            stack.append(block)
+        elif check_pair(sanitize_tag(stack[-1]), sanitize_tag(block)):
+            stack.pop()
+        else:
+            stack.append(block)
+    return not stack
+
+def check_pair(tag1: str, tag2: str) -> bool:
+    if (self_closing_tag(tag1) or self_closing_tag(tag2)):
+        return False
+
+    open_tag = tag1
+    close_tag = tag2
+
+    if (open_tag[-1] == ">" and open_tag[-2] == "/"):
+        close_tag, open_tag = open_tag, close_tag
+
+    open_tag_name = open_tag[1:-1]
+    close_tag_name = close_tag[2:-1]
+
+    return open_tag_name == close_tag_name
+
+def self_closing_tag(tag: str) -> bool:
+    return tag.startswith("<") and tag[-2:] == "/>"
+
+def sanitize_tag(tag: str) -> str:
+    tag_split: list[str] = tag.split(" ")
+    if len(tag_split) < 2:
+        return tag
+    tag_name: str = tag_split[0].split("\n")[0]
+    tag_end: str = ">"
+    if tag[-2] == "/":
+        tag_end = "/>"
+    return tag_name+tag_end
+
+def get_mdx_blocks(mdx: str) -> list[str]:
+    start: int = -1
+    for idx, c in enumerate(mdx):
+        if c == "<":
+            start = idx
+        elif c == ">" and start != -1:
+            yield mdx[start:idx+1]
+            start = -1
