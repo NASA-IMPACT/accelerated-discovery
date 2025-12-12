@@ -45,6 +45,11 @@ class GuardrailOutput(OutputSchema):
         default_factory=dict,
         description="Per-risk evaluation details (criteria, score, metadata)",
     )
+
+    provider: str | None = Field(
+        None,
+        description="Name of the guardrail provider (e.g., GraniteGuardianTool, RiskAgent)",
+    )
     extra: dict[str, Any] = Field(
         default_factory=dict,
         description="Provider-specific data (raw response, confidence, etc.)",

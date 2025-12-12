@@ -174,6 +174,7 @@ class GraniteGuardianTool(BaseTool[GuardrailInput, GuardrailOutput]):
         return GuardrailOutput(
             detected_risks=detected_risks,
             risk_results=risk_results,
+            provider=self.__class__.__name__,
         )
 
     async def _check_single_risk(
@@ -330,6 +331,7 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
         return GuardrailOutput(
             detected_risks=detected,
             risk_results=risk_results,
+            provider=self.__class__.__name__,
             extra={
                 "raw_response": result.get("raw_response"),
                 "risk_label": result.get("risk_label"),

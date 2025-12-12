@@ -121,7 +121,7 @@ class RiskAgent(
     input_schema = GuardrailInput
     output_schema = GuardrailOutput
     config_schema = RiskAgentConfig
-    config: RiskAgentConfig
+    config: RiskAgentConfig  # For type checker
 
     def __init__(
         self,
@@ -394,6 +394,7 @@ Model Output: {content}
         if not risk_categories:
             return GuardrailOutput(
                 detected_risks=[],
+                provider=self.__class__.__name__,
                 extra={"score": 1.0, "reason": "No risk categories specified"},
             )
 
@@ -457,6 +458,7 @@ Model Output: {content}
         return GuardrailOutput(
             detected_risks=detected,
             risk_results=risk_results,
+            provider=self.__class__.__name__,
             extra={
                 "score": score,
                 "raw_score": raw_score,
