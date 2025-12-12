@@ -2,12 +2,14 @@
 
 import asyncio
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
+
+from loguru import logger
 
 from akd.guardrails._base import GuardrailInput, GuardrailOutput, GuardrailProtocol
 
 
-class CompositeGuardrailMode(Enum):
+class CompositeGuardrailMode(StrEnum):
     """Mode for combining guardrail results."""
 
     ALL = "all"  # AND: all guardrails must pass
@@ -43,6 +45,7 @@ class CompositeGuardrail(GuardrailProtocol):
         guardrails: Sequence[GuardrailProtocol],
         mode: CompositeGuardrailMode = CompositeGuardrailMode.ALL,
         parallel: bool = True,
+        debug: bool = False,
     ):
         """Initialize composite guardrail.
 
@@ -63,9 +66,17 @@ class CompositeGuardrail(GuardrailProtocol):
         self.guardrails = list(guardrails)
         self.mode = mode
         self.parallel = parallel
+        self.debug = bool(debug)
 
     async def acheck(self, params: GuardrailInput) -> GuardrailOutput:
         """Run all guardrails and merge results based on mode."""
+        if self.debug:
+            guardrail_names = [g.__class__.__name__ for g in self.guardrails]
+            logger.debug(
+                f"CompositeGuardrail: starting mode={self.mode.value}, "
+                f"parallel={self.parallel}, guardrails={guardrail_names}",
+            )
+
         if self.mode == CompositeGuardrailMode.FAIL_FAST:
             return await self._run_fail_fast(params)
 
@@ -73,6 +84,12 @@ class CompositeGuardrail(GuardrailProtocol):
             results = await asyncio.gather(*[g.acheck(params) for g in self.guardrails])
         else:
             results = [await g.acheck(params) for g in self.guardrails]
+
+        if self.debug:
+            passed_count = sum(1 for r in results if r.passed)
+            logger.debug(
+                f"CompositeGuardrail({self.mode.value}): completed, {passed_count}/{len(results)} guardrails passed",
+            )
 
         return self._merge_results(list(results))
 
@@ -89,30 +106,35 @@ class CompositeGuardrail(GuardrailProtocol):
             executed_results.append(result)
 
             if not result.passed:
+                if self.debug:
+                    logger.debug(
+                        f"CompositeGuardrail({self.mode.value}): short-circuiting on failure from {guardrail.__class__.__name__}",
+                    )
                 # Short-circuit on first failure
                 return GuardrailOutput(
                     detected_risks=result.detected_risks,
                     risk_results=result.risk_results,
-                    provider=f"CompositeGuardrail(fail_fast)[{result.provider or 'unknown'}]",
+                    provider=f"CompositeGuardrail({self.mode.value})[{result.provider or 'unknown'}]",
                     extra={
-                        "mode": "fail_fast",
+                        "mode": self.mode.value,
                         "short_circuited": True,
                         "failed_at_index": len(executed_results) - 1,
                         "result": result.model_dump(),
                     },
                 )
 
-        # All passed
-        providers = [r.provider or "unknown" for r in executed_results]
-        return GuardrailOutput(
-            detected_risks=[],
-            provider=f"CompositeGuardrail(fail_fast)[{', '.join(providers)}]",
-            extra={
-                "mode": "fail_fast",
-                "short_circuited": False,
-                "sub_results": [r.model_dump() for r in executed_results],
-            },
-        )
+        # All passed - reuse ALL merge strategy
+        if self.debug:
+            logger.debug(
+                f"CompositeGuardrail({self.mode.value}): all {len(executed_results)} guardrails passed",
+            )
+        result = self._merge_results_all(executed_results)
+        result.extra = {
+            **(result.extra or {}),
+            "mode": self.mode.value,
+            "short_circuited": False,
+        }
+        return result
 
     def _merge_results(self, results: list[GuardrailOutput]) -> GuardrailOutput:
         """Merge results from multiple guardrails based on mode."""
@@ -133,11 +155,16 @@ class CompositeGuardrail(GuardrailProtocol):
             all_detected.extend(r.detected_risks)
             all_risk_results.update(r.risk_results or {})
 
+        if self.debug:
+            logger.debug(
+                f"CompositeGuardrail(all): merged {len(all_detected)} detected risks from {len(results)} guardrails",
+            )
+
         return GuardrailOutput(
             detected_risks=all_detected,
             risk_results=all_risk_results,
             provider=provider_str,
-            extra={"mode": "all", "sub_results": [r.model_dump() for r in results]},
+            extra={"mode": self.mode.value, "sub_results": [r.model_dump() for r in results]},
         )
 
     def _merge_results_any(self, results: list[GuardrailOutput]) -> GuardrailOutput:
@@ -147,11 +174,18 @@ class CompositeGuardrail(GuardrailProtocol):
 
         any_passed = any(r.passed for r in results)
 
+        if self.debug:
+            passed_count = sum(1 for r in results if r.passed)
+            logger.debug(
+                f"CompositeGuardrail(any): {passed_count}/{len(results)} passed, "
+                f"result={'PASS' if any_passed else 'FAIL'}",
+            )
+
         if any_passed:
             return GuardrailOutput(
                 detected_risks=[],
                 provider=provider_str,
-                extra={"mode": "any", "sub_results": [r.model_dump() for r in results]},
+                extra={"mode": self.mode.value, "sub_results": [r.model_dump() for r in results]},
             )
 
         # All failed - merge all detected risks
@@ -165,5 +199,5 @@ class CompositeGuardrail(GuardrailProtocol):
             detected_risks=all_detected,
             risk_results=all_risk_results,
             provider=provider_str,
-            extra={"mode": "any", "sub_results": [r.model_dump() for r in results]},
+            extra={"mode": self.mode.value, "sub_results": [r.model_dump() for r in results]},
         )
