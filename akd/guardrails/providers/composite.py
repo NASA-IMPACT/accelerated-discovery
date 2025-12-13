@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from loguru import logger
 
+from akd.errors import GuardrailError
 from akd.guardrails._base import (
     GuardrailInput,
     GuardrailOperatorMixin,
@@ -62,11 +63,17 @@ class CompositeGuardrail(GuardrailOperatorMixin, GuardrailProtocol):
         Raises:
             TypeError: If mode is not a CompositeGuardrailMode enum.
             ValueError: If guardrails sequence is empty.
+            GuardrailError: If any guardrail does not implement GuardrailProtocol.
         """
         if not isinstance(mode, CompositeGuardrailMode):
             raise TypeError(f"mode must be CompositeGuardrailMode, got {type(mode).__name__}")
         if not guardrails:
             raise ValueError("guardrails sequence cannot be empty")
+
+        # Validate all guardrails implement GuardrailProtocol
+        for i, g in enumerate(guardrails):
+            if not isinstance(g, GuardrailProtocol):
+                raise GuardrailError(f"guardrails[{i}] ({g}) does not implement GuardrailProtocol")
 
         self.guardrails = list(guardrails)
         self.mode = mode
