@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 from pydantic import Field, computed_field
 
 from akd._base import InputSchema, OutputSchema
+from akd.errors import GuardrailError
 from akd.guardrails.categories._base import RiskCategory
 
 
@@ -172,12 +173,19 @@ class GuardrailOperatorMixin:
         combined = (granite >> risk) | fallback  # Nested composition
     """
 
+    def _validate_other_guardrail(self, other: GuardrailProtocol) -> None:
+        """Validate that other is a GuardrailProtocol instance."""
+        if not isinstance(other, GuardrailProtocol):
+            raise GuardrailError(f"{other} does not follow GuardrailProtocol")
+
     def __and__(self, other: GuardrailProtocol) -> "CompositeGuardrail":
         """g1 & g2 → ALL mode (both must pass, parallel)."""
         from akd.guardrails.providers.composite import (
             CompositeGuardrail,
             CompositeGuardrailMode,
         )
+
+        self._validate_other_guardrail(other)
 
         # Flatten nested composites of same mode
         if isinstance(self, CompositeGuardrail) and self.mode == CompositeGuardrailMode.ALL:
@@ -197,6 +205,8 @@ class GuardrailOperatorMixin:
             CompositeGuardrailMode,
         )
 
+        self._validate_other_guardrail(other)
+
         if isinstance(self, CompositeGuardrail) and self.mode == CompositeGuardrailMode.ANY:
             return CompositeGuardrail(
                 guardrails=[*self.guardrails, other],
@@ -213,6 +223,8 @@ class GuardrailOperatorMixin:
             CompositeGuardrail,
             CompositeGuardrailMode,
         )
+
+        self._validate_other_guardrail(other)
 
         if isinstance(self, CompositeGuardrail) and self.mode == CompositeGuardrailMode.FAIL_FAST:
             return CompositeGuardrail(
