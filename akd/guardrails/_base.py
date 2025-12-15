@@ -85,7 +85,7 @@ class GuardrailInput(InputSchema):
     Unified input for guardrail validation.
 
     Simple: content to check + optional context.
-    For multi-turn, put the response to check in content, prior conversation in context.
+    For multi-turn, use `from_multi_turn()` classmethod.
     """
 
     content: str = Field(..., description="Content to check for risks")
@@ -94,6 +94,51 @@ class GuardrailInput(InputSchema):
         default_factory=list,
         description="Risk categories to check (empty = provider defaults)",
     )
+
+    @classmethod
+    def from_multi_turn(
+        cls,
+        inputs: list[str],
+        outputs: list[str],
+        risk_categories: Sequence[RiskCategory] | None = None,
+        additional_context: str | None = None,
+    ) -> "GuardrailInput":
+        """Create from multi-turn conversation.
+
+        Args:
+            inputs: List of user messages (chronological order).
+            outputs: List of model responses (aligned with inputs by index).
+            risk_categories: Risk categories to check.
+            additional_context: Extra info (agent name/description, process info) prepended to context.
+
+        Returns:
+            GuardrailInput with last output as content, prior turns + additional_context as context.
+        """
+        if len(inputs) != len(outputs):
+            raise ValueError(f"inputs and outputs must have same length, got {len(inputs)} and {len(outputs)}")
+
+        if not inputs:
+            raise ValueError("inputs cannot be empty")
+
+        # Format prior turns as context
+        if len(inputs) > 1:
+            prior_turns = "\n\n".join(
+                f"Turn {i + 1}:\nUser: {inp}\nModel: {outp}"
+                for i, (inp, outp) in enumerate(zip(inputs[:-1], outputs[:-1]))
+            )
+            context = f"{prior_turns}\n\nUser: {inputs[-1]}"
+        else:
+            context = inputs[0]
+
+        # Prepend additional context if provided
+        if additional_context:
+            context = f"{additional_context}\n\n{context}"
+
+        return cls(
+            content=outputs[-1],
+            context=context,
+            risk_categories=list(risk_categories or []),
+        )
 
 
 class GuardrailOutput(OutputSchema):
