@@ -29,15 +29,17 @@ from akd.guardrails.categories import (
 )
 from akd.guardrails.categories.granite import GraniteHarmCategory
 
+# New decorator API
+from akd.guardrails.decorators import apply_guardrails, guardrail
+
 # Composite guardrail
 from akd.guardrails.providers.composite import (
     CompositeGuardrail,
     CompositeGuardrailMode,
 )
 
-# Legacy backward compat
+# Legacy backward compat (deprecated)
 add_guardrails = _legacy.add_guardrails
-apply_guardrails = _legacy.apply_guardrails
 GuardrailResult = _legacy.GuardrailResult
 GuardrailsMixin = _legacy.GuardrailsMixin
 
@@ -56,9 +58,11 @@ __all__ = [
     "GraniteHarmCategory",
     "AtlasRiskCategory",
     "ScienceRiskCategory",
-    # Legacy (backward compat)
-    "add_guardrails",
+    # New decorator API
+    "guardrail",
     "apply_guardrails",
+    # Legacy (backward compat, deprecated)
+    "add_guardrails",
     "GuardrailResult",
     "GuardrailsMixin",
 ]
