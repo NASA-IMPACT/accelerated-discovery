@@ -233,22 +233,25 @@ def download_stac_data(stac_url: str, stac_collection_id: str, output_dir: str =
 
 class MDXValidator:
     def __init__(self):
-        pass
+        self.stack: list[tuple[str, int]] = [] # (tag, position)
 
-    def validate_mdx(self, mdx: str) -> bool:
+    def validate_mdx(self, mdx: str) -> tuple[bool, list[tuple[str, int]]]: # returns (valid, [(tag, position)]); (tag, position) when the mdx is invalid
+        # the list of (tag, position) are the tags that have missing opening or closing tags with their respecive tag positions
         mdx_blocks = self._get_mdx_blocks(mdx)
         first_tag = next(mdx_blocks, None)
-        stack = [first_tag]
-        for block in mdx_blocks:
+        if not first_tag: # a valid mdx can have no tags
+            return True, []
+        self.stack.append((first_tag, 0))
+        for idx, block in enumerate(mdx_blocks, start=1):
             if self._self_closing_tag(self._sanitize_tag(block)):
                 continue
-            elif len(stack) == 0:
-                stack.append(block)
-            elif self._check_pair(self._sanitize_tag(stack[-1]), self._sanitize_tag(block)):
-                stack.pop()
+            elif len(self.stack) == 0:
+                self.stack.append((block, idx))
+            elif self._check_pair(self._sanitize_tag(self.stack[-1][0]), self._sanitize_tag(block)):
+                self.stack.pop()
             else:
-                stack.append(block)
-        return not stack
+                self.stack.append((block, idx))
+        return not self.stack, [(tag, pos) for (tag, pos) in self.stack]
 
     def _check_pair(self, tag1: str, tag2: str) -> bool:
         if (self._self_closing_tag(tag1) or self._self_closing_tag(tag2)):
