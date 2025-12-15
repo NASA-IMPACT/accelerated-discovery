@@ -13,9 +13,6 @@ Example:
     print(output.passed, output.detected_risks)
 """
 
-# Backward compatibility - re-export from legacy guardrails.py
-import akd.guardrails_legacy as _legacy
-
 # Base IO schemas and protocol
 from akd.guardrails._base import GuardrailInput, GuardrailOutput, GuardrailProtocol
 
@@ -38,11 +35,6 @@ from akd.guardrails.providers.composite import (
     CompositeGuardrailMode,
 )
 
-# Legacy backward compat (deprecated)
-add_guardrails = _legacy.add_guardrails
-GuardrailResult = _legacy.GuardrailResult
-GuardrailsMixin = _legacy.GuardrailsMixin
-
 __all__ = [
     # IO schemas and protocol
     "GuardrailInput",
@@ -58,11 +50,7 @@ __all__ = [
     "GraniteHarmCategory",
     "AtlasRiskCategory",
     "ScienceRiskCategory",
-    # New decorator API
+    # Decorator API
     "guardrail",
     "apply_guardrails",
-    # Legacy (backward compat, deprecated)
-    "add_guardrails",
-    "GuardrailResult",
-    "GuardrailsMixin",
 ]

@@ -99,6 +99,10 @@ class RiskAgentConfig(BaseAgentConfig):
         default=None,
         description="Optional per-risk weight overrides. Keys are risk_id values.",
     )
+    include_dag_metric: bool = Field(
+        default=False,
+        description="Include full DAGMetric object in output extra (for advanced inspection).",
+    )
 
 
 class RiskAgent(
@@ -469,16 +473,20 @@ Model Output: {content}
                 f"detected: {[r.value for r in detected]}",
             )
 
+        extra: dict[str, Any] = {
+            "score": score,
+            "raw_score": raw_score,
+            "reason": dag_metric.reason,
+            "verbose_logs": dag_metric.verbose_logs,
+        }
+        if self.config.include_dag_metric:
+            extra["dag_metric"] = dag_metric
+
         return GuardrailOutput(
             detected_risks=detected,
             risk_results=risk_results,
             provider=self.__class__.__name__,
-            extra={
-                "score": score,
-                "raw_score": raw_score,
-                "reason": dag_metric.reason,
-                "verbose_logs": dag_metric.verbose_logs,
-            },
+            extra=extra,
         )
 
     # =========================================================================
