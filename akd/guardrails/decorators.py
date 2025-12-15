@@ -57,6 +57,7 @@ def guardrail(
     fail_on_output_risk: bool | None = False,
     input_fields: list[str] | None = None,
     output_fields: list[str] | None = None,
+    debug: bool = False,
 ):
     """Decorator to add guardrail checks to an agent or tool class.
 
@@ -71,6 +72,7 @@ def guardrail(
             If None, uses CONFIG.guardrails.input_fields.
         output_fields: Fields to extract text from in output.
             If None, uses CONFIG.guardrails.output_fields.
+        debug: Enable debug logging for guardrail checks.
 
     Example:
         from akd.guardrails.providers import GraniteGuardianTool, RiskAgent
@@ -91,17 +93,18 @@ def guardrail(
         class GuardedClass(cls):  # type: ignore[valid-type,misc]
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 super().__init__(*args, **kwargs)
-                self._input_guardrail = input_guardrail
-                self._output_guardrail = output_guardrail
-                self._fail_on_input_risk = (
+                self._guardrail_input = input_guardrail
+                self._guardrail_output = output_guardrail
+                self._guardrail_fail_on_input = (
                     CONFIG.guardrails.fail_on_input_risk if fail_on_input_risk is None else fail_on_input_risk
                 )
-                self._fail_on_output_risk = (
+                self._guardrail_fail_on_output = (
                     CONFIG.guardrails.fail_on_output_risk if fail_on_output_risk is None else fail_on_output_risk
                 )
-                self._input_fields = input_fields or CONFIG.guardrails.input_fields
-                self._output_fields = output_fields or CONFIG.guardrails.output_fields
-                self._log_warnings = CONFIG.guardrails.log_warnings
+                self._guardrail_input_fields = input_fields or CONFIG.guardrails.input_fields
+                self._guardrail_output_fields = output_fields or CONFIG.guardrails.output_fields
+                self._guardrail_log_warnings = CONFIG.guardrails.log_warnings
+                self._guardrail_debug = debug
 
             async def _check_input_guardrail(self, params: Any) -> GuardrailOutput | None:
                 """Check input against guardrail.
@@ -112,19 +115,29 @@ def guardrail(
                 Raises:
                     InputGuardrailTriggered: If risk detected and fail_on_input_risk=True.
                 """
-                if not self._input_guardrail:
+                if not self._guardrail_input:
+                    if self._guardrail_debug:
+                        logger.debug(f"[{cls.__name__}] No input guardrail configured, skipping")
                     return None
 
-                text = extract_text_content(params, self._input_fields)
-                result = await self._input_guardrail.acheck(GuardrailInput(content=text))
+                text = extract_text_content(params, self._guardrail_input_fields)
+                if self._guardrail_debug:
+                    logger.debug(f"[{cls.__name__}] Checking input guardrail with text: {text[:200]}...")
+
+                result = await self._guardrail_input.acheck(GuardrailInput(content=text))
+
+                if self._guardrail_debug:
+                    logger.debug(
+                        f"[{cls.__name__}] Input guardrail result: passed={result.passed}, risks={result.detected_risks}",
+                    )
 
                 if not result.passed:
-                    if self._fail_on_input_risk:
+                    if self._guardrail_fail_on_input:
                         raise InputGuardrailTriggered(
                             f"Input guardrail triggered: {result.summary}",
                             output=result,
                         )
-                    if self._log_warnings:
+                    if self._guardrail_log_warnings:
                         logger.warning(f"Input guardrail warning: {result.summary}")
 
                 return result
@@ -138,22 +151,32 @@ def guardrail(
                 Raises:
                     OutputGuardrailTriggered: If risk detected and fail_on_output_risk=True.
                 """
-                if not self._output_guardrail:
+                if not self._guardrail_output:
+                    if self._guardrail_debug:
+                        logger.debug(f"[{cls.__name__}] No output guardrail configured, skipping")
                     return None
 
-                text = extract_text_content(output, self._output_fields)
-                context = extract_text_content(params, self._input_fields)
-                result = await self._output_guardrail.acheck(
+                text = extract_text_content(output, self._guardrail_output_fields)
+                context = extract_text_content(params, self._guardrail_input_fields)
+                if self._guardrail_debug:
+                    logger.debug(f"[{cls.__name__}] Checking output guardrail with text: {text[:200]}...")
+
+                result = await self._guardrail_output.acheck(
                     GuardrailInput(content=text, context=context),
                 )
 
+                if self._guardrail_debug:
+                    logger.debug(
+                        f"[{cls.__name__}] Output guardrail result: passed={result.passed}, risks={result.detected_risks}",
+                    )
+
                 if not result.passed:
-                    if self._fail_on_output_risk:
+                    if self._guardrail_fail_on_output:
                         raise OutputGuardrailTriggered(
                             f"Output guardrail triggered: {result.summary}",
                             output=result,
                         )
-                    if self._log_warnings:
+                    if self._guardrail_log_warnings:
                         logger.warning(f"Output guardrail warning: {result.summary}")
 
                 return result
@@ -209,6 +232,7 @@ def apply_guardrails(
     fail_on_output_risk: bool | None = False,
     input_fields: list[str] | None = None,
     output_fields: list[str] | None = None,
+    debug: bool = False,
 ) -> "BaseAgent | BaseTool":
     """Apply guardrails to an existing agent or tool instance.
 
@@ -223,6 +247,7 @@ def apply_guardrails(
         fail_on_output_risk: Raise exception if output risk detected.
         input_fields: Fields to extract text from in input params.
         output_fields: Fields to extract text from in output.
+        debug: Enable debug logging for guardrail checks.
 
     Returns:
         A new instance with guardrails applied.
@@ -246,6 +271,7 @@ def apply_guardrails(
         fail_on_output_risk=fail_on_output_risk,
         input_fields=input_fields,
         output_fields=output_fields,
+        debug=debug,
     )(component.__class__)
 
     # Create new instance and copy state
@@ -253,17 +279,18 @@ def apply_guardrails(
     guarded.__dict__.update(component.__dict__)
 
     # Set guardrail attributes (in case __init__ wasn't called)
-    guarded._input_guardrail = input_guardrail  # type: ignore[attr-defined]
-    guarded._output_guardrail = output_guardrail  # type: ignore[attr-defined]
-    guarded._fail_on_input_risk = (
+    guarded._guardrail_input = input_guardrail  # type: ignore[attr-defined]
+    guarded._guardrail_output = output_guardrail  # type: ignore[attr-defined]
+    guarded._guardrail_fail_on_input = (  # type: ignore[attr-defined]
         CONFIG.guardrails.fail_on_input_risk if fail_on_input_risk is None else fail_on_input_risk
-    )  # type: ignore[attr-defined]
-    guarded._fail_on_output_risk = (
+    )
+    guarded._guardrail_fail_on_output = (  # type: ignore[attr-defined]
         CONFIG.guardrails.fail_on_output_risk if fail_on_output_risk is None else fail_on_output_risk
-    )  # type: ignore[attr-defined]
-    guarded._input_fields = input_fields or CONFIG.guardrails.input_fields  # type: ignore[attr-defined]
-    guarded._output_fields = output_fields or CONFIG.guardrails.output_fields  # type: ignore[attr-defined]
-    guarded._log_warnings = CONFIG.guardrails.log_warnings  # type: ignore[attr-defined]
+    )
+    guarded._guardrail_input_fields = input_fields or CONFIG.guardrails.input_fields  # type: ignore[attr-defined]
+    guarded._guardrail_output_fields = output_fields or CONFIG.guardrails.output_fields  # type: ignore[attr-defined]
+    guarded._guardrail_log_warnings = CONFIG.guardrails.log_warnings  # type: ignore[attr-defined]
+    guarded._guardrail_debug = debug  # type: ignore[attr-defined]
 
     return guarded
 
