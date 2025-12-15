@@ -232,11 +232,37 @@ def download_stac_data(stac_url: str, stac_collection_id: str, output_dir: str =
     return str(collection_file), str(items_file), collection_data, items
 
 class MDXValidator:
+    """Validates MDX (Markdown with JSX) tag structure.
+
+    This validator checks that all opening and closing tags are properly paired
+    in MDX content. It tracks tag positions to help identify mismatched tags.
+    Self-closing tags (e.g., <Component />) are handled correctly.
+    """
+
     def __init__(self):
+        """Initialize the MDX validator with an empty stack."""
         self.stack: list[tuple[str, int]] = [] # (tag, position)
 
-    def validate_mdx(self, mdx: str) -> tuple[bool, list[tuple[str, int]]]: # returns (valid, [(tag, position)]); (tag, position) when the mdx is invalid
-        # the list of (tag, position) are the tags that have missing opening or closing tags with their respecive tag positions
+    def validate_mdx(self, mdx: str) -> tuple[bool, list[tuple[str, int]]]:
+        """Validate MDX content for properly paired tags.
+
+        Args:
+            mdx: The MDX string to validate.
+
+        Returns:
+            A tuple containing:
+            - bool: True if the MDX is valid (all tags properly paired), False otherwise.
+            - list[tuple[str, int]]: List of unpaired tags with their positions. Empty if valid.
+              Each tuple contains (tag_string, position_index) where position is the
+              enumerated index of the tag in the sequence.
+
+        Examples:
+            >>> validator = MDXValidator()
+            >>> validator.validate_mdx("<Block><Prose>text</Prose></Block>")
+            (True, [])
+            >>> validator.validate_mdx("<Block><Prose>text</Block>")
+            (False, [('<Block>', 0), ('<Prose>', 1), ('</Block>', 2)])
+        """
         mdx_blocks = self._get_mdx_blocks(mdx)
         first_tag = next(mdx_blocks, None)
         if not first_tag: # a valid mdx can have no tags
@@ -254,6 +280,24 @@ class MDXValidator:
         return not self.stack, [(tag, pos) for (tag, pos) in self.stack]
 
     def _check_pair(self, tag1: str, tag2: str) -> bool:
+        """Check if two tags form a valid opening/closing pair.
+
+        Args:
+            tag1: First tag string (e.g., '<Block>' or '</Block>').
+            tag2: Second tag string (e.g., '<Block>' or '</Block>').
+
+        Returns:
+            True if the tags are a matching opening/closing pair, False otherwise.
+            Self-closing tags always return False as they don't pair with other tags.
+
+        Examples:
+            >>> validator._check_pair('<Block>', '</Block>')
+            True
+            >>> validator._check_pair('<Block>', '</Prose>')
+            False
+            >>> validator._check_pair('<Block />', '</Block>')
+            False
+        """
         if (self._self_closing_tag(tag1) or self._self_closing_tag(tag2)):
             return False
 
@@ -269,9 +313,41 @@ class MDXValidator:
         return open_tag_name == close_tag_name
 
     def _self_closing_tag(self, tag: str) -> bool:
+        """Check if a tag is self-closing.
+
+        Args:
+            tag: The tag string to check.
+
+        Returns:
+            True if the tag is self-closing (ends with '/>'), False otherwise.
+
+        Examples:
+            >>> validator._self_closing_tag('<Component />')
+            True
+            >>> validator._self_closing_tag('<Component>')
+            False
+        """
         return tag.startswith("<") and tag[-2:] == "/>"
 
     def _sanitize_tag(self, tag: str) -> str:
+        """Remove attributes and whitespace from a tag, keeping only the tag name.
+
+        This method strips out any attributes, props, or whitespace from a tag,
+        leaving only the tag name and appropriate closing characters.
+
+        Args:
+            tag: The tag string to sanitize (e.g., '<Block className="foo">').
+
+        Returns:
+            The sanitized tag with only the tag name (e.g., '<Block>').
+            Preserves self-closing syntax if present.
+
+        Examples:
+            >>> validator._sanitize_tag('<Block className="foo">')
+            '<Block>'
+            >>> validator._sanitize_tag('<Component prop="value" />')
+            '<Component />'
+        """
         tag_split: list[str] = tag.split(" ")
         if len(tag_split) < 2:
             return tag
@@ -281,7 +357,22 @@ class MDXValidator:
             tag_end = "/>"
         return tag_name+tag_end
 
-    def _get_mdx_blocks(self, mdx: str) -> list[str]:
+    def _get_mdx_blocks(self, mdx: str):
+        """Generator that yields all MDX tags from the input string.
+
+        Parses the MDX string and yields each tag (opening, closing, or self-closing)
+        in the order they appear. This is a generator function for memory efficiency.
+
+        Args:
+            mdx: The MDX string to parse.
+
+        Yields:
+            str: Each tag found in the MDX content (e.g., '<Block>', '</Block>', '<Component />').
+
+        Examples:
+            >>> list(validator._get_mdx_blocks('<Block><Prose>text</Prose></Block>'))
+            ['<Block>', '<Prose>', '</Prose>', '</Block>']
+        """
         start: int = -1
         for idx, c in enumerate(mdx):
             if c == "<":
