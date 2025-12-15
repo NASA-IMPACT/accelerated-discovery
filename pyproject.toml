@@ -22,6 +22,7 @@ dependencies = [
     "crawl4ai>=0.7.6",
     "duckduckgo-search>=8.0.1",
     "gdown>=5.2.0",
+    "geopy>=2.4.0",
     "instructor==1.13.0",
     "langchain-community>=0.3.24",
     "langchain-core>=0.3.48",
