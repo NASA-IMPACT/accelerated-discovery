@@ -120,13 +120,13 @@ class GuardrailInput(InputSchema):
         if not inputs:
             raise ValueError("inputs cannot be empty")
 
-        # Format prior turns as context
+        # Format turns as context
         if len(inputs) > 1:
             prior_turns = "\n\n".join(
                 f"Turn {i + 1}:\nUser: {inp}\nModel: {outp}"
                 for i, (inp, outp) in enumerate(zip(inputs[:-1], outputs[:-1]))
             )
-            context = f"{prior_turns}\n\nUser: {inputs[-1]}"
+            context = f"{prior_turns}\n\nTurn {len(inputs)}:\nUser: {inputs[-1]}"
         else:
             context = inputs[0]
 
