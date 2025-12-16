@@ -10,7 +10,6 @@ from sentence_transformers import CrossEncoder
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
-from akd.tools.search.utils import deduplicate_results, sort_results
 
 # Reranker type options for factory function
 RerankerType = Literal["cross_encoder", "identity", "no_op", "nope", "none"]
@@ -68,6 +67,10 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
         """
         Deduplicate results based on a list of keys.
         """
+        from akd.tools.search.utils import (
+            deduplicate_results,  # Lazy import to avoid circular dependency
+        )
+
         deduped = deduplicate_results(
             results,
             keys=deduplication_keys,
@@ -84,6 +87,10 @@ class RerankerTool(BaseTool[RerankerToolInputSchema, RerankerToolOutputSchema]):
         Sort results by the specified key. First checks for the key directly in the dict,
         then checks in the 'extra' field if it exists. Returns unsorted if key not found.
         """
+        from akd.tools.search.utils import (
+            sort_results,  # Lazy import to avoid circular dependency
+        )
+
         return sort_results(
             results,
             sort_by=sort_key,
