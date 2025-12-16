@@ -670,7 +670,7 @@ class SDECodeSearchTool(CodeSearchTool):
             logger.debug(f"Searching for query: '{query}' with top_k={max_results}")
 
         try:
-            for page in range(self.max_pages):
+            for page in range(1, self.config.max_pages + 1):
                 try:
                     results = self.sde_search(page=page, query=query)
                     if results:
