@@ -8,9 +8,7 @@ from loguru import logger
 from akd._base import AbstractBase
 from akd.agents._base import BaseAgent
 from akd.common_types import CallableSpec
-from akd.configs.guardrails_config import GuardrailsConfig
-from akd.guardrails import apply_guardrails
-from akd.tools.granite_guardian_tool import RiskDefinition
+from akd.guardrails import GuardrailProtocol, apply_guardrails
 from akd.tools.utils import ToolRunner
 
 from .states import GlobalState, NodeState
@@ -252,9 +250,8 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         self,
         agent: BaseAgent,
         node_id: str | None = None,
-        input_guardrails: list[RiskDefinition] | None = None,
-        output_guardrails: list[RiskDefinition] | None = None,
-        guardrails_config: GuardrailsConfig | None = None,
+        input_guardrail: GuardrailProtocol | None = None,
+        output_guardrail: GuardrailProtocol | None = None,
         io_map: dict[str, str] | None = None,
         mutation: bool = False,
         debug: bool = False,
@@ -265,12 +262,10 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
 
         Args:
             agent: The BaseAgent instance to wrap
-            input_guardrails: RiskDefinition list for AI safety input validation
-            output_guardrails: RiskDefinition list for AI safety output validation
-            guardrails_config: Configuration for RiskDefinition-style guardrails
+            input_guardrail: GuardrailProtocol for AI safety input validation
+            output_guardrail: GuardrailProtocol for AI safety output validation
             io_map: Optional mapping of input fields to other node fields (e.g., {"query": "lit_search.query"})
             node_id: Unique identifier for this node
-            tool_runner: Tool runner instance
             mutation: Whether to mutate global state in place
             debug: Enable debug logging
             **kwargs: Additional keyword arguments
@@ -280,9 +275,8 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
 
         self.agent = apply_guardrails(
             component=agent,
-            config=guardrails_config,
-            input_guardrails=input_guardrails,
-            output_guardrails=output_guardrails,
+            input_guardrail=input_guardrail,
+            output_guardrail=output_guardrail,
             input_fields=kwargs.get("input_fields", []),
             output_fields=kwargs.get("output_fields", []),
         )
