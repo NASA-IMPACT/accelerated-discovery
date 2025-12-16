@@ -7,9 +7,14 @@ from loguru import logger
 
 from akd._base import AbstractBase
 from akd.agents._base import BaseAgent
-from akd.common_types import CallableSpec
-from akd.guardrails import GuardrailProtocol, apply_guardrails
-from akd.tools.utils import ToolRunner
+from akd.configs.project import CONFIG
+from akd.guardrails import (
+    GuardrailInput,
+    GuardrailOutput,
+    GuardrailProtocol,
+    apply_guardrails,
+)
+from akd.guardrails.utils import extract_text_content
 
 from .states import GlobalState, NodeState
 from .supervisor import BaseSupervisor
@@ -33,18 +38,20 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
     def __init__(
         self,
         node_id: str | None = None,
-        input_guardrails: list[CallableSpec] | None = None,
-        output_guardrails: list[CallableSpec] | None = None,
-        tool_runner: ToolRunner | None = None,
+        input_guardrail: GuardrailProtocol | None = None,
+        output_guardrail: GuardrailProtocol | None = None,
+        input_fields: list[str] | None = None,
+        output_fields: list[str] | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(debug=debug, **kwargs)
-        self.input_guardrails = input_guardrails or []
-        self.output_guardrails = output_guardrails or []
+        self.input_guardrail = input_guardrail
+        self.output_guardrail = output_guardrail
+        self.input_fields = input_fields or CONFIG.guardrails.input_fields
+        self.output_fields = output_fields or CONFIG.guardrails.output_fields
         self.node_id = node_id or str(uuid.uuid4().hex)
-        self.tool_runner = tool_runner or ToolRunner(debug=debug)
         self.mutation = mutation
 
     async def _arun(self, params: GlobalState, **kwargs) -> NodeState:
@@ -59,7 +66,6 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
 
         # If mutation is not enabled, we create a copy of the node state
         # to avoid modifying the original state in place.
-        # This is useful for testing or when we want to keep the original state intact.
         if not self.mutation:
             node_state = node_state.model_copy(deep=True)
 
@@ -67,19 +73,25 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
             logger.debug(f"[Node {node_id}] node_state={node_state}")
 
         # 1) run input guardrails against node_state.inputs
-        node_state.input_guardrails = await self._apply_guardrails(
-            self.input_guardrails,
-            node_state.inputs.copy(),
-        )
+        if self.input_guardrail:
+            input_result = await self._run_guardrail(
+                self.input_guardrail,
+                node_state.inputs,
+                self.input_fields,
+            )
+            node_state.input_guardrails = input_result.model_dump() if input_result else {}
 
         # 2) execute core logic (either through supervisor or custom _execute method)
         node_state = await self._execute(node_state, global_state)
 
         # 3) run output guardrails against that output
-        node_state.output_guardrails = await self._apply_guardrails(
-            self.output_guardrails,
-            node_state.outputs.copy(),
-        )
+        if self.output_guardrail:
+            output_result = await self._run_guardrail(
+                self.output_guardrail,
+                node_state.outputs,
+                self.output_fields,
+            )
+            node_state.output_guardrails = output_result.model_dump() if output_result else {}
 
         # 4) write back into the global state, in place
         if self.mutation:
@@ -108,39 +120,32 @@ class AbstractNodeTemplate(AbstractBase[GlobalState, NodeState]):
         """
         raise NotImplementedError()
 
-    async def _apply_guardrails(
+    async def _run_guardrail(
         self,
-        guardrails: list[CallableSpec],
+        guardrail: GuardrailProtocol,
         data: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Note:
-            If guardrails are callables,
-            they will be wrapped into BaseTool via tool_wrapper.
+        preferred_fields: list[str],
+    ) -> GuardrailOutput | None:
+        """Run a guardrail check on the given data.
 
-            If they are BaseTool instances, they will be used as is.
+        Args:
+            guardrail: GuardrailProtocol instance to run
+            data: Data dict to extract content from
+            preferred_fields: Fields to prioritize when extracting text
 
-            If they are Tuple,
-            the 2nd element is the mapping of input keys.
+        Returns:
+            GuardrailOutput from the check, or None on error
         """
-        results: dict[str, Any] = {}
-        for guard in guardrails:
-            if isinstance(guard, tuple):
-                name = guard[0].__class__.__name__
-            else:
-                name = guard.__class__.__name__
-            try:
-                # build the guard's inputs from matching keys in the data
-                tool_output = await self.tool_runner.arun(
-                    spec=guard,
-                    data=data,
-                )
-                results[name] = getattr(tool_output, "result", tool_output)
-            except Exception as e:
-                if self.debug:
-                    logger.error(f"[{name}] guardrail {name!r} error: {e!r}")
-                results[name] = None
-        return results
+        try:
+            content = extract_text_content(data, preferred_fields=preferred_fields)
+            if not content:
+                return None
+            guardrail_input = GuardrailInput(content=content)
+            return await guardrail.acheck(guardrail_input)
+        except Exception as e:
+            if self.debug:
+                logger.error(f"[Node {self.node_id}] guardrail error: {e!r}")
+            return None
 
     def to_langgraph_node(
         self,
@@ -180,19 +185,17 @@ class SupervisedNodeTemplate(AbstractNodeTemplate):
     def __init__(
         self,
         supervisor: BaseSupervisor,
-        input_guardrails: list[CallableSpec] | None = None,
-        output_guardrails: list[CallableSpec] | None = None,
+        input_guardrail: GuardrailProtocol | None = None,
+        output_guardrail: GuardrailProtocol | None = None,
         node_id: str | None = None,
-        tool_runner: ToolRunner | None = None,
         mutation: bool = False,
         debug: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(
-            input_guardrails=input_guardrails,
-            output_guardrails=output_guardrails,
+            input_guardrail=input_guardrail,
+            output_guardrail=output_guardrail,
             node_id=node_id,
-            tool_runner=tool_runner,
             mutation=mutation,
             debug=debug,
             **kwargs,
@@ -277,8 +280,11 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
             component=agent,
             input_guardrail=input_guardrail,
             output_guardrail=output_guardrail,
-            input_fields=kwargs.get("input_fields", []),
-            output_fields=kwargs.get("output_fields", []),
+            fail_on_input_risk=kwargs.get("fail_on_input_risk"),
+            fail_on_output_risk=kwargs.get("fail_on_output_risk"),
+            input_fields=kwargs.get("input_fields"),
+            output_fields=kwargs.get("output_fields"),
+            debug=debug,
         )
         # Validate that agent has required schemas
         if not hasattr(self.agent, "input_schema") or self.agent.input_schema is None:
@@ -297,10 +303,10 @@ class SingleAgentNodeTemplate(AbstractNodeTemplate):
         # Store io_map for cross-node input mapping with JSONPath support
         self.io_map = io_map or {}
 
-        # Call parent constructor with no CallableSpec guardrails (agent handles its own guardrails)
+        # Call parent constructor with no guardrails (agent handles its own via apply_guardrails)
         super().__init__(
-            input_guardrails=[],  # no need to run callable spec guardrails
-            output_guardrails=[],  # no need to run callable spec guardrails
+            input_guardrail=None,
+            output_guardrail=None,
             node_id=node_id,
             mutation=mutation,
             debug=debug,
