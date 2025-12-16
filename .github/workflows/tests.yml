@@ -1,14 +1,14 @@
-name: Integration Branch Sync
+name: Tests & Coverage 🧪
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [develop]
+    branches: [develop, main]
 
 jobs:
-  test-pr-branch:
-    name: Run Tests on PR Branch 🧪
+  test:
+    name: Run Tests 🧪
     runs-on: ubuntu-latest
-    environment: integration
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
@@ -242,41 +242,3 @@ jobs:
               repo: context.repo.repo,
               body: `${outcome}${testSummary}\n\nBranch: \`${{ github.head_ref }}\`\nPR: #${{ github.event.pull_request.number }}\nCommit: ${{ github.sha }}\n\n📋 Full coverage report and logs are available in the [workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
             })
-
-  # sync-integration:
-  #   name: Sync Integration Branch
-  #   needs: [test-pr-branch]
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout integration branch
-  #       uses: actions/checkout@v4
-  #       with:
-  #         ref: integration
-  #         token: ${{ secrets.GITHUB_TOKEN }}
-  #         fetch-depth: 0
-
-  #     - name: Configure Git
-  #       run: |
-  #         git config user.name "github-actions[bot]"
-  #         git config user.email "github-actions[bot]@users.noreply.github.com"
-
-  #     - name: Merge PR branch into integration
-  #       run: |
-  #         git fetch origin ${{ github.head_ref }}
-  #         git merge origin/${{ github.head_ref }} --no-ff -m "Auto-merge PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration for testing"
-
-  #     - name: Push integration branch
-  #       run: git push origin integration
-
-  #     - name: Create issue on merge conflict
-  #       if: failure()
-  #       uses: actions/github-script@v7
-  #       with:
-  #         script: |
-  #           github.rest.issues.create({
-  #             owner: context.repo.owner,
-  #             repo: context.repo.repo,
-  #             title: 'Integration branch merge conflict',
-  #             body: `Automatic merge of PR #${{ github.event.pull_request.number }} (${{ github.head_ref }}) into integration failed.\n\nPlease resolve conflicts manually:\n\`\`\`bash\ngit checkout integration\ngit merge origin/${{ github.head_ref }}\n# resolve conflicts\ngit push origin integration\n\`\`\``,
-  #             labels: ['integration', 'conflict']
-  #           })
