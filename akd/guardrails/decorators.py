@@ -26,7 +26,7 @@ from loguru import logger
 from pydantic import BaseModel, computed_field, create_model
 
 from akd.configs.project import CONFIG
-from akd.errors import InputGuardrailTriggered, OutputGuardrailTriggered
+from akd.errors import GuardrailError, InputGuardrailTriggered, OutputGuardrailTriggered
 from akd.guardrails._base import GuardrailInput, GuardrailOutput, GuardrailProtocol
 from akd.guardrails.utils import extract_text_content
 
@@ -88,6 +88,15 @@ def guardrail(
         class MyAgent(BaseAgent):
             ...
     """
+    # Validate guardrail types at decoration time for early error detection
+    if input_guardrail is not None and not isinstance(input_guardrail, GuardrailProtocol):
+        raise GuardrailError(
+            f"input_guardrail must implement GuardrailProtocol, got {type(input_guardrail).__name__}",
+        )
+    if output_guardrail is not None and not isinstance(output_guardrail, GuardrailProtocol):
+        raise GuardrailError(
+            f"output_guardrail must implement GuardrailProtocol, got {type(output_guardrail).__name__}",
+        )
 
     def decorator[T](cls: type[T]) -> type[T]:
         class GuardedClass(cls):  # type: ignore[valid-type,misc]
