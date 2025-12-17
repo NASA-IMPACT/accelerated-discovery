@@ -44,7 +44,12 @@ class StoryTellerAgentOutputSchema(OutputSchema):
   )
   
 class StoryTellerAgentConfig(BaseAgentConfig):
-  pass
+  stac_url: str = Field(
+    default="https://earth.gov/ghgcenter/api/stac",
+    description="""
+      The url of the STAC.
+    """
+  )  
 
 class StoryTellerAgent(BaseAgent):
   input_schema = StoryTellerAgentInputSchema
@@ -65,11 +70,12 @@ class StoryTellerAgent(BaseAgent):
     self.script_writer_agent = script_writer_agent or ScriptWriterAgent(ScriptWriterAgentConfig(api_key=config.api_key))
     self.data_injection_agent = data_injection_agent or DataInjectionAgent(DataInjectionAgentConfig(api_key=config.api_key))
     self.mdx_builder_agent = mdx_builder_agent or MDXBuilderAgent(MDXBuilderAgentConfig(api_key=config.api_key))
+    self.stac_url = config.stac_url
 
   async def get_response_async(self, params: StoryTellerAgentInputSchema) -> StoryTellerAgentOutputSchema:
     # extract the text from urls and get the collection items
     urls: List[str] = params.urls
-    collection_items: List[CollectionItem] = get_collection_items(params.collection_ids)
+    collection_items: List[CollectionItem] = get_collection_items(params.collection_ids, self.stac_url)
     scraped_text: str = await scrape_text_from_urls(urls)
 
     # get the relevant collection items
