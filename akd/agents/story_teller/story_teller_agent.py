@@ -65,41 +65,54 @@ class StoryTellerAgent(BaseAgent):
     self.script_writer_agent = script_writer_agent or ScriptWriterAgent(ScriptWriterAgentConfig(api_key=config.api_key))
     self.data_injection_agent = data_injection_agent or DataInjectionAgent(DataInjectionAgentConfig(api_key=config.api_key))
     self.mdx_builder_agent = mdx_builder_agent or MDXBuilderAgent(MDXBuilderAgentConfig(api_key=config.api_key))
-  
+
   async def get_response_async(self, params: StoryTellerAgentInputSchema) -> StoryTellerAgentOutputSchema:
     # extract the text from urls and get the collection items
     urls: List[str] = params.urls
     collection_items: List[CollectionItem] = get_collection_items(params.collection_ids)
     scraped_text: str = await scrape_text_from_urls(urls)
-    
+
     # get the relevant collection items
-    data_scout_input: DataScoutAgentInputSchema = DataScoutAgentInputSchema(
-      literature=scraped_text,
-      collection_items=collection_items
-    )
-    data_scout_output: DataScoutAgentOutputSchema = await self.data_scout_agent.arun(data_scout_input)
-    
+    try:
+      data_scout_input: DataScoutAgentInputSchema = DataScoutAgentInputSchema(
+        literature=scraped_text,
+        collection_items=collection_items
+      )
+      data_scout_output: DataScoutAgentOutputSchema = await self.data_scout_agent.arun(data_scout_input)
+    except Exception as e:
+      raise Exception(f"DataScoutAgent failed: {str(e)}") from e
+
     # get the story script
-    script_writer_input = ScriptWriterAgentInputSchema(
-      literature_text=scraped_text,
-      collection_items=data_scout_output.relevant_collection
-    )
-    script_writer_output: ScriptWriterAgentOutputSchema = await self.script_writer_agent.arun(script_writer_input)
-    
+    try:
+      script_writer_input = ScriptWriterAgentInputSchema(
+        literature_text=scraped_text,
+        collection_items=data_scout_output.relevant_collection
+      )
+      script_writer_output: ScriptWriterAgentOutputSchema = await self.script_writer_agent.arun(script_writer_input)
+    except Exception as e:
+      raise Exception(f"ScriptWriterAgent failed: {str(e)}") from e
+
     # inject the data into the script
-    data_injection_input = DataInjectionAgentInputSchema(
-      collection_items=data_scout_output.relevant_collection,
-      script=script_writer_output.script
-    )
-    data_injection_output: DataInjectionAgentOutputSchema = await self.data_injection_agent.arun(data_injection_input)
-    
+    try:
+      data_injection_input = DataInjectionAgentInputSchema(
+        collection_items=data_scout_output.relevant_collection,
+        script=script_writer_output.script
+      )
+      data_injection_output: DataInjectionAgentOutputSchema = await self.data_injection_agent.arun(data_injection_input)
+    except Exception as e:
+      raise Exception(f"DataInjectionAgent failed: {str(e)}") from e
+
     # build the mdx
-    mdx_builder_input = MDXBuilderAgentInputSchema(
-      story_script=data_injection_output.script_with_data,
-    )
-    mdx_builder_output: MDXBuilderAgentOutputSchema = await self.mdx_builder_agent.arun(mdx_builder_input)
+    try:
+      mdx_builder_input = MDXBuilderAgentInputSchema(
+        story_script=data_injection_output.script_with_data,
+      )
+      mdx_builder_output: MDXBuilderAgentOutputSchema = await self.mdx_builder_agent.arun(mdx_builder_input)
+    except Exception as e:
+      raise Exception(f"MDXBuilderAgent failed: {str(e)}") from e
+
     return StoryTellerAgentOutputSchema(story_mdx=mdx_builder_output.story_mdx)
-  
+
   async def _arun(self, params: StoryTellerAgentInputSchema) -> StoryTellerAgentOutputSchema:
     result: StoryTellerAgentOutputSchema = await self.get_response_async(params)
     return result

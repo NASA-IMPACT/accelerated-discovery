@@ -88,7 +88,7 @@ class DataScoutAgent(BaseAgent):
       stac_data=relevant_data.stac_data
     )
     data_evidence: DataRelationshipBuilderAgentOutputSchema = await self._get_data_evidence(data_relationship_builder_agent_input)
-    
+
     return DataScoutAgentOutputSchema(
       relevant_collection=data_evidence.stac_data
     )
