@@ -3,7 +3,9 @@ import json
 import os
 from geopy.geocoders import Nominatim
 from data_types import CollectionItem
-
+from scraper import get_default_scraper
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
 
 class LocationCache:
     """Persistent cache for reverse geocoding results."""
@@ -380,3 +382,40 @@ class MDXValidator:
             elif c == ">" and start != -1:
                 yield mdx[start:idx+1]
                 start = -1
+
+def get_collection_items(stac_collection_ids: list[str], stac_url:str="https://earth.gov/ghgcenter/api/stac") -> List[CollectionItem]:
+    """Get collection items from the collection file."""
+    all_collection_items: List[CollectionItem] = []
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [
+            executor.submit(get_collection_item, cid, stac_url)
+            for cid in stac_collection_ids
+        ]
+        # collect the results as they complete
+        for future in as_completed(futures):
+            try:
+                collection_item: CollectionItem = future.result()
+                all_collection_items.append(collection_item)
+            except Exception as e:
+                print(f"Error getting collection item: {e}")
+    return all_collection_items
+
+def get_collection_item(stac_collection_id: str, stac_url:str) -> List[CollectionItem]:
+    """Get collection item from the collection file."""
+    [collection_file_path, items_file_path, stac_collection, stac_collection_items] = download_stac_data(stac_url=stac_url, stac_collection_id=stac_collection_id, output_dir="./data")
+    collection_items: List[CollectionItem] = parse_stac_items_to_collection_items(stac_collection_items, stac_collection)
+    return collection_items
+
+async def scrape_text_from_url(url: str) -> str:
+    default_scraper = get_default_scraper(debug=False)
+    scraper_input = default_scraper.input_schema(
+      url = url
+    )
+    scraped_output = await default_scraper.arun(scraper_input)
+    scraped_text = scraped_output.content
+    return scraped_text
+
+async def scrape_text_from_urls(urls: List[str]) -> str:
+    tasks = [scrape_text_from_url(url) for url in urls]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    return "\n\n`````\n\n".join(results)
