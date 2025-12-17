@@ -103,6 +103,10 @@ class RiskAgentConfig(BaseAgentConfig):
         default=False,
         description="Include full DAGMetric object in output extra (for advanced inspection).",
     )
+    dag_verbose: bool = Field(
+        default=True,
+        description="Enable verbose mode for DAGMetric (detailed step logs).",
+    )
 
 
 class RiskAgent(
@@ -354,7 +358,7 @@ class RiskAgent(
         dag_metric = DAGMetric(
             name=f"Evaluate result based on risks (weighted): {', '.join(criteria_by_risk.keys())}",
             dag=DeepAcyclicGraph(root_nodes=root_nodes),
-            verbose_mode=True,
+            verbose_mode=self.config.dag_verbose,
         )
         return dag_metric, criterion_nodes_by_risk
 
@@ -436,7 +440,7 @@ Model Output: {content}
             input=params.context or "",
             actual_output=params.content,
         )
-        dag_metric.measure(test_case)
+        await dag_metric.a_measure(test_case)
 
         # Get score (normalized to 0-1 from 0-10)
         raw_score = dag_metric.score or 0.0
