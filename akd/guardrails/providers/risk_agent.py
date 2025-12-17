@@ -208,16 +208,18 @@ class RiskAgent(
         self,
         criteria_by_risk: dict[str, list[Criterion]],
         risk_weights: dict[str, float] | None = None,
-    ) -> tuple[DAGMetric, dict[str, list[TaskNode]]]:
+    ) -> tuple[DAGMetric, dict[str, list[TaskNode]], dict[str, TaskNode]]:
         """Build a DAGMetric from criteria grouped by risk.
 
         Returns:
-            Tuple of (DAGMetric, criterion_nodes_by_risk) where criterion_nodes_by_risk
-            maps risk_id to list of TaskNodes in same order as criteria.
+            Tuple of (DAGMetric, criterion_nodes_by_risk, risk_agg_nodes_by_risk) where:
+            - criterion_nodes_by_risk maps risk_id to list of TaskNodes in same order as criteria
+            - risk_agg_nodes_by_risk maps risk_id to its aggregation TaskNode
         """
         root_nodes: list[TaskNode] = []
         final_risk_nodes: list[TaskNode] = []
         criterion_nodes_by_risk: dict[str, list[TaskNode]] = {}
+        risk_agg_nodes_by_risk: dict[str, TaskNode] = {}
 
         for risk_id, criteria in criteria_by_risk.items():
             child_nodes = []
@@ -312,6 +314,7 @@ class RiskAgent(
                 n.children = [risk_agg_node]
 
             final_risk_nodes.append(risk_agg_node)
+            risk_agg_nodes_by_risk[risk_id] = risk_agg_node
 
         # WEIGHTED FINAL AGGREGATION
         weights: dict[str, float] = {rid: 1.0 for rid in criteria_by_risk.keys()}
@@ -360,7 +363,7 @@ class RiskAgent(
             dag=DeepAcyclicGraph(root_nodes=root_nodes),
             verbose_mode=self.config.dag_verbose,
         )
-        return dag_metric, criterion_nodes_by_risk
+        return dag_metric, criterion_nodes_by_risk, risk_agg_nodes_by_risk
 
     async def _generate_criteria_for_risk(
         self,
@@ -429,7 +432,7 @@ Model Output: {content}
         criteria_by_risk: dict[str, list[Criterion]] = dict(results)
 
         # Build DAG metric from criteria
-        dag_metric, criterion_nodes_by_risk = self._build_dag_from_criteria(
+        dag_metric, criterion_nodes_by_risk, risk_agg_nodes_by_risk = self._build_dag_from_criteria(
             criteria_by_risk,
             risk_weights=risk_weights,
         )
@@ -446,8 +449,10 @@ Model Output: {content}
         raw_score = dag_metric.score or 0.0
         score = raw_score / 10.0  # DAGMetric scores are 0-10
 
-        # Build per-risk evaluation results with criterion verdicts
+        # Build per-risk evaluation results with criterion verdicts and determine detected risks
         risk_results: dict[RiskCategory, dict[str, Any]] = {}
+        detected: list[RiskCategory] = []
+
         for risk_category in risk_categories:
             risk_id = risk_category.value
             criteria_list = criteria_by_risk.get(risk_id, [])
@@ -462,14 +467,23 @@ Model Output: {content}
                 criterion_dict["verdict"] = verdict_str.strip().lower() == "true"
                 criteria_with_verdicts.append(criterion_dict)
 
+            # Check if this specific risk passed by examining its aggregation node
+            agg_node = risk_agg_nodes_by_risk.get(risk_id)
+            if agg_node:
+                agg_verdict_str = agg_node._output or ""
+                risk_passed = agg_verdict_str.strip().lower() == "true"
+            else:
+                # No aggregation node means no criteria were generated - treat as passed
+                risk_passed = True
+
             risk_results[risk_category] = {
                 "criteria": criteria_with_verdicts,
+                "passed": risk_passed,
             }
 
-        # Determine detected risks based on threshold
-        detected: list[RiskCategory] = []
-        if score < self.config.pass_threshold:
-            detected = list(risk_categories)
+            # Add to detected risks if this risk failed
+            if not risk_passed:
+                detected.append(risk_category)
 
         if self.debug:
             logger.debug(
