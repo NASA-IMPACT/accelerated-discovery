@@ -394,8 +394,8 @@ def get_collection_items(stac_collection_ids: list[str], stac_url:str="https://e
         # collect the results as they complete
         for future in as_completed(futures):
             try:
-                collection_item: CollectionItem = future.result()
-                all_collection_items.append(collection_item)
+                collection_items: List[CollectionItem] = future.result()
+                all_collection_items.extend(collection_items)
             except Exception as e:
                 print(f"Error getting collection item: {e}")
     return all_collection_items
