@@ -1263,7 +1263,7 @@ class TestDeepLitSearchAgentRealLLM:
     @pytest.mark.integration
     @pytest.mark.asyncio
     @pytest.mark.slow
-    async def test_end_to_end_workflow_with_report_output(self, project_config):
+    async def test_end_to_end_workflow_with_report_output(self, project_config, requires_searxng):
         """Test complete end-to-end workflow and print the full research report."""
         if not project_config.model_config_settings.api_keys.openai:
             pytest.skip("OpenAI API key required for this test")
