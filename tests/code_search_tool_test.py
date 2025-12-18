@@ -30,6 +30,38 @@ from akd.tools.search.code_search import (
 )
 from akd.utils import google_drive_downloader
 
+# --- Service availability fixtures (check only when needed, cached per module) ---
+
+
+@pytest.fixture(scope="module")
+def requires_searxng():
+    """Skip test if SearxNG is unavailable. Only checks when a test uses this fixture."""
+    url = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
+    try:
+        response = requests.head(url, timeout=5)
+        if response.status_code >= 400:
+            pytest.skip(f"SearxNG returned {response.status_code}")
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        pytest.skip(f"SearxNG unreachable at {url}")
+
+
+@pytest.fixture(scope="module")
+def requires_sde_api():
+    """Skip test if SDE API is unavailable. Only checks when a test uses this fixture."""
+    url = "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
+    try:
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            data=json.dumps({"page": 0, "pageSize": 1, "search_term": "test", "search_type": "keyword"}),
+            timeout=5,
+        )
+        if response.status_code >= 400:
+            pytest.skip(f"SDE API returned {response.status_code}")
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        pytest.skip(f"SDE API unreachable at {url}")
+
+
 """Validate the output structure"""
 
 
@@ -148,9 +180,9 @@ async def test_local_repo_search(local_tool):
 
 
 @pytest.mark.asyncio
-async def test_searxng_server():
+async def test_searxng_server(requires_searxng):
     url = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
-    response = requests.head(url)
+    response = requests.head(url, timeout=5)
     assert response.status_code == 200
     assert response.headers.get("Content-Type") == "text/html; charset=utf-8"
 
@@ -159,7 +191,7 @@ async def test_searxng_server():
 
 
 @pytest.mark.asyncio
-async def test_github_code_search(github_tool):
+async def test_github_code_search(github_tool, requires_searxng):
     input_params = CodeSearchToolInputSchema(
         queries=["flood detection"],
         max_results=10,
@@ -177,7 +209,7 @@ async def test_github_code_search(github_tool):
 
 
 @pytest.mark.asyncio
-async def test_sde_api():
+async def test_sde_api(requires_sde_api):
     url = "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     payload = {
@@ -197,7 +229,7 @@ async def test_sde_api():
 
 
 @pytest.mark.asyncio
-async def test_sde_code_search(sde_tool):
+async def test_sde_code_search(sde_tool, requires_sde_api):
     input_params = CodeSearchToolInputSchema(
         queries=["weather prediction"],
         max_results=5,

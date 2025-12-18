@@ -45,9 +45,41 @@ class ModelConfigSettings(BaseSettings):
     default_no_answer: str = "Answer not found"
 
 
+class GuardrailSettings(BaseModel):
+    """Project-level guardrail defaults for the @guardrail decorator.
+
+    These settings provide defaults when not explicitly specified in the decorator.
+    Can be overridden via environment variables using GUARDRAILS__ prefix:
+        GUARDRAILS__FAIL_ON_INPUT_RISK=true
+        GUARDRAILS__FAIL_ON_OUTPUT_RISK=false
+    """
+
+    input_fields: list[str] = Field(
+        default=["query", "content", "text", "message", "user_input"],
+        description="Default input fields to extract text from for guardrail checks",
+    )
+    output_fields: list[str] = Field(
+        default=["response", "answer", "result", "content", "text"],
+        description="Default output fields to extract text from for guardrail checks",
+    )
+    fail_on_input_risk: bool = Field(
+        default=False,
+        description="Raise InputGuardrailTriggered exception when input risk detected",
+    )
+    fail_on_output_risk: bool = Field(
+        default=False,
+        description="Raise OutputGuardrailTriggered exception when output risk detected",
+    )
+    log_warnings: bool = Field(
+        default=True,
+        description="Log warnings when risks detected but not failing",
+    )
+
+
 class ProjectSettings(BaseSettings):
     env: Environment = Environment.LOCAL
     model_config_settings: ModelConfigSettings = ModelConfigSettings()
+    guardrails: GuardrailSettings = GuardrailSettings()
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.prod"),
@@ -60,9 +92,7 @@ class ProjectSettings(BaseSettings):
     @field_validator("env", mode="before")
     def validate_env(cls, value):
         if isinstance(value, str):
-            return Environment[
-                value.upper()
-            ]  # Convert string to enum (e.g., "local" -> Environment.LOCAL)
+            return Environment[value.upper()]  # Convert string to enum (e.g., "local" -> Environment.LOCAL)
         return value
 
 

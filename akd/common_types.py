@@ -1,5 +1,5 @@
 # Type Definitions for tools, guardrails, and callables
-from typing import Any, Callable, Coroutine
+from typing import Any, Callable
 
 try:
     from typing import TypeAlias  # Python 3.10+
@@ -11,16 +11,12 @@ from .tools._base import BaseTool
 
 ToolType: TypeAlias = BaseTool | BaseAgent
 
-# Guardrail types
-GuardrailType: TypeAlias = BaseTool | Callable | Coroutine
-
-# Callable specifications
+# Callable specifications (used for ToolRunner)
 AnyCallable: TypeAlias = BaseTool | BaseAgent | Callable[..., Any]
 CallableSpec: TypeAlias = AnyCallable | tuple[AnyCallable, dict[str, str]]
 
 __all__ = [
     "ToolType",
-    "GuardrailType",
     "AnyCallable",
     "CallableSpec",
 ]

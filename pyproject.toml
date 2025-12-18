@@ -49,6 +49,7 @@ dependencies = [
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
     "litellm>=1.74.2",
     "dateparser>=1.2.2",
+    "pyzmq>=27.0.0",
 ]
 
 [project.urls]
@@ -64,6 +65,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["akd*"]
 exclude = ["tests*", "examples*", "scripts*", "notebooks*"]
+
+[tool.setuptools.package-data]
+"akd.guardrails.categories" = ["*.yaml"]
 
 # Pytest configuration
 [tool.pytest.ini_options]

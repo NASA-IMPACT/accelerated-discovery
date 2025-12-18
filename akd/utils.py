@@ -1,6 +1,7 @@
 import asyncio
 import time
 from datetime import datetime
+from functools import lru_cache, wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,58 @@ from pydantic import BaseModel, HttpUrl
 
 if TYPE_CHECKING:
     pass
+
+
+def async_lru_cache(maxsize: int = 128):
+    """
+    LRU cache decorator for async functions using Python's built-in lru_cache.
+
+    Caches the result (not the coroutine) to avoid 'cannot reuse awaited coroutine' errors.
+
+    Args:
+        maxsize: Maximum size of the cache. Defaults to 128.
+
+    Example:
+        ```python
+        @async_lru_cache(maxsize=256)
+        async def fetch_data(query: str) -> dict:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"https://api.example.com/{query}")
+                return response.json()
+
+        result1 = await fetch_data("test")  # First call - fetches from API
+        result2 = await fetch_data("test")  # Second call - returns cached result
+        ```
+
+    Note:
+        All arguments to the decorated function must be hashable.
+    """
+
+    def decorator(async_fn):
+        @lru_cache(maxsize=maxsize)
+        def _cached_result_key(*args, **kwargs):
+            """Create a unique cache key."""
+            return (args, tuple(sorted(kwargs.items())))
+
+        _cache: dict = {}
+
+        @wraps(async_fn)
+        async def wrapper(*args, **kwargs):
+            cache_key = _cached_result_key(*args, **kwargs)
+
+            if cache_key in _cache:
+                return _cache[cache_key]
+
+            result = await async_fn(*args, **kwargs)
+            _cache[cache_key] = result
+            return result
+
+        wrapper.cache_info = _cached_result_key.cache_info
+        wrapper.cache_clear = lambda: (_cached_result_key.cache_clear(), _cache.clear())
+
+        return wrapper
+
+    return decorator
 
 
 class RateLimiter:
