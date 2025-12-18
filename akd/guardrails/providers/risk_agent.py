@@ -440,6 +440,7 @@ class RiskAgent(
         dag_metric = DAGMetric(
             name=f"Evaluate result based on risks (weighted): {', '.join(criteria_by_risk.keys())}",
             dag=DeepAcyclicGraph(root_nodes=root_nodes),
+            model=self.config.model_name,
             verbose_mode=self.config.dag_verbose,
         )
         return dag_metric, criterion_nodes_by_risk, risk_agg_nodes_by_risk
