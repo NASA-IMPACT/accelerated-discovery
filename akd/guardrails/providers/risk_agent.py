@@ -6,6 +6,8 @@ GuardrailInput/GuardrailOutput for unified interface with other guardrail provid
 """
 
 import asyncio
+import re
+from collections import defaultdict
 from collections.abc import Sequence
 from enum import Enum
 from typing import Any
@@ -21,10 +23,10 @@ from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from akd._base import OutputSchema
+from akd._base import InputSchema, OutputSchema
 from akd.agents import LiteLLMInstructorBaseAgent
 from akd.agents._base import BaseAgentConfig
-from akd.configs.prompts import RISK_SYSTEM_PROMPT
+from akd.configs.prompts import RISK_REPORT_SYSTEM_PROMPT, RISK_SYSTEM_PROMPT
 from akd.guardrails._base import (
     GuardrailInput,
     GuardrailOperatorMixin,
@@ -67,6 +69,75 @@ class RiskCriteriaOutputSchema(OutputSchema):
     )
 
 
+class RiskReportInputSchema(InputSchema):
+    """Input schema for the Risk Report Agent (from feature branch)."""
+
+    failed_criteria: dict[RiskCategory, list[str]] = Field(
+        ...,
+        description="Failed criteria per risk category.",
+    )
+    risky_content: str = Field(
+        ...,
+        description="Risky generated content that was evaluated.",
+    )
+
+
+class RiskReportOutputSchema(OutputSchema):
+    """Output schema for risk report generation (from feature branch)."""
+
+    risk_report: str = Field(
+        ...,
+        description="A report documenting detected risks in generated content.",
+    )
+
+
+class _RiskReportAgentConfig(BaseAgentConfig):
+    """Configuration for the internal RiskReportAgent (from feature branch)."""
+
+    system_prompt: str = RISK_REPORT_SYSTEM_PROMPT
+
+
+class _RiskReportAgent(
+    LiteLLMInstructorBaseAgent[RiskReportInputSchema, RiskReportOutputSchema],
+):
+    """Internal agent that generates risk reports for failed criteria.
+
+    From feature/risks-in-decorator branch (Tigran's RiskReportAgent).
+    """
+
+    input_schema = RiskReportInputSchema
+    output_schema = RiskReportOutputSchema
+    config_schema = _RiskReportAgentConfig
+
+    async def _arun(
+        self,
+        params: RiskReportInputSchema,
+        **kwargs,
+    ) -> RiskReportOutputSchema:
+        """Generate a risk report from failed criteria."""
+        messages = [self._default_system_message()]
+
+        # Build risk definitions from RiskCategory metadata
+        failed_criteria_str = {rc.value: criteria for rc, criteria in params.failed_criteria.items()}
+        relevant_risk_definitions = {rc.value: rc.metadata.description for rc in params.failed_criteria.keys()}
+
+        user_prompt = f"""
+risky_content: {params.risky_content}
+
+failed_criteria: {failed_criteria_str}
+
+relevant_risk_definitions: {relevant_risk_definitions}
+"""
+        messages.append({"role": "user", "content": user_prompt})
+
+        response: RiskReportOutputSchema = await self.get_response_async(
+            response_model=RiskReportOutputSchema,
+            messages=messages,
+        )  # type: ignore[assignment]
+
+        return response
+
+
 class RiskAgentConfig(BaseAgentConfig):
     """Configuration for the RiskAgent."""
 
@@ -106,6 +177,10 @@ class RiskAgentConfig(BaseAgentConfig):
     dag_verbose: bool = Field(
         default=True,
         description="Enable verbose mode for DAGMetric (detailed step logs).",
+    )
+    risk_report_config: _RiskReportAgentConfig = Field(
+        default_factory=_RiskReportAgentConfig,
+        description="Configuration for the internal risk report agent.",
     )
 
 
@@ -150,6 +225,10 @@ class RiskAgent(
         """Initialize the RiskAgent with configuration."""
         config = config or RiskAgentConfig()
         super().__init__(config=config, debug=debug)
+        self._risk_report_agent = _RiskReportAgent(
+            config=self.config.risk_report_config,
+            debug=self.debug,
+        )
         logger.info("RiskAgent created.")
 
     def _get_risk_agg_instructions(
@@ -396,6 +475,149 @@ Model Output: {content}
         logger.info(f"Judge criteria obtained for risk: {risk_id}")
         return (risk_id, response.criteria)
 
+    def _extract_risk_verdicts_from_verbose_logs(
+        self,
+        dag_metric: DAGMetric,
+    ) -> dict[str, bool]:
+        """Extract per-risk pass/fail verdicts from DAG verbose logs.
+
+        DeepEval's DAGMetric doesn't populate _output on original node references,
+        so we parse the verbose logs to determine which risks passed/failed.
+
+        From feature/risks-in-decorator branch (Tigran's implementation).
+
+        Returns:
+            Dict mapping risk_id to whether it passed (True) or failed (False).
+        """
+        passed_risks: dict[str, bool] = {}
+
+        # Get verbose steps from the DAG metric
+        verbose_steps = getattr(dag_metric, "_verbose_steps", []) or []
+        if not verbose_steps:
+            return passed_risks
+
+        blob = "\n".join(verbose_steps)
+
+        # Level 1 aggregation nodes pattern (from feature branch)
+        level1_pattern = re.compile(
+            r"Label:\s*([\w\-]+)\s+aggregation node.*?\n[\s\S]*?\n\s*([\w\-]+_importance_aware_pass):\s*(True|False)\s*$",
+            re.DOTALL | re.MULTILINE,
+        )
+
+        for match in level1_pattern.finditer(blob):
+            risk_id = match.group(1)
+            verdict = match.group(3).strip().lower()
+            passed_risks[risk_id] = verdict == "true"
+
+            if self.debug:
+                logger.debug(f"[RiskAgent] Parsed verdict for {risk_id}: {verdict}")
+
+        return passed_risks
+
+    def _extract_failed_criteria_from_verbose_logs(
+        self,
+        dag_metric: DAGMetric,
+    ) -> dict[str, list[str]]:
+        """Extract failed HIGH importance criteria from DAG verbose logs.
+
+        From feature/risks-in-decorator branch (Tigran's _extract_high_importance_criteria).
+
+        Returns:
+            Dict mapping risk_id to list of failed criterion descriptions.
+        """
+        criteria_by_label: dict[str, list[tuple[int, str]]] = defaultdict(list)
+
+        verbose_steps = getattr(dag_metric, "_verbose_steps", []) or []
+        if not verbose_steps:
+            return {}
+
+        # Regex patterns from feature branch
+        level_pattern = re.compile(r"Level == (\d+)")
+        label_pattern = re.compile(r"Label:\s*([^\|]+)\|")
+        importance_pattern = re.compile(r"importance:\s*(\w+)", re.IGNORECASE)
+        instructions_pattern = re.compile(
+            r"Instructions:\s*(.*?)\nAnswer strictly",
+            re.DOTALL | re.IGNORECASE,
+        )
+        verdict_pattern = re.compile(
+            r"\n([\w\-]+_\d+):\s*\n?\s*(True|False|Pass|Fail)",
+            re.IGNORECASE,
+        )
+
+        for block in verbose_steps:
+            # Only Level 0 nodes (individual criteria)
+            level_match = level_pattern.search(block)
+            if not level_match or level_match.group(1) != "0":
+                continue
+
+            # Extract label (risk_id)
+            label_match = label_pattern.search(block)
+            if not label_match:
+                continue
+            label = label_match.group(1).strip()
+
+            # Only include high importance
+            importance_match = importance_pattern.search(block)
+            if not importance_match or importance_match.group(1).lower() != "high":
+                continue
+
+            # Find verdict
+            verdict_match = verdict_pattern.search(block)
+            if not verdict_match:
+                continue
+
+            criterion_id, verdict = verdict_match.group(1), verdict_match.group(2)
+            if verdict.lower() not in ("false", "fail"):
+                continue
+
+            # Extract numeric suffix for ordering
+            num_match = re.search(r"_(\d+)$", criterion_id)
+            order = int(num_match.group(1)) if num_match else 0
+
+            # Extract criterion text
+            instructions_match = instructions_pattern.search(block)
+            if instructions_match:
+                criteria_text = instructions_match.group(1).strip()
+                criteria_by_label[label].append((order, criteria_text))
+
+        # Sort by order and return just the text
+        return {
+            label: [text for _, text in sorted(items, key=lambda x: x[0])] for label, items in criteria_by_label.items()
+        }
+
+    def _extract_criterion_verdicts_from_verbose_logs(
+        self,
+        dag_metric: DAGMetric,
+    ) -> dict[str, bool]:
+        """Extract individual criterion verdicts from verbose logs.
+
+        Returns:
+            Dict mapping criterion_id (e.g., "consistency_1") to verdict (True/False).
+        """
+        verdicts: dict[str, bool] = {}
+
+        verbose_steps = getattr(dag_metric, "_verbose_steps", []) or []
+        if not verbose_steps:
+            return verdicts
+
+        # Pattern for criterion verdicts at Level 0
+        verdict_pattern = re.compile(
+            r"\n([\w\-]+_\d+):\s*\n?\s*(True|False)",
+            re.IGNORECASE,
+        )
+
+        for block in verbose_steps:
+            # Only Level 0
+            if "Level == 0" not in block:
+                continue
+
+            for match in verdict_pattern.finditer(block):
+                criterion_id = match.group(1)
+                verdict = match.group(2).strip().lower() == "true"
+                verdicts[criterion_id] = verdict
+
+        return verdicts
+
     async def _arun(
         self,
         params: GuardrailInput,
@@ -432,7 +654,8 @@ Model Output: {content}
         criteria_by_risk: dict[str, list[Criterion]] = dict(results)
 
         # Build DAG metric from criteria
-        dag_metric, criterion_nodes_by_risk, risk_agg_nodes_by_risk = self._build_dag_from_criteria(
+        # Note: node references aren't used - we parse verbose logs for verdicts
+        dag_metric, _, _ = self._build_dag_from_criteria(
             criteria_by_risk,
             risk_weights=risk_weights,
         )
@@ -449,6 +672,11 @@ Model Output: {content}
         raw_score = dag_metric.score or 0.0
         score = raw_score / 10.0  # DAGMetric scores are 0-10
 
+        # Parse verdicts from verbose logs (node._output isn't populated by DeepEval)
+        # From feature/risks-in-decorator branch (Tigran's implementation)
+        risk_verdicts = self._extract_risk_verdicts_from_verbose_logs(dag_metric)
+        criterion_verdicts = self._extract_criterion_verdicts_from_verbose_logs(dag_metric)
+
         # Build per-risk evaluation results with criterion verdicts and determine detected risks
         risk_results: dict[RiskCategory, dict[str, Any]] = {}
         detected: list[RiskCategory] = []
@@ -456,25 +684,17 @@ Model Output: {content}
         for risk_category in risk_categories:
             risk_id = risk_category.value
             criteria_list = criteria_by_risk.get(risk_id, [])
-            nodes = criterion_nodes_by_risk.get(risk_id, [])
 
-            # Merge criterion data with verdicts from nodes
+            # Merge criterion data with verdicts from parsed verbose logs
             criteria_with_verdicts = []
-            for criterion, node in zip(criteria_list, nodes):
+            for i, criterion in enumerate(criteria_list):
                 criterion_dict = criterion.model_dump()
-                # Parse verdict from node._output (e.g., "True" or "False")
-                verdict_str = node._output or ""
-                criterion_dict["verdict"] = verdict_str.strip().lower() == "true"
+                criterion_id = f"{risk_id}_{i + 1}"
+                criterion_dict["verdict"] = criterion_verdicts.get(criterion_id, False)
                 criteria_with_verdicts.append(criterion_dict)
 
-            # Check if this specific risk passed by examining its aggregation node
-            agg_node = risk_agg_nodes_by_risk.get(risk_id)
-            if agg_node:
-                agg_verdict_str = agg_node._output or ""
-                risk_passed = agg_verdict_str.strip().lower() == "true"
-            else:
-                # No aggregation node means no criteria were generated - treat as passed
-                risk_passed = True
+            # Check if this specific risk passed using parsed verdicts
+            risk_passed = risk_verdicts.get(risk_id, True)  # Default to passed if not found
 
             risk_results[risk_category] = {
                 "criteria": criteria_with_verdicts,
@@ -491,11 +711,35 @@ Model Output: {content}
                 f"detected: {[r.value for r in detected]}",
             )
 
+        # Generate risk report for failed risks (from feature branch)
+        risk_report: str | None = None
+        if detected:
+            # Extract failed criteria for report generation
+            failed_criteria_raw = self._extract_failed_criteria_from_verbose_logs(dag_metric)
+            # Map risk_id strings back to RiskCategory enums
+            failed_criteria: dict[RiskCategory, list[str]] = {}
+            for rc in detected:
+                if rc.value in failed_criteria_raw:
+                    failed_criteria[rc] = failed_criteria_raw[rc.value]
+
+            if failed_criteria:
+                try:
+                    report_result = await self._risk_report_agent.arun(
+                        RiskReportInputSchema(
+                            failed_criteria=failed_criteria,
+                            risky_content=params.content,
+                        ),
+                    )
+                    risk_report = report_result.risk_report
+                except Exception as e:
+                    logger.error(f"[RiskAgent] Error generating risk report: {e}")
+
         extra: dict[str, Any] = {
             "score": score,
             "raw_score": raw_score,
             "reason": dag_metric.reason,
             "verbose_logs": dag_metric.verbose_logs,
+            "risk_report": risk_report,
         }
         if self.config.include_dag_metric:
             extra["dag_metric"] = dag_metric
