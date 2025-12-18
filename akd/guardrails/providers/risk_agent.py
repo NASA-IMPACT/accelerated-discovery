@@ -260,7 +260,29 @@ class RiskAgent(
         all_risk_outputs: list[str],
         weights_text: str,
         denom: float,
+        verdicts: list[VerdictNode],
     ) -> str:
+        # Extract thresholds from verdict strings (all verdicts we create are strings)
+        thresholds = sorted(
+            [
+                float(str(v.verdict).split("≥")[1].strip())
+                for v in verdicts
+                if isinstance(v.verdict, str) and "≥" in v.verdict
+            ],
+            reverse=True,
+        )
+
+        # Pick top three + next lower for the example
+        top3 = thresholds[:3]
+        example_lower = thresholds[3] if len(thresholds) > 3 else thresholds[-1]
+
+        # Choose example ratio slightly below lowest of top3
+        example_ratio = round(example_lower + (top3[-1] - example_lower) / 2 - 0.01, 2)
+        top3_str = ", ".join(f"{t:.2f}" for t in top3)
+
+        # Get verdict strings for display
+        verdict_strs = [str(v.verdict) for v in verdicts if isinstance(v.verdict, str)]
+
         return (
             "Compute a weighted pass ratio over risks using their pass/fail outputs and the provided weights.\n"
             "Steps:\n"
@@ -271,11 +293,19 @@ class RiskAgent(
             f"3) Let total_weight = {denom} (sum of the weights).\n"
             "4) Let passed_weight = sum of weights for risks that passed (True).\n"
             "5) weighted_ratio = passed_weight / total_weight.\n"
-            "6) Select the verdict that matches the weighted_ratio bucket:\n"
-            "- Choose the **highest threshold** that weighted_ratio meets.\n"
-            "- Example: If weighted_ratio = 1.0, it meets >= 0.25, >= 0.50, >= 0.75, and >= 0.90, "
-            "but you must select only the >= 0.90 verdict.\n"
-            "7) Do not select lower thresholds once a higher one applies."
+            "6) Determine the verdict bucket using the following logic:\n"
+            "   - Each verdict node defines a single threshold of the form 'Weighted pass ratio ≥ X'.\n"
+            "   - Compute weighted_ratio as above.\n"
+            "   - Start from the **highest threshold** (the largest X) and move **downward**.\n"
+            "   - The first threshold where weighted_ratio ≥ X is the correct one — stop there.\n"
+            "   - Do NOT select any higher thresholds that the ratio does not meet.\n"
+            "   - Return exactly that node's verdict text as the final verdict.\n"
+            "   - The associated score must be the numeric score linked to that node.\n"
+            "   - If weighted_ratio is below the lowest threshold, return the node that explicitly represents ratios below 0.05.\n"
+            f"   - Example: if weighted_ratio = {example_ratio:.2f}, the highest thresholds ({top3_str}) are not satisfied, "
+            f"but {example_lower:.2f} is; therefore, the correct verdict is 'Weighted pass ratio ≥ {example_lower:.2f}'.\n\n"
+            "The possible verdicts are given below:\n"
+            f"{chr(10).join(verdict_strs)}"
         )
 
     def _resolve_risk_weights(self, risk_categories: Sequence[RiskCategory]) -> dict[str, float]:
@@ -411,18 +441,27 @@ class RiskAgent(
 
         all_risk_outputs = [n.output_label for n in final_risk_nodes]
 
+        # ----- Adaptive verdict generation based on number of risks ---
+        num_risks = len(risk_weights) if risk_weights else len(criteria_by_risk)
+
+        # For 7 risks 14 buckets is ok, so number of buckets ~ num_risks + 4 for now (setting minimum of 5 buckets)
+        num_buckets = max(5, num_risks + 4)
+        step = 1.0 / (num_buckets - 1)
+
+        scores = [round(i * step * 10, 1) for i in range(0, num_buckets)]
+        thresholds = [round(i / 10 - step / 2, 2) for i in scores]
+        thresholds[0] = 0.0
+
         verdicts = [
-            VerdictNode(verdict="Weighted pass ratio >= 0.90", score=10.0),
-            VerdictNode(verdict="Weighted pass ratio >= 0.75", score=7.5),
-            VerdictNode(verdict="Weighted pass ratio >= 0.50", score=5.0),
-            VerdictNode(verdict="Weighted pass ratio >= 0.25", score=2.5),
-            VerdictNode(verdict="Weighted pass ratio < 0.25", score=0.0),
+            VerdictNode(verdict=f"Weighted pass ratio ≥ {thr}", score=sco)
+            for thr, sco in zip(reversed(thresholds), reversed(scores))
         ]
 
         summary_instructions = self._get_summary_instructions(
             all_risk_outputs,
             weights_text,
             denom,
+            verdicts,
         )
 
         risk_summary_node = NonBinaryJudgementNode(
@@ -476,14 +515,45 @@ Model Output: {content}
         logger.info(f"Judge criteria obtained for risk: {risk_id}")
         return (risk_id, response.criteria)
 
+    def _extract_verdicts_from_nodes(
+        self,
+        criterion_nodes_by_risk: dict[str, list[TaskNode]],
+        risk_agg_nodes_by_risk: dict[str, TaskNode],
+    ) -> tuple[dict[str, bool], dict[str, bool]]:
+        """Extract verdicts directly from DAG nodes after a_measure() (primary method).
+
+        DeepEval populates TaskNode._output with "True" or "False" after execution.
+        This is more reliable than parsing verbose logs.
+
+        Returns:
+            Tuple of (criterion_verdicts, risk_verdicts) where:
+            - criterion_verdicts maps criterion_id (e.g., "consistency_1") to verdict
+            - risk_verdicts maps risk_id to whether it passed
+        """
+        criterion_verdicts: dict[str, bool] = {}
+        risk_verdicts: dict[str, bool] = {}
+
+        # Per-criterion verdicts from Level 0 TaskNodes
+        for risk_id, nodes in criterion_nodes_by_risk.items():
+            for i, node in enumerate(nodes):
+                if node._output:
+                    verdict = node._output.strip().lower() == "true"
+                    criterion_verdicts[f"{risk_id}_{i + 1}"] = verdict
+
+        # Per-risk aggregation verdicts from Level 1 TaskNodes
+        for risk_id, agg_node in risk_agg_nodes_by_risk.items():
+            if agg_node._output:
+                risk_verdicts[risk_id] = agg_node._output.strip().lower() == "true"
+
+        return criterion_verdicts, risk_verdicts
+
     def _extract_risk_verdicts_from_verbose_logs(
         self,
         dag_metric: DAGMetric,
     ) -> dict[str, bool]:
-        """Extract per-risk pass/fail verdicts from DAG verbose logs.
+        """Extract per-risk pass/fail verdicts from DAG verbose logs (fallback method).
 
-        DeepEval's DAGMetric doesn't populate _output on original node references,
-        so we parse the verbose logs to determine which risks passed/failed.
+        This parses verbose logs as a fallback when direct node access fails.
 
         From feature/risks-in-decorator branch (Tigran's implementation).
 
@@ -655,8 +725,7 @@ Model Output: {content}
         criteria_by_risk: dict[str, list[Criterion]] = dict(results)
 
         # Build DAG metric from criteria
-        # Note: node references aren't used - we parse verbose logs for verdicts
-        dag_metric, _, _ = self._build_dag_from_criteria(
+        dag_metric, criterion_nodes_by_risk, risk_agg_nodes_by_risk = self._build_dag_from_criteria(
             criteria_by_risk,
             risk_weights=risk_weights,
         )
@@ -673,10 +742,18 @@ Model Output: {content}
         raw_score = dag_metric.score or 0.0
         score = raw_score / 10.0  # DAGMetric scores are 0-10
 
-        # Parse verdicts from verbose logs (node._output isn't populated by DeepEval)
-        # From feature/risks-in-decorator branch (Tigran's implementation)
-        risk_verdicts = self._extract_risk_verdicts_from_verbose_logs(dag_metric)
-        criterion_verdicts = self._extract_criterion_verdicts_from_verbose_logs(dag_metric)
+        # Primary: Extract verdicts directly from DAG nodes (populated by DeepEval after a_measure)
+        criterion_verdicts, risk_verdicts = self._extract_verdicts_from_nodes(
+            criterion_nodes_by_risk,
+            risk_agg_nodes_by_risk,
+        )
+
+        # Fallback: Parse verbose logs if direct node extraction failed
+        if not risk_verdicts:
+            logger.warning("Direct node verdict extraction failed, falling back to verbose logs")
+            risk_verdicts = self._extract_risk_verdicts_from_verbose_logs(dag_metric)
+        if not criterion_verdicts:
+            criterion_verdicts = self._extract_criterion_verdicts_from_verbose_logs(dag_metric)
 
         # Build per-risk evaluation results with criterion verdicts and determine detected risks
         risk_results: dict[RiskCategory, dict[str, Any]] = {}
