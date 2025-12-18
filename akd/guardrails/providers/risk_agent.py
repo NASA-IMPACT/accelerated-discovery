@@ -7,7 +7,6 @@ GuardrailInput/GuardrailOutput for unified interface with other guardrail provid
 
 import asyncio
 import re
-from collections import defaultdict
 from collections.abc import Sequence
 from enum import Enum
 from typing import Any
@@ -166,9 +165,9 @@ class RiskAgentConfig(BaseAgentConfig):
         else [],
         description="Default risk categories for scientific discovery (AtlasRiskCategory, ScienceRiskCategory).",
     )
-    risk_weights: dict[str, float] | None = Field(
+    risk_weights: dict[RiskCategory, float] | None = Field(
         default=None,
-        description="Optional per-risk weight overrides. Keys are risk_id values.",
+        description="Per-risk weight overrides. Defaults to 1.0 for unspecified risks.",
     )
     include_dag_metric: bool = Field(
         default=False,
@@ -308,39 +307,30 @@ class RiskAgent(
             f"{chr(10).join(verdict_strs)}"
         )
 
-    def _resolve_risk_weights(self, risk_categories: Sequence[RiskCategory]) -> dict[str, float]:
-        """Resolve weights for all risk categories, defaulting to 1.0."""
-        overrides = self.config.risk_weights or {}
-        return {cat.value: float(overrides.get(cat.value, 1.0)) for cat in risk_categories}
-
     def _build_dag_from_criteria(
         self,
-        criteria_by_risk: dict[str, list[Criterion]],
-        risk_weights: dict[str, float] | None = None,
-    ) -> tuple[DAGMetric, dict[str, list[TaskNode]], dict[str, TaskNode]]:
+        criteria_by_risk: dict[RiskCategory, list[Criterion]],
+    ) -> tuple[DAGMetric, dict[RiskCategory, list[TaskNode]], dict[RiskCategory, TaskNode]]:
         """Build a DAGMetric from criteria grouped by risk.
 
         Returns:
             Tuple of (DAGMetric, criterion_nodes_by_risk, risk_agg_nodes_by_risk) where:
-            - criterion_nodes_by_risk maps risk_id to list of TaskNodes in same order as criteria
-            - risk_agg_nodes_by_risk maps risk_id to its aggregation TaskNode
+            - criterion_nodes_by_risk maps RiskCategory to list of TaskNodes in same order as criteria
+            - risk_agg_nodes_by_risk maps RiskCategory to its aggregation TaskNode
         """
         root_nodes: list[TaskNode] = []
         final_risk_nodes: list[TaskNode] = []
-        criterion_nodes_by_risk: dict[str, list[TaskNode]] = {}
-        risk_agg_nodes_by_risk: dict[str, TaskNode] = {}
+        criterion_nodes_by_risk: dict[RiskCategory, list[TaskNode]] = {}
+        risk_agg_nodes_by_risk: dict[RiskCategory, TaskNode] = {}
 
-        for risk_id, criteria in criteria_by_risk.items():
+        for risk_category, criteria in criteria_by_risk.items():
+            risk_id = risk_category.value
             child_nodes = []
-            criterion_nodes_by_risk[risk_id] = []
+            criterion_nodes_by_risk[risk_category] = []
 
             # Create root nodes (binary True/False) with importance-aware labeling
             for i, criterion in enumerate(criteria):
-                importance_str = getattr(
-                    criterion,
-                    "importance",
-                    CriterionImportance.MEDIUM,
-                ).value
+                importance = getattr(criterion, "importance", CriterionImportance.MEDIUM)
 
                 node = TaskNode(
                     output_label=f"{risk_id}_{i + 1}",
@@ -350,20 +340,20 @@ class RiskAgent(
                         LLMTestCaseParams.ACTUAL_OUTPUT,
                     ],
                     children=[],
-                    label=f"{risk_id} | importance: {importance_str} | {criterion.description}",
+                    label=f"{risk_id} | importance: {importance.value} | {criterion.description}",
                 )
-                child_nodes.append((node, importance_str))
+                child_nodes.append((node, importance.value))
                 root_nodes.append(node)
-                criterion_nodes_by_risk[risk_id].append(node)
+                criterion_nodes_by_risk[risk_category].append(node)
                 if self.debug:
                     logger.debug(
                         f"Created DAG root node for criterion: `{criterion}` for risk: {risk_id}",
                     )
 
             # Group nodes by importance for aggregation logic
-            high_nodes = [n for n, imp in child_nodes if imp == "high"]
-            medium_nodes = [n for n, imp in child_nodes if imp == "medium"]
-            low_nodes = [n for n, imp in child_nodes if imp == "low"]
+            high_nodes = [n for n, imp in child_nodes if imp == CriterionImportance.HIGH.value]
+            medium_nodes = [n for n, imp in child_nodes if imp == CriterionImportance.MEDIUM.value]
+            low_nodes = [n for n, imp in child_nodes if imp == CriterionImportance.LOW.value]
 
             high_labels = [n.output_label for n in high_nodes]
             medium_labels = [n.output_label for n in medium_nodes]
@@ -423,17 +413,14 @@ class RiskAgent(
                 n.children = [risk_agg_node]
 
             final_risk_nodes.append(risk_agg_node)
-            risk_agg_nodes_by_risk[risk_id] = risk_agg_node
+            risk_agg_nodes_by_risk[risk_category] = risk_agg_node
 
-        # WEIGHTED FINAL AGGREGATION
-        weights: dict[str, float] = {rid: 1.0 for rid in criteria_by_risk.keys()}
-        if risk_weights:
-            for rid, w in risk_weights.items():
-                if rid in weights:
-                    weights[rid] = float(w)
+        # WEIGHTED FINAL AGGREGATION (defaults to 1.0 for unspecified risks)
+        weights: dict[RiskCategory, float] = {
+            rc: (self.config.risk_weights or {}).get(rc, 1.0) for rc in criteria_by_risk.keys()
+        }
 
-        weight_lines = [f"- {rid}: {weights[rid]}" for rid in criteria_by_risk.keys()]
-        weights_text = "\n".join(weight_lines)
+        weights_text = "\n".join([f"- {rc.value}: {w}" for rc, w in weights.items()])
         denom = sum(weights.values())
         if denom == 0:
             logger.error("Risk weights sum to zero; cannot compute weighted ratio.")
@@ -442,7 +429,7 @@ class RiskAgent(
         all_risk_outputs = [n.output_label for n in final_risk_nodes]
 
         # ----- Adaptive verdict generation based on number of risks ---
-        num_risks = len(risk_weights) if risk_weights else len(criteria_by_risk)
+        num_risks = len(criteria_by_risk)
 
         # For 7 risks 14 buckets is ok, so number of buckets ~ num_risks + 4 for now (setting minimum of 5 buckets)
         num_buckets = max(5, num_risks + 4)
@@ -477,7 +464,7 @@ class RiskAgent(
             logger.debug("Created final risk aggregation node and linked its parent nodes.")
 
         dag_metric = DAGMetric(
-            name=f"Evaluate result based on risks (weighted): {', '.join(criteria_by_risk.keys())}",
+            name=f"Evaluate result based on risks (weighted): {', '.join(rc.value for rc in criteria_by_risk.keys())}",
             dag=DeepAcyclicGraph(root_nodes=root_nodes),
             model=self.config.model_name,
             verbose_mode=self.config.dag_verbose,
@@ -489,7 +476,7 @@ class RiskAgent(
         risk_category: RiskCategory,
         context: str | None,
         content: str,
-    ) -> tuple[str, list[Criterion]]:
+    ) -> list[Criterion]:
         """Generate evaluation criteria for a single risk category."""
         risk_id = risk_category.value
         risk_description = risk_category.metadata.description
@@ -513,13 +500,13 @@ Model Output: {content}
         )  # type: ignore[assignment]
 
         logger.info(f"Judge criteria obtained for risk: {risk_id}")
-        return (risk_id, response.criteria)
+        return response.criteria
 
     def _extract_verdicts_from_nodes(
         self,
-        criterion_nodes_by_risk: dict[str, list[TaskNode]],
-        risk_agg_nodes_by_risk: dict[str, TaskNode],
-    ) -> tuple[dict[str, bool], dict[str, bool]]:
+        criterion_nodes_by_risk: dict[RiskCategory, list[TaskNode]],
+        risk_agg_nodes_by_risk: dict[RiskCategory, TaskNode],
+    ) -> tuple[dict[str, bool], dict[RiskCategory, bool]]:
         """Extract verdicts directly from DAG nodes after a_measure() (primary method).
 
         DeepEval populates TaskNode._output with "True" or "False" after execution.
@@ -528,29 +515,31 @@ Model Output: {content}
         Returns:
             Tuple of (criterion_verdicts, risk_verdicts) where:
             - criterion_verdicts maps criterion_id (e.g., "consistency_1") to verdict
-            - risk_verdicts maps risk_id to whether it passed
+            - risk_verdicts maps RiskCategory to whether it passed
         """
         criterion_verdicts: dict[str, bool] = {}
-        risk_verdicts: dict[str, bool] = {}
+        risk_verdicts: dict[RiskCategory, bool] = {}
 
         # Per-criterion verdicts from Level 0 TaskNodes
-        for risk_id, nodes in criterion_nodes_by_risk.items():
+        for risk_category, nodes in criterion_nodes_by_risk.items():
+            risk_id = risk_category.value
             for i, node in enumerate(nodes):
                 if node._output:
                     verdict = node._output.strip().lower() == "true"
                     criterion_verdicts[f"{risk_id}_{i + 1}"] = verdict
 
         # Per-risk aggregation verdicts from Level 1 TaskNodes
-        for risk_id, agg_node in risk_agg_nodes_by_risk.items():
+        for risk_category, agg_node in risk_agg_nodes_by_risk.items():
             if agg_node._output:
-                risk_verdicts[risk_id] = agg_node._output.strip().lower() == "true"
+                risk_verdicts[risk_category] = agg_node._output.strip().lower() == "true"
 
         return criterion_verdicts, risk_verdicts
 
     def _extract_risk_verdicts_from_verbose_logs(
         self,
         dag_metric: DAGMetric,
-    ) -> dict[str, bool]:
+        risk_categories: Sequence[RiskCategory],
+    ) -> dict[RiskCategory, bool]:
         """Extract per-risk pass/fail verdicts from DAG verbose logs (fallback method).
 
         This parses verbose logs as a fallback when direct node access fails.
@@ -558,9 +547,11 @@ Model Output: {content}
         From feature/risks-in-decorator branch (Tigran's implementation).
 
         Returns:
-            Dict mapping risk_id to whether it passed (True) or failed (False).
+            Dict mapping RiskCategory to whether it passed (True) or failed (False).
         """
-        passed_risks: dict[str, bool] = {}
+        # Build mapping from risk_id string to RiskCategory enum
+        risk_id_to_category = {rc.value: rc for rc in risk_categories}
+        passed_risks: dict[RiskCategory, bool] = {}
 
         # Get verbose steps from the DAG metric
         verbose_steps = getattr(dag_metric, "_verbose_steps", []) or []
@@ -578,83 +569,13 @@ Model Output: {content}
         for match in level1_pattern.finditer(blob):
             risk_id = match.group(1)
             verdict = match.group(3).strip().lower()
-            passed_risks[risk_id] = verdict == "true"
+            if risk_id in risk_id_to_category:
+                passed_risks[risk_id_to_category[risk_id]] = verdict == "true"
 
             if self.debug:
                 logger.debug(f"[RiskAgent] Parsed verdict for {risk_id}: {verdict}")
 
         return passed_risks
-
-    def _extract_failed_criteria_from_verbose_logs(
-        self,
-        dag_metric: DAGMetric,
-    ) -> dict[str, list[str]]:
-        """Extract failed HIGH importance criteria from DAG verbose logs.
-
-        From feature/risks-in-decorator branch (Tigran's _extract_high_importance_criteria).
-
-        Returns:
-            Dict mapping risk_id to list of failed criterion descriptions.
-        """
-        criteria_by_label: dict[str, list[tuple[int, str]]] = defaultdict(list)
-
-        verbose_steps = getattr(dag_metric, "_verbose_steps", []) or []
-        if not verbose_steps:
-            return {}
-
-        # Regex patterns from feature branch
-        level_pattern = re.compile(r"Level == (\d+)")
-        label_pattern = re.compile(r"Label:\s*([^\|]+)\|")
-        importance_pattern = re.compile(r"importance:\s*(\w+)", re.IGNORECASE)
-        instructions_pattern = re.compile(
-            r"Instructions:\s*(.*?)\nAnswer strictly",
-            re.DOTALL | re.IGNORECASE,
-        )
-        verdict_pattern = re.compile(
-            r"\n([\w\-]+_\d+):\s*\n?\s*(True|False|Pass|Fail)",
-            re.IGNORECASE,
-        )
-
-        for block in verbose_steps:
-            # Only Level 0 nodes (individual criteria)
-            level_match = level_pattern.search(block)
-            if not level_match or level_match.group(1) != "0":
-                continue
-
-            # Extract label (risk_id)
-            label_match = label_pattern.search(block)
-            if not label_match:
-                continue
-            label = label_match.group(1).strip()
-
-            # Only include high importance
-            importance_match = importance_pattern.search(block)
-            if not importance_match or importance_match.group(1).lower() != "high":
-                continue
-
-            # Find verdict
-            verdict_match = verdict_pattern.search(block)
-            if not verdict_match:
-                continue
-
-            criterion_id, verdict = verdict_match.group(1), verdict_match.group(2)
-            if verdict.lower() not in ("false", "fail"):
-                continue
-
-            # Extract numeric suffix for ordering
-            num_match = re.search(r"_(\d+)$", criterion_id)
-            order = int(num_match.group(1)) if num_match else 0
-
-            # Extract criterion text
-            instructions_match = instructions_pattern.search(block)
-            if instructions_match:
-                criteria_text = instructions_match.group(1).strip()
-                criteria_by_label[label].append((order, criteria_text))
-
-        # Sort by order and return just the text
-        return {
-            label: [text for _, text in sorted(items, key=lambda x: x[0])] for label, items in criteria_by_label.items()
-        }
 
     def _extract_criterion_verdicts_from_verbose_logs(
         self,
@@ -716,18 +637,15 @@ Model Output: {content}
         # Validate category types (if enabled)
         self._validate_category_types(risk_categories)
 
-        risk_weights = self._resolve_risk_weights(risk_categories)
-
         # Generate criteria for all risk categories in parallel
         results = await asyncio.gather(
             *[self._generate_criteria_for_risk(rc, params.context, params.content) for rc in risk_categories],
         )
-        criteria_by_risk: dict[str, list[Criterion]] = dict(results)
+        criteria_by_risk: dict[RiskCategory, list[Criterion]] = dict(zip(risk_categories, results))
 
         # Build DAG metric from criteria
         dag_metric, criterion_nodes_by_risk, risk_agg_nodes_by_risk = self._build_dag_from_criteria(
             criteria_by_risk,
-            risk_weights=risk_weights,
         )
         logger.info("DAG metric created.")
 
@@ -751,7 +669,7 @@ Model Output: {content}
         # Fallback: Parse verbose logs if direct node extraction failed
         if not risk_verdicts:
             logger.warning("Direct node verdict extraction failed, falling back to verbose logs")
-            risk_verdicts = self._extract_risk_verdicts_from_verbose_logs(dag_metric)
+            risk_verdicts = self._extract_risk_verdicts_from_verbose_logs(dag_metric, risk_categories)
         if not criterion_verdicts:
             criterion_verdicts = self._extract_criterion_verdicts_from_verbose_logs(dag_metric)
 
@@ -761,7 +679,7 @@ Model Output: {content}
 
         for risk_category in risk_categories:
             risk_id = risk_category.value
-            criteria_list = criteria_by_risk.get(risk_id, [])
+            criteria_list = criteria_by_risk.get(risk_category, [])
 
             # Merge criterion data with verdicts from parsed verbose logs
             criteria_with_verdicts = []
@@ -772,7 +690,7 @@ Model Output: {content}
                 criteria_with_verdicts.append(criterion_dict)
 
             # Check if this specific risk passed using parsed verdicts
-            risk_passed = risk_verdicts.get(risk_id, True)  # Default to passed if not found
+            risk_passed = risk_verdicts.get(risk_category, True)  # Default to passed if not found
 
             risk_results[risk_category] = {
                 "criteria": criteria_with_verdicts,
@@ -792,13 +710,17 @@ Model Output: {content}
         # Generate risk report for failed risks (from feature branch)
         risk_report: str | None = None
         if detected:
-            # Extract failed criteria for report generation
-            failed_criteria_raw = self._extract_failed_criteria_from_verbose_logs(dag_metric)
-            # Map risk_id strings back to RiskCategory enums
+            # Extract failed HIGH importance criteria from risk_results
             failed_criteria: dict[RiskCategory, list[str]] = {}
             for rc in detected:
-                if rc.value in failed_criteria_raw:
-                    failed_criteria[rc] = failed_criteria_raw[rc.value]
+                criteria = risk_results[rc]["criteria"]
+                failed = [
+                    c["description"]
+                    for c in criteria
+                    if not c.get("verdict", True) and c.get("importance") == CriterionImportance.HIGH.value
+                ]
+                if failed:
+                    failed_criteria[rc] = failed
 
             if failed_criteria:
                 try:
