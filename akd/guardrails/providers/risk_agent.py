@@ -499,6 +499,7 @@ class RiskAgent(
         risk_category: RiskCategory,
         context: str | None,
         content: str,
+        source_context: str | None = None,
     ) -> list[Criterion]:
         """Generate evaluation criteria for a single risk category."""
         risk_id = risk_category.value
@@ -507,6 +508,11 @@ class RiskAgent(
         logger.info(f"Processing risk: {risk_id}")
 
         messages = [self._default_system_message()]
+
+        # now inject behavioral information to the system prompt
+
+        if source_context:
+            messages.append({"role": "system", "content": f"Source (Agent) Behaviour:\n{source_context}"})
 
         user_prompt = f"""
 Risk ID: {risk_id}
@@ -761,7 +767,10 @@ Model Output: {content}
 
         # Generate criteria for all risk categories in parallel
         results = await asyncio.gather(
-            *[self._generate_criteria_for_risk(rc, params.context, params.content) for rc in risk_categories],
+            *[
+                self._generate_criteria_for_risk(rc, params.context, params.content, params.source_context)
+                for rc in risk_categories
+            ],
         )
         criteria_by_risk: dict[RiskCategory, list[Criterion]] = dict(zip(risk_categories, results))
 
