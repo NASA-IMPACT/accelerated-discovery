@@ -631,7 +631,7 @@ Model Output: {content}
             # Merge criterion data with verdicts
             criteria_with_verdicts = []
             for i, criterion in enumerate(criteria_list):
-                criterion_dict = criterion.model_dump()
+                criterion_dict = criterion.model_dump(mode="json")  # Serialize enums as values
                 criterion_id = f"{risk_id}_{i + 1}"
                 criterion_dict["verdict"] = criterion_verdicts.get(criterion_id, False)
                 criteria_with_verdicts.append(criterion_dict)
@@ -666,6 +666,7 @@ Model Output: {content}
         failed_criteria: dict[RiskCategory, list[str]] = {}
         for rc in detected_risks:
             criteria = risk_results[rc]["criteria"]
+            print(criteria)
             failed = [
                 c["description"]
                 for c in criteria
