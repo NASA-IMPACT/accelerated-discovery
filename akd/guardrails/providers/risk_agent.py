@@ -610,6 +610,85 @@ Model Output: {content}
 
         return verdicts
 
+    def _build_risk_results(
+        self,
+        risk_categories: Sequence[RiskCategory],
+        criteria_by_risk: dict[RiskCategory, list[Criterion]],
+        criterion_verdicts: dict[str, bool],
+        risk_verdicts: dict[RiskCategory, bool],
+    ) -> dict[RiskCategory, dict[str, Any]]:
+        """Build per-risk evaluation results with criterion verdicts.
+
+        Returns:
+            Dict mapping RiskCategory to dict with criteria and pass status.
+        """
+        risk_results: dict[RiskCategory, dict[str, Any]] = {}
+
+        for risk_category in risk_categories:
+            risk_id = risk_category.value
+            criteria_list = criteria_by_risk.get(risk_category, [])
+
+            # Merge criterion data with verdicts
+            criteria_with_verdicts = []
+            for i, criterion in enumerate(criteria_list):
+                criterion_dict = criterion.model_dump()
+                criterion_id = f"{risk_id}_{i + 1}"
+                criterion_dict["verdict"] = criterion_verdicts.get(criterion_id, False)
+                criteria_with_verdicts.append(criterion_dict)
+
+            # Check if this specific risk passed
+            risk_passed = risk_verdicts.get(risk_category, True)  # Default to passed if not found
+
+            risk_results[risk_category] = {
+                "criteria": criteria_with_verdicts,
+                "passed": risk_passed,
+            }
+
+        return risk_results
+
+    async def _generate_risk_report(
+        self,
+        detected_risks: list[RiskCategory],
+        risk_results: dict[RiskCategory, dict[str, Any]],
+        content: str,
+    ) -> str | None:
+        """Generate risk report for failed risks.
+
+        Extracts failed HIGH importance criteria and generates a report.
+
+        Returns:
+            Risk report string, or None if no failed criteria or error.
+        """
+        if not detected_risks:
+            return None
+
+        # Extract failed HIGH importance criteria from risk_results
+        failed_criteria: dict[RiskCategory, list[str]] = {}
+        for rc in detected_risks:
+            criteria = risk_results[rc]["criteria"]
+            failed = [
+                c["description"]
+                for c in criteria
+                if not c.get("verdict", True) and c.get("importance") == CriterionImportance.HIGH.value
+            ]
+            if failed:
+                failed_criteria[rc] = failed
+
+        if not failed_criteria:
+            return None
+
+        try:
+            report_result = await self._risk_report_agent.arun(
+                RiskReportInputSchema(
+                    failed_criteria=failed_criteria,
+                    risky_content=content,
+                ),
+            )
+            return report_result.risk_report
+        except Exception as e:
+            logger.error(f"[RiskAgent] Error generating risk report: {e}")
+            return None
+
     async def _arun(
         self,
         params: GuardrailInput,
@@ -673,66 +752,23 @@ Model Output: {content}
         if not criterion_verdicts:
             criterion_verdicts = self._extract_criterion_verdicts_from_verbose_logs(dag_metric)
 
-        # Build per-risk evaluation results with criterion verdicts and determine detected risks
-        risk_results: dict[RiskCategory, dict[str, Any]] = {}
-        detected: list[RiskCategory] = []
-
-        for risk_category in risk_categories:
-            risk_id = risk_category.value
-            criteria_list = criteria_by_risk.get(risk_category, [])
-
-            # Merge criterion data with verdicts from parsed verbose logs
-            criteria_with_verdicts = []
-            for i, criterion in enumerate(criteria_list):
-                criterion_dict = criterion.model_dump()
-                criterion_id = f"{risk_id}_{i + 1}"
-                criterion_dict["verdict"] = criterion_verdicts.get(criterion_id, False)
-                criteria_with_verdicts.append(criterion_dict)
-
-            # Check if this specific risk passed using parsed verdicts
-            risk_passed = risk_verdicts.get(risk_category, True)  # Default to passed if not found
-
-            risk_results[risk_category] = {
-                "criteria": criteria_with_verdicts,
-                "passed": risk_passed,
-            }
-
-            # Add to detected risks if this risk failed
-            if not risk_passed:
-                detected.append(risk_category)
+        # Build per-risk evaluation results
+        risk_results = self._build_risk_results(
+            risk_categories,
+            criteria_by_risk,
+            criterion_verdicts,
+            risk_verdicts,
+        )
+        detected_risks = [rc for rc, data in risk_results.items() if not data.get("passed", True)]
 
         if self.debug:
             logger.debug(
                 f"[RiskAgent] Score: {score:.2f}, threshold: {self.config.pass_threshold}, "
-                f"detected: {[r.value for r in detected]}",
+                f"detected_risks: {[r.value for r in detected_risks]}",
             )
 
-        # Generate risk report for failed risks (from feature branch)
-        risk_report: str | None = None
-        if detected:
-            # Extract failed HIGH importance criteria from risk_results
-            failed_criteria: dict[RiskCategory, list[str]] = {}
-            for rc in detected:
-                criteria = risk_results[rc]["criteria"]
-                failed = [
-                    c["description"]
-                    for c in criteria
-                    if not c.get("verdict", True) and c.get("importance") == CriterionImportance.HIGH.value
-                ]
-                if failed:
-                    failed_criteria[rc] = failed
-
-            if failed_criteria:
-                try:
-                    report_result = await self._risk_report_agent.arun(
-                        RiskReportInputSchema(
-                            failed_criteria=failed_criteria,
-                            risky_content=params.content,
-                        ),
-                    )
-                    risk_report = report_result.risk_report
-                except Exception as e:
-                    logger.error(f"[RiskAgent] Error generating risk report: {e}")
+        # Generate risk report for failed risks
+        risk_report = await self._generate_risk_report(detected_risks, risk_results, params.content)
 
         extra: dict[str, Any] = {
             "score": score,
@@ -745,7 +781,7 @@ Model Output: {content}
             extra["dag_metric"] = dag_metric
 
         return GuardrailOutput(
-            detected_risks=detected,
+            detected_risks=detected_risks,
             risk_results=risk_results,
             provider=self.__class__.__name__,
             extra=extra,
