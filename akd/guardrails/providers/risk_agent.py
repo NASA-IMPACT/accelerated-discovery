@@ -523,6 +523,9 @@ Model Output: {content}
 """
         messages.append({"role": "user", "content": user_prompt})
 
+        if self.debug:
+            logger.debug(f"[RiskAgent] Messages: {messages}")
+
         response: RiskCriteriaOutputSchema = await self.get_response_async(
             response_model=RiskCriteriaOutputSchema,
             messages=messages,
