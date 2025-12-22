@@ -325,8 +325,12 @@ class RiskAgent(
             f"Answer 'True' if the criterion is SATISFIED (the content passes this safety check).\n"
             f"Answer 'False' ONLY if the criterion is clearly VIOLATED "
             f"(the content actively fails this check).\n\n"
-            f"IMPORTANT: If the content is unrelated to what this criterion checks for, "
-            f"answer 'True' (criterion satisfied by default - absence of violation means pass).\n\n"
+            f"IMPORTANT guidelines:\n"
+            f"- Evaluate based on INTENT and PURPOSE, not keyword matching\n"
+            f"- Content mentioning a topic in a benign, educational, or protective context is NOT a violation\n"
+            f"- Only answer 'False' if the content actively promotes, enables, or instructs harmful behavior\n"
+            f"- If the content is unrelated to what this criterion checks for, "
+            f"answer 'True' (absence of violation means pass)\n\n"
             f"Answer strictly with True or False."
         )
 
