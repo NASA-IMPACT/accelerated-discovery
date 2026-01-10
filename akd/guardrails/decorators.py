@@ -35,6 +35,25 @@ if TYPE_CHECKING:
     from akd.tools._base import BaseTool
 
 
+def _get_source_context(cls_or_obj: type | object, explicit_override: str | None = None) -> str | None:
+    """Extract source context from class or instance for guardrail evaluation.
+
+    Priority: explicit_override > description (if string) > __doc__
+
+    Note: When cls_or_obj is a class and description is a @property,
+    getattr returns the property object, not a string. We detect this
+    and fall back to __doc__.
+    """
+    if explicit_override:
+        return explicit_override.strip()
+    desc = getattr(cls_or_obj, "description", None)
+    # Only use description if it's actually a string (not a property object)
+    if not isinstance(desc, str):
+        cls = cls_or_obj if isinstance(cls_or_obj, type) else type(cls_or_obj)
+        desc = cls.__doc__
+    return desc.strip() if desc else None
+
+
 class GuardrailResultMixin(BaseModel):
     """Mixin that adds guardrail result fields to response models."""
 
@@ -57,7 +76,9 @@ def guardrail(
     fail_on_output_risk: bool | None = False,
     input_fields: list[str] | None = None,
     output_fields: list[str] | None = None,
+    source_context: str | None = None,
     debug: bool = False,
+    **kwargs: Any,
 ):
     """Decorator to add guardrail checks to an agent or tool class.
 
@@ -114,6 +135,7 @@ def guardrail(
                 self._guardrail_output_fields = output_fields or CONFIG.guardrails.output_fields
                 self._guardrail_log_warnings = CONFIG.guardrails.log_warnings
                 self._guardrail_debug = debug
+                self._guardrail_source_context = _get_source_context(cls, source_context)
 
             async def _check_input_guardrail(self, params: Any) -> GuardrailOutput | None:
                 """Check input against guardrail.
@@ -171,7 +193,11 @@ def guardrail(
                     logger.debug(f"[{cls.__name__}] Checking output guardrail with text: {text[:200]}...")
 
                 result = await self._guardrail_output.acheck(
-                    GuardrailInput(content=text, context=context),
+                    GuardrailInput(
+                        content=text,
+                        context=context,
+                        source_context=self._guardrail_source_context,
+                    ),
                 )
 
                 if self._guardrail_debug:
@@ -241,7 +267,9 @@ def apply_guardrails(
     fail_on_output_risk: bool | None = False,
     input_fields: list[str] | None = None,
     output_fields: list[str] | None = None,
+    source_context: str | None = None,
     debug: bool = False,
+    **kwargs: Any,
 ) -> "BaseAgent | BaseTool":
     """Apply guardrails to an existing agent or tool instance.
 
@@ -272,6 +300,8 @@ def apply_guardrails(
             fail_on_input_risk=True,
         )
     """
+    source_context = _get_source_context(component, source_context)
+
     # Create decorated class
     GuardedClass = guardrail(
         input_guardrail=input_guardrail,
@@ -280,6 +310,7 @@ def apply_guardrails(
         fail_on_output_risk=fail_on_output_risk,
         input_fields=input_fields,
         output_fields=output_fields,
+        source_context=source_context,
         debug=debug,
     )(component.__class__)
 
@@ -300,6 +331,7 @@ def apply_guardrails(
     guarded._guardrail_output_fields = output_fields or CONFIG.guardrails.output_fields  # type: ignore[attr-defined]
     guarded._guardrail_log_warnings = CONFIG.guardrails.log_warnings  # type: ignore[attr-defined]
     guarded._guardrail_debug = debug  # type: ignore[attr-defined]
+    guarded._guardrail_source_context = source_context  # type: ignore[attr-defined]
 
     return guarded
 

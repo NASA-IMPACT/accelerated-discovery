@@ -90,6 +90,10 @@ class GuardrailInput(InputSchema):
 
     content: str = Field(..., description="Content to check for risks")
     context: str | None = Field(None, description="Optional context (prior conversation, RAG docs)")
+    source_context: str | None = Field(
+        None,
+        description="Context about the source (agent/tool) that produced the content: its purpose, expected behavior, and constraints.",
+    )
     risk_categories: Sequence[RiskCategory] = Field(
         default_factory=list,
         description="Risk categories to check (empty = provider defaults)",
