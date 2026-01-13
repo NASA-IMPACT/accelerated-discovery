@@ -14,6 +14,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import IOSchema
+from akd.agents._base import BaseAgent
 
 from .config import AgentRegistryConfig
 
@@ -103,6 +104,35 @@ class AgentRegistry:
             self.registry_data: AgentRegistryData = AgentRegistryData()
             self._load_or_discover()
             AgentRegistry._initialized = True
+
+    def __repr__(self) -> str:
+        """Return a detailed string representation of the registry."""
+        lines = ["AgentRegistry:"]
+        lines.append(f"  Version: {self.registry_data.version}")
+        lines.append(f"  Updated: {self.registry_data.updated_at}")
+        lines.append(f"  Total Agents: {len(self.registry_data.agents)}")
+        lines.append(f"  Enabled: {len(self.get_enabled_agents())}")
+        lines.append("")
+        lines.append("  Registered Agents:")
+        for agent_id, agent in self.registry_data.agents.items():
+            status = "enabled" if agent.enabled else "disabled"
+            tags = ", ".join(agent.tags) if agent.tags else "none"
+            lines.append(f"    - {agent_id} [{status}]")
+            lines.append(f"        Class: {agent.agent_class}")
+            lines.append(f"        Description: {agent.description}")
+            lines.append(f"        Tags: {tags}")
+            input_fields = [f.name for f in agent.input_schema.fields]
+            output_fields = [f.name for f in agent.output_schema.fields]
+            lines.append(f"        Input: {input_fields}")
+            lines.append(f"        Output: {output_fields}")
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        """Return a concise string representation."""
+        enabled = len(self.get_enabled_agents())
+        total = len(self.registry_data.agents)
+        agent_ids = list(self.registry_data.agents.keys())
+        return f"AgentRegistry({enabled}/{total} enabled): {agent_ids}"
 
     def _load_or_discover(self) -> None:
         """
@@ -302,6 +332,95 @@ class AgentRegistry:
             self._save_registry()
             return True
         return False
+
+    def register_agent(
+        self,
+        agent_id: str,
+        agent_class: type | None = None,
+        module_path: str | None = None,
+        class_name: str | None = None,
+        enabled: bool = True,
+        tags: list[str] | None = None,
+        persist: bool = True,
+    ) -> AgentEntry:
+        """
+        Register a new agent with the registry at runtime.
+
+        Args:
+            agent_id: Unique identifier for the agent
+            agent_class: Agent class (provide this OR module_path+class_name).
+                         Must inherit from BaseAgent.
+            module_path: Module path for lazy loading
+            class_name: Class name for lazy loading
+            enabled: Whether agent is enabled (default: True)
+            tags: Optional tags for categorization
+            persist: Save to JSON file (default: True)
+
+        Returns:
+            The created AgentEntry
+
+        Raises:
+            ValueError: If agent_id already exists or invalid arguments
+            TypeError: If agent_class does not inherit from BaseAgent
+
+        Example:
+            registry.register_agent("cmr_search", CMRAgent)
+            registry.register_agent("cmr_search", module_path="akd_ext.agents.cmr", class_name="CMRAgent")
+        """
+        # Validate arguments
+        if agent_id in self.registry_data.agents:
+            raise ValueError(f"Agent '{agent_id}' already exists")
+
+        if agent_class is None and (module_path is None or class_name is None):
+            raise ValueError("Provide either agent_class OR both module_path and class_name")
+
+        # Load class if not provided directly
+        if agent_class is None:
+            module = importlib.import_module(module_path)
+            agent_class = getattr(module, class_name)
+            agent_class_path = f"{module_path}.{class_name}"
+        else:
+            agent_class_path = f"{agent_class.__module__}.{agent_class.__name__}"
+
+        # Type check: ensure agent inherits from BaseAgent (works with full inheritance chain)
+        if not issubclass(agent_class, BaseAgent):
+            raise TypeError(
+                f"Agent class '{agent_class.__name__}' must inherit from BaseAgent",
+            )
+
+        # Extract schemas using existing method
+        input_schema = self._extract_schema(getattr(agent_class, "input_schema", None))
+        output_schema = self._extract_schema(getattr(agent_class, "output_schema", None))
+
+        # Get description from docstring
+        description = agent_class.__doc__
+        if description:
+            description = description.strip().split("\n")[0]
+        else:
+            description = f"Agent for {agent_id.replace('_', ' ')}"
+
+        # Create entry
+        entry = AgentEntry(
+            agent_id=agent_id,
+            name=agent_id.replace("_", " ").title(),
+            description=description,
+            agent_class=agent_class_path,
+            input_schema=input_schema,
+            output_schema=output_schema,
+            enabled=enabled,
+            tags=tags or ["external"],
+            use_cases=[description],
+        )
+
+        # Add to registry
+        self.registry_data.agents[agent_id] = entry
+        logger.info(f"Registered agent: {agent_id}")
+
+        # Persist if requested
+        if persist:
+            self._save_registry()
+
+        return entry
 
     def reload(self) -> None:
         """Reload the registry from file or re-discover."""
