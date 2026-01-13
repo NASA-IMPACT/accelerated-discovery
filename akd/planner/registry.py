@@ -436,6 +436,34 @@ class AgentRegistry:
 
         return entry
 
+    def unregister_agent(self, agent_id: str, persist: bool = False) -> AgentEntry | None:
+        """
+        Unregister an agent from the registry.
+
+        Args:
+            agent_id: Unique identifier of the agent to remove
+            persist: Save changes to JSON file (default: False)
+
+        Returns:
+            The removed AgentEntry, or None if agent_id not found
+
+        Example:
+            removed = registry.unregister_agent("cmr_agent")
+            if removed:
+                print(f"Removed: {removed.agent_id}")
+        """
+        if agent_id not in self.registry_data.agents:
+            logger.warning(f"Agent '{agent_id}' not found in registry")
+            return None
+
+        entry = self.registry_data.agents.pop(agent_id)
+        logger.info(f"Unregistered agent: {agent_id}")
+
+        if persist:
+            self._save_registry()
+
+        return entry
+
     def reload(self) -> None:
         """Reload the registry from file or re-discover."""
         self._load_or_discover()
