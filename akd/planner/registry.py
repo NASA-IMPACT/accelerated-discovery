@@ -342,7 +342,7 @@ class AgentRegistry:
         class_name: str | None = None,
         enabled: bool = True,
         tags: list[str] | None = None,
-        persist: bool = True,
+        persist: bool = False,
     ) -> AgentEntry:
         """
         Register a new agent with the registry at runtime.
@@ -356,7 +356,7 @@ class AgentRegistry:
             class_name: Class name for lazy loading
             enabled: Whether agent is enabled (default: True)
             tags: Optional tags for categorization
-            persist: Save to JSON file (default: True)
+            persist: Save to JSON file (default: False, transient registration)
 
         Returns:
             The created AgentEntry
