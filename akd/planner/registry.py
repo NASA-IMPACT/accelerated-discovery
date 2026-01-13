@@ -336,10 +336,8 @@ class AgentRegistry:
 
     def register_agent(
         self,
+        agent_class: type,
         agent_id: str | None = None,
-        agent_class: type | None = None,
-        module_path: str | None = None,
-        class_name: str | None = None,
         enabled: bool = True,
         tags: list[str] | None = None,
         persist: bool = False,
@@ -348,12 +346,9 @@ class AgentRegistry:
         Register a new agent with the registry at runtime.
 
         Args:
+            agent_class: Agent class to register. Must inherit from BaseAgent.
             agent_id: Unique identifier for the agent. If not provided, auto-generated
                       from class name (e.g., QueryAgent -> "query_agent", CMRAgent -> "cmr_agent")
-            agent_class: Agent class (provide this OR module_path+class_name).
-                         Must inherit from BaseAgent.
-            module_path: Module path for lazy loading
-            class_name: Class name for lazy loading
             enabled: Whether agent is enabled (default: True)
             tags: Optional tags for categorization
             persist: Save to JSON file (default: False, transient registration)
@@ -362,21 +357,16 @@ class AgentRegistry:
             The created AgentEntry
 
         Raises:
-            ValueError: If agent_id already exists or invalid arguments
+            ValueError: If agent_id already exists
             TypeError: If agent_class does not inherit from BaseAgent
 
         Example:
-            registry.register_agent(agent_class=CMRAgent)  # auto-generates id "cmr_agent"
-            registry.register_agent("cmr_search", CMRAgent)
-            registry.register_agent("cmr_search", module_path="akd_ext.agents.cmr", class_name="CMRAgent")
+            registry.register_agent(CMRAgent)  # auto-generates id "cmr_agent"
+            registry.register_agent(CMRAgent, agent_id="my_cmr")
         """
-        # Validate arguments
-        if agent_class is None and (module_path is None or class_name is None):
-            raise ValueError("Provide either agent_class OR both module_path and class_name")
-
         # Auto-generate agent_id from class name if not provided
         if agent_id is None:
-            name = agent_class.__name__ if agent_class else class_name
+            name = agent_class.__name__
             # Convert CamelCase to snake_case, handling acronyms properly
             # Step 1: Insert _ between lowercase and uppercase: deepLit -> deep_Lit
             agent_id = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
@@ -388,13 +378,7 @@ class AgentRegistry:
         if agent_id in self.registry_data.agents:
             raise ValueError(f"Agent '{agent_id}' already exists")
 
-        # Load class if not provided directly
-        if agent_class is None:
-            module = importlib.import_module(module_path)
-            agent_class = getattr(module, class_name)
-            agent_class_path = f"{module_path}.{class_name}"
-        else:
-            agent_class_path = f"{agent_class.__module__}.{agent_class.__name__}"
+        agent_class_path = f"{agent_class.__module__}.{agent_class.__name__}"
 
         # Type check: ensure agent inherits from BaseAgent (works with full inheritance chain)
         if not issubclass(agent_class, BaseAgent):
