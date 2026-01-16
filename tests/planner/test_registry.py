@@ -534,7 +534,7 @@ class TestRegisterUnregisterAgent:
         from akd.agents.intents import IntentAgent
 
         registry = get_agent_registry()
-        entry = registry.register_agent(agent_class=IntentAgent)
+        entry = registry.register_agent(IntentAgent)
 
         assert entry.agent_id == "intent_agent"
         assert entry.agent_class == "akd.agents.intents.IntentAgent"
@@ -549,22 +549,10 @@ class TestRegisterUnregisterAgent:
         from akd.agents.intents import IntentAgent
 
         registry = get_agent_registry()
-        entry = registry.register_agent(agent_id="my_custom_intent", agent_class=IntentAgent)
+        entry = registry.register_agent(IntentAgent, agent_id="my_custom_intent")
 
         assert entry.agent_id == "my_custom_intent"
         assert registry.get_agent("my_custom_intent") is not None
-
-    def test_register_agent_with_module_path(self):
-        """Test registering an agent with module_path and class_name."""
-        registry = get_agent_registry()
-        entry = registry.register_agent(
-            agent_id="intent_from_path",
-            module_path="akd.agents.intents",
-            class_name="IntentAgent",
-        )
-
-        assert entry.agent_id == "intent_from_path"
-        assert entry.agent_class == "akd.agents.intents.IntentAgent"
 
     def test_register_agent_with_custom_tags(self):
         """Test registering an agent with custom tags."""
@@ -572,7 +560,7 @@ class TestRegisterUnregisterAgent:
 
         registry = get_agent_registry()
         entry = registry.register_agent(
-            agent_class=IntentAgent,
+            IntentAgent,
             tags=["custom", "test", "external"],
         )
 
@@ -587,11 +575,11 @@ class TestRegisterUnregisterAgent:
         registry = get_agent_registry()
 
         # QueryAgent -> query_agent
-        entry1 = registry.register_agent(agent_class=QueryAgent)
+        entry1 = registry.register_agent(QueryAgent)
         assert entry1.agent_id == "query_agent"
 
         # RelevancyAgent -> relevancy_agent
-        entry2 = registry.register_agent(agent_class=RelevancyAgent)
+        entry2 = registry.register_agent(RelevancyAgent)
         assert entry2.agent_id == "relevancy_agent"
 
     def test_register_agent_duplicate_raises_error(self):
@@ -599,31 +587,24 @@ class TestRegisterUnregisterAgent:
         from akd.agents.intents import IntentAgent
 
         registry = get_agent_registry()
-        registry.register_agent(agent_id="duplicate_test", agent_class=IntentAgent)
+        registry.register_agent(IntentAgent, agent_id="duplicate_test")
 
         with pytest.raises(ValueError, match="already exists"):
-            registry.register_agent(agent_id="duplicate_test", agent_class=IntentAgent)
+            registry.register_agent(IntentAgent, agent_id="duplicate_test")
 
     def test_register_agent_non_base_agent_raises_error(self):
         """Test that registering non-BaseAgent class raises TypeError."""
         registry = get_agent_registry()
 
         with pytest.raises(TypeError, match="must inherit from BaseAgent"):
-            registry.register_agent(agent_id="invalid", agent_class=str)
-
-    def test_register_agent_missing_args_raises_error(self):
-        """Test that missing required args raises ValueError."""
-        registry = get_agent_registry()
-
-        with pytest.raises(ValueError, match="Provide either agent_class"):
-            registry.register_agent(agent_id="no_class")
+            registry.register_agent(str, agent_id="invalid")
 
     def test_register_agent_extracts_schemas(self):
         """Test that schemas are correctly extracted from agent class."""
         from akd.agents.query import QueryAgent
 
         registry = get_agent_registry()
-        entry = registry.register_agent(agent_class=QueryAgent)
+        entry = registry.register_agent(QueryAgent)
 
         # Verify input schema has fields
         input_field_names = [f.name for f in entry.input_schema.fields]
