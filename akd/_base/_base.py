@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError, computed_field, create_m
 from akd.errors import SchemaValidationError
 from akd.utils import get_model_fields
 
+from .streaming import StreamingMixin
 from .utils import AsyncRunMixin
 
 
@@ -230,7 +231,7 @@ class AbstractBaseMeta(ABCMeta):
 class AbstractBase[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
+](StreamingMixin, AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
@@ -414,7 +415,7 @@ class AbstractBase[
 class UnrestrictedAbstractBase[
     InSchema: BaseModel,
     OutSchema: BaseModel,
-](AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
+](StreamingMixin, AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
