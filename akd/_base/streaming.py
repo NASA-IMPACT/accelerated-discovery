@@ -2,7 +2,7 @@
 
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -61,7 +61,7 @@ class StreamEvent(BaseModel):
 
     # Core envelope
     event_type: StreamEventType
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     event_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
     source: str | None = None  # Class name that generated this event
     message: str | None = None
