@@ -37,6 +37,7 @@ class StreamEvent(BaseModel):
         event_type: Type of event (STARTING, COMPLETED, FAILED, etc.)
         timestamp: UTC timestamp when event was created
         event_id: Unique identifier for this event
+        source: Class name that generated this event
         message: Human-readable description
         data: Flexible payload for all event-specific data
 
@@ -62,6 +63,7 @@ class StreamEvent(BaseModel):
     event_type: StreamEventType
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     event_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
+    source: str | None = None  # Class name that generated this event
     message: str | None = None
 
     # Flexible payload
@@ -139,12 +141,14 @@ class StreamingMixin:
 
         yield StreamEvent(
             event_type=StreamEventType.STARTING,
+            source=class_name,
             message=f"Starting {class_name}",
         )
 
         try:
             yield StreamEvent(
                 event_type=StreamEventType.RUNNING,
+                source=class_name,
                 message=f"Running {class_name}",
             )
 
@@ -152,12 +156,14 @@ class StreamingMixin:
 
             yield StreamEvent(
                 event_type=StreamEventType.COMPLETED,
+                source=class_name,
                 message=f"Completed {class_name}",
                 data={"output": output},
             )
         except Exception as e:
             yield StreamEvent(
                 event_type=StreamEventType.FAILED,
+                source=class_name,
                 message=f"Failed: {e!s}",
                 data={"error": str(e), "error_type": type(e).__name__},
             )
