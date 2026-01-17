@@ -519,5 +519,240 @@ class TestRegistryWithFieldMapping:
         assert len(required_inputs) > 0
 
 
+class TestRegisterUnregisterAgent:
+    """Test register_agent and unregister_agent methods."""
+
+    @pytest.fixture(autouse=True)
+    def reset_registry(self):
+        """Auto-reset singleton before and after each test."""
+        AgentRegistry._reset_singleton()
+        yield
+        AgentRegistry._reset_singleton()
+
+    def test_register_agent_with_class(self):
+        """Test registering an agent with class directly."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+        entry = registry.register_agent(IntentAgent)
+
+        assert entry.agent_id == "intent_agent"
+        assert entry.agent_class == "akd.agents.intents.IntentAgent"
+        assert "external" in entry.tags
+        assert entry.enabled is True
+
+        # Verify it's in the registry
+        assert registry.get_agent("intent_agent") is not None
+
+    def test_register_agent_with_custom_id(self):
+        """Test registering an agent with custom agent_id."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+        entry = registry.register_agent(IntentAgent, agent_id="my_custom_intent")
+
+        assert entry.agent_id == "my_custom_intent"
+        assert registry.get_agent("my_custom_intent") is not None
+
+    def test_register_agent_with_custom_tags(self):
+        """Test registering an agent with custom tags."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+        entry = registry.register_agent(
+            IntentAgent,
+            tags=["custom", "test", "external"],
+        )
+
+        assert "custom" in entry.tags
+        assert "test" in entry.tags
+
+    def test_register_agent_auto_id_from_class_name(self):
+        """Test auto-generation of agent_id from class name."""
+        from akd.agents.query import QueryAgent
+        from akd.agents.relevancy import RelevancyAgent
+
+        registry = get_agent_registry()
+
+        # QueryAgent -> query_agent
+        entry1 = registry.register_agent(QueryAgent)
+        assert entry1.agent_id == "query_agent"
+
+        # RelevancyAgent -> relevancy_agent
+        entry2 = registry.register_agent(RelevancyAgent)
+        assert entry2.agent_id == "relevancy_agent"
+
+    def test_register_agent_duplicate_raises_error(self):
+        """Test that registering duplicate agent_id raises ValueError."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+        registry.register_agent(IntentAgent, agent_id="duplicate_test")
+
+        with pytest.raises(ValueError, match="already exists"):
+            registry.register_agent(IntentAgent, agent_id="duplicate_test")
+
+    def test_register_agent_non_base_agent_raises_error(self):
+        """Test that registering non-BaseAgent class raises TypeError."""
+        registry = get_agent_registry()
+
+        with pytest.raises(TypeError, match="must inherit from BaseAgent"):
+            registry.register_agent(str, agent_id="invalid")
+
+    def test_register_agent_extracts_schemas(self):
+        """Test that schemas are correctly extracted from agent class."""
+        from akd.agents.query import QueryAgent
+
+        registry = get_agent_registry()
+        entry = registry.register_agent(QueryAgent)
+
+        # Verify input schema has fields
+        input_field_names = [f.name for f in entry.input_schema.fields]
+        assert "query" in input_field_names
+
+        # Verify output schema has fields
+        output_field_names = [f.name for f in entry.output_schema.fields]
+        assert len(output_field_names) > 0
+
+    def test_register_agent_persist_false_by_default(self, temp_registry_file):
+        """Test that persist=False is the default (transient registration)."""
+        from akd.agents.intents import IntentAgent
+
+        config = AgentRegistryConfig(registry_path=temp_registry_file, auto_discover=True)
+        registry = AgentRegistry(config)
+
+        # Register without persist (default)
+        registry.register_agent(agent_class=IntentAgent)
+
+        # Read file - should not contain the new agent
+        with open(temp_registry_file, "r") as f:
+            data = json.load(f)
+
+        assert "intent_agent" not in data.get("agents", {})
+
+    def test_register_agent_persist_true(self, temp_registry_file):
+        """Test that persist=True saves to JSON file."""
+        from akd.agents.intents import IntentAgent
+
+        config = AgentRegistryConfig(registry_path=temp_registry_file, auto_discover=True)
+        registry = AgentRegistry(config)
+
+        # Register with persist=True
+        registry.register_agent(agent_class=IntentAgent, persist=True)
+
+        # Read file - should contain the new agent
+        with open(temp_registry_file, "r") as f:
+            data = json.load(f)
+
+        assert "intent_agent" in data.get("agents", {})
+
+    def test_unregister_agent_returns_entry(self):
+        """Test unregistering an agent returns the removed entry."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+        registry.register_agent(agent_class=IntentAgent)
+
+        removed = registry.unregister_agent("intent_agent")
+
+        assert removed is not None
+        assert removed.agent_id == "intent_agent"
+        assert registry.get_agent("intent_agent") is None
+
+    def test_unregister_agent_not_found_returns_none(self):
+        """Test unregistering non-existent agent returns None."""
+        registry = get_agent_registry()
+
+        removed = registry.unregister_agent("does_not_exist")
+
+        assert removed is None
+
+    def test_unregister_agent_persist_false_by_default(self, temp_registry_file):
+        """Test that unregister persist=False is the default."""
+        config = AgentRegistryConfig(registry_path=temp_registry_file, auto_discover=True)
+        registry = AgentRegistry(config)
+
+        # Get an existing agent from file
+        agents_before = list(registry.registry_data.agents.keys())
+        if agents_before:
+            agent_to_remove = agents_before[0]
+            registry.unregister_agent(agent_to_remove)
+
+            # Read file - should still contain the agent
+            with open(temp_registry_file, "r") as f:
+                data = json.load(f)
+
+            assert agent_to_remove in data.get("agents", {})
+
+    def test_unregister_agent_persist_true(self, temp_registry_file):
+        """Test that unregister with persist=True updates JSON file."""
+        from akd.agents.intents import IntentAgent
+
+        config = AgentRegistryConfig(registry_path=temp_registry_file, auto_discover=True)
+        registry = AgentRegistry(config)
+
+        # Register with persist
+        registry.register_agent(agent_class=IntentAgent, persist=True)
+
+        # Verify it's in file
+        with open(temp_registry_file, "r") as f:
+            data = json.load(f)
+        assert "intent_agent" in data.get("agents", {})
+
+        # Unregister with persist
+        registry.unregister_agent("intent_agent", persist=True)
+
+        # Verify it's removed from file
+        with open(temp_registry_file, "r") as f:
+            data = json.load(f)
+        assert "intent_agent" not in data.get("agents", {})
+
+    def test_register_unregister_cycle(self):
+        """Test registering and unregistering multiple times."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+
+        # Register
+        entry1 = registry.register_agent(agent_class=IntentAgent)
+        assert registry.get_agent("intent_agent") is not None
+
+        # Unregister
+        removed = registry.unregister_agent("intent_agent")
+        assert removed.agent_id == entry1.agent_id
+        assert registry.get_agent("intent_agent") is None
+
+        # Register again
+        entry2 = registry.register_agent(agent_class=IntentAgent)
+        assert registry.get_agent("intent_agent") is not None
+        assert entry2.agent_id == "intent_agent"
+
+    def test_registered_agent_appears_in_enabled_agents(self):
+        """Test that registered agent appears in get_enabled_agents()."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+        registry.register_agent(agent_class=IntentAgent)
+
+        enabled = registry.get_enabled_agents()
+        enabled_ids = [a.agent_id for a in enabled]
+
+        assert "intent_agent" in enabled_ids
+
+    def test_registered_agent_with_disabled_flag(self):
+        """Test registering an agent as disabled."""
+        from akd.agents.intents import IntentAgent
+
+        registry = get_agent_registry()
+        entry = registry.register_agent(agent_class=IntentAgent, enabled=False)
+
+        assert entry.enabled is False
+
+        enabled = registry.get_enabled_agents()
+        enabled_ids = [a.agent_id for a in enabled]
+
+        assert "intent_agent" not in enabled_ids
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

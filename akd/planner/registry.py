@@ -14,6 +14,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import IOSchema
+from akd.agents._base import BaseAgent
+from akd.utils import to_snake_case
 
 from .config import AgentRegistryConfig
 
@@ -103,6 +105,35 @@ class AgentRegistry:
             self.registry_data: AgentRegistryData = AgentRegistryData()
             self._load_or_discover()
             AgentRegistry._initialized = True
+
+    def __repr__(self) -> str:
+        """Return a detailed string representation of the registry."""
+        lines = ["AgentRegistry:"]
+        lines.append(f"  Version: {self.registry_data.version}")
+        lines.append(f"  Updated: {self.registry_data.updated_at}")
+        lines.append(f"  Total Agents: {len(self.registry_data.agents)}")
+        lines.append(f"  Enabled: {len(self.get_enabled_agents())}")
+        lines.append("")
+        lines.append("  Registered Agents:")
+        for agent_id, agent in self.registry_data.agents.items():
+            status = "enabled" if agent.enabled else "disabled"
+            tags = ", ".join(agent.tags) if agent.tags else "none"
+            lines.append(f"    - {agent_id} [{status}]")
+            lines.append(f"        Class: {agent.agent_class}")
+            lines.append(f"        Description: {agent.description}")
+            lines.append(f"        Tags: {tags}")
+            input_fields = [f.name for f in agent.input_schema.fields]
+            output_fields = [f.name for f in agent.output_schema.fields]
+            lines.append(f"        Input: {input_fields}")
+            lines.append(f"        Output: {output_fields}")
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        """Return a concise string representation."""
+        enabled = len(self.get_enabled_agents())
+        total = len(self.registry_data.agents)
+        agent_ids = list(self.registry_data.agents.keys())
+        return f"AgentRegistry({enabled}/{total} enabled): {agent_ids}"
 
     def _load_or_discover(self) -> None:
         """
@@ -302,6 +333,113 @@ class AgentRegistry:
             self._save_registry()
             return True
         return False
+
+    def register_agent(
+        self,
+        agent_class: type,
+        agent_id: str | None = None,
+        enabled: bool = True,
+        tags: list[str] | None = None,
+        persist: bool = False,
+    ) -> AgentEntry:
+        """
+        Register a new agent with the registry at runtime.
+
+        Args:
+            agent_class: Agent class to register. Must inherit from BaseAgent.
+            agent_id: Unique identifier for the agent. If not provided, auto-generated
+                      from class name (e.g., QueryAgent -> "query_agent", CMRAgent -> "cmr_agent")
+            enabled: Whether agent is enabled (default: True)
+            tags: Optional tags for categorization
+            persist: Save to JSON file (default: False, transient registration)
+
+        Returns:
+            The created AgentEntry
+
+        Raises:
+            ValueError: If agent_id already exists
+            TypeError: If agent_class does not inherit from BaseAgent
+
+        Example:
+            registry.register_agent(CMRAgent)  # auto-generates id "cmr_agent"
+            registry.register_agent(CMRAgent, agent_id="my_cmr")
+        """
+        # Auto-generate agent_id from class name if not provided
+        if agent_id is None:
+            agent_id = to_snake_case(agent_class.__name__)
+
+        if agent_id in self.registry_data.agents:
+            raise ValueError(f"Agent '{agent_id}' already exists")
+
+        agent_class_path = f"{agent_class.__module__}.{agent_class.__name__}"
+
+        # Type check: ensure agent inherits from BaseAgent (works with full inheritance chain)
+        if not issubclass(agent_class, BaseAgent):
+            raise TypeError(
+                f"Agent class '{agent_class.__name__}' must inherit from BaseAgent",
+            )
+
+        # Extract schemas using existing method
+        input_schema = self._extract_schema(getattr(agent_class, "input_schema", None))
+        output_schema = self._extract_schema(getattr(agent_class, "output_schema", None))
+
+        # Get description from docstring
+        description = agent_class.__doc__
+        if description:
+            description = description.strip().split("\n")[0]
+        else:
+            description = f"Agent for {agent_id.replace('_', ' ')}"
+
+        # Create entry
+        entry = AgentEntry(
+            agent_id=agent_id,
+            name=agent_id.replace("_", " ").title(),
+            description=description,
+            agent_class=agent_class_path,
+            input_schema=input_schema,
+            output_schema=output_schema,
+            enabled=enabled,
+            tags=tags or ["external"],
+            use_cases=[description],
+        )
+
+        # Add to registry
+        self.registry_data.agents[agent_id] = entry
+        logger.info(f"Registered agent: {agent_id}")
+
+        # Persist if requested
+        if persist:
+            self._save_registry()
+
+        return entry
+
+    def unregister_agent(self, agent_id: str, persist: bool = False) -> AgentEntry | None:
+        """
+        Unregister an agent from the registry.
+
+        Args:
+            agent_id: Unique identifier of the agent to remove
+            persist: Save changes to JSON file (default: False)
+
+        Returns:
+            The removed AgentEntry, or None if agent_id not found
+
+        Example:
+            removed = registry.unregister_agent("cmr_agent")
+            if removed:
+                print(f"Removed: {removed.agent_id}")
+        """
+        if agent_id not in self.registry_data.agents:
+            logger.warning(f"Agent '{agent_id}' not found in registry")
+            return None
+
+        entry = self.registry_data.agents.pop(agent_id)
+        logger.info(f"Unregistered agent: {agent_id}")
+
+        if persist:
+            self._save_registry()
+
+        return entry
 
     def reload(self) -> None:
         """Reload the registry from file or re-discover."""

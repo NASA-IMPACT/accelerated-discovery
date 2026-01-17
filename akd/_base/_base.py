@@ -8,7 +8,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
 
 from akd.errors import SchemaValidationError
-from akd.utils import get_model_fields
+from akd.utils import get_model_fields, to_snake_case
 
 from .streaming import StreamingMixin
 from .utils import AsyncRunMixin
@@ -24,6 +24,10 @@ class BaseConfig(BaseModel):
         "extra": "forbid",  # Disallow extra fields
     }
 
+    name: str | None = Field(
+        default=None,
+        description="Name of the tool/agent. Defaults to snake_case of class name.",
+    )
     description: str | None = None
     io_hints: bool = Field(
         default=True,
@@ -277,6 +281,10 @@ class AbstractBase[
         for key, value in self._kwargs.items():
             setattr(self, key, value)
 
+        # Set default name from class name if not provided
+        if getattr(self, "name", None) is None:
+            self.name = to_snake_case(self.__class__.__name__)
+
         self.description = (getattr(self, "description", None) or self.__class__.__doc__ or "").strip()
 
         # Add input/output schema info to description if io_hints is True
@@ -463,6 +471,10 @@ class UnrestrictedAbstractBase[
         """
         for key, value in self._kwargs.items():
             setattr(self, key, value)
+
+        # Set default name from class name if not provided
+        if getattr(self, "name", None) is None:
+            self.name = to_snake_case(self.__class__.__name__)
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> UnrestrictedAbstractBase:
