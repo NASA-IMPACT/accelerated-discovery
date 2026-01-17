@@ -7,7 +7,6 @@ This module provides agent registration and discovery capabilities for the AKD f
 import importlib
 import json
 import os
-import re
 from datetime import datetime, timezone
 from typing import Any, Optional, Type
 
@@ -16,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from akd._base import IOSchema
 from akd.agents._base import BaseAgent
+from akd.utils import to_snake_case
 
 from .config import AgentRegistryConfig
 
@@ -366,14 +366,7 @@ class AgentRegistry:
         """
         # Auto-generate agent_id from class name if not provided
         if agent_id is None:
-            name = agent_class.__name__
-            # Convert CamelCase to snake_case, handling acronyms properly
-            # Step 1: Insert _ between lowercase and uppercase: deepLit -> deep_Lit
-            agent_id = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
-            # Step 2: Insert _ between acronym and next word: CMRAgent -> CMR_Agent
-            agent_id = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", agent_id)
-            # Step 3: Lowercase everything
-            agent_id = agent_id.lower()
+            agent_id = to_snake_case(agent_class.__name__)
 
         if agent_id in self.registry_data.agents:
             raise ValueError(f"Agent '{agent_id}' already exists")

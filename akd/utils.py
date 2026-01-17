@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 from datetime import datetime
 from functools import lru_cache, wraps
@@ -244,3 +245,19 @@ def parse_date(date_input: str | int | None) -> datetime | None:
         parsed_date = dateparser.parse(date_input)
 
     return parsed_date
+
+
+def to_snake_case(name: str) -> str:
+    """
+    Convert CamelCase/PascalCase to snake_case, handling acronyms.
+
+    Examples:
+        SearxNGSearchTool -> searxng_search_tool
+        QueryAgent -> query_agent
+        CMRDataExtractor -> cmr_data_extractor
+    """
+    # Insert _ between lowercase and uppercase: deepLit -> deep_Lit
+    result = re.sub(r"([a-z])([A-Z])", r"\1_\2", name)
+    # Insert _ between acronym and next word: CMRAgent -> CMR_Agent
+    result = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", result)
+    return result.lower()
