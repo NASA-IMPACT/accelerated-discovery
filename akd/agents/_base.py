@@ -27,10 +27,13 @@ from akd._base import (
 )
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+from akd.tools._base import BaseTool
 
 
 class BaseAgentConfig(BaseConfig):
     """Configuration class for base agents."""
+
+    model_config = {"extra": "forbid", "arbitrary_types_allowed": True}
 
     base_url: AnyUrl | None = Field(default=CONFIG.model_config_settings.base_url)
     api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
@@ -83,6 +86,10 @@ class BaseAgentConfig(BaseConfig):
     reasoning_summary: Literal["auto", "detailed", "concise"] | None = Field(
         default=None,
         description="How to present reasoning output in response",
+    )
+    tools: list[BaseTool] = Field(
+        default_factory=list,
+        description="List of tools available to the agent",
     )
 
     @model_validator(mode="after")
