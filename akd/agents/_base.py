@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import copy
 from abc import abstractmethod
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import instructor
 import openai
-from litellm import acompletion, get_model_info
-from litellm.utils import trim_messages
+from litellm import acompletion
+from litellm.utils import get_model_info, supports_reasoning, trim_messages
 from loguru import logger
 from pydantic import (
     AnyUrl,
@@ -27,10 +27,13 @@ from akd._base import (
 )
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+from akd.tools._base import BaseTool
 
 
 class BaseAgentConfig(BaseConfig):
     """Configuration class for base agents."""
+
+    model_config = {"extra": "forbid", "arbitrary_types_allowed": True}
 
     base_url: AnyUrl | None = Field(default=CONFIG.model_config_settings.base_url)
     api_key: str | None = Field(default=CONFIG.model_config_settings.api_keys.openai)
@@ -75,6 +78,20 @@ class BaseAgentConfig(BaseConfig):
         description="Number of retries for LLM calls",
     )
 
+    # Reasoning parameters (for o1, o3, Claude extended thinking, etc.)
+    reasoning_effort: Literal["low", "medium", "high"] | None = Field(
+        default=None,
+        description="Reasoning effort level for supported models (o1, o3, Claude, etc.)",
+    )
+    reasoning_summary: Literal["auto", "detailed", "concise"] | None = Field(
+        default=None,
+        description="How to present reasoning output in response",
+    )
+    tools: list[BaseTool] = Field(
+        default_factory=list,
+        description="List of tools available to the agent",
+    )
+
     @model_validator(mode="after")
     def validate_max_tokens_against_model(self):
         """Validate that max_tokens doesn't exceed the model's actual capacity."""
@@ -92,6 +109,20 @@ class BaseAgentConfig(BaseConfig):
             raise ValueError(
                 f"max_tokens ({self.max_tokens}) exceeds model '{self.model_name}' capacity ({model_limit} tokens)",
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_reasoning_params(self):
+        """Warn if reasoning params set for non-reasoning models."""
+        if not self.model_name or not (self.reasoning_effort or self.reasoning_summary):
+            return self
+
+        try:
+            if not supports_reasoning(model=self.model_name):
+                logger.warning(f"Model '{self.model_name}' may not support reasoning params")
+        except Exception:
+            pass
+
         return self
 
     @field_validator("input_hints", mode="before")
@@ -453,15 +484,25 @@ class LiteLLMInstructorBaseAgent[
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
 
-        response = await self.client.chat.completions.create(
-            messages=messages,
-            model=self.model_name,
-            temperature=self.temperature,
-            response_model=instructor_model,
-            api_base=str(self.base_url).rstrip("/") if self.base_url else None,
-            api_key=self.api_key,
-            num_retries=self.num_retries,
-        )
+        # Build kwargs for completion call
+        completion_kwargs = {
+            "messages": messages,
+            "model": self.model_name,
+            "temperature": self.temperature,
+            "response_model": instructor_model,
+            "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
+            "api_key": self.api_key,
+            "num_retries": self.num_retries,
+            "drop_params": True,  # Safely drop unsupported params at runtime
+        }
+
+        # Only add reasoning params if set (don't send None)
+        if self.reasoning_effort:
+            completion_kwargs["reasoning_effort"] = self.reasoning_effort
+        if self.reasoning_summary:
+            completion_kwargs["reasoning_summary"] = self.reasoning_summary
+
+        response = await self.client.chat.completions.create(**completion_kwargs)
 
         response_data = response.model_dump()
         response = response_model(**response_data)
