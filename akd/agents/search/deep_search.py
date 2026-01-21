@@ -9,12 +9,15 @@ refer to akd/docs/deep_research_agent.md for more details.
 from __future__ import annotations
 
 import asyncio
+import uuid
+from collections.abc import AsyncIterator
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
 from pydantic import Field
 
 from akd._base import exposed_param
+from akd._base.streaming import StreamEvent, StreamEventType
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -162,6 +165,49 @@ class DeepLitSearchAgent(LitBaseAgent):
     def clarification_prompt(self, prompt: str) -> None:
         self.clarification_component.config.system_prompt = prompt
 
+    def _emit_step_event(
+        self,
+        step: str,
+        message: str,
+        run_context: dict[str, Any],
+        step_index: int | None = None,
+        total_steps: int | None = None,
+        substep: str | None = None,
+        **data_kwargs: Any,
+    ) -> StreamEvent:
+        """Create a RUNNING event for a pipeline step.
+
+        Args:
+            step: Step identifier (e.g., "triage", "research.search")
+            message: Human-readable progress message
+            run_context: Execution context with run_id, query, etc.
+            step_index: Current step number (1-based)
+            total_steps: Total number of main steps
+            substep: Sub-step identifier for nested progress
+            **data_kwargs: Additional data to include in event payload
+
+        Returns:
+            StreamEvent with RUNNING type and step information
+        """
+        data = {
+            "step": step,
+            **data_kwargs,
+        }
+        if step_index is not None:
+            data["step_index"] = step_index
+        if total_steps is not None:
+            data["total_steps"] = total_steps
+        if substep is not None:
+            data["substep"] = substep
+
+        return StreamEvent(
+            event_type=StreamEventType.RUNNING,
+            source=self.__class__.__name__,
+            message=message,
+            data=data,
+            context=run_context,
+        )
+
     async def _handle_triage(self, query: str) -> dict:
         """Handle query triage using embedded component."""
         if self.debug:
@@ -230,39 +276,78 @@ class DeepLitSearchAgent(LitBaseAgent):
 
         return instructions
 
-    async def _perform_deep_research(
+    async def _stream_deep_research(
         self,
         instructions: str,
         original_query: str,
         max_results: int,
-    ) -> dict:
-        """
-        Perform the actual deep research using iterative search and synthesis.
+        run_context: dict[str, Any],
+    ) -> AsyncIterator[StreamEvent | dict]:
+        """Stream the deep research loop with iteration events.
 
-        This method coordinates search tools, relevancy checking, and the
-        embedded research synthesis component to produce comprehensive results.
+        Yields StreamEvent for progress updates, and a dict with "result" key
+        containing the final research output.
+
+        Args:
+            instructions: Research instructions from instruction builder
+            original_query: Original user query
+            max_results: Maximum results per search
+            run_context: Execution context for event correlation
+
+        Yields:
+            StreamEvent: Progress events for each research step
+            dict: Final result with {"result": research_output_dict}
         """
         # Initialize research tracking
-        all_results = []
+        all_results: List[SearchResultItem] = []
         iterations = 0
-        quality_scores = []
-        research_trace = []
+        quality_scores: List[float] = []
+        research_trace: List[str] = []
 
-        # Initial search queries from instructions
+        # Generate initial queries
+        yield self._emit_step_event(
+            "research.queries",
+            "Generating initial search queries...",
+            run_context,
+            substep="initial_queries",
+        )
+
         initial_queries = await self._generate_initial_queries(instructions)
 
+        yield self._emit_step_event(
+            "research.queries",
+            f"Generated {len(initial_queries)} initial queries",
+            run_context,
+            substep="initial_queries",
+            queries=initial_queries,
+        )
+
+        # Research iteration loop
         while iterations < self.config.max_research_iterations:
             iterations += 1
             research_trace.append(
                 f"Iteration {iterations}: Searching with queries: {initial_queries}",
             )
 
-            if self.debug:
-                logger.debug(
-                    f"Research iteration {iterations}/{self.config.max_research_iterations}",
-                )
+            yield self._emit_step_event(
+                "research.iteration",
+                f"Starting research iteration {iterations}/{self.config.max_research_iterations}",
+                run_context,
+                substep=f"iteration_{iterations}",
+                iteration=iterations,
+                max_iterations=self.config.max_research_iterations,
+                current_results_count=len(all_results),
+            )
 
-            # Perform searches
+            # Search
+            yield self._emit_step_event(
+                "research.search",
+                f"Executing searches with {len(initial_queries)} queries...",
+                run_context,
+                substep=f"iteration_{iterations}.search",
+                queries=initial_queries,
+            )
+
             search_results = await self._execute_searches(
                 queries=initial_queries,
                 max_results=max_results,
@@ -272,46 +357,107 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             if not search_results:
                 research_trace.append(f"Iteration {iterations}: No new results found")
+                yield self._emit_step_event(
+                    "research.search",
+                    "No results found, stopping research",
+                    run_context,
+                    substep=f"iteration_{iterations}.search",
+                    results_count=0,
+                )
                 break
 
             # Deduplicate and add to results
             new_results = self._deduplicate_results(search_results, all_results)
             all_results.extend(new_results)
-
-            # HARD Cap total results
-            # TODO: Implement reranking before capping
-            # Note: Search tool already implements reranking though. `new_results` is already reranked.
             all_results = all_results[: self.config.max_results]
+
+            yield self._emit_step_event(
+                "research.search",
+                f"Found {len(new_results)} new results (total: {len(all_results)})",
+                run_context,
+                substep=f"iteration_{iterations}.search",
+                new_results_count=len(new_results),
+                total_results_count=len(all_results),
+            )
 
             # Evaluate quality
             if new_results:
+                yield self._emit_step_event(
+                    "research.evaluate",
+                    "Evaluating research quality...",
+                    run_context,
+                    substep=f"iteration_{iterations}.evaluate",
+                )
+
                 quality_score = await self._evaluate_research_quality(
                     new_results,
                     original_query,
                 )
                 quality_scores.append(quality_score)
+                avg_quality = sum(quality_scores) / len(quality_scores)
 
                 research_trace.append(
                     f"Iteration {iterations}: Found {len(new_results)} new results, quality score: {quality_score:.2f}",
                 )
 
+                yield self._emit_step_event(
+                    "research.evaluate",
+                    f"Quality score: {quality_score:.2f} (avg: {avg_quality:.2f})",
+                    run_context,
+                    substep=f"iteration_{iterations}.evaluate",
+                    quality_score=quality_score,
+                    avg_quality=avg_quality,
+                    threshold=self.config.quality_threshold,
+                )
+
                 # Check if we've reached quality threshold
-                avg_quality = sum(quality_scores) / len(quality_scores)
                 if avg_quality >= self.config.quality_threshold and len(all_results) >= 10:
                     research_trace.append(
                         f"Stopping: Quality threshold reached ({avg_quality:.2f})",
+                    )
+                    yield self._emit_step_event(
+                        "research.iteration",
+                        f"Quality threshold reached ({avg_quality:.2f}), stopping research",
+                        run_context,
+                        substep=f"iteration_{iterations}",
+                        stopping_reason="quality_threshold",
+                        avg_quality=avg_quality,
                     )
                     break
 
             # Generate refined queries for next iteration
             if iterations < self.config.max_research_iterations:
+                yield self._emit_step_event(
+                    "research.refine",
+                    "Generating refined queries for next iteration...",
+                    run_context,
+                    substep=f"iteration_{iterations}.refine",
+                )
+
                 initial_queries = await self._generate_refined_queries(
                     initial_queries,
                     all_results,
                     instructions,
                 )
 
-        # Synthesize final research report using embedded component
+                yield self._emit_step_event(
+                    "research.refine",
+                    f"Generated {len(initial_queries)} refined queries",
+                    run_context,
+                    substep=f"iteration_{iterations}.refine",
+                    refined_queries=initial_queries,
+                )
+
+        # Synthesize final research report
+        yield self._emit_step_event(
+            "research.synthesize",
+            "Synthesizing research findings...",
+            run_context,
+            substep="synthesis",
+            total_results=len(all_results),
+            iterations_performed=iterations,
+        )
+
         research_output = await self.research_synthesis_component.synthesize(
             all_results,
             instructions,
@@ -321,14 +467,25 @@ class DeepLitSearchAgent(LitBaseAgent):
             iterations,
         )
 
-        return {
-            "research_report": research_output.research_report,
-            "key_findings": research_output.key_findings,
-            "evidence_quality_score": research_output.evidence_quality_score,
-            "citations": research_output.citations,
-            "iterations_performed": iterations,
-            "results": all_results,
-            "research_traces": research_trace,
+        yield self._emit_step_event(
+            "research.synthesize",
+            "Research synthesis complete",
+            run_context,
+            substep="synthesis",
+            key_findings_count=len(research_output.key_findings) if research_output.key_findings else 0,
+        )
+
+        # Yield final result as dict
+        yield {
+            "result": {
+                "research_report": research_output.research_report,
+                "key_findings": research_output.key_findings,
+                "evidence_quality_score": research_output.evidence_quality_score,
+                "citations": research_output.citations,
+                "iterations_performed": iterations,
+                "results": all_results,
+                "research_traces": research_trace,
+            },
         }
 
     async def _generate_initial_queries(self, instructions: str) -> List[str]:
@@ -541,96 +698,284 @@ class DeepLitSearchAgent(LitBaseAgent):
         # So we just return it from kwargs
         return kwargs.get("research_report", "")
 
+    async def _astream(
+        self,
+        params: LitSearchAgentInputSchema,
+        context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream the deep literature search with progress events.
+
+        Emits events throughout the multi-step research pipeline:
+        - STARTING at the beginning
+        - RUNNING events for each major step (triage, clarification, instructions, research, synthesis)
+        - COMPLETED with output on success
+        - FAILED with error on failure
+
+        Args:
+            params: Validated input parameters
+            context: Execution context (node_id, query, etc.)
+            **kwargs: Additional arguments (mock_answers, search_max_results, etc.)
+
+        Yields:
+            StreamEvent objects throughout execution
+
+        Example:
+            async for event in agent.astream({"query": "climate change research"}):
+                print(f"{event.event_type}: {event.data.get('step', '')} - {event.message}")
+        """
+        class_name = self.__class__.__name__
+
+        # Setup context with auto-generated run_id
+        run_context = context.copy() if context else {}
+        if "run_id" not in run_context:
+            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context["query"] = params.query
+
+        # STARTING event
+        yield StreamEvent(
+            event_type=StreamEventType.STARTING,
+            source=class_name,
+            message=f"Starting deep literature search: {params.query[:100]}...",
+            data={"query": params.query},
+            context=run_context,
+        )
+
+        try:
+            original_query = params.query
+            max_results = kwargs.get("search_max_results", params.search_mode.to_max_results())
+            logger.info(f"DeepLitSearchAgent with params: {params}")
+            logger.debug(f"DeepLitSearchAgent | max_results = {max_results}")
+
+            # Step 1: Triage
+            yield self._emit_step_event(
+                "triage",
+                "Analyzing query to determine research approach...",
+                run_context,
+                step_index=1,
+                total_steps=5,
+            )
+
+            triage_result = await self._handle_triage(original_query)
+
+            yield self._emit_step_event(
+                "triage",
+                f"Query triage complete: {triage_result['routing_decision']}",
+                run_context,
+                step_index=1,
+                total_steps=5,
+                needs_clarification=triage_result["needs_clarification"],
+                routing_decision=triage_result["routing_decision"],
+            )
+
+            # Step 2: Clarification (if needed)
+            enriched_query = original_query
+            clarifications: List[str] = []
+
+            if triage_result["needs_clarification"] and self.config.auto_clarify:
+                yield self._emit_step_event(
+                    "clarification",
+                    "Query requires clarification, starting clarification process...",
+                    run_context,
+                    step_index=2,
+                    total_steps=5,
+                )
+
+                max_rounds = max(1, getattr(self.config, "max_clarifying_rounds", 1))
+                for round_num in range(max_rounds):
+                    yield self._emit_step_event(
+                        "clarification",
+                        f"Clarification round {round_num + 1}/{max_rounds}...",
+                        run_context,
+                        step_index=2,
+                        total_steps=5,
+                        substep=f"round_{round_num + 1}",
+                        round=round_num + 1,
+                    )
+
+                    enriched_query, new_clarifications = await self._handle_clarification(
+                        enriched_query,
+                        kwargs.get("mock_answers"),
+                    )
+                    if new_clarifications:
+                        clarifications.extend(new_clarifications)
+
+                    yield self._emit_step_event(
+                        "clarification",
+                        f"Clarification round {round_num + 1} complete",
+                        run_context,
+                        step_index=2,
+                        total_steps=5,
+                        substep=f"round_{round_num + 1}",
+                        clarifications_count=len(clarifications),
+                    )
+
+                    # Re-triage to check if more clarification is needed
+                    try:
+                        triage_result = await self._handle_triage(enriched_query)
+                    except Exception:
+                        break
+
+                    if not triage_result.get("needs_clarification"):
+                        break
+
+            # Step 3: Build research instructions
+            yield self._emit_step_event(
+                "instructions",
+                "Building detailed research instructions...",
+                run_context,
+                step_index=3,
+                total_steps=5,
+            )
+
+            instructions = await self._build_research_instructions(
+                enriched_query,
+                clarifications or None,
+            )
+
+            yield self._emit_step_event(
+                "instructions",
+                "Research instructions ready",
+                run_context,
+                step_index=3,
+                total_steps=5,
+                instructions_preview=instructions[:200] if instructions else "",
+            )
+
+            # Step 4: Deep research loop (streaming)
+            yield self._emit_step_event(
+                "research",
+                f"Starting iterative deep research (max {self.config.max_research_iterations} iterations)...",
+                run_context,
+                step_index=4,
+                total_steps=5,
+                max_iterations=self.config.max_research_iterations,
+            )
+
+            research_output = None
+            async for item in self._stream_deep_research(
+                instructions,
+                original_query,
+                max_results,
+                run_context,
+            ):
+                if isinstance(item, StreamEvent):
+                    yield item
+                elif isinstance(item, dict) and "result" in item:
+                    research_output = item["result"]
+
+            if research_output is None:
+                raise RuntimeError("No research output received from _stream_deep_research")
+
+            yield self._emit_step_event(
+                "research",
+                f"Deep research complete: {len(research_output['results'])} results in {research_output['iterations_performed']} iterations",
+                run_context,
+                step_index=4,
+                total_steps=5,
+                total_results=len(research_output["results"]),
+                iterations_performed=research_output["iterations_performed"],
+            )
+
+            # Step 5: Generate report and answer
+            yield self._emit_step_event(
+                "synthesis",
+                "Generating detailed report...",
+                run_context,
+                step_index=5,
+                total_steps=5,
+                substep="report",
+            )
+
+            detailed_report = await self._generate_report(
+                query=original_query,
+                results=research_output["results"],
+                research_report=research_output["research_report"],
+            )
+
+            yield self._emit_step_event(
+                "synthesis",
+                "Report complete, generating answer...",
+                run_context,
+                step_index=5,
+                total_steps=5,
+                substep="answer",
+                report_preview=detailed_report[:200] if detailed_report else "",
+            )
+
+            shortform_answer = await self._generate_answer(
+                query=original_query,
+                search_results=research_output["results"],
+                additional_context=detailed_report,
+            )
+
+            yield self._emit_step_event(
+                "synthesis",
+                "Synthesis complete",
+                run_context,
+                step_index=5,
+                total_steps=5,
+                answer_preview=shortform_answer.answer[:200] if shortform_answer.answer else "",
+            )
+
+            # Build final output
+            output = LitSearchAgentOutputSchema(
+                answer=shortform_answer.answer,
+                report=detailed_report,
+                results=research_output["results"],
+                extra={
+                    "key_findings": research_output["key_findings"],
+                    "evidence_quality_score": research_output["evidence_quality_score"],
+                    "citations": research_output["citations"],
+                    "answer_reasoning_traces": shortform_answer.reasoning_traces,
+                    "research_traces": research_output.get("research_traces", []),
+                    "iterations_performed": research_output["iterations_performed"],
+                },
+            )
+
+            # COMPLETED event
+            yield StreamEvent(
+                event_type=StreamEventType.COMPLETED,
+                source=class_name,
+                message="Deep literature search completed",
+                data={"output": output},
+                context=run_context,
+            )
+
+        except Exception as e:
+            # FAILED event
+            yield StreamEvent(
+                event_type=StreamEventType.FAILED,
+                source=class_name,
+                message=f"Deep literature search failed: {e!s}",
+                data={"error": str(e), "error_type": type(e).__name__},
+                context=run_context,
+            )
+            raise
+
     async def _arun(
         self,
         params: LitSearchAgentInputSchema,
         **kwargs: Any,
     ) -> LitSearchAgentOutputSchema:
+        """Run the DeepLitSearchAgent by collecting output from _astream().
+
+        This method delegates to _astream() and collects the final output from
+        the COMPLETED event. Use astream() directly if you want real-time progress.
+
+        Args:
+            params: Input parameters for the search
+            **kwargs: Additional arguments (mock_answers, search_max_results, etc.)
+
+        Returns:
+            LitSearchAgentOutputSchema with answer, report, results, and metadata
         """
-        Run the DeepLitSearchAgent with multi-agent orchestration using embedded components.
+        output = None
+        async for event in self._astream(params, **kwargs):
+            if event.event_type == StreamEventType.COMPLETED:
+                output = event.output
 
-        This implements the full deep research pipeline:
-        1. Triage the query
-        2. Clarify if needed
-        3. Build research instructions
-        4. Perform deep research
-        5. Return structured results
+        if output is None:
+            raise RuntimeError("No output received from _astream()")
 
-        Note 1: The maximum number of results to retrieve while running the DeepLitSearchAgent.search_tool is controlled  either:
-        - By `SearchMode` from `params.search_mode` (if kwargs does not specify `search_max_results`). This is the user-facing paramter to control search.
-        - By passing `search_max_results` in `kwargs` (overrides SearchMode). This is useful for dev-mode
-
-        Note 2:
-        - The `DeepLitSearchAgentConfig.max_results` parameter is a hard cap on the total number of results the agent will keep track of during research to control the research iteration. (TODO: Implement reranking at before capping.)
-        """
-        original_query = params.query
-        max_results = kwargs.get("search_max_results", params.search_mode.to_max_results())
-        logger.info(f"DeepLitSearchAgent with params: {params}")
-        logger.debug(f"DeepLitSearchAgent | max_results = {max_results}")
-
-        # Step 1: Triage the query using embedded component
-        triage_result = await self._handle_triage(original_query)
-
-        # Step 2: Clarification loop (LLM-driven) if needed
-        enriched_query = original_query
-        clarifications: List[str] | None = []
-
-        if triage_result["needs_clarification"] and self.config.auto_clarify:
-            max_rounds = max(1, getattr(self.config, "max_clarifying_rounds", 1))
-            for _ in range(max_rounds):
-                enriched_query, new_clarifications = await self._handle_clarification(
-                    enriched_query,
-                    kwargs.get("mock_answers"),
-                )
-                if new_clarifications:
-                    clarifications.extend(new_clarifications)
-
-                # Re-triage to see if more clarification is needed
-                try:
-                    triage_result = await self._handle_triage(enriched_query)
-                except Exception:
-                    break
-
-                if not triage_result.get("needs_clarification"):
-                    break
-
-        # Step 3: Build research instructions using embedded component
-        instructions = await self._build_research_instructions(
-            enriched_query,
-            clarifications or None,
-        )
-
-        # Step 4: Perform deep research using embedded components
-        research_output = await self._perform_deep_research(
-            instructions,
-            original_query,
-            max_results=max_results,
-        )
-
-        # Step 5: Generate shortform answer and report
-        detailed_report = await self._generate_report(
-            query=original_query,
-            results=research_output["results"],
-            research_report=research_output["research_report"],
-        )
-
-        shortform_answer = await self._generate_answer(
-            query=original_query,
-            search_results=research_output["results"],
-            additional_context=detailed_report,
-        )
-
-        # Step 6: Return research output with SearchResultItem objects directly
-        return LitSearchAgentOutputSchema(
-            answer=shortform_answer.answer,
-            report=detailed_report,
-            results=research_output["results"],
-            extra={
-                "key_findings": research_output["key_findings"],
-                "evidence_quality_score": research_output["evidence_quality_score"],
-                "citations": research_output["citations"],
-                "answer_reasoning_traces": shortform_answer.reasoning_traces,
-                "research_traces": research_output.get("research_traces", []),
-                "iterations_performed": research_output["iterations_performed"],
-            },
-        )
+        return output
