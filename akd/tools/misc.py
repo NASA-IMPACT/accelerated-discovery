@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import os
+
 import numpy as np
+import openai
+import tiktoken
 from loguru import logger
 from pydantic import HttpUrl, TypeAdapter
-from sentence_transformers import SentenceTransformer
-import openai
-import os
-import tiktoken
 
 HttpUrlAdapter = TypeAdapter(HttpUrl)
 
@@ -23,6 +23,10 @@ class Embedder:
     ):
         self.model_name = model_name
         logger.info(f"Loading SentenceTransformer model: {self.model_name}")
+
+        # lazy load
+        from sentence_transformers import SentenceTransformer
+
         self.model = SentenceTransformer(
             self.model_name,
             trust_remote_code=trust_remote_code,
@@ -110,7 +114,10 @@ class OpenAIEmbedder(Embedder):
         self.debug = debug
 
     def truncate_text(
-        self, text: str, max_tokens: int = 8192, buffer: int = 200
+        self,
+        text: str,
+        max_tokens: int = 8192,
+        buffer: int = 200,
     ) -> str:
         """Use tiktoken to truncate text to a maximum number of tokens."""
         enc = tiktoken.encoding_for_model(self.model_name)
@@ -124,12 +131,7 @@ class OpenAIEmbedder(Embedder):
             texts = [texts]
 
         # Ensure all elements are non-null strings
-        texts = [
-            str(t)
-            if t is not None and str(t).strip() != ""
-            else "No ReadMe or Description"
-            for t in texts
-        ]
+        texts = [str(t) if t is not None and str(t).strip() != "" else "No ReadMe or Description" for t in texts]
 
         if not texts:
             raise ValueError("No valid input texts provided for embedding.")
