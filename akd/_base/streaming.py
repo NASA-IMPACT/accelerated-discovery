@@ -19,7 +19,9 @@ class StreamEventType(str, Enum):
 
     # Execution
     RUNNING = "running"
-    THINKING = "thinking"
+    STREAMING = "streaming"  # Raw tokens as they arrive
+    THINKING = "thinking"  # Reasoning tokens (Claude extended thinking, o1)
+    GENERATING = "generating"  # Partial structured output as it streams
 
     # Tool calling (Stage 2)
     TOOL_CALLING = "tool_calling"
@@ -44,13 +46,19 @@ class StreamEvent(BaseModel):
     Data Keys by Event Type:
         COMPLETED: {"output": <OutputSchema>}
         FAILED: {"error": str, "error_type": str}
-        THINKING: {"content": str, "source": str}
+        STREAMING: {"token": str} for raw tokens as they arrive
+        THINKING: {"thinking_content": str} for reasoning tokens (Claude/o1)
+        GENERATING: {"partial_output": Any} for partial structured output
         TOOL_CALLING: {"tool_name": str, "tool_input": dict}
         TOOL_RESULT: {"tool_name": str, "tool_output": Any}
 
     Example:
         async for event in agent.astream(input_data):
             match event.event_type:
+                case StreamEventType.THINKING:
+                    print(f"Reasoning: {event.thinking_content}")
+                case StreamEventType.GENERATING:
+                    print(f"Partial: {event.partial_output}")
                 case StreamEventType.COMPLETED:
                     result = event.output
                 case StreamEventType.FAILED:
@@ -101,6 +109,21 @@ class StreamEvent(BaseModel):
     def tool_output(self) -> Any | None:
         """TOOL_RESULT output value."""
         return self.data.get("tool_output")
+
+    @property
+    def partial_output(self) -> Any | None:
+        """THINKING event partial output (partial structured response as it builds)."""
+        return self.data.get("partial_output")
+
+    @property
+    def thinking_content(self) -> str | None:
+        """THINKING event reasoning content (Claude extended thinking, o1 reasoning)."""
+        return self.data.get("thinking_content")
+
+    @property
+    def token(self) -> str | None:
+        """STREAMING event raw token."""
+        return self.data.get("token")
 
 
 class StreamingMixin:
