@@ -551,10 +551,10 @@ class LiteLLMInstructorBaseAgent[
             token_batch_size: Batch N tokens before emitting STREAMING event (default=1)
 
         Yields:
-            - {"type": "streaming", "token": str} for batched raw tokens
-            - {"type": "thinking", "content": str} for reasoning tokens
-            - {"type": "partial", "partial": PartialModel} for validated partials
-            - {"type": "final", "output": OutputSchema} for final output
+            - {"type": StreamEventType.STREAMING, "token": str} for batched raw tokens
+            - {"type": StreamEventType.THINKING, "content": str} for reasoning tokens
+            - {"type": StreamEventType.PARTIAL, "partial": PartialModel} for validated partials
+            - {"type": StreamEventType.COMPLETED, "output": OutputSchema} for final output
         """
         response_model = response_model or self.output_schema
         PartialModel = self._create_partial_model(response_model)
@@ -595,7 +595,7 @@ class LiteLLMInstructorBaseAgent[
                 None,
             )
             if reasoning:
-                yield {"type": "thinking", "content": reasoning}
+                yield {"type": StreamEventType.THINKING, "content": reasoning}
 
             # Content tokens - batch, then accumulate and validate as partial
             if delta.content:
@@ -604,7 +604,7 @@ class LiteLLMInstructorBaseAgent[
 
                 # Emit batched tokens
                 if len(token_buffer) >= token_batch_size:
-                    yield {"type": "streaming", "token": token_buffer}
+                    yield {"type": StreamEventType.STREAMING, "token": token_buffer}
                     token_buffer = ""
 
                 # Try to validate as partial
@@ -613,40 +613,42 @@ class LiteLLMInstructorBaseAgent[
                     last_partial_dict = parsed
                     try:
                         partial = PartialModel.model_validate(parsed)
-                        yield {"type": "partial", "partial": partial}
+                        yield {"type": StreamEventType.PARTIAL, "partial": partial}
                     except Exception:
                         pass  # Skip invalid partials
 
         # Emit remaining tokens
         if token_buffer:
-            yield {"type": "streaming", "token": token_buffer}
+            yield {"type": StreamEventType.STREAMING, "token": token_buffer}
 
         # Final validation
         output = response_model.model_validate_json(accumulated)
-        yield {"type": "final", "output": output}
+        yield {"type": StreamEventType.COMPLETED, "output": output}
 
-    async def astream(
+    async def _astream(
         self,
         params: InSchema,
         context: dict[str, Any] | None = None,
         token_batch_size: int = 10,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
-        """Stream execution with thinking tokens and partial output.
+        """Internal streaming with thinking tokens and partial output.
 
-        Overrides base astream() to emit:
+        Emits:
         - STREAMING events for raw tokens (batched)
         - THINKING events for reasoning tokens (Claude extended thinking, o1)
-        - GENERATING events for partial structured output as it streams
+        - PARTIAL events for partial structured output as it streams
+
+        Note: Input/output validation is handled by parent astream() method.
 
         Args:
-            params: Input parameters
+            params: Input parameters (already validated by astream())
             context: Execution context (node_id, query, etc.)
             token_batch_size: Batch N characters before emitting STREAMING event (default=10)
             **kwargs: Additional keyword arguments
 
         Yields:
-            StreamEvent: STARTING, RUNNING, STREAMING, GENERATING, then COMPLETED or FAILED
+            StreamEvent: STARTING, RUNNING, STREAMING, PARTIAL, then COMPLETED or FAILED
 
         Example:
             async for event in agent.astream(input_data, token_batch_size=20):
@@ -655,7 +657,7 @@ class LiteLLMInstructorBaseAgent[
                         print(event.token, end="")  # Raw tokens
                     case StreamEventType.THINKING:
                         print(f"Reasoning: {event.thinking_content}")
-                    case StreamEventType.GENERATING:
+                    case StreamEventType.PARTIAL:
                         print(f"Partial: {event.partial_output}")
                     case StreamEventType.COMPLETED:
                         print(f"Final: {event.output}")
@@ -677,8 +679,7 @@ class LiteLLMInstructorBaseAgent[
         )
 
         try:
-            # Validate input
-            params = self._validate_input(params)
+            # Note: Input validation handled by parent astream()
 
             # Build messages (same logic as _arun)
             messages = [] if self.stateless else self.memory
@@ -712,14 +713,14 @@ class LiteLLMInstructorBaseAgent[
             # Stream LLM response with raw tokens, thinking, and partial output
             final_output = None
             async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
-                if chunk["type"] == "streaming":
+                if chunk["type"] == StreamEventType.STREAMING:
                     yield StreamEvent(
                         event_type=StreamEventType.STREAMING,
                         source=class_name,
                         data={"token": chunk["token"]},
                         context=run_context,
                     )
-                elif chunk["type"] == "thinking":
+                elif chunk["type"] == StreamEventType.THINKING:
                     yield StreamEvent(
                         event_type=StreamEventType.THINKING,
                         source=class_name,
@@ -727,22 +728,22 @@ class LiteLLMInstructorBaseAgent[
                         data={"thinking_content": chunk["content"]},
                         context=run_context,
                     )
-                elif chunk["type"] == "partial":
+                elif chunk["type"] == StreamEventType.PARTIAL:
                     yield StreamEvent(
-                        event_type=StreamEventType.GENERATING,
+                        event_type=StreamEventType.PARTIAL,
                         source=class_name,
-                        message="Generating...",
+                        message="Partial...",
                         data={"partial_output": chunk["partial"]},
                         context=run_context,
                     )
-                elif chunk["type"] == "final":
+                elif chunk["type"] == StreamEventType.COMPLETED:
                     final_output = chunk["output"]
 
             if final_output is None:
                 raise ValueError("No output received from LLM")
 
-            # Validate output
-            output = self._validate_output(final_output)
+            # Note: Output validation handled by parent astream()
+            output = final_output
 
             # Update memory if stateful
             messages.append(

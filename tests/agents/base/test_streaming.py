@@ -89,10 +89,10 @@ class TestStreaming:
         assert thinking_events[0].thinking_content == "Let me think..."
 
     @pytest.mark.asyncio
-    async def test_astream_emits_generating_events(self, litellm_config):
-        """Test GENERATING events for partial output."""
+    async def test_astream_emits_partial_events(self, litellm_config):
+        """Test PARTIAL events for partial output."""
         with patch("akd.agents._base.acompletion") as mock_acompletion:
-            # Stream JSON in chunks - only complete JSON will emit GENERATING
+            # Stream JSON in chunks - only complete JSON will emit PARTIAL
             mock_acompletion.return_value = make_stream(
                 make_chunk('{"response": "Test", "confidence": 0.9}'),
             )
@@ -100,8 +100,8 @@ class TestStreaming:
             agent = TestLiteLLMAgent(config=litellm_config)
             events = [e async for e in agent.astream(LiteLLMTestInputSchema(query="test"))]
 
-        generating_events = [e for e in events if e.event_type == "generating"]
-        assert len(generating_events) >= 1
+        partial_events = [e for e in events if e.event_type == "partial"]
+        assert len(partial_events) >= 1
 
     @pytest.mark.asyncio
     async def test_astream_error_yields_failed(self, litellm_config):
@@ -135,7 +135,7 @@ class TestStreamEventProperties:
     def test_partial_output_property(self):
         """Test partial_output property returns data value."""
         event = StreamEvent(
-            event_type=StreamEventType.GENERATING,
+            event_type=StreamEventType.PARTIAL,
             source="TestAgent",
             data={"partial_output": {"response": "partial"}},
         )

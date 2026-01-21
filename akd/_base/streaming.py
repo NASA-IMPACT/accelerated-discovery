@@ -21,7 +21,7 @@ class StreamEventType(str, Enum):
     RUNNING = "running"
     STREAMING = "streaming"  # Raw tokens as they arrive
     THINKING = "thinking"  # Reasoning tokens (Claude extended thinking, o1)
-    GENERATING = "generating"  # Partial structured output as it streams
+    PARTIAL = "partial"  # Partial structured output as it streams
 
     # Tool calling (Stage 2)
     TOOL_CALLING = "tool_calling"
@@ -48,7 +48,7 @@ class StreamEvent(BaseModel):
         FAILED: {"error": str, "error_type": str}
         STREAMING: {"token": str} for raw tokens as they arrive
         THINKING: {"thinking_content": str} for reasoning tokens (Claude/o1)
-        GENERATING: {"partial_output": Any} for partial structured output
+        PARTIAL: {"partial_output": Any} for partial structured output
         TOOL_CALLING: {"tool_name": str, "tool_input": dict}
         TOOL_RESULT: {"tool_name": str, "tool_output": Any}
 
@@ -59,7 +59,7 @@ class StreamEvent(BaseModel):
                     print(event.token, end="")  # Raw tokens
                 case StreamEventType.THINKING:
                     print(f"Reasoning: {event.thinking_content}")
-                case StreamEventType.GENERATING:
+                case StreamEventType.PARTIAL:
                     print(f"Partial: {event.partial_output}")
                 case StreamEventType.COMPLETED:
                     result = event.output
@@ -114,7 +114,7 @@ class StreamEvent(BaseModel):
 
     @property
     def partial_output(self) -> Any | None:
-        """GENERATING event partial output (validated partial model as JSON builds)."""
+        """PARTIAL event partial output (validated partial model as JSON builds)."""
         return self.data.get("partial_output")
 
     @property
