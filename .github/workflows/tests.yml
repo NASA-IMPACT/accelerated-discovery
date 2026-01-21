@@ -52,7 +52,7 @@ jobs:
           set +e  # Don't exit on command failure
 
           # Run tests with real-time output and capture for parsing
-          python -m pytest tests/ -v --cov --cov-report=xml --cov-report=term 2>&1 | tee test_output.log
+          python -m pytest tests/ -v -n auto --dist=loadfile --cov --cov-report=xml --cov-report=term 2>&1 | tee test_output.log
           test_exit_code=${PIPESTATUS[0]}
 
           echo ""
