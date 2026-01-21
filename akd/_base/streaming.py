@@ -69,6 +69,12 @@ class StreamEvent(BaseModel):
     # Flexible payload
     data: dict[str, Any] = Field(default_factory=dict)
 
+    # Execution context
+    context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Execution context (node_id, query, etc.)",
+    )
+
     # Convenience properties
 
     @property
@@ -121,6 +127,7 @@ class StreamingMixin:
     async def astream(
         self,
         params: Any,
+        context: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Stream execution with events.
@@ -129,6 +136,7 @@ class StreamingMixin:
 
         Args:
             params: Input parameters
+            context: Execution context (node_id, query, etc.). Auto-generates run_id if not provided.
             **kwargs: Passed to arun()
 
         Yields:
@@ -139,10 +147,16 @@ class StreamingMixin:
         """
         class_name = self.__class__.__name__
 
+        # Auto-generate run_id for event correlation
+        run_context = context.copy() if context else {}
+        if "run_id" not in run_context:
+            run_context["run_id"] = uuid.uuid4().hex[:8]
+
         yield StreamEvent(
             event_type=StreamEventType.STARTING,
             source=class_name,
             message=f"Starting {class_name}",
+            context=run_context,
         )
 
         try:
@@ -150,6 +164,7 @@ class StreamingMixin:
                 event_type=StreamEventType.RUNNING,
                 source=class_name,
                 message=f"Running {class_name}",
+                context=run_context,
             )
 
             output = await self.arun(params, **kwargs)
@@ -159,6 +174,7 @@ class StreamingMixin:
                 source=class_name,
                 message=f"Completed {class_name}",
                 data={"output": output},
+                context=run_context,
             )
         except Exception as e:
             yield StreamEvent(
@@ -166,6 +182,7 @@ class StreamingMixin:
                 source=class_name,
                 message=f"Failed: {e!s}",
                 data={"error": str(e), "error_type": type(e).__name__},
+                context=run_context,
             )
             raise
 
