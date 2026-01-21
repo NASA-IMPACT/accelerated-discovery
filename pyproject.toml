@@ -77,6 +77,9 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
+    "-n",
+    "auto",
+    "--dist=loadfile",
     "--strict-markers",
     "--strict-config",
     "-ra",
@@ -97,6 +100,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
     "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.5.0",
     "pre-commit>=4.2.0",
     "memray>=1.18.0",
     "scalene>=1.5.55",

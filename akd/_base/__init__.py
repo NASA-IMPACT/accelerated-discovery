@@ -11,6 +11,7 @@ from ._base import (
     UnrestrictedAbstractBase,
 )
 from .exposure import ParamExposureMixin, exposed_param
+from .streaming import StreamEvent, StreamEventType, StreamingMixin
 
 __all__ = [
     # Base classes
@@ -28,4 +29,8 @@ __all__ = [
     "ParamExposureMixin",
     # Metaclass
     "AbstractBaseMeta",
+    # Streaming
+    "StreamEvent",
+    "StreamEventType",
+    "StreamingMixin",
 ]
