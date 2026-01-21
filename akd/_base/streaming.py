@@ -55,6 +55,8 @@ class StreamEvent(BaseModel):
     Example:
         async for event in agent.astream(input_data):
             match event.event_type:
+                case StreamEventType.STREAMING:
+                    print(event.token, end="")  # Raw tokens
                 case StreamEventType.THINKING:
                     print(f"Reasoning: {event.thinking_content}")
                 case StreamEventType.GENERATING:
@@ -112,7 +114,7 @@ class StreamEvent(BaseModel):
 
     @property
     def partial_output(self) -> Any | None:
-        """THINKING event partial output (partial structured response as it builds)."""
+        """GENERATING event partial output (validated partial model as JSON builds)."""
         return self.data.get("partial_output")
 
     @property

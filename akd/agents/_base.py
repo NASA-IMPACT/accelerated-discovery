@@ -539,7 +539,7 @@ class LiteLLMInstructorBaseAgent[
         self,
         messages: list[dict[str, str]],
         response_model: type[OutputSchema] | None = None,
-        token_batch_size: int = 1,
+        token_batch_size: int = 10,
     ) -> AsyncIterator[dict[str, Any]]:
         """Stream LLM response with thinking tokens and validated partial output.
 
