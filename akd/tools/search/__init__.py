@@ -1,5 +1,8 @@
 """Search tools for the AKD framework."""
 
+import importlib
+from typing import TYPE_CHECKING
+
 # Re-export SearchResultItem from structures for backward compatibility
 from akd.structures import SearchResultItem
 
@@ -24,7 +27,6 @@ from .code_search import (
     SDECodeSearchToolConfig,
 )
 from .composite import CompositeSearchTool, CompositeSearchToolConfig
-from .pipeline import SearchPipeline, SearchPipelineConfig, SearchPipelineScrapingMode
 from .searxng import (
     SearxNGSearchTool,
     SearxNGSearchToolConfig,
@@ -43,6 +45,28 @@ from .serper import (
     SerperSearchToolInputSchema,
     SerperSearchToolOutputSchema,
 )
+
+# Lazy imports for heavy dependencies (pipeline depends on scrapers.omni -> docling)
+if TYPE_CHECKING:
+    from .pipeline import (
+        SearchPipeline,
+        SearchPipelineConfig,
+        SearchPipelineScrapingMode,
+    )
+
+_LAZY_IMPORTS = {
+    "SearchPipeline": ".pipeline",
+    "SearchPipelineConfig": ".pipeline",
+    "SearchPipelineScrapingMode": ".pipeline",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_IMPORTS:
+        module = importlib.import_module(_LAZY_IMPORTS[name], __name__)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Re-exported structures
@@ -71,7 +95,7 @@ __all__ = [
     "SemanticScholarSearchToolInputSchema",
     "SemanticScholarSearchToolOutputSchema",
     "SemanticScholarSearchToolConfig",
-    # Text Search Pipeline
+    # Text Search Pipeline (lazy loaded)
     "SearchPipeline",
     "SearchPipelineConfig",
     "SearchPipelineScrapingMode",

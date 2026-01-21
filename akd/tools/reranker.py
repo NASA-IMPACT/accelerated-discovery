@@ -5,7 +5,6 @@ from typing import Literal
 
 import numpy as np
 from pydantic.fields import Field
-from sentence_transformers import CrossEncoder
 
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
@@ -131,6 +130,8 @@ class CrossEncoderRerankerTool(RerankerTool):
 
     def __init__(self, config: RerankerToolConfig | None = None, debug: bool = False):
         super().__init__(config=config, debug=debug)
+        from sentence_transformers import CrossEncoder
+
         self.reranker_model = CrossEncoder(self.config.model_name)
         self.debug = debug
 
