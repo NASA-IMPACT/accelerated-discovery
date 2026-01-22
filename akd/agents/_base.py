@@ -5,7 +5,7 @@ import json
 import uuid
 from abc import abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any, Literal, Optional, cast
+from typing import Any, Literal, cast
 
 import instructor
 import openai
@@ -32,6 +32,7 @@ from akd._base.streaming import StreamEvent, StreamEventType
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
+from akd.utils import PartialSchema
 
 
 class BaseAgentConfig(BaseConfig):
@@ -326,13 +327,6 @@ class InstructorBaseAgent[
 
         return instructor_model
 
-    def _create_partial_model(self, model: type[OutputSchema]) -> type[BaseModel]:
-        """Create partial model with all fields Optional for streaming validation."""
-        fields = {}
-        for name, info in model.model_fields.items():
-            fields[name] = (Optional[info.annotation], Field(default=None))
-        return create_model(f"Partial{model.__name__}", **fields)
-
     def _build_response_format_schema(self, model: type[OutputSchema]) -> dict[str, Any]:
         """Build JSON schema for response_format (OpenAI strict mode)."""
         schema = model.model_json_schema()
@@ -557,7 +551,7 @@ class LiteLLMInstructorBaseAgent[
             - {"type": StreamEventType.COMPLETED, "output": OutputSchema} for final output
         """
         response_model = response_model or self.output_schema
-        PartialModel = self._create_partial_model(response_model)
+        PartialModel = PartialSchema[response_model]
 
         completion_kwargs: dict[str, Any] = {
             "model": self.model_name,
