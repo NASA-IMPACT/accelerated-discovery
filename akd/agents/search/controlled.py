@@ -42,6 +42,7 @@ from akd.tools.link_relevancy_assessor import (
 from akd.tools.reranker import RerankerToolInputSchema
 from akd.tools.search import SearxNGSearchTool
 from akd.tools.search._base import QueryFocusStrategy, SearchToolInputSchema
+from akd.utils import PartialSchema
 
 from ._base import (
     LitBaseAgent,
@@ -1029,6 +1030,20 @@ class ControlledSearchAgent(LitBaseAgent):
 
             logger.debug(f"Final Stopping Criteria :: {criteria}")
 
+            # PARTIAL event: search results available
+            yield StreamEvent(
+                event_type=StreamEventType.PARTIAL,
+                source=class_name,
+                message="Search results available",
+                data={
+                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                        results=all_results,
+                        extra={"iterations_performed": iteration},
+                    ),
+                },
+                context=run_context,
+            )
+
             # Emit synthesis events
             yield self._emit_step_event(
                 step="synthesis.answer",
@@ -1045,14 +1060,6 @@ class ControlledSearchAgent(LitBaseAgent):
             )
 
             yield self._emit_step_event(
-                step="synthesis.answer",
-                message="Answer generated",
-                run_context=run_context,
-                substep="complete",
-                answer_preview=shortform_answer.answer[:200] if shortform_answer.answer else None,
-            )
-
-            yield self._emit_step_event(
                 step="synthesis.report",
                 message="Generating report",
                 run_context=run_context,
@@ -1064,12 +1071,22 @@ class ControlledSearchAgent(LitBaseAgent):
                 results=all_results,
             )
 
-            yield self._emit_step_event(
-                step="synthesis.report",
+            # PARTIAL event: report available
+            yield StreamEvent(
+                event_type=StreamEventType.PARTIAL,
+                source=class_name,
                 message="Report generated",
-                run_context=run_context,
-                substep="complete",
-                report_preview=detailed_report[:200] if detailed_report else None,
+                data={
+                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                        results=all_results,
+                        report=detailed_report,
+                        extra={
+                            "answer_reasoning_traces": shortform_answer.reasoning_traces,
+                            "iterations_performed": iteration,
+                        },
+                    ),
+                },
+                context=run_context,
             )
 
             # Build output

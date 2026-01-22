@@ -38,6 +38,7 @@ from akd.structures import SearchResultItem
 from akd.tools.search import SearchTool
 from akd.tools.search.pipeline import SearchPipeline
 from akd.tools.search.searxng import SearxNGSearchTool
+from akd.utils import PartialSchema
 
 from ._base import (
     LitBaseAgent,
@@ -877,6 +878,25 @@ class DeepLitSearchAgent(LitBaseAgent):
                 iterations_performed=research_output["iterations_performed"],
             )
 
+            # PARTIAL event: research results available
+            yield StreamEvent(
+                event_type=StreamEventType.PARTIAL,
+                source=class_name,
+                message="Research results available",
+                data={
+                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                        results=research_output["results"],
+                        extra={
+                            "key_findings": research_output["key_findings"],
+                            "evidence_quality_score": research_output["evidence_quality_score"],
+                            "citations": research_output["citations"],
+                            "iterations_performed": research_output["iterations_performed"],
+                        },
+                    ),
+                },
+                context=run_context,
+            )
+
             # Step 5: Generate report and answer
             yield self._emit_step_event(
                 "synthesis",
@@ -893,29 +913,39 @@ class DeepLitSearchAgent(LitBaseAgent):
                 research_report=research_output["research_report"],
             )
 
+            # PARTIAL event: report now available
+            yield StreamEvent(
+                event_type=StreamEventType.PARTIAL,
+                source=class_name,
+                message="Report generated",
+                data={
+                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                        results=research_output["results"],
+                        report=detailed_report,
+                        extra={
+                            "key_findings": research_output["key_findings"],
+                            "evidence_quality_score": research_output["evidence_quality_score"],
+                            "citations": research_output["citations"],
+                            "iterations_performed": research_output["iterations_performed"],
+                        },
+                    ),
+                },
+                context=run_context,
+            )
+
             yield self._emit_step_event(
                 "synthesis",
-                "Report complete, generating answer...",
+                "Generating answer...",
                 run_context,
                 step_index=5,
                 total_steps=5,
                 substep="answer",
-                report_preview=detailed_report[:200] if detailed_report else "",
             )
 
             shortform_answer = await self._generate_answer(
                 query=original_query,
                 search_results=research_output["results"],
                 additional_context=detailed_report,
-            )
-
-            yield self._emit_step_event(
-                "synthesis",
-                "Synthesis complete",
-                run_context,
-                step_index=5,
-                total_steps=5,
-                answer_preview=shortform_answer.answer[:200] if shortform_answer.answer else "",
             )
 
             # Build final output
@@ -933,7 +963,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 },
             )
 
-            # COMPLETED event
+            # COMPLETED event with full output
             yield StreamEvent(
                 event_type=StreamEventType.COMPLETED,
                 source=class_name,
