@@ -7,11 +7,14 @@ and agentic decision-making to iteratively refine search queries based on rubric
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import AsyncIterator
 from typing import Any, List, Optional
 
 from loguru import logger
 from pydantic import Field
 
+from akd._base.streaming import StreamEvent, StreamEventType
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -733,6 +736,46 @@ class ControlledSearchAgent(LitBaseAgent):
             },
         )
 
+    def _emit_step_event(
+        self,
+        step: str,
+        message: str,
+        run_context: dict[str, Any],
+        step_index: int | None = None,
+        total_steps: int | None = None,
+        substep: str | None = None,
+        **data_kwargs: Any,
+    ) -> StreamEvent:
+        """Create a RUNNING event for a pipeline step.
+
+        Args:
+            step: Step identifier (e.g., "iteration", "search", "evaluate")
+            message: Human-readable description
+            run_context: Execution context dict
+            step_index: Current step number (optional)
+            total_steps: Total number of steps (optional)
+            substep: Sub-step identifier (optional)
+            **data_kwargs: Additional data fields
+
+        Returns:
+            StreamEvent with RUNNING type and step metadata
+        """
+        data = {"step": step, **data_kwargs}
+        if step_index is not None:
+            data["step_index"] = step_index
+        if total_steps is not None:
+            data["total_steps"] = total_steps
+        if substep is not None:
+            data["substep"] = substep
+
+        return StreamEvent(
+            event_type=StreamEventType.RUNNING,
+            source=self.__class__.__name__,
+            message=message,
+            data=data,
+            context=run_context,
+        )
+
     async def _generate_report(
         self,
         query: str,
@@ -754,151 +797,323 @@ class ControlledSearchAgent(LitBaseAgent):
         # For now, return empty string as placeholder
         return ""
 
+    async def _astream(
+        self,
+        params: LitSearchAgentInputSchema,
+        context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream events during controlled search execution.
+
+        Yields RUNNING events throughout the iterative search loop,
+        then COMPLETED or FAILED at the end.
+
+        Args:
+            params: Input parameters (already validated by astream())
+            context: Execution context
+            **kwargs: Additional arguments
+
+        Yields:
+            StreamEvent: STARTING, RUNNING (iteration/search/evaluate), COMPLETED/FAILED
+        """
+        class_name = self.__class__.__name__
+
+        # Setup run context
+        run_context = context.copy() if context else {}
+        if "run_id" not in run_context:
+            run_context["run_id"] = uuid.uuid4().hex[:8]
+
+        # STARTING event
+        yield StreamEvent(
+            event_type=StreamEventType.STARTING,
+            source=class_name,
+            message=f"Starting {class_name}",
+            data={"query": params.query},
+            context=run_context,
+        )
+
+        try:
+            desired_max_results = params.search_mode.to_max_results()
+            queries = [params.query]
+
+            iteration = 0
+            all_results = []
+            current_results = []
+            content_so_far = ""
+
+            while not (
+                criteria := await self._should_stop(
+                    iteration=iteration,
+                    all_results=all_results,
+                    current_results=current_results,
+                    max_results=desired_max_results,
+                    query=params.query,
+                )
+            ).stop_now:
+                logger.debug(f"Stopping Criteria :: {criteria}")
+                iteration += 1
+
+                # Emit iteration start event
+                yield self._emit_step_event(
+                    step="iteration",
+                    message=f"Starting iteration {iteration}/{self.config.max_iteration}",
+                    run_context=run_context,
+                    step_index=iteration,
+                    total_steps=self.config.max_iteration,
+                    results_so_far=len(all_results),
+                    target_results=desired_max_results,
+                )
+
+                if self.debug:
+                    logger.info(f"🔄 ITERATION {iteration}")
+
+                remaining_needed = desired_max_results - len(all_results)
+                dynamic_batch_size = self._calculate_dynamic_batch_size(iteration, criteria)
+                search_limit = min(remaining_needed, dynamic_batch_size)
+
+                current_queries = queries
+                if iteration > 0:
+                    rubric_focus = None
+                    if hasattr(criteria, "recommended_query_focus") and criteria.recommended_query_focus:
+                        rubric_focus = criteria.recommended_query_focus
+
+                    logger.debug(f"Rubric focus for iteration {iteration}: {rubric_focus}")
+
+                    # Emit query generation event
+                    yield self._emit_step_event(
+                        step="iteration.queries",
+                        message=f"Generating queries for iteration {iteration}",
+                        run_context=run_context,
+                        substep="generating",
+                        rubric_focus=rubric_focus,
+                    )
+
+                    current_queries = await self._generate_queries(
+                        iteration=iteration,
+                        num_queries=3,
+                        queries=queries,
+                        results=all_results,
+                        accumulated_content=content_so_far,
+                        rubric_focus=rubric_focus,
+                    )
+
+                    # Emit queries generated event
+                    yield self._emit_step_event(
+                        step="iteration.queries",
+                        message=f"Generated {len(current_queries)} queries",
+                        run_context=run_context,
+                        substep="complete",
+                        queries=current_queries,
+                    )
+
+                logger.debug(f"Generated queries (iteration {iteration}): {current_queries}")
+
+                # Emit search event
+                yield self._emit_step_event(
+                    step="iteration.search",
+                    message=f"Searching with {len(current_queries)} queries",
+                    run_context=run_context,
+                    substep="searching",
+                    queries=current_queries,
+                    search_limit=search_limit,
+                )
+
+                search_input = SearchToolInputSchema(
+                    queries=current_queries,
+                    max_results=search_limit,
+                )
+
+                search_result = await self.search_tool.arun(
+                    self.search_tool.input_schema(**search_input.model_dump()),
+                )
+
+                current_results = self._deduplicate_results(
+                    new_results=search_result.results,
+                    existing_results=all_results,
+                )
+
+                # Fallback mechanism
+                if not current_results and iteration > 1 and current_queries != queries:
+                    if self.debug:
+                        logger.debug(
+                            f"No results from adapted queries, falling back to original queries: {queries}",
+                        )
+
+                    yield self._emit_step_event(
+                        step="iteration.search",
+                        message="Falling back to original queries",
+                        run_context=run_context,
+                        substep="fallback",
+                    )
+
+                    fallback_input = SearchToolInputSchema(
+                        queries=queries,
+                        max_results=search_limit,
+                    )
+
+                    fallback_result = await self.search_tool.arun(
+                        self.search_tool.input_schema(**fallback_input.model_dump()),
+                    )
+
+                    current_results = self._deduplicate_results(
+                        new_results=fallback_result.results,
+                        existing_results=all_results,
+                    )
+
+                    if current_results and self.debug:
+                        logger.debug(f"Fallback successful: found {len(current_results)} results")
+
+                # Emit search complete event
+                yield self._emit_step_event(
+                    step="iteration.search",
+                    message=f"Found {len(current_results)} new results",
+                    run_context=run_context,
+                    substep="complete",
+                    new_results_count=len(current_results),
+                    raw_results_count=len(search_result.results),
+                )
+
+                all_results.extend(current_results)
+
+                # Emit rerank event
+                yield self._emit_step_event(
+                    step="iteration.rerank",
+                    message=f"Reranking {len(all_results)} results",
+                    run_context=run_context,
+                    substep="reranking",
+                    total_results=len(all_results),
+                )
+
+                reranker_input = RerankerToolInputSchema(
+                    query=params.query,
+                    results=all_results,
+                )
+                reranked_results = await self.reranker.arun(reranker_input)
+                all_results = reranked_results.results
+
+                yield self._emit_step_event(
+                    step="iteration.rerank",
+                    message=f"Reranked to {len(all_results)} results",
+                    run_context=run_context,
+                    substep="complete",
+                    total_results=len(all_results),
+                )
+
+                # Update accumulated content
+                new_content = self._accumulate_content(current_results)
+                if new_content:
+                    content_so_far += "\n" + new_content if content_so_far else new_content
+
+                # Learn from iteration if rubric analysis available
+                if hasattr(criteria, "rubric_analysis") and criteria.rubric_analysis:
+                    self._learn_from_iteration(
+                        iteration,
+                        current_queries,
+                        criteria.rubric_analysis,
+                    )
+
+                    # Emit evaluate event with rubric info
+                    yield self._emit_step_event(
+                        step="iteration.evaluate",
+                        message=f"Rubric: {criteria.rubric_analysis.positive_rubric_count}/6 positive",
+                        run_context=run_context,
+                        positive_rubrics=criteria.rubric_analysis.positive_rubric_count,
+                        strong_rubrics=criteria.rubric_analysis.strong_rubrics,
+                        weak_rubrics=criteria.rubric_analysis.weak_rubrics,
+                        overall_assessment=criteria.rubric_analysis.overall_assessment,
+                    )
+
+                if self.debug:
+                    logger.debug(f"Content accumulated so far (chars): {len(content_so_far)}")
+                    logger.debug(f"Current iteration results: {len(current_results)}")
+
+            logger.debug(f"Final Stopping Criteria :: {criteria}")
+
+            # Emit synthesis events
+            yield self._emit_step_event(
+                step="synthesis.answer",
+                message="Generating answer",
+                run_context=run_context,
+                substep="generating",
+                total_results=len(all_results),
+            )
+
+            shortform_answer = await self._generate_answer(
+                query=params.query,
+                search_results=all_results,
+                additional_context=f"Final stopping criteria: {criteria}",
+            )
+
+            yield self._emit_step_event(
+                step="synthesis.answer",
+                message="Answer generated",
+                run_context=run_context,
+                substep="complete",
+                answer_preview=shortform_answer.answer[:200] if shortform_answer.answer else None,
+            )
+
+            yield self._emit_step_event(
+                step="synthesis.report",
+                message="Generating report",
+                run_context=run_context,
+                substep="generating",
+            )
+
+            detailed_report = await self._generate_report(
+                query=params.query,
+                results=all_results,
+            )
+
+            yield self._emit_step_event(
+                step="synthesis.report",
+                message="Report generated",
+                run_context=run_context,
+                substep="complete",
+                report_preview=detailed_report[:200] if detailed_report else None,
+            )
+
+            # Build output
+            output = LitSearchAgentOutputSchema(
+                answer=shortform_answer.answer,
+                report=detailed_report,
+                results=all_results,
+                extra=dict(
+                    answer_reasoning_traces=shortform_answer.reasoning_traces,
+                    iterations_performed=iteration,
+                ),
+            )
+
+            # COMPLETED event
+            yield StreamEvent(
+                event_type=StreamEventType.COMPLETED,
+                source=class_name,
+                message=f"Completed {class_name}",
+                data={"output": output},
+                context=run_context,
+            )
+
+        except Exception as e:
+            # FAILED event
+            yield StreamEvent(
+                event_type=StreamEventType.FAILED,
+                source=class_name,
+                message=f"Failed: {e!s}",
+                data={"error": str(e), "error_type": type(e).__name__},
+                context=run_context,
+            )
+            raise
+
     async def _arun(
         self,
         params: LitSearchAgentInputSchema,
         **kwargs: Any,
     ) -> LitSearchAgentOutputSchema:
-        desired_max_results = params.search_mode.to_max_results()
-        queries = [params.query]  # Convert single query to list for compatibility
+        """Run by collecting output from _astream()."""
+        output = None
+        async for event in self._astream(params, **kwargs):
+            if event.event_type == StreamEventType.COMPLETED:
+                output = event.output
 
-        iteration = 0
-        all_results = []
-        current_results = []
-        content_so_far = ""
-
-        while not (
-            criteria := await self._should_stop(
-                iteration=iteration,
-                all_results=all_results,
-                current_results=current_results,
-                max_results=desired_max_results,
-                query=params.query,
-            )
-        ).stop_now:
-            logger.debug(f"Stopping Criteria :: {criteria}")
-            iteration += 1
-
-            if self.debug:
-                logger.info(f"🔄 ITERATION {iteration}")
-
-            remaining_needed = desired_max_results - len(all_results)
-            # Dynamic batch sizing: adjust based on previous rubric performance
-            dynamic_batch_size = self._calculate_dynamic_batch_size(iteration, criteria)
-            search_limit = min(remaining_needed, dynamic_batch_size)
-
-            current_queries = queries
-            if iteration > 0:
-                # Get rubric focus from previous iteration's stopping criteria
-                rubric_focus = None
-                if hasattr(criteria, "recommended_query_focus") and criteria.recommended_query_focus:
-                    rubric_focus = criteria.recommended_query_focus
-
-                logger.debug(f"Rubric focus for iteration {iteration}: {rubric_focus}")
-
-                current_queries = await self._generate_queries(
-                    iteration=iteration,
-                    num_queries=3,
-                    queries=queries,
-                    results=all_results,
-                    accumulated_content=content_so_far,  # Pass accumulated content
-                    rubric_focus=rubric_focus,  # Pass rubric focus for adaptive queries
-                )
-
-            logger.debug(
-                f"Generated queries (iteration {iteration}): {current_queries}",
-            )
-
-            search_input = SearchToolInputSchema(
-                queries=current_queries,
-                max_results=search_limit,
-            )
-
-            search_result = await self.search_tool.arun(
-                self.search_tool.input_schema(**search_input.model_dump()),
-            )
-
-            current_results = self._deduplicate_results(
-                new_results=search_result.results,
-                existing_results=all_results,
-            )
-
-            # Fallback mechanism: If adapted queries return no results, try original queries
-            if not current_results and iteration > 1 and current_queries != queries:
-                if self.debug:
-                    logger.debug(
-                        f"No results from adapted queries, falling back to original queries: {queries}",
-                    )
-
-                fallback_input = SearchToolInputSchema(
-                    queries=queries,  # Use original queries
-                    max_results=search_limit,
-                )
-
-                fallback_result = await self.search_tool.arun(
-                    self.search_tool.input_schema(**fallback_input.model_dump()),
-                )
-
-                current_results = self._deduplicate_results(
-                    new_results=fallback_result.results,
-                    existing_results=all_results,
-                )
-
-                if current_results and self.debug:
-                    logger.debug(
-                        f"Fallback successful: found {len(current_results)} results",
-                    )
-
-            all_results.extend(current_results)
-
-            reranker_input = RerankerToolInputSchema(
-                query=params.query,
-                results=all_results,
-            )
-            reranked_results = await self.reranker.arun(reranker_input)
-            all_results = reranked_results.results
-
-            # Update accumulated content after each iteration
-            new_content = self._accumulate_content(current_results)
-            if new_content:
-                content_so_far += "\n" + new_content if content_so_far else new_content
-
-            # Learn from this iteration if we have rubric analysis
-            if hasattr(criteria, "rubric_analysis") and criteria.rubric_analysis:
-                self._learn_from_iteration(
-                    iteration,
-                    current_queries,
-                    criteria.rubric_analysis,
-                )
-
-            if self.debug:
-                logger.debug(
-                    f"Content accumulated so far (chars): {len(content_so_far)}",
-                )
-                logger.debug(
-                    f"Current iteration results: {len(current_results)}",
-                )
-
-        logger.debug(f"Final Stopping Criteria :: {criteria}")
-
-        # Generate shortform answer and report
-        shortform_answer = await self._generate_answer(
-            query=params.query,
-            search_results=all_results,
-            additional_context=f"Final stopping criteria: {criteria}",
-        )
-
-        detailed_report = await self._generate_report(
-            query=params.query,
-            results=all_results,
-        )
-
-        return LitSearchAgentOutputSchema(
-            answer=shortform_answer.answer,
-            report=detailed_report,
-            results=all_results,
-            extra=dict(
-                answer_reasoning_traces=shortform_answer.reasoning_traces,
-                iterations_performed=iteration,
-            ),
-        )
+        if output is None:
+            raise RuntimeError("No output received from _astream()")
+        return output
