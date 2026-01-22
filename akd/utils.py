@@ -263,22 +263,22 @@ def to_snake_case(name: str) -> str:
     return result.lower()
 
 
-class PartialSchema[T: BaseModel]:
+class PartialModel[T: BaseModel]:
     """Partial schema generator - all fields become Optional.
 
     Creates a Pydantic model where all fields are Optional, useful for
     streaming PARTIAL events where output builds progressively.
 
     Usage:
-        PartialSchema[MySchema]           # Returns the partial model class
-        PartialSchema[MySchema](field=v)  # Creates instance
+        PartialModel[MySchema]           # Returns the partial model class
+        PartialModel[MySchema](field=v)  # Creates instance
 
     Example:
-        from akd.utils import PartialSchema
+        from akd.utils import PartialModel
         from akd.agents.search._base import LitSearchAgentOutputSchema
 
         # Create partial with only some fields
-        partial = PartialSchema[LitSearchAgentOutputSchema](
+        partial = PartialModel[LitSearchAgentOutputSchema](
             results=[...],
             extra={"key_findings": [...]},
         )

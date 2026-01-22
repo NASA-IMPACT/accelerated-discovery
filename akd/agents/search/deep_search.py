@@ -38,7 +38,7 @@ from akd.structures import SearchResultItem
 from akd.tools.search import SearchTool
 from akd.tools.search.pipeline import SearchPipeline
 from akd.tools.search.searxng import SearxNGSearchTool
-from akd.utils import PartialSchema
+from akd.utils import PartialModel
 
 from ._base import (
     LitBaseAgent,
@@ -884,7 +884,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 source=class_name,
                 message="Research results available",
                 data={
-                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
                         results=research_output["results"],
                         extra={
                             "key_findings": research_output["key_findings"],
@@ -919,7 +919,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 source=class_name,
                 message="Report generated",
                 data={
-                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
                         results=research_output["results"],
                         report=detailed_report,
                         extra={

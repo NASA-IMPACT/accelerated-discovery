@@ -32,7 +32,7 @@ from akd._base.streaming import StreamEvent, StreamEventType
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
-from akd.utils import PartialSchema
+from akd.utils import PartialModel
 
 
 class BaseAgentConfig(BaseConfig):
@@ -551,7 +551,7 @@ class LiteLLMInstructorBaseAgent[
             - {"type": StreamEventType.COMPLETED, "output": OutputSchema} for final output
         """
         response_model = response_model or self.output_schema
-        PartialModel = PartialSchema[response_model]
+        PartialResponseModel = PartialModel[response_model]
 
         completion_kwargs: dict[str, Any] = {
             "model": self.model_name,
@@ -606,7 +606,7 @@ class LiteLLMInstructorBaseAgent[
                 if parsed and parsed != last_partial_dict:
                     last_partial_dict = parsed
                     try:
-                        partial = PartialModel.model_validate(parsed)
+                        partial = PartialResponseModel.model_validate(parsed)
                         yield {"type": StreamEventType.PARTIAL, "partial": partial}
                     except Exception:
                         pass  # Skip invalid partials

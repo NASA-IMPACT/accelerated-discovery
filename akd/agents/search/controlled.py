@@ -42,7 +42,7 @@ from akd.tools.link_relevancy_assessor import (
 from akd.tools.reranker import RerankerToolInputSchema
 from akd.tools.search import SearxNGSearchTool
 from akd.tools.search._base import QueryFocusStrategy, SearchToolInputSchema
-from akd.utils import PartialSchema
+from akd.utils import PartialModel
 
 from ._base import (
     LitBaseAgent,
@@ -1036,7 +1036,7 @@ class ControlledSearchAgent(LitBaseAgent):
                 source=class_name,
                 message="Search results available",
                 data={
-                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
                         results=all_results,
                         extra={"iterations_performed": iteration},
                     ),
@@ -1077,7 +1077,7 @@ class ControlledSearchAgent(LitBaseAgent):
                 source=class_name,
                 message="Report generated",
                 data={
-                    "partial_output": PartialSchema[LitSearchAgentOutputSchema](
+                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
                         results=all_results,
                         report=detailed_report,
                         extra={
