@@ -9,17 +9,23 @@
 *.xlsx
 *.xls
 .envrc
+.envrc.ci
 .env
 .worktrees/
+.deepeval/
+searxng-docker/
 data/cmr_collections_umm.json
+notebooks/
 notebooks/artifacts/
+notebooks/marimo/
 tmp/
 temp/
 data/
 models/
-documents/
+evals/
 akd/mapping/llm_generated_mappings.json
 llm_generated_mappings.json
+documents/
 
 __marimo__/
 .DS_Store
