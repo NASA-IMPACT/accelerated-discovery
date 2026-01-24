@@ -19,7 +19,9 @@ class StreamEventType(str, Enum):
 
     # Execution
     RUNNING = "running"
-    THINKING = "thinking"
+    STREAMING = "streaming"  # Raw tokens as they arrive
+    THINKING = "thinking"  # Reasoning tokens (Claude extended thinking, o1)
+    PARTIAL = "partial"  # Partial structured output as it streams
 
     # Tool calling (Stage 2)
     TOOL_CALLING = "tool_calling"
@@ -44,13 +46,21 @@ class StreamEvent(BaseModel):
     Data Keys by Event Type:
         COMPLETED: {"output": <OutputSchema>}
         FAILED: {"error": str, "error_type": str}
-        THINKING: {"content": str, "source": str}
+        STREAMING: {"token": str} for raw tokens as they arrive
+        THINKING: {"thinking_content": str} for reasoning tokens (Claude/o1)
+        PARTIAL: {"partial_output": Any} for partial structured output
         TOOL_CALLING: {"tool_name": str, "tool_input": dict}
         TOOL_RESULT: {"tool_name": str, "tool_output": Any}
 
     Example:
         async for event in agent.astream(input_data):
             match event.event_type:
+                case StreamEventType.STREAMING:
+                    print(event.token, end="")  # Raw tokens
+                case StreamEventType.THINKING:
+                    print(f"Reasoning: {event.thinking_content}")
+                case StreamEventType.PARTIAL:
+                    print(f"Partial: {event.partial_output}")
                 case StreamEventType.COMPLETED:
                     result = event.output
                 case StreamEventType.FAILED:
@@ -102,23 +112,36 @@ class StreamEvent(BaseModel):
         """TOOL_RESULT output value."""
         return self.data.get("tool_output")
 
+    @property
+    def partial_output(self) -> Any | None:
+        """PARTIAL event partial output (validated partial model as JSON builds)."""
+        return self.data.get("partial_output")
+
+    @property
+    def thinking_content(self) -> str | None:
+        """THINKING event reasoning content (Claude extended thinking, o1 reasoning)."""
+        return self.data.get("thinking_content")
+
+    @property
+    def token(self) -> str | None:
+        """STREAMING event raw token."""
+        return self.data.get("token")
+
 
 class StreamingMixin:
-    """Mixin that adds astream() capability.
+    """Mixin that adds astream() capability with validation.
 
-    Wraps arun() with streaming events. arun() handles validation,
-    logging, and calls _arun() internally.
+    Pattern:
+        astream() → validate_input → _astream() → validate_output on COMPLETED → yield
 
-    Flow:
-        astream() → STARTING → arun() → COMPLETED/FAILED
-
-    Override astream() for custom streaming (tool calling, thinking events).
+    Subclasses override _astream() for custom streaming logic.
+    Default _astream() yields STARTING/RUNNING, calls _arun(), yields COMPLETED/FAILED.
 
     Usage:
         # Just get result
         result = await agent.arun(input_data)
 
-        # Observe execution
+        # Observe execution with streaming
         async for event in agent.astream(input_data):
             if event.event_type == StreamEventType.COMPLETED:
                 result = event.output
@@ -130,20 +153,72 @@ class StreamingMixin:
         context: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
-        """Stream execution with events.
+        """Public streaming API with input/output validation.
 
-        Wraps arun() with STARTING/COMPLETED/FAILED events.
+        Wraps _astream() with validation:
+        - Input validation before any events are yielded
+        - Output validation on COMPLETED event before yielding
 
         Args:
             params: Input parameters
             context: Execution context (node_id, query, etc.). Auto-generates run_id if not provided.
-            **kwargs: Passed to arun()
+            **kwargs: Passed to _astream()
 
         Yields:
-            StreamEvent: STARTING, then COMPLETED (with output) or FAILED
+            StreamEvent: Events from _astream() (typically STARTING, RUNNING, COMPLETED/FAILED)
 
         Raises:
-            Exception: Re-raises after yielding FAILED event.
+            Exception: Re-raises after _astream() yields FAILED event.
+        """
+        # Input validation (before any events are yielded)
+        params = self._validate_input(params)
+
+        # Stream from internal implementation
+        async for event in self._astream(params, context, **kwargs):
+            if event.event_type == StreamEventType.COMPLETED:
+                # Validate output before yielding COMPLETED
+                output = event.data.get("output")
+                if output is not None:
+                    output = self._validate_output(output)
+                    # Yield event with validated output
+                    yield StreamEvent(
+                        event_type=event.event_type,
+                        timestamp=event.timestamp,
+                        event_id=event.event_id,
+                        source=event.source,
+                        message=event.message,
+                        data={"output": output},
+                        context=event.context,
+                    )
+                    continue
+            yield event
+
+    async def _astream(
+        self,
+        params: Any,
+        context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Internal streaming implementation. Override for custom streaming.
+
+        Default implementation yields STARTING/RUNNING, calls _arun(), yields COMPLETED/FAILED.
+
+        Subclasses should:
+        - Yield STARTING at the beginning
+        - Yield RUNNING events for progress updates
+        - Yield COMPLETED with {"output": result} on success
+        - Yield FAILED with {"error": str, "error_type": str} on error, then re-raise
+
+        Note: Input/output validation is handled by the parent astream() method.
+        Do NOT call _validate_input() or _validate_output() here.
+
+        Args:
+            params: Input parameters (already validated by astream())
+            context: Execution context
+            **kwargs: Additional arguments
+
+        Yields:
+            StreamEvent: STARTING, RUNNING, then COMPLETED or FAILED
         """
         class_name = self.__class__.__name__
 
@@ -167,7 +242,7 @@ class StreamingMixin:
                 context=run_context,
             )
 
-            output = await self.arun(params, **kwargs)
+            output = await self._arun(params, **kwargs)
 
             yield StreamEvent(
                 event_type=StreamEventType.COMPLETED,

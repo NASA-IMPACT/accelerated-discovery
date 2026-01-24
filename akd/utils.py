@@ -10,7 +10,7 @@ import dateparser
 import gdown
 import requests
 from loguru import logger
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, create_model
 
 if TYPE_CHECKING:
     pass
@@ -261,3 +261,42 @@ def to_snake_case(name: str) -> str:
     # Insert _ between acronym and next word: CMRAgent -> CMR_Agent
     result = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", result)
     return result.lower()
+
+
+class PartialModel[T: BaseModel]:
+    """Partial schema generator - all fields become Optional.
+
+    Creates a Pydantic model where all fields are Optional, useful for
+    streaming PARTIAL events where output builds progressively.
+
+    Usage:
+        PartialModel[MySchema]           # Returns the partial model class
+        PartialModel[MySchema](field=v)  # Creates instance
+
+    Example:
+        from akd.utils import PartialModel
+        from akd.agents.search._base import LitSearchAgentOutputSchema
+
+        # Create partial with only some fields
+        partial = PartialModel[LitSearchAgentOutputSchema](
+            results=[...],
+            extra={"key_findings": [...]},
+        )
+
+        # Serialize for frontend
+        partial.model_dump()  # {'answer': None, 'report': None, 'results': [...], 'extra': {...}}
+    """
+
+    _cache: dict[type[BaseModel], type[BaseModel]] = {}
+
+    def __class_getitem__(cls, model: type[T]) -> type[T]:
+        """Generate partial version of model with all fields Optional."""
+        if model not in cls._cache:
+            fields = {}
+            for name, field_info in model.model_fields.items():
+                fields[name] = (field_info.annotation | None, None)
+            cls._cache[model] = create_model(
+                f"Partial{model.__name__}",
+                **fields,
+            )
+        return cls._cache[model]

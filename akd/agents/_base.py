@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import uuid
 from abc import abstractmethod
+from collections.abc import AsyncIterator
 from typing import Any, Literal, cast
 
 import instructor
@@ -25,9 +28,11 @@ from akd._base import (
     OutputSchema,
     ParamExposureMixin,
 )
+from akd._base.streaming import StreamEvent, StreamEventType
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
+from akd.utils import PartialModel
 
 
 class BaseAgentConfig(BaseConfig):
@@ -322,6 +327,22 @@ class InstructorBaseAgent[
 
         return instructor_model
 
+    def _build_response_format_schema(self, model: type[OutputSchema]) -> dict[str, Any]:
+        """Build JSON schema for response_format (OpenAI strict mode)."""
+        schema = model.model_json_schema()
+        schema.pop("$defs", None)
+        if schema.get("type") == "object" and "properties" in schema:
+            schema["additionalProperties"] = False
+            schema["required"] = list(schema["properties"].keys())
+        return schema
+
+    def _try_parse_json(self, content: str) -> dict[str, Any] | None:
+        """Try to parse content as JSON."""
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            return None
+
     async def get_response_async(
         self,
         messages: list[dict[str, str]],
@@ -507,3 +528,241 @@ class LiteLLMInstructorBaseAgent[
         response_data = response.model_dump()
         response = response_model(**response_data)
         return cast(OutSchema, response)
+
+    async def _stream_llm_response(
+        self,
+        messages: list[dict[str, str]],
+        response_model: type[OutputSchema] | None = None,
+        token_batch_size: int = 10,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream LLM response with thinking tokens and validated partial output.
+
+        Uses raw LiteLLM streaming to access thinking tokens (reasoning_content).
+
+        Args:
+            messages: Chat messages
+            response_model: Output schema (defaults to self.output_schema)
+            token_batch_size: Batch N tokens before emitting STREAMING event (default=1)
+
+        Yields:
+            - {"type": StreamEventType.STREAMING, "token": str} for batched raw tokens
+            - {"type": StreamEventType.THINKING, "content": str} for reasoning tokens
+            - {"type": StreamEventType.PARTIAL, "partial": PartialModel} for validated partials
+            - {"type": StreamEventType.COMPLETED, "output": OutputSchema} for final output
+        """
+        response_model = response_model or self.output_schema
+        PartialResponseModel = PartialModel[response_model]
+
+        completion_kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": True,
+            "temperature": self.temperature,
+            "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
+            "api_key": self.api_key,
+            "drop_params": True,  # Allow unsupported params to be dropped
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "strict": True,
+                    "schema": self._build_response_format_schema(response_model),
+                },
+            },
+        }
+
+        if self.reasoning_effort:
+            completion_kwargs["reasoning_effort"] = self.reasoning_effort
+
+        accumulated = ""
+        token_buffer = ""
+        last_partial_dict = None
+
+        response = await acompletion(**completion_kwargs)
+        async for chunk in response:
+            delta = chunk.choices[0].delta
+
+            # Thinking tokens (Claude extended thinking, o1 reasoning)
+            reasoning = getattr(delta, "reasoning_content", None) or getattr(
+                delta,
+                "thinking",
+                None,
+            )
+            if reasoning:
+                yield {"type": StreamEventType.THINKING, "content": reasoning}
+
+            # Content tokens - batch, then accumulate and validate as partial
+            if delta.content:
+                token_buffer += delta.content
+                accumulated += delta.content
+
+                # Emit batched tokens
+                if len(token_buffer) >= token_batch_size:
+                    yield {"type": StreamEventType.STREAMING, "token": token_buffer}
+                    token_buffer = ""
+
+                # Try to validate as partial
+                parsed = self._try_parse_json(accumulated)
+                if parsed and parsed != last_partial_dict:
+                    last_partial_dict = parsed
+                    try:
+                        partial = PartialResponseModel.model_validate(parsed)
+                        yield {"type": StreamEventType.PARTIAL, "partial": partial}
+                    except Exception:
+                        pass  # Skip invalid partials
+
+        # Emit remaining tokens
+        if token_buffer:
+            yield {"type": StreamEventType.STREAMING, "token": token_buffer}
+
+        # Final validation
+        output = response_model.model_validate_json(accumulated)
+        yield {"type": StreamEventType.COMPLETED, "output": output}
+
+    async def _astream(
+        self,
+        params: InSchema,
+        context: dict[str, Any] | None = None,
+        token_batch_size: int = 10,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Internal streaming with thinking tokens and partial output.
+
+        Emits:
+        - STREAMING events for raw tokens (batched)
+        - THINKING events for reasoning tokens (Claude extended thinking, o1)
+        - PARTIAL events for partial structured output as it streams
+
+        Note: Input/output validation is handled by parent astream() method.
+
+        Args:
+            params: Input parameters (already validated by astream())
+            context: Execution context (node_id, query, etc.)
+            token_batch_size: Batch N characters before emitting STREAMING event (default=10)
+            **kwargs: Additional keyword arguments
+
+        Yields:
+            StreamEvent: STARTING, RUNNING, STREAMING, PARTIAL, then COMPLETED or FAILED
+
+        Example:
+            async for event in agent.astream(input_data, token_batch_size=20):
+                match event.event_type:
+                    case StreamEventType.STREAMING:
+                        print(event.token, end="")  # Raw tokens
+                    case StreamEventType.THINKING:
+                        print(f"Reasoning: {event.thinking_content}")
+                    case StreamEventType.PARTIAL:
+                        print(f"Partial: {event.partial_output}")
+                    case StreamEventType.COMPLETED:
+                        print(f"Final: {event.output}")
+                    case StreamEventType.FAILED:
+                        print(f"Error: {event.error}")
+        """
+        class_name = self.__class__.__name__
+
+        # Auto-generate run_id for event correlation
+        run_context = context.copy() if context else {}
+        if "run_id" not in run_context:
+            run_context["run_id"] = uuid.uuid4().hex[:8]
+
+        yield StreamEvent(
+            event_type=StreamEventType.STARTING,
+            source=class_name,
+            message=f"Starting {class_name}",
+            context=run_context,
+        )
+
+        try:
+            # Note: Input validation handled by parent astream()
+
+            # Build messages (same logic as _arun)
+            messages = [] if self.stateless else self.memory
+            if not messages:
+                messages.append(self._default_system_message())
+
+            if params:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": params.model_dump_json(exclude={"type"}),
+                    },
+                )
+
+            # Apply trimming if enabled
+            if self.enable_trimming:
+                messages = trim_messages(
+                    messages,
+                    model=self.model_name,
+                    max_tokens=self.max_tokens,
+                    trim_ratio=self.trim_ratio,
+                )
+
+            yield StreamEvent(
+                event_type=StreamEventType.RUNNING,
+                source=class_name,
+                message=f"Running {class_name}",
+                context=run_context,
+            )
+
+            # Stream LLM response with raw tokens, thinking, and partial output
+            final_output = None
+            async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
+                if chunk["type"] == StreamEventType.STREAMING:
+                    yield StreamEvent(
+                        event_type=StreamEventType.STREAMING,
+                        source=class_name,
+                        data={"token": chunk["token"]},
+                        context=run_context,
+                    )
+                elif chunk["type"] == StreamEventType.THINKING:
+                    yield StreamEvent(
+                        event_type=StreamEventType.THINKING,
+                        source=class_name,
+                        message="Reasoning...",
+                        data={"thinking_content": chunk["content"]},
+                        context=run_context,
+                    )
+                elif chunk["type"] == StreamEventType.PARTIAL:
+                    yield StreamEvent(
+                        event_type=StreamEventType.PARTIAL,
+                        source=class_name,
+                        message="Partial...",
+                        data={"partial_output": chunk["partial"]},
+                        context=run_context,
+                    )
+                elif chunk["type"] == StreamEventType.COMPLETED:
+                    final_output = chunk["output"]
+
+            if final_output is None:
+                raise ValueError("No output received from LLM")
+
+            # Note: Output validation handled by parent astream()
+            output = final_output
+
+            # Update memory if stateful
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": output.model_dump_json(exclude={"type"}),
+                },
+            )
+            if not self.stateless:
+                self._memory = messages
+
+            yield StreamEvent(
+                event_type=StreamEventType.COMPLETED,
+                source=class_name,
+                message=f"Completed {class_name}",
+                data={"output": output},
+                context=run_context,
+            )
+
+        except Exception as e:
+            yield StreamEvent(
+                event_type=StreamEventType.FAILED,
+                source=class_name,
+                message=f"Failed: {e!s}",
+                data={"error": str(e), "error_type": type(e).__name__},
+                context=run_context,
+            )
+            raise
