@@ -12,6 +12,7 @@ from ._base import (
 )
 from .exposure import ParamExposureMixin, exposed_param
 from .streaming import StreamEvent, StreamEventType, StreamingMixin
+from .tool_calling import ToolCall, ToolCallingMixin, ToolResult
 
 __all__ = [
     # Base classes
@@ -33,4 +34,8 @@ __all__ = [
     "StreamEvent",
     "StreamEventType",
     "StreamingMixin",
+    # Tool calling
+    "ToolCall",
+    "ToolResult",
+    "ToolCallingMixin",
 ]

@@ -27,8 +27,11 @@ from akd._base import (
     InputSchema,
     OutputSchema,
     ParamExposureMixin,
+    StreamEvent,
+    StreamEventType,
+    ToolCall,
+    ToolCallingMixin,
 )
-from akd._base.streaming import StreamEvent, StreamEventType
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
@@ -95,6 +98,12 @@ class BaseAgentConfig(BaseConfig):
     tools: list[BaseTool] = Field(
         default_factory=list,
         description="List of tools available to the agent",
+    )
+    max_tool_iterations: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum tool calling iterations before stopping",
     )
 
     @model_validator(mode="after")
@@ -200,6 +209,11 @@ class BaseAgent[
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
         return content
+
+    @property
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        """Convert tools to function calling format."""
+        return [tool.as_tool_definition() for tool in self.tools]
 
     @abstractmethod
     async def get_response_async(
@@ -431,7 +445,7 @@ class InstructorBaseAgent[
 class LiteLLMInstructorBaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](InstructorBaseAgent):
+](ToolCallingMixin, InstructorBaseAgent):
     """InstructorBaseAgent with LiteLLM integration and automatic message trimming.
 
     This agent extends InstructorBaseAgent to use LiteLLM with automatic message trimming
@@ -619,6 +633,122 @@ class LiteLLMInstructorBaseAgent[
         output = response_model.model_validate_json(accumulated)
         yield {"type": StreamEventType.COMPLETED, "output": output}
 
+    async def _run_tool_loop(
+        self,
+        messages: list[dict[str, Any]],
+        class_name: str,
+        run_context: dict[str, Any],
+    ) -> AsyncIterator[StreamEvent]:
+        """ReAct loop: call LLM with tools until final answer.
+
+        Yields TOOL_CALLING and TOOL_RESULT events as IO-level streaming.
+        LLM calls are non-streaming for simplicity.
+
+        Args:
+            messages: Conversation history (mutated in place)
+            class_name: For event source
+            run_context: For event context
+
+        Yields:
+            StreamEvent: TOOL_CALLING, TOOL_RESULT, then COMPLETED
+        """
+        for iteration in range(self.max_tool_iterations):
+            # Call LLM with tools
+            completion_kwargs: dict[str, Any] = {
+                "model": self.model_name,
+                "messages": messages,
+                "tools": self.tool_definitions,
+                "temperature": self.temperature,
+                "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
+                "api_key": self.api_key,
+                "drop_params": True,
+                # response_format ensures final answer matches agent's output_schema
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": self.output_schema.__name__,
+                        "strict": True,
+                        "schema": self._build_response_format_schema(self.output_schema),
+                    },
+                },
+            }
+            if self.reasoning_effort:
+                completion_kwargs["reasoning_effort"] = self.reasoning_effort
+
+            response = await acompletion(**completion_kwargs)
+            response_message = response.choices[0].message
+            tool_calls_raw = response_message.tool_calls
+
+            # No tool calls = final answer
+            if not tool_calls_raw:
+                content = response_message.content
+                if not content:
+                    raise ValueError("LLM returned empty response without tool calls")
+                output = self.output_schema.model_validate_json(content)
+                yield StreamEvent(
+                    event_type=StreamEventType.COMPLETED,
+                    source=class_name,
+                    message=f"Completed {class_name}",
+                    data={"output": output},
+                    context=run_context,
+                )
+                return
+
+            # Yield any thinking/reasoning content before tool calls
+            if response_message.content:
+                yield StreamEvent(
+                    event_type=StreamEventType.THINKING,
+                    source=class_name,
+                    message="Reasoning...",
+                    data={"thinking_content": response_message.content},
+                    context=run_context,
+                )
+
+            # Convert to ToolCall and yield TOOL_CALLING events
+            tool_calls: list[ToolCall] = []
+            for tc in tool_calls_raw:
+                tool_call = ToolCall(
+                    tool_call_id=tc.id,
+                    tool_name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments),
+                )
+                tool_calls.append(tool_call)
+                yield StreamEvent(
+                    event_type=StreamEventType.TOOL_CALLING,
+                    source=class_name,
+                    message=f"Calling {tool_call.tool_name}",
+                    data=tool_call.model_dump(),
+                    context=run_context,
+                )
+
+            # Execute tools in parallel
+            results = await self._execute_tools_parallel(tool_calls)
+
+            # Yield TOOL_RESULT events
+            for result in results:
+                yield StreamEvent(
+                    event_type=StreamEventType.TOOL_RESULT,
+                    source=class_name,
+                    message=f"Result from {result.tool_name}",
+                    data=result.model_dump(),
+                    context=run_context,
+                )
+
+            # Add assistant message and tool results to history
+            messages.append(response_message.model_dump())
+            for result in results:
+                content = json.dumps(result.content) if result.content else (result.error or "")
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": result.tool_call_id,
+                        "content": content,
+                    },
+                )
+
+        # Loop exhausted
+        raise RuntimeError(f"Exceeded {self.max_tool_iterations} tool iterations")
+
     async def _astream(
         self,
         params: InSchema,
@@ -704,58 +834,67 @@ class LiteLLMInstructorBaseAgent[
                 context=run_context,
             )
 
-            # Stream LLM response with raw tokens, thinking, and partial output
-            final_output = None
-            async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
-                if chunk["type"] == StreamEventType.STREAMING:
-                    yield StreamEvent(
-                        event_type=StreamEventType.STREAMING,
-                        source=class_name,
-                        data={"token": chunk["token"]},
-                        context=run_context,
-                    )
-                elif chunk["type"] == StreamEventType.THINKING:
-                    yield StreamEvent(
-                        event_type=StreamEventType.THINKING,
-                        source=class_name,
-                        message="Reasoning...",
-                        data={"thinking_content": chunk["content"]},
-                        context=run_context,
-                    )
-                elif chunk["type"] == StreamEventType.PARTIAL:
-                    yield StreamEvent(
-                        event_type=StreamEventType.PARTIAL,
-                        source=class_name,
-                        message="Partial...",
-                        data={"partial_output": chunk["partial"]},
-                        context=run_context,
-                    )
-                elif chunk["type"] == StreamEventType.COMPLETED:
-                    final_output = chunk["output"]
+            # Route: tool calling mode vs streaming mode
+            output = None
 
-            if final_output is None:
-                raise ValueError("No output received from LLM")
+            if self.tools:
+                # === TOOL CALLING MODE ===
+                # Yields THINKING, TOOL_CALLING, TOOL_RESULT, then COMPLETED
+                async for event in self._run_tool_loop(messages, class_name, run_context):
+                    yield event
+                    if event.event_type == StreamEventType.COMPLETED:
+                        output = event.output
+            else:
+                # === STREAMING MODE (no tools) ===
+                # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
+                async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
+                    if chunk["type"] == StreamEventType.STREAMING:
+                        yield StreamEvent(
+                            event_type=StreamEventType.STREAMING,
+                            source=class_name,
+                            data={"token": chunk["token"]},
+                            context=run_context,
+                        )
+                    elif chunk["type"] == StreamEventType.THINKING:
+                        yield StreamEvent(
+                            event_type=StreamEventType.THINKING,
+                            source=class_name,
+                            message="Reasoning...",
+                            data={"thinking_content": chunk["content"]},
+                            context=run_context,
+                        )
+                    elif chunk["type"] == StreamEventType.PARTIAL:
+                        yield StreamEvent(
+                            event_type=StreamEventType.PARTIAL,
+                            source=class_name,
+                            message="Partial...",
+                            data={"partial_output": chunk["partial"]},
+                            context=run_context,
+                        )
+                    elif chunk["type"] == StreamEventType.COMPLETED:
+                        output = chunk["output"]
 
-            # Note: Output validation handled by parent astream()
-            output = final_output
+                if output is None:
+                    raise ValueError("No output received from LLM")
 
-            # Update memory if stateful
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": output.model_dump_json(exclude={"type"}),
-                },
-            )
-            if not self.stateless:
-                self._memory = messages
+                yield StreamEvent(
+                    event_type=StreamEventType.COMPLETED,
+                    source=class_name,
+                    message=f"Completed {class_name}",
+                    data={"output": output},
+                    context=run_context,
+                )
 
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
-                source=class_name,
-                message=f"Completed {class_name}",
-                data={"output": output},
-                context=run_context,
-            )
+            # Update memory if stateful (for both modes)
+            if output:
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": output.model_dump_json(exclude={"type"}),
+                    },
+                )
+                if not self.stateless:
+                    self._memory = messages
 
         except Exception as e:
             yield StreamEvent(
