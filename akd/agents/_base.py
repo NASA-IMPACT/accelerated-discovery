@@ -328,6 +328,29 @@ class InstructorBaseAgent[
             schema["required"] = list(schema["properties"].keys())
         return schema
 
+    def _build_output_tool(self) -> dict[str, Any]:
+        """Create a special tool for structured final output (Pydantic AI pattern).
+
+        The output schema is registered as a tool so the model can call it
+        when ready to give the final answer. This ensures structured output
+        without needing response_format (which conflicts with tool calling).
+        """
+        schema = self.output_schema.model_json_schema()
+        schema.pop("$defs", None)  # Remove definitions to flatten schema
+
+        return {
+            "type": "function",
+            "function": {
+                "name": "final_answer",
+                "description": (
+                    f"Provide the final answer to the user's query. "
+                    f"Call this tool when you have gathered enough information to respond. "
+                    f"Output schema: {self.output_schema.__doc__ or self.output_schema.__name__}"
+                ),
+                "parameters": schema,
+            },
+        }
+
     def _try_parse_json(self, content: str) -> dict[str, Any] | None:
         """Try to parse content as JSON."""
         try:
@@ -635,26 +658,22 @@ class LiteLLMInstructorBaseAgent[
         # For partial output validation (only for final answer)
         PartialResponseModel = PartialModel[self.output_schema]
 
+        # TODO: Convert _build_output_tool() to a proper akd/tools/output.py BaseTool class
+        # Add output tool for structured final answer (Pydantic AI pattern)
+        output_tool = self._build_output_tool()
+        all_tools = self.tool_definitions + [output_tool]
+
         for iteration in range(self.max_tool_iterations):
-            # Call LLM with tools (streaming enabled for thinking tokens)
+            # Call LLM with tools (no response_format - output tool handles structured output)
             completion_kwargs: dict[str, Any] = {
                 "model": self.model_name,
                 "messages": messages,
-                "tools": self.tool_definitions,
+                "tools": all_tools,
                 "temperature": self.temperature,
                 "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
                 "api_key": self.api_key,
                 "drop_params": True,
-                "stream": True,  # Enable streaming for thinking tokens
-                # response_format ensures final answer matches agent's output_schema
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": self.output_schema.__name__,
-                        "strict": True,
-                        "schema": self._build_response_format_schema(self.output_schema),
-                    },
-                },
+                "stream": True,
             }
             if self.reasoning_effort:
                 completion_kwargs["reasoning_effort"] = self.reasoning_effort
@@ -751,13 +770,20 @@ class LiteLLMInstructorBaseAgent[
 
             # After streaming: check for tool calls
             if not accumulated_tool_calls:
-                # Final answer - yield buffered partials first
+                # No tool calls - model should have called final_answer but didn't
+                # Fallback: try to parse content as JSON
                 for partial_event in buffered_partials:
                     yield partial_event
 
                 if not accumulated_content:
                     raise ValueError("LLM returned empty response without tool calls")
+
+                logger.warning(
+                    "Model gave direct response instead of calling final_answer tool. "
+                    "Attempting to parse as JSON fallback.",
+                )
                 output = self.output_schema.model_validate_json(accumulated_content)
+
                 yield StreamEvent(
                     event_type=StreamEventType.COMPLETED,
                     source=class_name,
@@ -772,6 +798,31 @@ class LiteLLMInstructorBaseAgent[
             tool_calls_for_message: list[dict[str, Any]] = []
             for idx in sorted(accumulated_tool_calls.keys()):
                 tc_data = accumulated_tool_calls[idx]
+
+                # Check for output tool (final_answer) - signals completion
+                if tc_data["name"] == "final_answer":
+                    # Emit TOOL_CALLING for transparency
+                    yield StreamEvent(
+                        event_type=StreamEventType.TOOL_CALLING,
+                        source=class_name,
+                        message="Calling final_answer",
+                        data={
+                            "tool_call_id": tc_data["id"],
+                            "tool_name": "final_answer",
+                            "arguments": json.loads(tc_data["arguments"]),
+                        },
+                        context=run_context,
+                    )
+                    output = self.output_schema.model_validate_json(tc_data["arguments"])
+                    yield StreamEvent(
+                        event_type=StreamEventType.COMPLETED,
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data={"output": output},
+                        context=run_context,
+                    )
+                    return
+
                 tool_call = ToolCall(
                     tool_call_id=tc_data["id"],
                     tool_name=tc_data["name"],
@@ -793,7 +844,7 @@ class LiteLLMInstructorBaseAgent[
                     context=run_context,
                 )
 
-            # Execute tools in parallel
+            # Execute regular tools in parallel (output tool already handled above)
             results = await self._execute_tools_parallel(tool_calls)
 
             # Yield TOOL_RESULT events
@@ -940,9 +991,18 @@ class LiteLLMInstructorBaseAgent[
                     run_context,
                     token_batch_size=token_batch_size,
                 ):
-                    yield event
+                    # Update memory BEFORE yielding COMPLETED (so early break still persists)
                     if event.event_type == StreamEventType.COMPLETED:
                         output = event.output
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": output.model_dump_json(exclude={"type"}),
+                            },
+                        )
+                        if not self.stateless:
+                            self._memory = messages
+                    yield event
             else:
                 # === STREAMING MODE (no tools) ===
                 # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
@@ -976,16 +1036,7 @@ class LiteLLMInstructorBaseAgent[
                 if output is None:
                     raise ValueError("No output received from LLM")
 
-                yield StreamEvent(
-                    event_type=StreamEventType.COMPLETED,
-                    source=class_name,
-                    message=f"Completed {class_name}",
-                    data={"output": output},
-                    context=run_context,
-                )
-
-            # Update memory if stateful (for both modes)
-            if output:
+                # Update memory BEFORE yielding COMPLETED (so early break still persists)
                 messages.append(
                     {
                         "role": "assistant",
@@ -994,6 +1045,14 @@ class LiteLLMInstructorBaseAgent[
                 )
                 if not self.stateless:
                     self._memory = messages
+
+                yield StreamEvent(
+                    event_type=StreamEventType.COMPLETED,
+                    source=class_name,
+                    message=f"Completed {class_name}",
+                    data={"output": output},
+                    context=run_context,
+                )
 
         except Exception as e:
             yield StreamEvent(

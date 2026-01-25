@@ -47,7 +47,7 @@ dependencies = [
     "undetected-chromedriver>=3.5.5",
     "jsonpath-ng>=1.6.1",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
-    "litellm>=1.74.2",
+    "litellm>=1.81.0",
     "dateparser>=1.2.2",
     "pyzmq>=27.0.0",
 ]
