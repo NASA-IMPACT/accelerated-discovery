@@ -616,22 +616,27 @@ class LiteLLMInstructorBaseAgent[
         messages: list[dict[str, Any]],
         class_name: str,
         run_context: dict[str, Any],
+        token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
         """ReAct loop: call LLM with tools until final answer.
 
-        Yields TOOL_CALLING and TOOL_RESULT events as IO-level streaming.
-        LLM calls are non-streaming for simplicity.
+        Streams thinking/reasoning tokens in real-time.
+        Tool calls are IO events (TOOL_CALLING, TOOL_RESULT).
 
         Args:
             messages: Conversation history (mutated in place)
             class_name: For event source
             run_context: For event context
+            token_batch_size: Batch N characters before emitting STREAMING event
 
         Yields:
-            StreamEvent: TOOL_CALLING, TOOL_RESULT, then COMPLETED
+            StreamEvent: STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT, COMPLETED
         """
+        # For partial output validation (only for final answer)
+        PartialResponseModel = PartialModel[self.output_schema]
+
         for iteration in range(self.max_tool_iterations):
-            # Call LLM with tools
+            # Call LLM with tools (streaming enabled for thinking tokens)
             completion_kwargs: dict[str, Any] = {
                 "model": self.model_name,
                 "messages": messages,
@@ -640,6 +645,7 @@ class LiteLLMInstructorBaseAgent[
                 "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
                 "api_key": self.api_key,
                 "drop_params": True,
+                "stream": True,  # Enable streaming for thinking tokens
                 # response_format ensures final answer matches agent's output_schema
                 "response_format": {
                     "type": "json_schema",
@@ -654,15 +660,104 @@ class LiteLLMInstructorBaseAgent[
                 completion_kwargs["reasoning_effort"] = self.reasoning_effort
 
             response = await acompletion(**completion_kwargs)
-            response_message = response.choices[0].message
-            tool_calls_raw = response_message.tool_calls
 
-            # No tool calls = final answer
-            if not tool_calls_raw:
-                content = response_message.content
-                if not content:
+            # Accumulate streamed response
+            accumulated_content = ""
+            token_buffer = ""  # Batch tokens before emitting
+            last_partial_dict: dict[str, Any] | None = None  # For deduplicating PARTIAL events
+            accumulated_tool_calls: dict[int, dict[str, Any]] = {}  # index -> {id, name, arguments}
+            buffered_partials: list[StreamEvent] = []  # Buffer partials until we know it's final
+
+            async for chunk in response:
+                delta = chunk.choices[0].delta
+
+                # Stream reasoning/thinking tokens (o1, o3, Claude extended thinking)
+                reasoning = getattr(delta, "reasoning_content", None) or getattr(
+                    delta,
+                    "thinking",
+                    None,
+                )
+                if reasoning:
+                    yield StreamEvent(
+                        event_type=StreamEventType.THINKING,
+                        source=class_name,
+                        message=reasoning,
+                        data={"streaming": True, "reasoning_content": reasoning},
+                        context=run_context,
+                    )
+
+                # Batch and stream content tokens
+                if delta.content:
+                    accumulated_content += delta.content
+                    token_buffer += delta.content
+
+                    # Emit batched tokens when buffer is full
+                    if len(token_buffer) >= token_batch_size:
+                        yield StreamEvent(
+                            event_type=StreamEventType.STREAMING,
+                            source=class_name,
+                            message=token_buffer,
+                            data={"token": token_buffer},
+                            context=run_context,
+                        )
+                        token_buffer = ""
+
+                    # Try to validate as partial (buffer until we know it's final)
+                    parsed = self._try_parse_json(accumulated_content)
+                    if parsed and parsed != last_partial_dict:
+                        last_partial_dict = parsed
+                        try:
+                            partial = PartialResponseModel.model_validate(parsed)
+                            buffered_partials.append(
+                                StreamEvent(
+                                    event_type=StreamEventType.PARTIAL,
+                                    source=class_name,
+                                    message="Partial output",
+                                    data={"partial": partial},
+                                    context=run_context,
+                                ),
+                            )
+                        except Exception:
+                            pass  # Skip invalid partials
+
+                # Accumulate tool calls (may be split across chunks)
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        idx = tc.index
+                        if idx not in accumulated_tool_calls:
+                            accumulated_tool_calls[idx] = {
+                                "id": tc.id or "",
+                                "name": tc.function.name if tc.function else "",
+                                "arguments": tc.function.arguments if tc.function else "",
+                            }
+                        else:
+                            # Append to existing tool call
+                            if tc.id:
+                                accumulated_tool_calls[idx]["id"] = tc.id
+                            if tc.function and tc.function.name:
+                                accumulated_tool_calls[idx]["name"] = tc.function.name
+                            if tc.function and tc.function.arguments:
+                                accumulated_tool_calls[idx]["arguments"] += tc.function.arguments
+
+            # Emit remaining tokens in buffer
+            if token_buffer:
+                yield StreamEvent(
+                    event_type=StreamEventType.STREAMING,
+                    source=class_name,
+                    message=token_buffer,
+                    data={"token": token_buffer},
+                    context=run_context,
+                )
+
+            # After streaming: check for tool calls
+            if not accumulated_tool_calls:
+                # Final answer - yield buffered partials first
+                for partial_event in buffered_partials:
+                    yield partial_event
+
+                if not accumulated_content:
                     raise ValueError("LLM returned empty response without tool calls")
-                output = self.output_schema.model_validate_json(content)
+                output = self.output_schema.model_validate_json(accumulated_content)
                 yield StreamEvent(
                     event_type=StreamEventType.COMPLETED,
                     source=class_name,
@@ -672,25 +767,24 @@ class LiteLLMInstructorBaseAgent[
                 )
                 return
 
-            # Yield any thinking/reasoning content before tool calls
-            if response_message.content:
-                yield StreamEvent(
-                    event_type=StreamEventType.THINKING,
-                    source=class_name,
-                    message="Reasoning...",
-                    data={"thinking_content": response_message.content},
-                    context=run_context,
-                )
-
-            # Convert to ToolCall and yield TOOL_CALLING events
+            # Convert accumulated tool calls to ToolCall objects
             tool_calls: list[ToolCall] = []
-            for tc in tool_calls_raw:
+            tool_calls_for_message: list[dict[str, Any]] = []
+            for idx in sorted(accumulated_tool_calls.keys()):
+                tc_data = accumulated_tool_calls[idx]
                 tool_call = ToolCall(
-                    tool_call_id=tc.id,
-                    tool_name=tc.function.name,
-                    arguments=json.loads(tc.function.arguments),
+                    tool_call_id=tc_data["id"],
+                    tool_name=tc_data["name"],
+                    arguments=json.loads(tc_data["arguments"]),
                 )
                 tool_calls.append(tool_call)
+                tool_calls_for_message.append(
+                    {
+                        "id": tc_data["id"],
+                        "type": "function",
+                        "function": {"name": tc_data["name"], "arguments": tc_data["arguments"]},
+                    },
+                )
                 yield StreamEvent(
                     event_type=StreamEventType.TOOL_CALLING,
                     source=class_name,
@@ -712,8 +806,14 @@ class LiteLLMInstructorBaseAgent[
                     context=run_context,
                 )
 
-            # Add assistant message and tool results to history
-            messages.append(response_message.model_dump())
+            # Add assistant message (reconstructed from stream) and tool results to history
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": accumulated_content or None,
+                    "tool_calls": tool_calls_for_message,
+                },
+            )
             for result in results:
                 content = json.dumps(result.content) if result.content else (result.error or "")
                 messages.append(
@@ -833,8 +933,13 @@ class LiteLLMInstructorBaseAgent[
 
             if self.tools:
                 # === TOOL CALLING MODE ===
-                # Yields THINKING, TOOL_CALLING, TOOL_RESULT, then COMPLETED
-                async for event in self._run_tool_loop(messages, class_name, run_context):
+                # Yields STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT, then COMPLETED
+                async for event in self._run_tool_loop(
+                    messages,
+                    class_name,
+                    run_context,
+                    token_batch_size=token_batch_size,
+                ):
                     yield event
                     if event.event_type == StreamEventType.COMPLETED:
                         output = event.output
