@@ -119,14 +119,19 @@ class TestInstructorBaseAgentFunctionality:
         assert result.response == "test response"
 
     def test_default_system_message(self, mock_openai_client, mock_instructor_client):
-        """Test default system message creation."""
+        """Test default system message creation.
+
+        Note: io_hints=True by default, so description (with IO hints) is included.
+        """
         agent = TestInstructorBaseAgent()
 
         system_message = agent._default_system_message()
 
         assert isinstance(system_message, dict)
         assert system_message["role"] == "system"
-        assert system_message["content"] == agent.system_prompt
+        # System message includes base prompt + description (with IO hints)
+        assert agent.system_prompt in system_message["content"]
+        assert "AGENT DESCRIPTION:" in system_message["content"]
 
     @pytest.mark.asyncio
     async def test_arun_stateless_behavior(
@@ -288,39 +293,38 @@ class TestInstructorBaseAgentFunctionality:
         assert result.response == "custom model response"
         assert result.metadata == {"custom": True}
 
-    def test_input_hints_disabled_by_default(
+    def test_io_hints_enabled_by_default(
         self,
         mock_openai_client,
         mock_instructor_client,
     ):
-        """Test that input hints are disabled by default."""
+        """Test that IO hints are enabled by default (io_hints=True in BaseConfig)."""
         agent = TestInstructorBaseAgent()
 
         system_message = agent._default_system_message()
 
-        # Verify no input hints are present by default
-        assert "INPUT FIELD DESCRIPTIONS:" not in system_message["content"]
-        assert system_message["content"] == agent.system_prompt
+        # Verify IO hints are present by default
+        assert "INPUT FIELD DESCRIPTIONS:" in system_message["content"]
+        assert "OUTPUT FIELD DESCRIPTIONS:" in system_message["content"]
+        assert agent.system_prompt in system_message["content"]
 
-    def test_input_hints_enabled(
+    def test_io_hints_disabled(
         self,
         mock_openai_client,
         mock_instructor_client,
     ):
-        """Test input hints functionality when enabled."""
-        config = BaseAgentConfig(input_hints=True)
+        """Test IO hints functionality when disabled."""
+        config = BaseAgentConfig(io_hints=False)
         agent = TestInstructorBaseAgent(config=config)
 
         system_message = agent._default_system_message()
 
-        # Verify input hints are present
-        assert "INPUT FIELD DESCRIPTIONS:" in system_message["content"]
-        assert "**query**:" in system_message["content"]
-        assert "**optional_param**:" in system_message["content"]
-        assert "Test query input" in system_message["content"]
-        assert "Optional parameter" in system_message["content"]
+        # Verify IO hints are NOT present when disabled
+        assert "INPUT FIELD DESCRIPTIONS:" not in system_message["content"]
+        assert "OUTPUT FIELD DESCRIPTIONS:" not in system_message["content"]
 
-        # Verify original system prompt is still there
+        # Description is still added (just without IO field info)
+        # The docstring from the agent class is still there
         assert agent.system_prompt in system_message["content"]
 
     def test_input_schema_info_property(
@@ -360,32 +364,31 @@ class TestInstructorBaseAgentFunctionality:
         # Restore original schema
         agent.input_schema = original_schema
 
-    def test_agent_description_disabled_by_default(
+    def test_agent_description_enabled_by_default(
         self,
         mock_openai_client,
         mock_instructor_client,
     ):
-        """Test that agent description is not included when input hints are disabled."""
+        """Test that agent description is included by default (io_hints=True)."""
         agent = TestInstructorBaseAgent()
 
         system_message = agent._default_system_message()
 
-        # Should not include description when input_hints=False (default)
-        assert "AGENT DESCRIPTION:" not in system_message["content"]
-        assert system_message["content"] == agent.system_prompt
+        # Should include description by default
+        assert "AGENT DESCRIPTION:" in system_message["content"]
+        assert agent.system_prompt in system_message["content"]
 
-    def test_agent_description_with_input_hints_enabled_no_description(
+    def test_agent_description_when_cleared(
         self,
         mock_openai_client,
         mock_instructor_client,
     ):
-        """Test behavior when input hints enabled but description is cleared.
+        """Test behavior when description is cleared.
 
         Note: Since AbstractBase adds INPUT/OUTPUT FIELD DESCRIPTIONS to description,
         clearing the description also clears the field descriptions.
         """
-        config = BaseAgentConfig(input_hints=True)
-        agent = TestInstructorBaseAgent(config=config)
+        agent = TestInstructorBaseAgent()
 
         # Clear the description to simulate no description
         agent.description = ""
@@ -396,18 +399,17 @@ class TestInstructorBaseAgentFunctionality:
         assert "AGENT DESCRIPTION:" not in system_message["content"]
         assert "INPUT FIELD DESCRIPTIONS:" not in system_message["content"]
 
-    def test_agent_description_with_input_hints_enabled_with_description(
+    def test_agent_description_with_custom_description(
         self,
         mock_openai_client,
         mock_instructor_client,
     ):
-        """Test agent description inclusion when input hints enabled and description available.
+        """Test agent description when manually set.
 
         Note: When manually setting description, you override the INPUT/OUTPUT FIELD DESCRIPTIONS
         that were added by AbstractBase. To keep them, append to existing description instead.
         """
-        config = BaseAgentConfig(input_hints=True)
-        agent = TestInstructorBaseAgent(config=config)
+        agent = TestInstructorBaseAgent()
 
         # Set a test description (this replaces the auto-generated one with field descriptions)
         test_description = "This is a test instructor agent for testing purposes"
@@ -434,7 +436,7 @@ class TestInstructorBaseAgentFunctionality:
         during _post_init(), so the final description will be longer than the input.
         """
         test_description = "Instructor agent description from config"
-        config = BaseAgentConfig(input_hints=True, description=test_description)
+        config = BaseAgentConfig(description=test_description)
         agent = TestInstructorBaseAgent(config=config)
 
         system_message = agent._default_system_message()

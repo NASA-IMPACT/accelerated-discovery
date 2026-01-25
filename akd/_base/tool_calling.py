@@ -89,7 +89,8 @@ class ToolCallingMixin:
         try:
             input_obj = tool.input_schema(**tool_call.arguments)
             result = await tool.arun(input_obj)
-            content = result.model_dump() if hasattr(result, "model_dump") else result
+            # Use mode='json' to ensure JSON-serializable types (HttpUrl → str, datetime → ISO string)
+            content = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
             return ToolResult(
                 tool_call_id=tool_call.tool_call_id,
                 tool_name=tool_call.tool_name,
