@@ -1,3 +1,8 @@
+DEFAULT_REFLECTION_PROMPT = """Decide if you have enough information to answer.
+If yes: give your final answer directly (no meta-commentary about your reasoning process).
+If no: make additional tool calls."""
+
+
 DEFAULT_SYSTEM_PROMPT = """IDENTITY and PURPOSE
 This is a conversation with a helpful and friendly AI assistant.
 

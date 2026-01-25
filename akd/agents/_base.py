@@ -94,6 +94,10 @@ class BaseAgentConfig(BaseConfig):
         le=50,
         description="Maximum tool calling iterations before stopping",
     )
+    reflection_prompt: str | None = Field(
+        default=None,
+        description="Reflection prompt injected after tool results to force reasoning. If None, no reflection step.",
+    )
 
     @model_validator(mode="after")
     def validate_max_tokens_against_model(self):
@@ -718,6 +722,22 @@ class LiteLLMInstructorBaseAgent[
                         "tool_call_id": result.tool_call_id,
                         "content": content,
                     },
+                )
+
+            # Inject reflection prompt if configured (forces reasoning before next iteration)
+            if self.reflection_prompt:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": self.reflection_prompt,
+                    },
+                )
+                yield StreamEvent(
+                    event_type=StreamEventType.THINKING,
+                    source=class_name,
+                    message="Reflecting on results...",
+                    data={"reflection_prompt": self.reflection_prompt},
+                    context=run_context,
                 )
 
         # Loop exhausted
