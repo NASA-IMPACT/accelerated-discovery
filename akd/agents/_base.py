@@ -544,6 +544,84 @@ class LiteLLMInstructorBaseAgent[
         response = response_model(**response_data)
         return cast(OutSchema, response)
 
+    async def _arun(
+        self,
+        params: InSchema,
+        **kwargs,
+    ) -> OutSchema:
+        """Run agent with optional tool calling support.
+
+        If tools are configured, uses the tool loop (ReAct pattern).
+        Otherwise, uses direct LLM call with structured output.
+
+        Args:
+            params: Input parameters matching input_schema.
+
+        Returns:
+            Output matching output_schema.
+        """
+        class_name = self.__class__.__name__
+
+        # Build messages
+        messages = [] if self.stateless else self.memory
+        if not messages:
+            messages.append(self._default_system_message())
+
+        if params:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": params.model_dump_json(exclude={"type"}),
+                },
+            )
+
+        # Apply trimming if enabled
+        if self.enable_trimming:
+            messages = trim_messages(
+                messages,
+                model=self.model_name,
+                max_tokens=self.max_tokens,
+                trim_ratio=self.trim_ratio,
+            )
+
+        output: OutSchema | None = None
+
+        if self.tools:
+            # === TOOL CALLING MODE ===
+            # Use _run_tool_loop and consume events to get final output
+            run_context = {"run_id": uuid.uuid4().hex[:8]}
+            async for event in self._run_tool_loop(
+                messages,
+                class_name,
+                run_context,
+            ):
+                if event.event_type == StreamEventType.COMPLETED:
+                    output = event.output
+                    break
+
+            if output is None:
+                raise ValueError("Tool loop completed without producing output")
+
+        else:
+            # === DIRECT MODE (no tools) ===
+            # Use instructor for structured output
+            output = await self.get_response_async(
+                messages=messages,
+                response_model=self.output_schema,
+            )
+
+        # Update memory
+        messages.append(
+            {
+                "role": "assistant",
+                "content": output.model_dump_json(exclude={"type"}),
+            },
+        )
+        if not self.stateless:
+            self._memory = messages
+
+        return output
+
     async def _stream_llm_response(
         self,
         messages: list[dict[str, str]],
