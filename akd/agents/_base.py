@@ -12,14 +12,7 @@ import openai
 from litellm import acompletion
 from litellm.utils import get_model_info, supports_reasoning, trim_messages
 from loguru import logger
-from pydantic import (
-    AnyUrl,
-    BaseModel,
-    Field,
-    create_model,
-    field_validator,
-    model_validator,
-)
+from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
 from akd._base import (
     AbstractBase,
@@ -56,10 +49,6 @@ class BaseAgentConfig(BaseConfig):
     stateless: bool = Field(
         default=True,
         description="Whether to maintain conversation history/state",
-    )
-    input_hints: bool = Field(
-        default=False,
-        description="Whether to include input schema field information in system prompt",
     )
 
     # Token management
@@ -139,19 +128,6 @@ class BaseAgentConfig(BaseConfig):
 
         return self
 
-    @field_validator("input_hints", mode="before")
-    @classmethod
-    def warn_input_hints_deprecated(cls, v):
-        """Emit deprecation warning when input_hints is explicitly set."""
-        # Only warn if a non-default value is being set
-        if v is not None:
-            logger.warning(
-                "The 'input_hints' parameter is deprecated and will be removed in a future version. "
-                "Please use 'io_hints' instead, which is now available in the base BaseConfig class."
-                "Setting input_hints doesn't have any effect.",
-            )
-        return v
-
 
 class BaseAgent[
     InSchema: InputSchema,
@@ -194,18 +170,16 @@ class BaseAgent[
     @property
     def _system_prompt(self) -> str:
         """
-        Enhanced system prompt with optional input hints.
+        Enhanced system prompt with agent description.
+
+        The description includes IO field hints if io_hints=True (default).
 
         Returns:
-            str: System prompt with input schema information if enabled.
+            str: System prompt with agent description if available.
         """
         content = self.system_prompt
 
-        # Early return if input hints disabled
-        if not self.input_hints:
-            return content
-
-        # Add agent description if available
+        # Add agent description (includes IO hints if io_hints=True)
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
         return content
