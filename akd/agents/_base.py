@@ -28,6 +28,7 @@ from akd._base import (
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
+from akd.tools.output import OutputTool
 from akd.utils import PartialModel
 
 
@@ -327,29 +328,6 @@ class InstructorBaseAgent[
             schema["additionalProperties"] = False
             schema["required"] = list(schema["properties"].keys())
         return schema
-
-    def _build_output_tool(self) -> dict[str, Any]:
-        """Create a special tool for structured final output (Pydantic AI pattern).
-
-        The output schema is registered as a tool so the model can call it
-        when ready to give the final answer. This ensures structured output
-        without needing response_format (which conflicts with tool calling).
-        """
-        schema = self.output_schema.model_json_schema()
-        schema.pop("$defs", None)  # Remove definitions to flatten schema
-
-        return {
-            "type": "function",
-            "function": {
-                "name": "final_answer",
-                "description": (
-                    f"Provide the final answer to the user's query. "
-                    f"Call this tool when you have gathered enough information to respond. "
-                    f"Output schema: {self.output_schema.__doc__ or self.output_schema.__name__}"
-                ),
-                "parameters": schema,
-            },
-        }
 
     def _try_parse_json(self, content: str) -> dict[str, Any] | None:
         """Try to parse content as JSON."""
@@ -736,17 +714,18 @@ class LiteLLMInstructorBaseAgent[
         # For partial output validation (only for final answer)
         PartialResponseModel = PartialModel[self.output_schema]
 
-        # TODO: Convert _build_output_tool() to a proper akd/tools/output.py BaseTool class
         # Add output tool for structured final answer (Pydantic AI pattern)
-        output_tool = self._build_output_tool()
-        all_tools = self.tool_definitions + [output_tool]
+        output_tool = OutputTool(self.output_schema)
+        # Add to tools list so _find_tool can find it
+        all_tool_instances = self.tools + [output_tool]
+        all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
 
         for iteration in range(self.max_tool_iterations):
             # Call LLM with tools (no response_format - output tool handles structured output)
             completion_kwargs: dict[str, Any] = {
                 "model": self.model_name,
                 "messages": messages,
-                "tools": all_tools,
+                "tools": all_tool_definitions,
                 "temperature": self.temperature,
                 "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
                 "api_key": self.api_key,
@@ -876,31 +855,6 @@ class LiteLLMInstructorBaseAgent[
             tool_calls_for_message: list[dict[str, Any]] = []
             for idx in sorted(accumulated_tool_calls.keys()):
                 tc_data = accumulated_tool_calls[idx]
-
-                # Check for output tool (final_answer) - signals completion
-                if tc_data["name"] == "final_answer":
-                    # Emit TOOL_CALLING for transparency
-                    yield StreamEvent(
-                        event_type=StreamEventType.TOOL_CALLING,
-                        source=class_name,
-                        message="Calling final_answer",
-                        data={
-                            "tool_call_id": tc_data["id"],
-                            "tool_name": "final_answer",
-                            "arguments": json.loads(tc_data["arguments"]),
-                        },
-                        context=run_context,
-                    )
-                    output = self.output_schema.model_validate_json(tc_data["arguments"])
-                    yield StreamEvent(
-                        event_type=StreamEventType.COMPLETED,
-                        source=class_name,
-                        message=f"Completed {class_name}",
-                        data={"output": output},
-                        context=run_context,
-                    )
-                    return
-
                 tool_call = ToolCall(
                     tool_call_id=tc_data["id"],
                     tool_name=tc_data["name"],
@@ -922,10 +876,31 @@ class LiteLLMInstructorBaseAgent[
                     context=run_context,
                 )
 
-            # Execute regular tools in parallel (output tool already handled above)
-            results = await self._execute_tools_parallel(tool_calls)
+            # Execute all tools in parallel (including OutputTool if called)
+            # Temporarily include OutputTool so _find_tool can find it
+            original_tools = self.tools
+            self.tools = all_tool_instances
+            try:
+                results = await self._execute_tools_parallel(tool_calls)
+            finally:
+                self.tools = original_tools
 
-            # Yield TOOL_RESULT events
+            # Check if final_answer was called - signals completion
+            for result in results:
+                if result.tool_name == "final_answer":
+                    # Validation done in _execute_tool via input_schema(**arguments)
+                    # result.content is dict from model_dump(), reconstruct the model
+                    output = self.output_schema.model_validate(result.content)
+                    yield StreamEvent(
+                        event_type=StreamEventType.COMPLETED,
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data={"output": output},
+                        context=run_context,
+                    )
+                    return
+
+            # Yield TOOL_RESULT events for regular tools
             for result in results:
                 yield StreamEvent(
                     event_type=StreamEventType.TOOL_RESULT,
