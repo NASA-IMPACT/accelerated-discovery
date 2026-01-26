@@ -25,6 +25,7 @@ from akd._base import (
     ToolCall,
     ToolCallingMixin,
 )
+from akd._base.errors import MaxToolIterationsExceeded, UnexpectedModelBehavior
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
@@ -578,7 +579,7 @@ class LiteLLMInstructorBaseAgent[
                     break
 
             if output is None:
-                raise ValueError("Tool loop completed without producing output")
+                raise UnexpectedModelBehavior("Tool loop completed without producing output")
 
         else:
             # === DIRECT MODE (no tools) ===
@@ -833,7 +834,7 @@ class LiteLLMInstructorBaseAgent[
                     yield partial_event
 
                 if not accumulated_content:
-                    raise ValueError("LLM returned empty response without tool calls")
+                    raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
 
                 logger.warning(
                     "Model gave direct response instead of calling final_answer tool. "
@@ -945,7 +946,7 @@ class LiteLLMInstructorBaseAgent[
                 )
 
         # Loop exhausted
-        raise RuntimeError(f"Exceeded {self.max_tool_iterations} tool iterations")
+        raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
 
     async def _astream(
         self,
@@ -1087,7 +1088,7 @@ class LiteLLMInstructorBaseAgent[
                         output = chunk["output"]
 
                 if output is None:
-                    raise ValueError("No output received from LLM")
+                    raise UnexpectedModelBehavior("No output received from LLM")
 
                 # Update memory BEFORE yielding COMPLETED (so early break still persists)
                 messages.append(

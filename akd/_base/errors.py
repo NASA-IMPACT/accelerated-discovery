@@ -17,6 +17,24 @@ class AgentError(AKDError):
     pass
 
 
+class UsageLimitExceeded(AgentError):
+    """Raised when agent usage exceeds specified limits."""
+
+    pass
+
+
+class MaxToolIterationsExceeded(UsageLimitExceeded):
+    """Raised when agent exceeds max tool iterations in ReAct loop."""
+
+    pass
+
+
+class UnexpectedModelBehavior(AgentError):
+    """Raised when model produces unexpected output (empty, malformed)."""
+
+    pass
+
+
 class ToolError(AKDError):
     """Base exception for tool-related errors."""
 

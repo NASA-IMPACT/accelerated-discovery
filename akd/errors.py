@@ -5,9 +5,12 @@ from akd._base.errors import (
     AKDError,
     GuardrailError,
     InputGuardrailTriggered,
+    MaxToolIterationsExceeded,
     OutputGuardrailTriggered,
     SchemaValidationError,
     ToolError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
 )
 
 __all__ = [
@@ -15,7 +18,10 @@ __all__ = [
     "AgentError",
     "GuardrailError",
     "InputGuardrailTriggered",
+    "MaxToolIterationsExceeded",
     "OutputGuardrailTriggered",
     "SchemaValidationError",
     "ToolError",
+    "UnexpectedModelBehavior",
+    "UsageLimitExceeded",
 ]
