@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from pydantic import Field, computed_field
 
 from akd._base import InputSchema, OutputSchema
-from akd.errors import GuardrailError
+from akd._base.errors import GuardrailError
 from akd.guardrails.categories._base import RiskCategory
 
 

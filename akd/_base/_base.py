@@ -7,9 +7,9 @@ from typing import Any, Type, cast
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
 
-from akd.errors import SchemaValidationError
 from akd.utils import get_model_fields, to_snake_case
 
+from .errors import SchemaValidationError
 from .streaming import StreamingMixin
 from .utils import AsyncRunMixin
 

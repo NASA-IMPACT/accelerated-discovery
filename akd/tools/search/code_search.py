@@ -13,7 +13,7 @@ from pydantic import Field, ValidationError, computed_field
 from scipy.spatial.distance import cdist
 from tenacity import retry, stop_after_attempt
 
-from akd.errors import SchemaValidationError
+from akd._base.errors import SchemaValidationError
 from akd.structures import SearchResultItem
 from akd.tools.misc import Embedder, HttpUrlAdapter, OpenAIEmbedder
 from akd.tools.reranker import RerankerToolConfig, RerankerType
