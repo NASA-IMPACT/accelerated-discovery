@@ -58,15 +58,18 @@ class ToolCallingMixin:
     """
 
     def _find_tool(self, name: str) -> BaseTool | None:
-        """Find a tool by class name.
+        """Find a tool by name.
 
         Args:
-            name: The class name of the tool to find
+            name: The name of the tool to find (checks both tool.name and class name)
 
         Returns:
             The matching tool instance, or None if not found
         """
-        return next((t for t in self.tools if t.__class__.__name__ == name), None)
+        return next(
+            (t for t in self.tools if t.name == name or t.__class__.__name__ == name),
+            None,
+        )
 
     async def _execute_tool(self, tool_call: ToolCall) -> ToolResult:
         """Execute a single tool call.

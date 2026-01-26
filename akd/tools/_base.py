@@ -34,7 +34,7 @@ class BaseTool[
         return {
             "type": "function",
             "function": {
-                "name": self.__class__.__name__,
+                "name": self.name,
                 "description": self.description or self.__class__.__doc__ or "",
                 "parameters": self.input_schema.model_json_schema(),
             },
