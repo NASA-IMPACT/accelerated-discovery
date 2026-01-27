@@ -528,37 +528,6 @@ class LiteLLMInstructorBaseAgent[
 
         return result
 
-    def _prepare_messages(self, params: InSchema | None = None) -> list[dict[str, Any]]:
-        """Prepare working messages for a run.
-
-        Returns a COPY of memory (stateful) or fresh list (stateless).
-        This ensures the tool loop can mutate messages without affecting
-        stored memory until explicitly persisted.
-
-        Args:
-            params: Optional input parameters to add as user message.
-
-        Returns:
-            Working message list (copy of memory or fresh).
-        """
-        if self.stateless:
-            messages = []
-        else:
-            messages = list(self._memory)  # Shallow copy - safe for message dicts
-
-        if not messages:
-            messages.append(self._default_system_message())
-
-        if params:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": params.model_dump_json(exclude={"type"}),
-                },
-            )
-
-        return messages
-
     def _persist_memory(self, messages: list[dict[str, Any]]) -> None:
         """Persist messages to memory with trimming.
 
