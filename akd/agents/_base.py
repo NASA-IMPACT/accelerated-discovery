@@ -893,14 +893,17 @@ class LiteLLMInstructorBaseAgent[
                             question=str(tool_call.arguments.get("question", "Input needed")),
                         )
 
-                    # Build message history snapshot (includes this assistant turn with tool_calls)
-                    message_history = messages + [
+                    # Add assistant message with tool_calls to memory
+                    messages.append(
                         {
                             "role": "assistant",
                             "content": accumulated_content or None,
                             "tool_calls": tool_calls_for_message,
                         },
-                    ]
+                    )
+
+                    # Build message history snapshot for resumption
+                    message_history = list(messages)
 
                     # Yield HUMAN_INPUT_REQUIRED with full state for resumption
                     yield StreamEvent(
