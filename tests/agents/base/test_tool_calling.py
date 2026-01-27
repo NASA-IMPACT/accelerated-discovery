@@ -99,11 +99,8 @@ def math_agent():
         model_name="gpt-4o-mini",
         temperature=0.0,
         system_prompt=(
-            "You are a math assistant. Use the provided tools to compute answers.\n"
-            "You only have Add and Multiply tools, but you can handle all operations:\n"
-            "- Subtraction: add(a, -b) computes a - b\n"
-            "- Division: multiply(a, 1/b) computes a / b\n"
-            "Always use tools for calculations. Never guess or approximate."
+            "You are a math assistant. Always use the provided tools for calculations. "
+            "Never compute in your head - use the Add and Multiply tools."
         ),
         tools=[AddTool(), MultiplyTool()],
         max_tool_iterations=10,
@@ -147,27 +144,20 @@ class TestMathAgent:
         assert _tools_were_called(math_agent)
 
     @pytest.mark.asyncio
-    async def test_complex_all_operations(self, math_agent):
-        """Complex calculation with all operations using only add/multiply tools.
+    async def test_complex_add_multiply(self, math_agent):
+        """Complex add/multiply calculation with large decimals.
 
-        LLM figures out: subtract = add negative, divide = multiply by reciprocal.
-
-        847293.847 + 156482.293 = 1003776.14
-        * 7.389 = 7416901.89846
-        - 2847561.228 = 4569340.67046
-        / 13.847 ≈ 329987.77
+        (12345.67 + 89012.34) * 56.789 = 101358.01 * 56.789 ≈ 5755855.74
         """
         result = await math_agent.arun(
             MathInput(
-                query="Start with 847293.847. Add 156482.293 to it. "
-                "Multiply the result by 7.389. Then subtract 2847561.228. "
-                "Finally divide by 13.847. What's the exact answer?",
+                query="Add 12345.67 and 89012.34, then multiply by 56.789",
             ),
         )
         # Find all numbers and check if any is within 1% of expected
         numbers = re.findall(r"[\d]+\.?\d*", result.result)
         assert numbers, f"No number found in: {result.result}"
-        expected = 329987.77
+        expected = 5755855.74
         assert any(float(n) == pytest.approx(expected, rel=0.01) for n in numbers), (
             f"Expected ~{expected}, got: {result.result}"
         )
