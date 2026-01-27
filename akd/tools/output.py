@@ -2,15 +2,16 @@
 
 from typing import Any
 
-from akd._base import OutputSchema
+from akd._base import InputSchema, OutputSchema
 from akd.tools._base import BaseTool
 
 
-class _OutputToolPlaceholder(OutputSchema):
+class _OutputToolPlaceholder(InputSchema, OutputSchema):
     """Placeholder schema for OutputTool class definition.
 
-    The AbstractBaseMeta validates input_schema/output_schema at class definition time.
-    This placeholder satisfies that requirement - actual schemas are set in __init__.
+    Inherits from both InputSchema and OutputSchema to satisfy BaseTool's
+    type bounds. The AbstractBaseMeta validates input_schema/output_schema
+    at class definition time - actual schemas are set dynamically in __init__.
     """
 
     pass
