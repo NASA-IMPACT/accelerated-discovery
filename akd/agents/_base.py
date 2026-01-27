@@ -25,7 +25,11 @@ from akd._base import (
     ToolCall,
     ToolCallingMixin,
 )
-from akd._base.errors import MaxToolIterationsExceeded, UnexpectedModelBehavior
+from akd._base.errors import (
+    MaxToolCallsExceeded,
+    MaxToolIterationsExceeded,
+    UnexpectedModelBehavior,
+)
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
@@ -94,7 +98,12 @@ class BaseAgentConfig(BaseConfig):
         default=10,
         ge=1,
         le=50,
-        description="Maximum tool calling iterations before stopping",
+        description="Maximum tool calling iterations (ReAct loop turns) before stopping",
+    )
+    max_tool_calls: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum total tool calls across the run (None = unlimited)",
     )
     reflection_prompt: str | None = Field(
         default=None,
@@ -721,6 +730,8 @@ class LiteLLMInstructorBaseAgent[
         all_tool_instances = self.tools + [output_tool]
         all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
 
+        total_tool_calls = 0  # Track total tool calls for max_tool_calls limit
+
         for iteration in range(self.max_tool_iterations):
             # Call LLM with tools (no response_format - output tool handles structured output)
             completion_kwargs: dict[str, Any] = {
@@ -877,6 +888,14 @@ class LiteLLMInstructorBaseAgent[
                     context=run_context,
                 )
 
+            # Check max_tool_calls limit before executing
+            if self.max_tool_calls is not None:
+                if total_tool_calls + len(tool_calls) > self.max_tool_calls:
+                    raise MaxToolCallsExceeded(
+                        f"Exceeded {self.max_tool_calls} total tool calls "
+                        f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
+                    )
+
             # Execute all tools in parallel (including OutputTool if called)
             # Temporarily include OutputTool so _find_tool can find it
             original_tools = self.tools
@@ -885,6 +904,8 @@ class LiteLLMInstructorBaseAgent[
                 results = await self._execute_tools_parallel(tool_calls)
             finally:
                 self.tools = original_tools
+
+            total_tool_calls += len(tool_calls)
 
             # Check if final_answer was called - signals completion
             for result in results:

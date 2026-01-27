@@ -29,6 +29,12 @@ class MaxToolIterationsExceeded(UsageLimitExceeded):
     pass
 
 
+class MaxToolCallsExceeded(UsageLimitExceeded):
+    """Raised when agent exceeds max total tool calls."""
+
+    pass
+
+
 class UnexpectedModelBehavior(AgentError):
     """Raised when model produces unexpected output (empty, malformed)."""
 
