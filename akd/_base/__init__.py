@@ -12,6 +12,7 @@ from ._base import (
 )
 from .errors import HumanInputRequired
 from .exposure import ParamExposureMixin, exposed_param
+from .memory import Memory
 from .streaming import StreamEvent, StreamEventType, StreamingMixin
 from .tool_calling import HumanResponse, ToolCall, ToolCallingMixin, ToolResult
 
@@ -42,4 +43,6 @@ __all__ = [
     # Human interaction
     "HumanResponse",
     "HumanInputRequired",
+    # Memory
+    "Memory",
 ]

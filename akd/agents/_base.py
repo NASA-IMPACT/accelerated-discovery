@@ -18,6 +18,7 @@ from akd._base import (
     AbstractBase,
     BaseConfig,
     InputSchema,
+    Memory,
     OutputSchema,
     ParamExposureMixin,
     StreamEvent,
@@ -164,24 +165,18 @@ class BaseAgent[
 
     config_schema = BaseAgentConfig
 
-    @property
-    def memory(self) -> Any:
-        """
-        Returns the memory of the agent, implemented by subclasses.
-        This property should return the memory structure used by the agent,
-        which typically includes past messages or interactions.
-        Raises:
-            NotImplementedError: If the property is not implemented in a subclass.
-        Args:
-            None
-
-        Returns:
-            list[Any | BaseModel]: The memory of the agent.
-        """
-        raise NotImplementedError("Attribute 'memory' not implemented.")
+    def __init__(
+        self,
+        config: BaseAgentConfig | None = None,
+        memory: Memory | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(config=config, **kwargs)
+        self.memory = memory or Memory()
 
     def reset_memory(self) -> None:
-        pass
+        """Clear memory."""
+        self.memory.clear()
 
     @property
     def _system_prompt(self) -> str:
@@ -205,30 +200,73 @@ class BaseAgent[
         """Convert tools to function calling format."""
         return [tool.as_tool_definition() for tool in self.tools]
 
-    def _prepare_messages(self, params: InputSchema | None = None) -> list[dict[str, Any]]:
-        """Prepare working messages for a run.
+    def _prepare_messages(
+        self,
+        params: InputSchema | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Prepare messages for a run.
 
-        Returns a COPY of memory (stateful) or fresh list (stateless).
-        Subclasses can override to add custom behavior (e.g., trimming).
-
-        Args:
-            params: Optional input parameters to add as user message.
-
-        Returns:
-            Working message list.
+        Agent handles:
+        - Stateless mode (clears memory)
+        - Delegates context sync to memory.prepare()
+        - Trimming to fit within token limits
         """
-        raise NotImplementedError("Subclasses must implement _prepare_messages")
+        # Stateless mode - clear before each run
+        if self.stateless:
+            self.memory.clear()
 
-    def _persist_memory(self, messages: list[dict[str, Any]]) -> None:
-        """Persist messages to memory.
+        # Memory handles context sync, returns reference
+        messages = self.memory.prepare(context)
 
-        This is the SINGLE point where memory should be persisted.
-        Subclasses can override to add custom behavior (e.g., trimming).
+        # Add system message if empty
+        if not messages:
+            messages.append(self._default_system_message())
 
-        Args:
-            messages: The complete message list to persist.
+        # Add user message (skip if resuming with human response)
+        if params and not (context and "human_response" in context):
+            messages.append(
+                {
+                    "role": "user",
+                    "content": params.model_dump_json(exclude={"type"}),
+                },
+            )
+
+        # Trim to fit within token limits
+        if self.enable_trimming and self.model_name:
+            trimmed = trim_messages(
+                messages,
+                model=self.model_name,
+                max_tokens=self.max_tokens,
+                trim_ratio=self.trim_ratio,
+            )
+            # Sync trimmed messages back to memory
+            self.memory.sync(trimmed)
+            return self.memory.messages
+
+        return messages
+
+    def _default_system_message(self) -> dict[str, str]:
+        """Return default system message."""
+        return {
+            "role": "system",
+            "content": self._system_prompt,
+        }
+
+    async def arun(
+        self,
+        params: InputSchema,
+        **kwargs,
+    ) -> OutputSchema:
+        """Run agent with stateless cleanup.
+
+        Overrides AbstractBase.arun() to clear memory after stateless runs.
         """
-        raise NotImplementedError("Subclasses must implement _persist_memory")
+        try:
+            return await super().arun(params, **kwargs)
+        finally:
+            if self.stateless:
+                self.memory.clear()
 
     @abstractmethod
     async def get_response_async(
@@ -262,9 +300,10 @@ class InstructorBaseAgent[
     def __init__(
         self,
         config: BaseAgentConfig | None = None,
+        memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
-        super().__init__(config=config, debug=debug)
+        super().__init__(config=config, memory=memory, debug=debug)
 
         # Create the OpenAI client
         self.client = instructor.from_openai(
@@ -273,9 +312,6 @@ class InstructorBaseAgent[
                 base_url=str(self.base_url),
             ),
         )
-
-        # Initialize memory
-        self._memory = []
 
     def __deepcopy__(self, memo: dict[int, Any]) -> InstructorBaseAgent:
         """Custom deepcopy that recreates the client instead of copying it.
@@ -311,88 +347,6 @@ class InstructorBaseAgent[
         )
 
         return result
-
-    @property
-    def memory(self) -> list[dict[str, str]]:
-        return self._memory
-
-    def reset_memory(self) -> None:
-        """
-        Resets the memory of the agent.
-        This method clears the chat message history, effectively resetting the agent's memory.
-        """
-        self.memory.clear()
-
-    def _prepare_messages(
-        self,
-        params: InSchema | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Prepare working messages for a run.
-
-        Priority for message source:
-        1. Explicit "message_history" in context (Pydantic AI style)
-        2. Internal _memory if stateful
-        3. Fresh start if stateless
-
-        Note: _memory is ALWAYS updated at the end via _persist_memory(),
-        keeping it in sync even when explicit history was used.
-
-        Args:
-            params: Optional input parameters to add as user message.
-            context: Optional context dict. If contains "message_history",
-                uses that instead of internal memory.
-
-        Returns:
-            Working message list.
-        """
-        # Priority: explicit history > internal memory > fresh start
-        if context and "message_history" in context:
-            messages = list(context["message_history"])  # Explicit history takes priority
-        elif self.stateless:
-            messages = []
-        else:
-            messages = list(self._memory)  # Shallow copy
-
-        if not messages:
-            messages.append(self._default_system_message())
-
-        # Add user message if params provided (only if not resuming from human input)
-        # When resuming, params might be the same but we don't want to add duplicate user message
-        if params and not (context and "human_response" in context):
-            messages.append(
-                {
-                    "role": "user",
-                    "content": params.model_dump_json(exclude={"type"}),
-                },
-            )
-
-        return messages
-
-    def _persist_memory(self, messages: list[dict[str, Any]]) -> None:
-        """Persist messages to memory.
-
-        Called only on successful completion.
-
-        Args:
-            messages: The complete message list to persist.
-        """
-        if self.stateless:
-            return
-
-        self._memory = messages
-
-    def _default_system_message(self) -> dict[str, str]:
-        """
-        Returns the default system message.
-
-        Returns:
-            dict[str, str]: System message dictionary with role and content.
-        """
-        return {
-            "role": "system",
-            "content": self._system_prompt,
-        }
 
     def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
         """Create a model that's compatible with instructor but avoids IOSchema validation."""
@@ -494,9 +448,6 @@ class InstructorBaseAgent[
             },
         )
 
-        # Single point of memory persistence
-        self._persist_memory(messages)
-
         return response
 
 
@@ -514,10 +465,11 @@ class LiteLLMInstructorBaseAgent[
     def __init__(
         self,
         config: BaseAgentConfig | None = None,
+        memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
         # Initialize base class but we'll replace the client
-        super().__init__(config=config, debug=debug)
+        super().__init__(config=config, memory=memory, debug=debug)
 
         # Replace instructor client with LiteLLM version
         self.client = instructor.from_litellm(acompletion)
@@ -545,31 +497,6 @@ class LiteLLMInstructorBaseAgent[
         result.client = instructor.from_litellm(acompletion)
 
         return result
-
-    def _persist_memory(self, messages: list[dict[str, Any]]) -> None:
-        """Persist messages to memory with trimming.
-
-        This is the SINGLE point where memory should be persisted.
-        Called only on successful completion, not mid-run.
-
-        Trimming is applied here to keep _memory bounded, preventing
-        unbounded growth across multiple runs.
-
-        Args:
-            messages: The complete message list to persist.
-        """
-        if self.stateless:
-            return
-
-        if self.enable_trimming:
-            messages = trim_messages(
-                messages,
-                model=self.model_name,
-                max_tokens=self.max_tokens,
-                trim_ratio=self.trim_ratio,
-            )
-
-        self._memory = messages
 
     async def get_response_async(
         self,
@@ -691,9 +618,6 @@ class LiteLLMInstructorBaseAgent[
                 "content": output.model_dump_json(exclude={"type"}),
             },
         )
-
-        # Single point of memory persistence (with trimming)
-        self._persist_memory(messages)
 
         return output
 
@@ -1031,8 +955,6 @@ class LiteLLMInstructorBaseAgent[
             # Check max_tool_calls limit before executing
             if self.max_tool_calls is not None:
                 if total_tool_calls + len(tool_calls) > self.max_tool_calls:
-                    # Persist memory before raising (conversation history is still valid)
-                    self._persist_memory(messages)
                     raise MaxToolCallsExceeded(
                         f"Exceeded {self.max_tool_calls} total tool calls "
                         f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
@@ -1111,8 +1033,6 @@ class LiteLLMInstructorBaseAgent[
                     context=run_context,
                 )
 
-        # Loop exhausted - persist memory before raising (conversation history is still valid)
-        self._persist_memory(messages)
         raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
 
     async def _astream(
@@ -1204,7 +1124,6 @@ class LiteLLMInstructorBaseAgent[
                             "content": output.model_dump_json(exclude={"type"}),
                         },
                     )
-                    self._persist_memory(messages)
 
             else:
                 # === STREAMING MODE (no tools) ===
@@ -1239,14 +1158,13 @@ class LiteLLMInstructorBaseAgent[
                 if output is None:
                     raise UnexpectedModelBehavior("No output received from LLM")
 
-                # Add final assistant message and persist (single point)
+                # Add final assistant message (auto-synced to memory via reference)
                 messages.append(
                     {
                         "role": "assistant",
                         "content": output.model_dump_json(exclude={"type"}),
                     },
                 )
-                self._persist_memory(messages)
 
                 yield StreamEvent(
                     event_type=StreamEventType.COMPLETED,
