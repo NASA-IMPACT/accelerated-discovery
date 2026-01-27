@@ -33,6 +33,7 @@ from akd._base.errors import (
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
+from akd.tools.human import HumanToolInput
 from akd.tools.output import OutputTool
 from akd.utils import PartialModel
 
@@ -322,18 +323,33 @@ class InstructorBaseAgent[
         """
         self.memory.clear()
 
-    def _prepare_messages(self, params: InSchema | None = None) -> list[dict[str, Any]]:
+    def _prepare_messages(
+        self,
+        params: InSchema | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """Prepare working messages for a run.
 
-        Returns a COPY of memory (stateful) or fresh list (stateless).
+        Priority for message source:
+        1. Explicit "message_history" in context (Pydantic AI style)
+        2. Internal _memory if stateful
+        3. Fresh start if stateless
+
+        Note: _memory is ALWAYS updated at the end via _persist_memory(),
+        keeping it in sync even when explicit history was used.
 
         Args:
             params: Optional input parameters to add as user message.
+            context: Optional context dict. If contains "message_history",
+                uses that instead of internal memory.
 
         Returns:
-            Working message list (copy of memory or fresh).
+            Working message list.
         """
-        if self.stateless:
+        # Priority: explicit history > internal memory > fresh start
+        if context and "message_history" in context:
+            messages = list(context["message_history"])  # Explicit history takes priority
+        elif self.stateless:
             messages = []
         else:
             messages = list(self._memory)  # Shallow copy
@@ -341,7 +357,9 @@ class InstructorBaseAgent[
         if not messages:
             messages.append(self._default_system_message())
 
-        if params:
+        # Add user message if params provided (only if not resuming from human input)
+        # When resuming, params might be the same but we don't want to add duplicate user message
+        if params and not (context and "human_response" in context):
             messages.append(
                 {
                     "role": "user",
@@ -780,16 +798,32 @@ class LiteLLMInstructorBaseAgent[
 
         Streams thinking/reasoning tokens in real-time.
         Tool calls are IO events (TOOL_CALLING, TOOL_RESULT).
+        Human tool calls yield HUMAN_INPUT_REQUIRED and return.
 
         Args:
             messages: Conversation history (mutated in place)
             class_name: For event source
-            run_context: For event context
+            run_context: For event context (may contain human_response for resumption)
             token_batch_size: Batch N characters before emitting STREAMING event
 
         Yields:
-            StreamEvent: STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT, COMPLETED
+            StreamEvent: STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT,
+                        HUMAN_INPUT_REQUIRED, or COMPLETED
         """
+        # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
+        human_response = run_context.get("human_response")
+        if human_response:
+            # Inject human's response as tool result
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": human_response["tool_call_id"],
+                    "content": json.dumps(
+                        human_response.get("content", {"response": human_response.get("response", "")}),
+                    ),
+                },
+            )
+
         # For partial output validation (only for final answer)
         PartialResponseModel = PartialModel[self.output_schema]
 
@@ -957,6 +991,43 @@ class LiteLLMInstructorBaseAgent[
                     context=run_context,
                 )
 
+            # Check for ask_human tool BEFORE execution - intercept and yield HUMAN_INPUT_REQUIRED
+            for tool_call in tool_calls:
+                if tool_call.tool_name == "ask_human":
+                    try:
+                        human_input = HumanToolInput(**tool_call.arguments)
+                    except Exception:
+                        human_input = HumanToolInput(
+                            question=str(tool_call.arguments.get("question", "Input needed")),
+                        )
+
+                    # Build message history snapshot (includes this assistant turn with tool_calls)
+                    message_history = messages + [
+                        {
+                            "role": "assistant",
+                            "content": accumulated_content or None,
+                            "tool_calls": tool_calls_for_message,
+                        },
+                    ]
+
+                    # Yield HUMAN_INPUT_REQUIRED with full state for resumption
+                    yield StreamEvent(
+                        event_type=StreamEventType.HUMAN_INPUT_REQUIRED,
+                        source=class_name,
+                        message=f"Human input required: {human_input.question}",
+                        data={
+                            "prompt": human_input.question,
+                            "tool_call_id": tool_call.tool_call_id,
+                            "tool_name": tool_call.tool_name,
+                            "context": {"description": human_input.context} if human_input.context else None,
+                            "options": human_input.options,
+                            "message_history": message_history,
+                        },
+                        context=run_context,
+                    )
+                    # End generator gracefully - caller will resume with fresh astream() call
+                    return
+
             # Check max_tool_calls limit before executing
             if self.max_tool_calls is not None:
                 if total_tool_calls + len(tool_calls) > self.max_tool_calls:
@@ -1098,8 +1169,8 @@ class LiteLLMInstructorBaseAgent[
         )
 
         try:
-            # Prepare working messages (copy of memory or fresh list)
-            messages = self._prepare_messages(params)
+            # Prepare working messages (supports explicit message_history in context)
+            messages = self._prepare_messages(params, context=run_context)
 
             yield StreamEvent(
                 event_type=StreamEventType.RUNNING,
