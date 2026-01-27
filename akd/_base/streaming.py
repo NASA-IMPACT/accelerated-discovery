@@ -27,6 +27,9 @@ class StreamEventType(str, Enum):
     TOOL_CALLING = "tool_calling"
     TOOL_RESULT = "tool_result"
 
+    # Human interaction (Stage 3)
+    HUMAN_INPUT_REQUIRED = "human_input_required"
+
 
 class StreamEvent(BaseModel):
     """Streaming event with CloudEvents-inspired design.
@@ -51,6 +54,9 @@ class StreamEvent(BaseModel):
         PARTIAL: {"partial_output": Any} for partial structured output
         TOOL_CALLING: {"tool_name": str, "tool_input": dict}
         TOOL_RESULT: {"tool_name": str, "tool_output": Any}
+        HUMAN_INPUT_REQUIRED: {"prompt": str, "tool_call_id": str, "tool_name": str,
+            "context": dict | None, "options": list[str] | None,
+            "message_history": list[dict]} for human-in-the-loop interaction
 
     Example:
         async for event in agent.astream(input_data):
@@ -126,6 +132,16 @@ class StreamEvent(BaseModel):
     def token(self) -> str | None:
         """STREAMING event raw token."""
         return self.data.get("token")
+
+    @property
+    def human_prompt(self) -> str | None:
+        """HUMAN_INPUT_REQUIRED event prompt."""
+        return self.data.get("prompt")
+
+    @property
+    def message_history(self) -> list[dict[str, Any]] | None:
+        """HUMAN_INPUT_REQUIRED event message history snapshot for resumption."""
+        return self.data.get("message_history")
 
 
 class StreamingMixin:

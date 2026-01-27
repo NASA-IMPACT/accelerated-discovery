@@ -10,9 +10,10 @@ from ._base import (
     OutputSchema,
     UnrestrictedAbstractBase,
 )
+from .errors import HumanInputRequired
 from .exposure import ParamExposureMixin, exposed_param
 from .streaming import StreamEvent, StreamEventType, StreamingMixin
-from .tool_calling import ToolCall, ToolCallingMixin, ToolResult
+from .tool_calling import HumanResponse, ToolCall, ToolCallingMixin, ToolResult
 
 __all__ = [
     # Base classes
@@ -38,4 +39,7 @@ __all__ = [
     "ToolCall",
     "ToolResult",
     "ToolCallingMixin",
+    # Human interaction
+    "HumanResponse",
+    "HumanInputRequired",
 ]

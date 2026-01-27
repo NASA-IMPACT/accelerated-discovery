@@ -47,6 +47,33 @@ class ToolError(AKDError):
     pass
 
 
+class HumanInputRequired(ToolError):
+    """Raised when agent needs human input to continue.
+
+    This exception signals that the HumanTool was invoked and the agent
+    is waiting for human input before it can proceed.
+
+    Attributes:
+        prompt: The question or request for the human.
+        tool_call_id: ID of the tool call (for correlating response).
+        context: Additional context for the request.
+        options: Optional list of choices for the human.
+    """
+
+    def __init__(
+        self,
+        prompt: str,
+        tool_call_id: str | None = None,
+        context: dict | None = None,
+        options: list[str] | None = None,
+    ) -> None:
+        self.prompt = prompt
+        self.tool_call_id = tool_call_id
+        self.context = context
+        self.options = options
+        super().__init__(f"Human input required: {prompt}")
+
+
 class SchemaValidationError(AKDError):
     """Raised when schema validation fails."""
 

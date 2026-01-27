@@ -39,6 +39,35 @@ class ToolResult(BaseModel):
     error: str | None = Field(default=None, description="Error message if failed")
 
 
+class HumanResponse(ToolResult):
+    """Human's response to a HUMAN_INPUT_REQUIRED event.
+
+    Inherits from ToolResult since a human response IS a tool result
+    for the ask_human tool call.
+
+    Example:
+        # Caller constructs and passes in context:
+        context = {
+            "message_history": event.message_history,
+            "human_response": HumanResponse(
+                tool_call_id=event.data["tool_call_id"],
+                content={"response": "user's answer"}
+            ).model_dump()
+        }
+
+        # Or as a simple dict (agent validates internally):
+        context = {
+            "message_history": event.message_history,
+            "human_response": {
+                "tool_call_id": "...",
+                "content": {"response": "user's answer"}
+            }
+        }
+    """
+
+    tool_name: str = Field(default="ask_human", description="Tool name (defaults to ask_human)")
+
+
 class ToolCallingMixin:
     """Mixin providing reusable tool execution helpers.
 
@@ -127,4 +156,4 @@ class ToolCallingMixin:
         )
 
 
-__all__ = ["ToolCall", "ToolResult", "ToolCallingMixin"]
+__all__ = ["ToolCall", "ToolResult", "HumanResponse", "ToolCallingMixin"]
