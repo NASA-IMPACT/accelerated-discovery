@@ -1,17 +1,23 @@
 """Memory storage for agents."""
 
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
+from litellm.utils import trim_messages
 from pydantic import BaseModel, Field
 
 
 class Memory[T](BaseModel):
-    """Message storage with context-aware preparation.
+    """Message storage with session-based lifecycle management.
 
-    Handles:
-    - Message storage (append, extend, clear)
-    - Context syncing (prepare syncs from context["message_history"])
-    - Returns reference for auto-sync during runs
+    Provides context managers for memory operations:
+    - session() for sync code
+    - asession() for async code
+
+    Session handles:
+    - Stateless clearing (start and end)
+    - Context syncing (message_history)
+    - Message trimming
     """
 
     messages: list[T] = Field(default_factory=list)
@@ -37,16 +43,6 @@ class Memory[T](BaseModel):
         self.messages.clear()
         self.messages.extend(items)
 
-    def prepare(self, context: dict[str, Any] | None = None) -> list[T]:
-        """Prepare messages for a run.
-
-        Syncs from context["message_history"] if provided (human-in-the-loop resumption).
-        Returns REFERENCE to self.messages - changes during run auto-sync.
-        """
-        if context and "message_history" in context:
-            self.sync(context["message_history"])
-        return self.messages
-
     def last(self) -> T | None:
         """Get last message."""
         return self.messages[-1] if self.messages else None
@@ -64,6 +60,84 @@ class Memory[T](BaseModel):
     def __getitem__(self, index: int) -> T:
         """Get message by index."""
         return self.messages[index]
+
+    @contextmanager
+    def session(
+        self,
+        stateless: bool = False,
+        context: dict[str, Any] | None = None,
+        enable_trimming: bool = False,
+        model_name: str | None = None,
+        max_tokens: int | None = None,
+        trim_ratio: float = 0.75,
+    ):
+        """Sync context manager for memory operations.
+
+        Args:
+            stateless: Clear memory at start and end
+            context: If contains "message_history", sync from it
+            enable_trimming: Enable message trimming
+            model_name: Model name for trimming
+            max_tokens: Max tokens for trimming
+            trim_ratio: Trim ratio (default 0.75)
+
+        Yields:
+            Reference to self.messages
+        """
+        # Setup
+        if stateless:
+            self.clear()
+
+        if context and "message_history" in context:
+            self.sync(context["message_history"])
+
+        if enable_trimming and model_name and max_tokens:
+            trimmed = trim_messages(
+                self.messages,
+                model=model_name,
+                max_tokens=max_tokens,
+                trim_ratio=trim_ratio,
+            )
+            self.sync(trimmed)
+
+        try:
+            yield self.messages
+        finally:
+            if stateless:
+                self.clear()
+
+    @asynccontextmanager
+    async def asession(
+        self,
+        stateless: bool = False,
+        context: dict[str, Any] | None = None,
+        enable_trimming: bool = False,
+        model_name: str | None = None,
+        max_tokens: int | None = None,
+        trim_ratio: float = 0.75,
+    ):
+        """Async context manager for memory operations.
+
+        Args:
+            stateless: Clear memory at start and end
+            context: If contains "message_history", sync from it
+            enable_trimming: Enable message trimming
+            model_name: Model name for trimming
+            max_tokens: Max tokens for trimming
+            trim_ratio: Trim ratio (default 0.75)
+
+        Yields:
+            Reference to self.messages
+        """
+        with self.session(
+            stateless=stateless,
+            context=context,
+            enable_trimming=enable_trimming,
+            model_name=model_name,
+            max_tokens=max_tokens,
+            trim_ratio=trim_ratio,
+        ) as messages:
+            yield messages
 
 
 __all__ = ["Memory"]

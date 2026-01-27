@@ -200,73 +200,12 @@ class BaseAgent[
         """Convert tools to function calling format."""
         return [tool.as_tool_definition() for tool in self.tools]
 
-    def _prepare_messages(
-        self,
-        params: InputSchema | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> list[dict[str, Any]]:
-        """Prepare messages for a run.
-
-        Agent handles:
-        - Stateless mode (clears memory)
-        - Delegates context sync to memory.prepare()
-        - Trimming to fit within token limits
-        """
-        # Stateless mode - clear before each run
-        if self.stateless:
-            self.memory.clear()
-
-        # Memory handles context sync, returns reference
-        messages = self.memory.prepare(context)
-
-        # Add system message if empty
-        if not messages:
-            messages.append(self._default_system_message())
-
-        # Add user message (skip if resuming with human response)
-        if params and not (context and "human_response" in context):
-            messages.append(
-                {
-                    "role": "user",
-                    "content": params.model_dump_json(exclude={"type"}),
-                },
-            )
-
-        # Trim to fit within token limits
-        if self.enable_trimming and self.model_name:
-            trimmed = trim_messages(
-                messages,
-                model=self.model_name,
-                max_tokens=self.max_tokens,
-                trim_ratio=self.trim_ratio,
-            )
-            # Sync trimmed messages back to memory
-            self.memory.sync(trimmed)
-            return self.memory.messages
-
-        return messages
-
     def _default_system_message(self) -> dict[str, str]:
         """Return default system message."""
         return {
             "role": "system",
             "content": self._system_prompt,
         }
-
-    async def arun(
-        self,
-        params: InputSchema,
-        **kwargs,
-    ) -> OutputSchema:
-        """Run agent with stateless cleanup.
-
-        Overrides AbstractBase.arun() to clear memory after stateless runs.
-        """
-        try:
-            return await super().arun(params, **kwargs)
-        finally:
-            if self.stateless:
-                self.memory.clear()
 
     @abstractmethod
     async def get_response_async(
@@ -421,6 +360,7 @@ class InstructorBaseAgent[
     async def _arun(
         self,
         params: InSchema,
+        context: dict[str, Any] | None = None,
         **kwargs,
     ) -> OutSchema:
         """
@@ -428,27 +368,46 @@ class InstructorBaseAgent[
 
         Args:
             params: The input from the user.
+            context: Optional context dict (message_history, human_response, etc.)
 
         Returns:
             OutputSchema: The response from the chat agent.
         """
-        # Prepare working messages (copy of memory or fresh list)
-        messages = self._prepare_messages(params)
+        async with self.memory.asession(
+            stateless=self.stateless,
+            context=context,
+            enable_trimming=self.enable_trimming,
+            model_name=self.model_name,
+            max_tokens=self.max_tokens,
+            trim_ratio=self.trim_ratio,
+        ) as messages:
+            # Add system message if empty
+            if not messages:
+                messages.append(self._default_system_message())
 
-        response = await self.get_response_async(
-            messages=messages,
-            response_model=self.output_schema,
-        )
+            # Add user message (skip if resuming with human response)
+            if params and not (context and "human_response" in context):
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": params.model_dump_json(exclude={"type"}),
+                    },
+                )
 
-        # Add assistant response
-        messages.append(
-            {
-                "role": "assistant",
-                "content": response.model_dump_json(exclude={"type"}),
-            },
-        )
+            response = await self.get_response_async(
+                messages=messages,
+                response_model=self.output_schema,
+            )
 
-        return response
+            # Add assistant response
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.model_dump_json(exclude={"type"}),
+                },
+            )
+
+            return response
 
 
 class LiteLLMInstructorBaseAgent[
@@ -556,6 +515,7 @@ class LiteLLMInstructorBaseAgent[
     async def _arun(
         self,
         params: InSchema,
+        context: dict[str, Any] | None = None,
         **kwargs,
     ) -> OutSchema:
         """Run agent with optional tool calling support.
@@ -565,61 +525,69 @@ class LiteLLMInstructorBaseAgent[
 
         Args:
             params: Input parameters matching input_schema.
+            context: Optional context dict (message_history, human_response, etc.)
 
         Returns:
             Output matching output_schema.
         """
         class_name = self.__class__.__name__
 
-        # Prepare working messages (copy of memory or fresh list)
-        messages = self._prepare_messages(params)
+        async with self.memory.asession(
+            stateless=self.stateless,
+            context=context,
+            enable_trimming=self.enable_trimming,
+            model_name=self.model_name,
+            max_tokens=self.max_tokens,
+            trim_ratio=self.trim_ratio,
+        ) as messages:
+            # Add system message if empty
+            if not messages:
+                messages.append(self._default_system_message())
 
-        output: OutSchema | None = None
-
-        if self.tools:
-            # === TOOL CALLING MODE ===
-            # Use _run_tool_loop and consume events to get final output
-            # Note: Tool loop mutates `messages` in place during iterations
-            run_context = {"run_id": uuid.uuid4().hex[:8]}
-            async for event in self._run_tool_loop(
-                messages,
-                class_name,
-                run_context,
-            ):
-                if event.event_type == StreamEventType.COMPLETED:
-                    output = event.output
-                    break
-
-            if output is None:
-                raise UnexpectedModelBehavior("Tool loop completed without producing output")
-
-        else:
-            # === DIRECT MODE (no tools) ===
-            # Apply trimming for LLM call (get_response_async also trims, but be explicit)
-            if self.enable_trimming:
-                trimmed_messages = trim_messages(
-                    messages,
-                    model=self.model_name,
-                    max_tokens=self.max_tokens,
-                    trim_ratio=self.trim_ratio,
+            # Add user message (skip if resuming with human response)
+            if params and not (context and "human_response" in context):
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": params.model_dump_json(exclude={"type"}),
+                    },
                 )
-            else:
-                trimmed_messages = messages
 
-            output = await self.get_response_async(
-                messages=trimmed_messages,
-                response_model=self.output_schema,
+            output: OutSchema | None = None
+
+            if self.tools:
+                # === TOOL CALLING MODE ===
+                # Use _run_tool_loop and consume events to get final output
+                # Note: Tool loop mutates `messages` in place during iterations
+                run_context = {"run_id": uuid.uuid4().hex[:8]}
+                async for event in self._run_tool_loop(
+                    messages,
+                    class_name,
+                    run_context,
+                ):
+                    if event.event_type == StreamEventType.COMPLETED:
+                        output = event.output
+                        break
+
+                if output is None:
+                    raise UnexpectedModelBehavior("Tool loop completed without producing output")
+
+            else:
+                # === DIRECT MODE (no tools) ===
+                output = await self.get_response_async(
+                    messages=messages,
+                    response_model=self.output_schema,
+                )
+
+            # Add final assistant message
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": output.model_dump_json(exclude={"type"}),
+                },
             )
 
-        # Add final assistant message
-        messages.append(
-            {
-                "role": "assistant",
-                "content": output.model_dump_json(exclude={"type"}),
-            },
-        )
-
-        return output
+            return output
 
     async def _stream_llm_response(
         self,
@@ -1089,35 +1057,94 @@ class LiteLLMInstructorBaseAgent[
         )
 
         try:
-            # Prepare working messages (supports explicit message_history in context)
-            messages = self._prepare_messages(params, context=run_context)
-
-            yield StreamEvent(
-                event_type=StreamEventType.RUNNING,
-                source=class_name,
-                message=f"Running {class_name}",
+            async with self.memory.asession(
+                stateless=self.stateless,
                 context=run_context,
-            )
+                enable_trimming=self.enable_trimming,
+                model_name=self.model_name,
+                max_tokens=self.max_tokens,
+                trim_ratio=self.trim_ratio,
+            ) as messages:
+                # Add system message if empty
+                if not messages:
+                    messages.append(self._default_system_message())
 
-            # Route: tool calling mode vs streaming mode
-            output = None
+                # Add user message (skip if resuming with human response)
+                if params and not (run_context and "human_response" in run_context):
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": params.model_dump_json(exclude={"type"}),
+                        },
+                    )
 
-            if self.tools:
-                # === TOOL CALLING MODE ===
-                # Yields STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT, then COMPLETED
-                # Tool loop mutates `messages` in place during iterations
-                async for event in self._run_tool_loop(
-                    messages,
-                    class_name,
-                    run_context,
-                    token_batch_size=token_batch_size,
-                ):
-                    if event.event_type == StreamEventType.COMPLETED:
-                        output = event.output
-                    yield event
+                yield StreamEvent(
+                    event_type=StreamEventType.RUNNING,
+                    source=class_name,
+                    message=f"Running {class_name}",
+                    context=run_context,
+                )
 
-                # Persistence happens after loop completes (single point)
-                if output is not None:
+                # Route: tool calling mode vs streaming mode
+                output = None
+
+                if self.tools:
+                    # === TOOL CALLING MODE ===
+                    # Yields STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT, then COMPLETED
+                    # Tool loop mutates `messages` in place during iterations
+                    async for event in self._run_tool_loop(
+                        messages,
+                        class_name,
+                        run_context,
+                        token_batch_size=token_batch_size,
+                    ):
+                        if event.event_type == StreamEventType.COMPLETED:
+                            output = event.output
+                        yield event
+
+                    # Persistence happens after loop completes (single point)
+                    if output is not None:
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": output.model_dump_json(exclude={"type"}),
+                            },
+                        )
+
+                else:
+                    # === STREAMING MODE (no tools) ===
+                    # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
+                    async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
+                        if chunk["type"] == StreamEventType.STREAMING:
+                            yield StreamEvent(
+                                event_type=StreamEventType.STREAMING,
+                                source=class_name,
+                                data={"token": chunk["token"]},
+                                context=run_context,
+                            )
+                        elif chunk["type"] == StreamEventType.THINKING:
+                            yield StreamEvent(
+                                event_type=StreamEventType.THINKING,
+                                source=class_name,
+                                message="Reasoning...",
+                                data={"thinking_content": chunk["content"]},
+                                context=run_context,
+                            )
+                        elif chunk["type"] == StreamEventType.PARTIAL:
+                            yield StreamEvent(
+                                event_type=StreamEventType.PARTIAL,
+                                source=class_name,
+                                message="Partial...",
+                                data={"partial_output": chunk["partial"]},
+                                context=run_context,
+                            )
+                        elif chunk["type"] == StreamEventType.COMPLETED:
+                            output = chunk["output"]
+
+                    if output is None:
+                        raise UnexpectedModelBehavior("No output received from LLM")
+
+                    # Add final assistant message (auto-synced to memory via reference)
                     messages.append(
                         {
                             "role": "assistant",
@@ -1125,54 +1152,13 @@ class LiteLLMInstructorBaseAgent[
                         },
                     )
 
-            else:
-                # === STREAMING MODE (no tools) ===
-                # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
-                async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
-                    if chunk["type"] == StreamEventType.STREAMING:
-                        yield StreamEvent(
-                            event_type=StreamEventType.STREAMING,
-                            source=class_name,
-                            data={"token": chunk["token"]},
-                            context=run_context,
-                        )
-                    elif chunk["type"] == StreamEventType.THINKING:
-                        yield StreamEvent(
-                            event_type=StreamEventType.THINKING,
-                            source=class_name,
-                            message="Reasoning...",
-                            data={"thinking_content": chunk["content"]},
-                            context=run_context,
-                        )
-                    elif chunk["type"] == StreamEventType.PARTIAL:
-                        yield StreamEvent(
-                            event_type=StreamEventType.PARTIAL,
-                            source=class_name,
-                            message="Partial...",
-                            data={"partial_output": chunk["partial"]},
-                            context=run_context,
-                        )
-                    elif chunk["type"] == StreamEventType.COMPLETED:
-                        output = chunk["output"]
-
-                if output is None:
-                    raise UnexpectedModelBehavior("No output received from LLM")
-
-                # Add final assistant message (auto-synced to memory via reference)
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": output.model_dump_json(exclude={"type"}),
-                    },
-                )
-
-                yield StreamEvent(
-                    event_type=StreamEventType.COMPLETED,
-                    source=class_name,
-                    message=f"Completed {class_name}",
-                    data={"output": output},
-                    context=run_context,
-                )
+                    yield StreamEvent(
+                        event_type=StreamEventType.COMPLETED,
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data={"output": output},
+                        context=run_context,
+                    )
 
         except Exception as e:
             yield StreamEvent(
