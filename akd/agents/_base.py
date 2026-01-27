@@ -950,6 +950,10 @@ class LiteLLMInstructorBaseAgent[
                     },
                 )
 
+            # Persist memory after each iteration (so state survives exceptions)
+            if not self.stateless:
+                self._memory = messages
+
             # Inject reflection prompt if configured (forces reasoning before next iteration)
             if self.reflection_prompt:
                 messages.append(
