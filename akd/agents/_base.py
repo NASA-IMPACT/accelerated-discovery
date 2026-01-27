@@ -204,6 +204,31 @@ class BaseAgent[
         """Convert tools to function calling format."""
         return [tool.as_tool_definition() for tool in self.tools]
 
+    def _prepare_messages(self, params: InputSchema | None = None) -> list[dict[str, Any]]:
+        """Prepare working messages for a run.
+
+        Returns a COPY of memory (stateful) or fresh list (stateless).
+        Subclasses can override to add custom behavior (e.g., trimming).
+
+        Args:
+            params: Optional input parameters to add as user message.
+
+        Returns:
+            Working message list.
+        """
+        raise NotImplementedError("Subclasses must implement _prepare_messages")
+
+    def _persist_memory(self, messages: list[dict[str, Any]]) -> None:
+        """Persist messages to memory.
+
+        This is the SINGLE point where memory should be persisted.
+        Subclasses can override to add custom behavior (e.g., trimming).
+
+        Args:
+            messages: The complete message list to persist.
+        """
+        raise NotImplementedError("Subclasses must implement _persist_memory")
+
     @abstractmethod
     async def get_response_async(
         self,
@@ -297,6 +322,48 @@ class InstructorBaseAgent[
         """
         self.memory.clear()
 
+    def _prepare_messages(self, params: InSchema | None = None) -> list[dict[str, Any]]:
+        """Prepare working messages for a run.
+
+        Returns a COPY of memory (stateful) or fresh list (stateless).
+
+        Args:
+            params: Optional input parameters to add as user message.
+
+        Returns:
+            Working message list (copy of memory or fresh).
+        """
+        if self.stateless:
+            messages = []
+        else:
+            messages = list(self._memory)  # Shallow copy
+
+        if not messages:
+            messages.append(self._default_system_message())
+
+        if params:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": params.model_dump_json(exclude={"type"}),
+                },
+            )
+
+        return messages
+
+    def _persist_memory(self, messages: list[dict[str, Any]]) -> None:
+        """Persist messages to memory.
+
+        Called only on successful completion.
+
+        Args:
+            messages: The complete message list to persist.
+        """
+        if self.stateless:
+            return
+
+        self._memory = messages
+
     def _default_system_message(self) -> dict[str, str]:
         """
         Returns the default system message.
@@ -388,45 +455,29 @@ class InstructorBaseAgent[
         Runs the chat agent with the given user input asynchronously.
 
         Args:
-            user_input (Optional[InputSchema]):
-                The input from the user.
-                If not provided, skips adding to memory.
+            params: The input from the user.
 
         Returns:
             OutputSchema: The response from the chat agent.
         """
-
-        # start fresh if no tracking required
-        messages = [] if self.stateless else self.memory
-
-        # if empty, add system message
-        if not messages:
-            messages.append(self._default_system_message())
-
-        # add user message
-        if params:
-            messages.append(
-                dict(
-                    role="user",
-                    content=params.model_dump_json(exclude={"type"}),
-                ),
-            )
+        # Prepare working messages (copy of memory or fresh list)
+        messages = self._prepare_messages(params)
 
         response = await self.get_response_async(
             messages=messages,
             response_model=self.output_schema,
         )
 
+        # Add assistant response
         messages.append(
-            dict(
-                role="assistant",
-                content=response.model_dump_json(exclude={"type"}),
-            ),
+            {
+                "role": "assistant",
+                "content": response.model_dump_json(exclude={"type"}),
+            },
         )
 
-        # update memory only if stateful
-        if not self.stateless:
-            self._memory = messages
+        # Single point of memory persistence
+        self._persist_memory(messages)
 
         return response
 
@@ -476,6 +527,62 @@ class LiteLLMInstructorBaseAgent[
         result.client = instructor.from_litellm(acompletion)
 
         return result
+
+    def _prepare_messages(self, params: InSchema | None = None) -> list[dict[str, Any]]:
+        """Prepare working messages for a run.
+
+        Returns a COPY of memory (stateful) or fresh list (stateless).
+        This ensures the tool loop can mutate messages without affecting
+        stored memory until explicitly persisted.
+
+        Args:
+            params: Optional input parameters to add as user message.
+
+        Returns:
+            Working message list (copy of memory or fresh).
+        """
+        if self.stateless:
+            messages = []
+        else:
+            messages = list(self._memory)  # Shallow copy - safe for message dicts
+
+        if not messages:
+            messages.append(self._default_system_message())
+
+        if params:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": params.model_dump_json(exclude={"type"}),
+                },
+            )
+
+        return messages
+
+    def _persist_memory(self, messages: list[dict[str, Any]]) -> None:
+        """Persist messages to memory with trimming.
+
+        This is the SINGLE point where memory should be persisted.
+        Called only on successful completion, not mid-run.
+
+        Trimming is applied here to keep _memory bounded, preventing
+        unbounded growth across multiple runs.
+
+        Args:
+            messages: The complete message list to persist.
+        """
+        if self.stateless:
+            return
+
+        if self.enable_trimming:
+            messages = trim_messages(
+                messages,
+                model=self.model_name,
+                max_tokens=self.max_tokens,
+                trim_ratio=self.trim_ratio,
+            )
+
+        self._memory = messages
 
     async def get_response_async(
         self,
@@ -550,33 +657,15 @@ class LiteLLMInstructorBaseAgent[
         """
         class_name = self.__class__.__name__
 
-        # Build messages
-        messages = [] if self.stateless else self.memory
-        if not messages:
-            messages.append(self._default_system_message())
-
-        if params:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": params.model_dump_json(exclude={"type"}),
-                },
-            )
-
-        # Apply trimming if enabled
-        if self.enable_trimming:
-            messages = trim_messages(
-                messages,
-                model=self.model_name,
-                max_tokens=self.max_tokens,
-                trim_ratio=self.trim_ratio,
-            )
+        # Prepare working messages (copy of memory or fresh list)
+        messages = self._prepare_messages(params)
 
         output: OutSchema | None = None
 
         if self.tools:
             # === TOOL CALLING MODE ===
             # Use _run_tool_loop and consume events to get final output
+            # Note: Tool loop mutates `messages` in place during iterations
             run_context = {"run_id": uuid.uuid4().hex[:8]}
             async for event in self._run_tool_loop(
                 messages,
@@ -592,21 +681,32 @@ class LiteLLMInstructorBaseAgent[
 
         else:
             # === DIRECT MODE (no tools) ===
-            # Use instructor for structured output
+            # Apply trimming for LLM call (get_response_async also trims, but be explicit)
+            if self.enable_trimming:
+                trimmed_messages = trim_messages(
+                    messages,
+                    model=self.model_name,
+                    max_tokens=self.max_tokens,
+                    trim_ratio=self.trim_ratio,
+                )
+            else:
+                trimmed_messages = messages
+
             output = await self.get_response_async(
-                messages=messages,
+                messages=trimmed_messages,
                 response_model=self.output_schema,
             )
 
-        # Update memory
+        # Add final assistant message
         messages.append(
             {
                 "role": "assistant",
                 "content": output.model_dump_json(exclude={"type"}),
             },
         )
-        if not self.stateless:
-            self._memory = messages
+
+        # Single point of memory persistence (with trimming)
+        self._persist_memory(messages)
 
         return output
 
@@ -891,6 +991,8 @@ class LiteLLMInstructorBaseAgent[
             # Check max_tool_calls limit before executing
             if self.max_tool_calls is not None:
                 if total_tool_calls + len(tool_calls) > self.max_tool_calls:
+                    # Persist memory before raising (conversation history is still valid)
+                    self._persist_memory(messages)
                     raise MaxToolCallsExceeded(
                         f"Exceeded {self.max_tool_calls} total tool calls "
                         f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
@@ -950,9 +1052,8 @@ class LiteLLMInstructorBaseAgent[
                     },
                 )
 
-            # Persist memory after each iteration (so state survives exceptions)
-            if not self.stateless:
-                self._memory = messages
+            # Note: Memory persistence moved to caller (_arun/_astream)
+            # Tool loop only mutates working messages, doesn't persist
 
             # Inject reflection prompt if configured (forces reasoning before next iteration)
             if self.reflection_prompt:
@@ -970,7 +1071,8 @@ class LiteLLMInstructorBaseAgent[
                     context=run_context,
                 )
 
-        # Loop exhausted
+        # Loop exhausted - persist memory before raising (conversation history is still valid)
+        self._persist_memory(messages)
         raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
 
     async def _astream(
@@ -1027,29 +1129,8 @@ class LiteLLMInstructorBaseAgent[
         )
 
         try:
-            # Note: Input validation handled by parent astream()
-
-            # Build messages (same logic as _arun)
-            messages = [] if self.stateless else self.memory
-            if not messages:
-                messages.append(self._default_system_message())
-
-            if params:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": params.model_dump_json(exclude={"type"}),
-                    },
-                )
-
-            # Apply trimming if enabled
-            if self.enable_trimming:
-                messages = trim_messages(
-                    messages,
-                    model=self.model_name,
-                    max_tokens=self.max_tokens,
-                    trim_ratio=self.trim_ratio,
-                )
+            # Prepare working messages (copy of memory or fresh list)
+            messages = self._prepare_messages(params)
 
             yield StreamEvent(
                 event_type=StreamEventType.RUNNING,
@@ -1064,24 +1145,27 @@ class LiteLLMInstructorBaseAgent[
             if self.tools:
                 # === TOOL CALLING MODE ===
                 # Yields STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT, then COMPLETED
+                # Tool loop mutates `messages` in place during iterations
                 async for event in self._run_tool_loop(
                     messages,
                     class_name,
                     run_context,
                     token_batch_size=token_batch_size,
                 ):
-                    # Update memory BEFORE yielding COMPLETED (so early break still persists)
                     if event.event_type == StreamEventType.COMPLETED:
                         output = event.output
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": output.model_dump_json(exclude={"type"}),
-                            },
-                        )
-                        if not self.stateless:
-                            self._memory = messages
                     yield event
+
+                # Persistence happens after loop completes (single point)
+                if output is not None:
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": output.model_dump_json(exclude={"type"}),
+                        },
+                    )
+                    self._persist_memory(messages)
+
             else:
                 # === STREAMING MODE (no tools) ===
                 # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
@@ -1115,15 +1199,14 @@ class LiteLLMInstructorBaseAgent[
                 if output is None:
                     raise UnexpectedModelBehavior("No output received from LLM")
 
-                # Update memory BEFORE yielding COMPLETED (so early break still persists)
+                # Add final assistant message and persist (single point)
                 messages.append(
                     {
                         "role": "assistant",
                         "content": output.model_dump_json(exclude={"type"}),
                     },
                 )
-                if not self.stateless:
-                    self._memory = messages
+                self._persist_memory(messages)
 
                 yield StreamEvent(
                     event_type=StreamEventType.COMPLETED,
