@@ -396,6 +396,12 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
     async def _call_harm_detection(self, prompt: str) -> dict[str, Any]:
         """Step 1: Call model to detect harm. Stop at </confidence>."""
         try:
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 1 - Sending harm detection prompt:\n"
+                    f"--- PROMPT START ---\n{prompt}\n--- PROMPT END ---",
+                )
+
             url = urljoin(str(self.config.ollama_base_url), "/api/generate")
             response = await self._client.post(
                 url,
@@ -415,10 +421,21 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
 
             content = response.json().get("response", "")
 
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 1 - Ollama response:\n"
+                    f"--- RESPONSE START ---\n{content}\n--- RESPONSE END ---",
+                )
+
             # Parse: "Yes\n<confidence> High " or "No\n<confidence> Low "
             label = "yes" if content.strip().lower().startswith("yes") else "no"
             confidence_match = re.search(r"<confidence>\s*(\w+)", content)
             confidence = confidence_match.group(1) if confidence_match else ""
+
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 1 - Parsed: label={label}, confidence={confidence}",
+                )
 
             return {
                 "label": label,
@@ -433,6 +450,12 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
     async def _call_category_detection(self, prompt: str) -> dict[str, Any]:
         """Step 2: Call model to get categories. Stop at </categories>."""
         try:
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 2 - Sending category detection prompt:\n"
+                    f"--- PROMPT START ---\n{prompt}\n--- PROMPT END ---",
+                )
+
             url = urljoin(str(self.config.ollama_base_url), "/api/generate")
             response = await self._client.post(
                 url,
@@ -451,7 +474,19 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
             response.raise_for_status()
 
             content = response.json().get("response", "")
+
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 2 - Ollama response:\n"
+                    f"--- RESPONSE START ---\n{content}\n--- RESPONSE END ---",
+                )
+
             categories = self._parse_categories(content)
+
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 2 - Parsed categories: {[c.value for c in categories]}",
+                )
 
             return {
                 "categories": categories,
