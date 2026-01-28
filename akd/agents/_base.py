@@ -707,15 +707,25 @@ class LiteLLMInstructorBaseAgent[
         # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
         human_response = run_context.get("human_response")
         if human_response:
+            tool_call_id = human_response["tool_call_id"]
+            content = human_response.get("content", {"response": human_response.get("response", "")})
+
             # Inject human's response as tool result
             messages.append(
                 {
                     "role": "tool",
-                    "tool_call_id": human_response["tool_call_id"],
-                    "content": json.dumps(
-                        human_response.get("content", {"response": human_response.get("response", "")}),
-                    ),
+                    "tool_call_id": tool_call_id,
+                    "content": json.dumps(content),
                 },
+            )
+
+            # Emit event so caller knows we resumed with human input
+            yield StreamEvent(
+                event_type=StreamEventType.HUMAN_RESPONSE,
+                source=class_name,
+                message="Resumed with human input",
+                data={"tool_call_id": tool_call_id, "response": content},
+                context=run_context,
             )
 
         # For partial output validation (only for final answer)

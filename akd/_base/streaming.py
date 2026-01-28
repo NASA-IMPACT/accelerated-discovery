@@ -29,6 +29,7 @@ class StreamEventType(str, Enum):
 
     # Human interaction (Stage 3)
     HUMAN_INPUT_REQUIRED = "human_input_required"
+    HUMAN_RESPONSE = "human_response"  # Resumed with human input
 
 
 class StreamEvent(BaseModel):
@@ -57,6 +58,7 @@ class StreamEvent(BaseModel):
         HUMAN_INPUT_REQUIRED: {"prompt": str, "tool_call_id": str, "tool_name": str,
             "context": dict | None, "options": list[str] | None,
             "message_history": list[dict]} for human-in-the-loop interaction
+        HUMAN_RESPONSE: {"tool_call_id": str, "response": Any} when resuming with human input
 
     Example:
         async for event in agent.astream(input_data):
