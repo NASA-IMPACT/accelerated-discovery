@@ -376,7 +376,7 @@ class InstructorBaseAgent[
         """
         async with self.memory.asession(
             stateless=self.stateless,
-            run_run_context=run_context,
+            run_context=run_context,
             enable_trimming=self.enable_trimming,
             model_name=self.model_name,
             max_tokens=self.max_tokens,
@@ -535,7 +535,7 @@ class LiteLLMInstructorBaseAgent[
 
         async with self.memory.asession(
             stateless=self.stateless,
-            run_run_context=run_context,
+            run_context=run_context,
             enable_trimming=self.enable_trimming,
             model_name=self.model_name,
             max_tokens=self.max_tokens,
@@ -704,6 +704,9 @@ class LiteLLMInstructorBaseAgent[
             StreamEvent: STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT,
                         HUMAN_INPUT_REQUIRED, or COMPLETED
         """
+        # Attach messages reference to run_context (caller can access live state via any event)
+        run_context.messages = messages
+
         # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
         human_response = run_context.human_response
         if human_response:
@@ -1065,7 +1068,7 @@ class LiteLLMInstructorBaseAgent[
         try:
             async with self.memory.asession(
                 stateless=self.stateless,
-                run_run_context=run_context,
+                run_context=run_context,
                 enable_trimming=self.enable_trimming,
                 model_name=self.model_name,
                 max_tokens=self.max_tokens,

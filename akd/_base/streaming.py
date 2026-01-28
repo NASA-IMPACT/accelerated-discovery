@@ -6,12 +6,11 @@ import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-if TYPE_CHECKING:
-    from .tool_calling import RunContext
+from .tool_calling import RunContext
 
 
 class StreamEventType(str, Enum):
