@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from akd._base.memory import Memory
 from akd.agents._base import BaseAgentConfig
 
 from .conftest import (
@@ -27,7 +28,7 @@ class TestInstructorBaseAgentFunctionality:
 
         # Verify agent properties
         assert agent.client == mock_instructor_client
-        assert isinstance(agent.memory, list)
+        assert isinstance(agent.memory, Memory)
         assert len(agent.memory) == 0
 
     def test_initialization_custom_config(
@@ -48,7 +49,7 @@ class TestInstructorBaseAgentFunctionality:
         agent = TestInstructorBaseAgent()
 
         # Test initial memory state
-        assert isinstance(agent.memory, list)
+        assert isinstance(agent.memory, Memory)
         assert len(agent.memory) == 0
 
         # Add test messages manually
