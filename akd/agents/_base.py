@@ -100,7 +100,7 @@ class BaseAgentConfig(BaseConfig):
         description="List of tools available to the agent",
     )
     max_tool_iterations: int = Field(
-        default=10,
+        default=25,
         ge=1,
         le=50,
         description="Maximum tool calling iterations (ReAct loop turns) before stopping",
@@ -217,8 +217,12 @@ class BaseAgent[
     ) -> TextOutput:
         """Convenience method for simple text-based conversations.
 
-        A simplified interface for chat-style interactions. Automatically wraps
-        input in TextInput if needed and returns TextOutput directly.
+        Converts any agent into a chat-style interface by routing through _arun(),
+        preserving tool calling, guardrails, and streaming support. Wraps input
+        in TextInput and converts the agent's response to TextOutput.
+
+        Note: Messages in memory will be JSON-serialized (e.g. {"content": "hello"})
+        rather than plain text, since this goes through the standard _arun() pipeline.
 
         Args:
             params: The input content. If already a TextInput, used directly.
@@ -229,20 +233,20 @@ class BaseAgent[
             TextOutput: The agent's text response.
 
         Example:
-            # Simple usage
-            response = await agent.achat("Hello, how are you?")
-            print(response.content)  # "I'm doing well, thanks!"
+            # Works with any agent, not just TextInput/TextOutput agents
+            response = await search_agent.achat("Find papers on quantum computing")
+            print(response.content)
 
             # Multi-turn with stateless=False
-            agent = ChatAgent(config=BaseAgentConfig(stateless=False))
+            agent = MyAgent(config=BaseAgentConfig(stateless=False))
             await agent.achat("My name is Alice")
             response = await agent.achat("What's my name?")  # response.content == "Alice"
-
-            # Already a TextInput - used directly
-            await agent.achat(TextInput(content="Hello"))
         """
         text_input = params if isinstance(params, TextInput) else TextInput(content=str(params))
-        return await self.arun(text_input, run_context=run_context)
+        result = await self._arun(text_input, run_context=run_context)
+        if isinstance(result, TextOutput):
+            return result
+        return TextOutput(content=result._response or str(result))
 
     @abstractmethod
     async def get_response_async(
