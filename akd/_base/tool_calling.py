@@ -86,30 +86,41 @@ class ToolCallingMixin:
                 result = await self._execute_tool(tool_call)
     """
 
-    def _find_tool(self, name: str) -> BaseTool | None:
+    def _find_tool(
+        self,
+        name: str,
+        tools: list[BaseTool] | None = None,
+    ) -> BaseTool | None:
         """Find a tool by name.
 
         Args:
             name: The name of the tool to find (checks both tool.name and class name)
+            tools: Optional list of tools to search. Defaults to self.tools.
 
         Returns:
             The matching tool instance, or None if not found
         """
+        tools = tools or self.tools
         return next(
-            (t for t in self.tools if t.name == name or t.__class__.__name__ == name),
+            (t for t in tools if t.name == name or t.__class__.__name__ == name),
             None,
         )
 
-    async def _execute_tool(self, tool_call: ToolCall) -> ToolResult:
+    async def _execute_tool(
+        self,
+        tool_call: ToolCall,
+        tools: list[BaseTool] | None = None,
+    ) -> ToolResult:
         """Execute a single tool call.
 
         Args:
             tool_call: Normalized tool call request
+            tools: Optional list of tools to search. Defaults to self.tools.
 
         Returns:
             ToolResult with content or error
         """
-        tool = self._find_tool(tool_call.tool_name)
+        tool = self._find_tool(tool_call.tool_name, tools=tools)
         if not tool:
             return ToolResult(
                 tool_call_id=tool_call.tool_call_id,
@@ -139,6 +150,7 @@ class ToolCallingMixin:
     async def _execute_tools_parallel(
         self,
         tool_calls: list[ToolCall],
+        tools: list[BaseTool] | None = None,
     ) -> list[ToolResult]:
         """Execute multiple tool calls in parallel.
 
@@ -147,12 +159,13 @@ class ToolCallingMixin:
 
         Args:
             tool_calls: List of normalized tool calls
+            tools: Optional list of tools to search. Defaults to self.tools.
 
         Returns:
             List of ToolResults in same order as input
         """
         return list(
-            await asyncio.gather(*[self._execute_tool(tc) for tc in tool_calls]),
+            await asyncio.gather(*[self._execute_tool(tc, tools=tools) for tc in tool_calls]),
         )
 
 

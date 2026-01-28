@@ -944,13 +944,8 @@ class LiteLLMInstructorBaseAgent[
                     )
 
             # Execute all tools in parallel (including OutputTool if called)
-            # Temporarily include OutputTool so _find_tool can find it
-            original_tools = self.tools
-            self.tools = all_tool_instances
-            try:
-                results = await self._execute_tools_parallel(tool_calls)
-            finally:
-                self.tools = original_tools
+            # Pass all_tool_instances directly to avoid mutating self.tools (race condition)
+            results = await self._execute_tools_parallel(tool_calls, tools=all_tool_instances)
 
             total_tool_calls += len(tool_calls)
 
