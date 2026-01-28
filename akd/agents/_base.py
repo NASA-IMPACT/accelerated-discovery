@@ -17,6 +17,7 @@ from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 from akd._base import (
     AbstractBase,
     BaseConfig,
+    HumanResponse,
     InputSchema,
     Memory,
     OutputSchema,
@@ -368,7 +369,7 @@ class InstructorBaseAgent[
 
         Args:
             params: The input from the user.
-            context: Optional context dict (message_history, human_response, etc.)
+            context: Optional context dict (message_history, human_response: akd._base.HumanResponse, etc.)
 
         Returns:
             OutputSchema: The response from the chat agent.
@@ -525,7 +526,7 @@ class LiteLLMInstructorBaseAgent[
 
         Args:
             params: Input parameters matching input_schema.
-            context: Optional context dict (message_history, human_response, etc.)
+            context: Optional context dict (message_history, human_response: akd._base.HumanResponse, etc.)
 
         Returns:
             Output matching output_schema.
@@ -697,7 +698,7 @@ class LiteLLMInstructorBaseAgent[
         Args:
             messages: Conversation history (mutated in place)
             class_name: For event source
-            run_context: For event context (may contain human_response for resumption)
+            run_context: For event context (may contain human_response: akd._base.HumanResponse for resumption)
             token_batch_size: Batch N characters before emitting STREAMING event
 
         Yields:
@@ -705,10 +706,10 @@ class LiteLLMInstructorBaseAgent[
                         HUMAN_INPUT_REQUIRED, or COMPLETED
         """
         # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
-        human_response = run_context.get("human_response")
+        human_response: HumanResponse | None = run_context.get("human_response")
         if human_response:
-            tool_call_id = human_response["tool_call_id"]
-            content = human_response.get("content", {"response": human_response.get("response", "")})
+            tool_call_id = human_response.tool_call_id
+            content = human_response.content
 
             # Inject human's response as tool result
             messages.append(
