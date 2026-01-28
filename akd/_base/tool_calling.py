@@ -6,6 +6,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
@@ -166,6 +167,7 @@ class ToolCallingMixin:
                 content=content,
             )
         except Exception as e:
+            logger.exception(f"Tool '{tool_call.tool_name}' failed with args {tool_call.arguments}")
             return ToolResult(
                 tool_call_id=tool_call.tool_call_id,
                 tool_name=tool_call.tool_name,
