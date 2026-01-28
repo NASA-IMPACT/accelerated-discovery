@@ -92,6 +92,54 @@ class OutputSchema(IOSchema):
         return ""
 
 
+class TextInput(InputSchema):
+    """Simple text-based input schema for unstructured content.
+
+    Use this schema when you need a simple input format without structured fields,
+    such as for conversational agents, chat interfaces, or any scenario where
+    the input is just free-form text content.
+
+    This is the text-specific implementation of InputSchema. For other modalities,
+    use corresponding schemas like ImageInput, DocumentInput, etc. (when available).
+
+    Example:
+        # Simple chat agent usage
+        agent = ChatAgent(config=config)
+        result = await agent.arun(TextInput(content="Hello, how are you?"))
+
+        # Multi-turn conversation with stateless=False
+        await agent.arun(TextInput(content="My name is Alice"))
+        await agent.arun(TextInput(content="What's my name?"))  # Remembers context
+    """
+
+    content: str = Field(description="The text content to process")
+
+
+class TextOutput(OutputSchema):
+    """Simple text-based output schema for unstructured content.
+
+    Use this schema when your agent produces free-form text output without
+    structured fields, such as for conversational responses, summaries,
+    or any scenario where the output is just text content.
+
+    This is the text-specific implementation of OutputSchema. For other modalities,
+    use corresponding schemas like ImageOutput, DocumentOutput, etc. (when available).
+
+    Example:
+        class ChatAgent(LiteLLMInstructorBaseAgent[TextInput, TextOutput]):
+            '''Simple conversational agent.'''
+            input_schema = TextInput
+            output_schema = TextOutput
+
+        result = await agent.arun(TextInput(content="Tell me a joke"))
+        print(result.content)  # The agent's text response
+    """
+
+    __response_field__: str | None = "content"
+
+    content: str = Field(description="The text content response")
+
+
 def _make_config_property(field_name: str):
     """Create a property that references a config field.
 

@@ -24,6 +24,8 @@ from akd._base import (
     RunContext,
     StreamEvent,
     StreamEventType,
+    TextInput,
+    TextOutput,
     ToolCall,
     ToolCallingMixin,
 )
@@ -207,6 +209,40 @@ class BaseAgent[
             "role": "system",
             "content": self._system_prompt,
         }
+
+    async def achat(
+        self,
+        params: Any,
+        run_context: RunContext | None = None,
+    ) -> TextOutput:
+        """Convenience method for simple text-based conversations.
+
+        A simplified interface for chat-style interactions. Automatically wraps
+        input in TextInput if needed and returns TextOutput directly.
+
+        Args:
+            params: The input content. If already a TextInput, used directly.
+                    Otherwise, stringified and wrapped in TextInput.
+            run_context: Optional context for resumption after human input.
+
+        Returns:
+            TextOutput: The agent's text response.
+
+        Example:
+            # Simple usage
+            response = await agent.achat("Hello, how are you?")
+            print(response.content)  # "I'm doing well, thanks!"
+
+            # Multi-turn with stateless=False
+            agent = ChatAgent(config=BaseAgentConfig(stateless=False))
+            await agent.achat("My name is Alice")
+            response = await agent.achat("What's my name?")  # response.content == "Alice"
+
+            # Already a TextInput - used directly
+            await agent.achat(TextInput(content="Hello"))
+        """
+        text_input = params if isinstance(params, TextInput) else TextInput(content=str(params))
+        return await self.arun(text_input, run_context=run_context)
 
     @abstractmethod
     async def get_response_async(

@@ -8,6 +8,8 @@ from ._base import (
     InputSchema,
     IOSchema,
     OutputSchema,
+    TextInput,
+    TextOutput,
     UnrestrictedAbstractBase,
 )
 from .errors import HumanInputRequired
@@ -31,6 +33,8 @@ __all__ = [
     "IOSchema",
     "InputSchema",
     "OutputSchema",
+    "TextInput",
+    "TextOutput",
     # Config classes
     "BaseConfig",
     # Metadata and decorators
