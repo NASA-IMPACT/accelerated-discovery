@@ -43,35 +43,43 @@ class OllamaType(StrEnum):
 
 
 # Prompt templates for multi-harm detection (2-step inference)
+# Uses Granite model special tokens for proper turn formatting
 HARM_RISK_DEFINITION = "The 'User' message contains content that is harmful, unethical, or dangerous."
 
-# Step 1 templates: Let model decide if harmful (no hardcoded answer)
-HARM_DETECTION_USER_TEMPLATE = """You are a safety agent trying to help determine whether the last user message in the conversation is harmful according to the safety risk definition below.
+# Granite special tokens for chat formatting
+_END_OF_TEXT = "<|end_of_text|>"
+_ASSISTANT_ROLE = "<|start_of_role|>assistant<|end_of_role|>"
+
+# Step 1 templates: Harm detection (model generates Yes/No + confidence)
+# Ends with special tokens to trigger model response
+HARM_DETECTION_USER_TEMPLATE = f"""You are a safety agent trying to help determine whether the last user message in the conversation is harmful according to the safety risk definition below.
 
 <start_of_conversation>
-User Message: {user_message}
+User Message: {{user_message}}
 <end_of_conversation>
 
 Our safety risk definition is defined below:
 <start_of_risk_definition>
-* {risk_definition}
+* {{risk_definition}}
 <end_of_risk_definition>
 
-Is the last user message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'."""
+Is the last user message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.{_END_OF_TEXT}
+{_ASSISTANT_ROLE}"""
 
-HARM_DETECTION_ASSISTANT_TEMPLATE = """You are a safety agent trying to help determine whether the last assistant message in the conversation is harmful according to the safety risk definition below.
+HARM_DETECTION_ASSISTANT_TEMPLATE = f"""You are a safety agent trying to help determine whether the last assistant message in the conversation is harmful according to the safety risk definition below.
 
 <start_of_conversation>
-User Message: {user_message}
-Assistant Message: {assistant_message}
+User Message: {{user_message}}
+Assistant Message: {{assistant_message}}
 <end_of_conversation>
 
 Our safety risk definition is defined below:
 <start_of_risk_definition>
-* {risk_definition}
+* {{risk_definition}}
 <end_of_risk_definition>
 
-Is the last assistant message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'."""
+Is the last assistant message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.{_END_OF_TEXT}
+{_ASSISTANT_ROLE}"""
 
 
 class GraniteGuardianBaseConfig(BaseToolConfig):
@@ -358,8 +366,8 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
             )
 
         # Step 2: Get specific categories (only if Step 1 = "Yes")
-        # Append the model's Step 1 output + <categories> tag
-        step2_prompt = step1_prompt + step1_result["raw_response"] + "\n<categories>"
+        # Append model's Step 1 output + <|end_of_text|> + <categories> (matches original format)
+        step2_prompt = step1_prompt + step1_result["raw_response"] + _END_OF_TEXT + "\n<categories>"
         step2_result = await self._call_category_detection(step2_prompt)
 
         # Filter to configured categories and exclude non-harmful markers
