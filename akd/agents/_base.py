@@ -559,7 +559,9 @@ class LiteLLMInstructorBaseAgent[
                 # === TOOL CALLING MODE ===
                 # Use _run_tool_loop and consume events to get final output
                 # Note: Tool loop mutates `messages` in place during iterations
-                run_context = {"run_id": uuid.uuid4().hex[:8]}
+                run_context = context.copy() if context else {}
+                if "run_id" not in run_context:
+                    run_context["run_id"] = uuid.uuid4().hex[:8]
                 async for event in self._run_tool_loop(
                     messages,
                     class_name,
