@@ -14,7 +14,13 @@ from .errors import HumanInputRequired
 from .exposure import ParamExposureMixin, exposed_param
 from .memory import Memory
 from .streaming import StreamEvent, StreamEventType, StreamingMixin
-from .tool_calling import HumanResponse, ToolCall, ToolCallingMixin, ToolResult
+from .tool_calling import (
+    HumanResponse,
+    RunContext,
+    ToolCall,
+    ToolCallingMixin,
+    ToolResult,
+)
 
 __all__ = [
     # Base classes
@@ -40,6 +46,8 @@ __all__ = [
     "ToolCall",
     "ToolResult",
     "ToolCallingMixin",
+    # Context
+    "RunContext",
     # Human interaction
     "HumanResponse",
     "HumanInputRequired",

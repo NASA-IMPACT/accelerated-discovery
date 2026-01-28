@@ -1,10 +1,15 @@
 """Memory storage for agents."""
 
+from __future__ import annotations
+
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any
+from typing import TYPE_CHECKING
 
 from litellm.utils import trim_messages
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from .tool_calling import RunContext
 
 
 class Memory[T](BaseModel):
@@ -65,7 +70,7 @@ class Memory[T](BaseModel):
     def session(
         self,
         stateless: bool = False,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         enable_trimming: bool = False,
         model_name: str | None = None,
         max_tokens: int | None = None,
@@ -75,7 +80,7 @@ class Memory[T](BaseModel):
 
         Args:
             stateless: Clear memory at start and end
-            context: If contains "message_history", sync from it
+            run_context: RunContext with messages for resumption
             enable_trimming: Enable message trimming
             model_name: Model name for trimming
             max_tokens: Max tokens for trimming
@@ -88,8 +93,8 @@ class Memory[T](BaseModel):
         if stateless:
             self.clear()
 
-        if context and "message_history" in context:
-            self.sync(context["message_history"])
+        if run_context and run_context.messages:
+            self.sync(run_context.messages)
 
         if enable_trimming and model_name and max_tokens:
             trimmed = trim_messages(
@@ -110,7 +115,7 @@ class Memory[T](BaseModel):
     async def asession(
         self,
         stateless: bool = False,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         enable_trimming: bool = False,
         model_name: str | None = None,
         max_tokens: int | None = None,
@@ -120,7 +125,7 @@ class Memory[T](BaseModel):
 
         Args:
             stateless: Clear memory at start and end
-            context: If contains "message_history", sync from it
+            run_context: RunContext with messages for resumption
             enable_trimming: Enable message trimming
             model_name: Model name for trimming
             max_tokens: Max tokens for trimming
@@ -131,7 +136,7 @@ class Memory[T](BaseModel):
         """
         with self.session(
             stateless=stateless,
-            context=context,
+            run_context=run_context,
             enable_trimming=enable_trimming,
             model_name=model_name,
             max_tokens=max_tokens,

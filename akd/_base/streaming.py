@@ -1,12 +1,17 @@
 """Streaming support for akd agents and tools."""
 
+from __future__ import annotations
+
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from .tool_calling import RunContext
 
 
 class StreamEventType(str, Enum):
@@ -55,9 +60,8 @@ class StreamEvent(BaseModel):
         PARTIAL: {"partial_output": Any} for partial structured output
         TOOL_CALLING: {"tool_name": str, "tool_input": dict}
         TOOL_RESULT: {"tool_name": str, "tool_output": Any}
-        HUMAN_INPUT_REQUIRED: {"prompt": str, "tool_call_id": str, "tool_name": str,
-            "context": dict | None, "options": list[str] | None,
-            "message_history": list[dict]} for human-in-the-loop interaction
+        HUMAN_INPUT_REQUIRED: {"human_input": HumanToolInput, "tool_call_id": str,
+            "tool_name": str} - messages for resumption are in run_context.messages
         HUMAN_RESPONSE: {"tool_call_id": str, "response": Any} when resuming with human input
 
     Example:
@@ -88,9 +92,9 @@ class StreamEvent(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
     # Execution context
-    context: dict[str, Any] = Field(
+    run_context: RunContext | dict[str, Any] = Field(
         default_factory=dict,
-        description="Execution context (node_id, query, etc.)",
+        description="Execution context (run_id, human_response, messages, etc.)",
     )
 
     # Convenience properties
@@ -168,7 +172,7 @@ class StreamingMixin:
     async def astream(
         self,
         params: Any,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Public streaming API with input/output validation.
@@ -179,7 +183,7 @@ class StreamingMixin:
 
         Args:
             params: Input parameters
-            context: Execution context (node_id, query, etc.). Auto-generates run_id if not provided.
+            run_context: RunContext with run_id, messages, human_response, etc.
             **kwargs: Passed to _astream()
 
         Yields:
@@ -192,7 +196,7 @@ class StreamingMixin:
         params = self._validate_input(params)
 
         # Stream from internal implementation
-        async for event in self._astream(params, context, **kwargs):
+        async for event in self._astream(params, run_context, **kwargs):
             if event.event_type == StreamEventType.COMPLETED:
                 # Validate output before yielding COMPLETED
                 output = event.data.get("output")
@@ -206,7 +210,7 @@ class StreamingMixin:
                         source=event.source,
                         message=event.message,
                         data={"output": output},
-                        context=event.context,
+                        run_context=event.run_context,
                     )
                     continue
             yield event
@@ -214,7 +218,7 @@ class StreamingMixin:
     async def _astream(
         self,
         params: Any,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Internal streaming implementation. Override for custom streaming.
@@ -232,24 +236,26 @@ class StreamingMixin:
 
         Args:
             params: Input parameters (already validated by astream())
-            context: Execution context
+            run_context: RunContext with run_id, messages, human_response, etc.
             **kwargs: Additional arguments
 
         Yields:
             StreamEvent: STARTING, RUNNING, then COMPLETED or FAILED
         """
+        # Import here to avoid circular import at module level
+        from .tool_calling import RunContext as RunContextClass
+
         class_name = self.__class__.__name__
 
         # Auto-generate run_id for event correlation
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context = (run_context or RunContextClass()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         yield StreamEvent(
             event_type=StreamEventType.STARTING,
             source=class_name,
             message=f"Starting {class_name}",
-            context=run_context,
+            run_context=run_context,
         )
 
         try:
@@ -257,7 +263,7 @@ class StreamingMixin:
                 event_type=StreamEventType.RUNNING,
                 source=class_name,
                 message=f"Running {class_name}",
-                context=run_context,
+                run_context=run_context,
             )
 
             output = await self._arun(params, **kwargs)
@@ -267,7 +273,7 @@ class StreamingMixin:
                 source=class_name,
                 message=f"Completed {class_name}",
                 data={"output": output},
-                context=run_context,
+                run_context=run_context,
             )
         except Exception as e:
             yield StreamEvent(
@@ -275,7 +281,7 @@ class StreamingMixin:
                 source=class_name,
                 message=f"Failed: {e!s}",
                 data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                run_context=run_context,
             )
             raise
 

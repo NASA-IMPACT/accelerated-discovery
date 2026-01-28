@@ -17,11 +17,11 @@ from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 from akd._base import (
     AbstractBase,
     BaseConfig,
-    HumanResponse,
     InputSchema,
     Memory,
     OutputSchema,
     ParamExposureMixin,
+    RunContext,
     StreamEvent,
     StreamEventType,
     ToolCall,
@@ -361,7 +361,7 @@ class InstructorBaseAgent[
     async def _arun(
         self,
         params: InSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs,
     ) -> OutSchema:
         """
@@ -369,14 +369,14 @@ class InstructorBaseAgent[
 
         Args:
             params: The input from the user.
-            context: Optional context dict (message_history, human_response: akd._base.HumanResponse, etc.)
+            run_context: Optional RunContext with messages, human_response, etc.
 
         Returns:
             OutputSchema: The response from the chat agent.
         """
         async with self.memory.asession(
             stateless=self.stateless,
-            context=context,
+            run_run_context=run_context,
             enable_trimming=self.enable_trimming,
             model_name=self.model_name,
             max_tokens=self.max_tokens,
@@ -387,7 +387,7 @@ class InstructorBaseAgent[
                 messages.append(self._default_system_message())
 
             # Add user message (skip if resuming with human response)
-            if params and not (context and "human_response" in context):
+            if params and not (run_context and run_context.human_response):
                 messages.append(
                     {
                         "role": "user",
@@ -516,7 +516,7 @@ class LiteLLMInstructorBaseAgent[
     async def _arun(
         self,
         params: InSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs,
     ) -> OutSchema:
         """Run agent with optional tool calling support.
@@ -526,7 +526,7 @@ class LiteLLMInstructorBaseAgent[
 
         Args:
             params: Input parameters matching input_schema.
-            context: Optional context dict (message_history, human_response: akd._base.HumanResponse, etc.)
+            run_context: Optional RunContext with messages, human_response, etc.
 
         Returns:
             Output matching output_schema.
@@ -535,7 +535,7 @@ class LiteLLMInstructorBaseAgent[
 
         async with self.memory.asession(
             stateless=self.stateless,
-            context=context,
+            run_run_context=run_context,
             enable_trimming=self.enable_trimming,
             model_name=self.model_name,
             max_tokens=self.max_tokens,
@@ -546,7 +546,7 @@ class LiteLLMInstructorBaseAgent[
                 messages.append(self._default_system_message())
 
             # Add user message (skip if resuming with human response)
-            if params and not (context and "human_response" in context):
+            if params and not (run_context and run_context.human_response):
                 messages.append(
                     {
                         "role": "user",
@@ -560,9 +560,8 @@ class LiteLLMInstructorBaseAgent[
                 # === TOOL CALLING MODE ===
                 # Use _run_tool_loop and consume events to get final output
                 # Note: Tool loop mutates `messages` in place during iterations
-                run_context = context.copy() if context else {}
-                if "run_id" not in run_context:
-                    run_context["run_id"] = uuid.uuid4().hex[:8]
+                run_context = (run_context or RunContext()).model_copy()
+                run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
                 async for event in self._run_tool_loop(
                     messages,
                     class_name,
@@ -686,7 +685,7 @@ class LiteLLMInstructorBaseAgent[
         self,
         messages: list[dict[str, Any]],
         class_name: str,
-        run_context: dict[str, Any],
+        run_context: RunContext,
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
         """ReAct loop: call LLM with tools until final answer.
@@ -698,7 +697,7 @@ class LiteLLMInstructorBaseAgent[
         Args:
             messages: Conversation history (mutated in place)
             class_name: For event source
-            run_context: For event context (may contain human_response: akd._base.HumanResponse for resumption)
+            run_context: RunContext (may contain human_response for resumption)
             token_batch_size: Batch N characters before emitting STREAMING event
 
         Yields:
@@ -706,7 +705,7 @@ class LiteLLMInstructorBaseAgent[
                         HUMAN_INPUT_REQUIRED, or COMPLETED
         """
         # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
-        human_response: HumanResponse | None = run_context.get("human_response")
+        human_response = run_context.human_response
         if human_response:
             tool_call_id = human_response.tool_call_id
             content = human_response.content
@@ -726,7 +725,7 @@ class LiteLLMInstructorBaseAgent[
                 source=class_name,
                 message="Resumed with human input",
                 data={"tool_call_id": tool_call_id, "response": content},
-                context=run_context,
+                run_context=run_context,
             )
 
         # For partial output validation (only for final answer)
@@ -779,7 +778,7 @@ class LiteLLMInstructorBaseAgent[
                         source=class_name,
                         message=reasoning,
                         data={"streaming": True, "reasoning_content": reasoning},
-                        context=run_context,
+                        run_context=run_context,
                     )
 
                 # Batch and stream content tokens
@@ -794,7 +793,7 @@ class LiteLLMInstructorBaseAgent[
                             source=class_name,
                             message=token_buffer,
                             data={"token": token_buffer},
-                            context=run_context,
+                            run_context=run_context,
                         )
                         token_buffer = ""
 
@@ -810,7 +809,7 @@ class LiteLLMInstructorBaseAgent[
                                     source=class_name,
                                     message="Partial output",
                                     data={"partial": partial},
-                                    context=run_context,
+                                    run_context=run_context,
                                 ),
                             )
                         except Exception:
@@ -842,7 +841,7 @@ class LiteLLMInstructorBaseAgent[
                     source=class_name,
                     message=token_buffer,
                     data={"token": token_buffer},
-                    context=run_context,
+                    run_context=run_context,
                 )
 
             # After streaming: check for tool calls
@@ -866,7 +865,7 @@ class LiteLLMInstructorBaseAgent[
                     source=class_name,
                     message=f"Completed {class_name}",
                     data={"output": output},
-                    context=run_context,
+                    run_context=run_context,
                 )
                 return
 
@@ -893,7 +892,7 @@ class LiteLLMInstructorBaseAgent[
                     source=class_name,
                     message=f"Calling {tool_call.tool_name}",
                     data=tool_call.model_dump(),
-                    context=run_context,
+                    run_context=run_context,
                 )
 
             # Check for ask_human tool BEFORE execution - intercept and yield HUMAN_INPUT_REQUIRED
@@ -915,8 +914,8 @@ class LiteLLMInstructorBaseAgent[
                         },
                     )
 
-                    # Build message history snapshot for resumption
-                    message_history = list(messages)
+                    # Store messages in run_context for resumption
+                    run_context.messages = list(messages)
 
                     # Yield HUMAN_INPUT_REQUIRED with full state for resumption
                     yield StreamEvent(
@@ -924,14 +923,11 @@ class LiteLLMInstructorBaseAgent[
                         source=class_name,
                         message=f"Human input required: {human_input.question}",
                         data={
-                            "prompt": human_input.question,
+                            "human_input": human_input,
                             "tool_call_id": tool_call.tool_call_id,
                             "tool_name": tool_call.tool_name,
-                            "context": {"description": human_input.context} if human_input.context else None,
-                            "options": human_input.options,
-                            "message_history": message_history,
                         },
-                        context=run_context,
+                        run_context=run_context,
                     )
                     # End generator gracefully - caller will resume with fresh astream() call
                     return
@@ -961,7 +957,7 @@ class LiteLLMInstructorBaseAgent[
                         source=class_name,
                         message=f"Completed {class_name}",
                         data={"output": output},
-                        context=run_context,
+                        run_context=run_context,
                     )
                     return
 
@@ -972,7 +968,7 @@ class LiteLLMInstructorBaseAgent[
                     source=class_name,
                     message=f"Result from {result.tool_name}",
                     data=result.model_dump(),
-                    context=run_context,
+                    run_context=run_context,
                 )
 
             # Add assistant message (reconstructed from stream) and tool results to history
@@ -1009,7 +1005,7 @@ class LiteLLMInstructorBaseAgent[
                     source=class_name,
                     message="Reflecting on results...",
                     data={"reflection_prompt": self.reflection_prompt},
-                    context=run_context,
+                    run_context=run_context,
                 )
 
         raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
@@ -1017,7 +1013,7 @@ class LiteLLMInstructorBaseAgent[
     async def _astream(
         self,
         params: InSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         token_batch_size: int = 10,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
@@ -1032,7 +1028,7 @@ class LiteLLMInstructorBaseAgent[
 
         Args:
             params: Input parameters (already validated by astream())
-            context: Execution context (node_id, query, etc.)
+            run_context: RunContext with messages, human_response, run_id, etc.
             token_batch_size: Batch N characters before emitting STREAMING event (default=10)
             **kwargs: Additional keyword arguments
 
@@ -1056,21 +1052,20 @@ class LiteLLMInstructorBaseAgent[
         class_name = self.__class__.__name__
 
         # Auto-generate run_id for event correlation
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         yield StreamEvent(
             event_type=StreamEventType.STARTING,
             source=class_name,
             message=f"Starting {class_name}",
-            context=run_context,
+            run_context=run_context,
         )
 
         try:
             async with self.memory.asession(
                 stateless=self.stateless,
-                context=run_context,
+                run_run_context=run_context,
                 enable_trimming=self.enable_trimming,
                 model_name=self.model_name,
                 max_tokens=self.max_tokens,
@@ -1081,7 +1076,7 @@ class LiteLLMInstructorBaseAgent[
                     messages.append(self._default_system_message())
 
                 # Add user message (skip if resuming with human response)
-                if params and not (run_context and "human_response" in run_context):
+                if params and not (run_context and run_context.human_response):
                     messages.append(
                         {
                             "role": "user",
@@ -1093,7 +1088,7 @@ class LiteLLMInstructorBaseAgent[
                     event_type=StreamEventType.RUNNING,
                     source=class_name,
                     message=f"Running {class_name}",
-                    context=run_context,
+                    run_context=run_context,
                 )
 
                 # Route: tool calling mode vs streaming mode
@@ -1131,7 +1126,7 @@ class LiteLLMInstructorBaseAgent[
                                 event_type=StreamEventType.STREAMING,
                                 source=class_name,
                                 data={"token": chunk["token"]},
-                                context=run_context,
+                                run_context=run_context,
                             )
                         elif chunk["type"] == StreamEventType.THINKING:
                             yield StreamEvent(
@@ -1139,7 +1134,7 @@ class LiteLLMInstructorBaseAgent[
                                 source=class_name,
                                 message="Reasoning...",
                                 data={"thinking_content": chunk["content"]},
-                                context=run_context,
+                                run_context=run_context,
                             )
                         elif chunk["type"] == StreamEventType.PARTIAL:
                             yield StreamEvent(
@@ -1147,7 +1142,7 @@ class LiteLLMInstructorBaseAgent[
                                 source=class_name,
                                 message="Partial...",
                                 data={"partial_output": chunk["partial"]},
-                                context=run_context,
+                                run_context=run_context,
                             )
                         elif chunk["type"] == StreamEventType.COMPLETED:
                             output = chunk["output"]
@@ -1168,7 +1163,7 @@ class LiteLLMInstructorBaseAgent[
                         source=class_name,
                         message=f"Completed {class_name}",
                         data={"output": output},
-                        context=run_context,
+                        run_context=run_context,
                     )
 
         except Exception as e:
@@ -1177,6 +1172,6 @@ class LiteLLMInstructorBaseAgent[
                 source=class_name,
                 message=f"Failed: {e!s}",
                 data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                run_context=run_context,
             )
             raise

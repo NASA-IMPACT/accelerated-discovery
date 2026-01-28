@@ -6,7 +6,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from akd.tools._base import BaseTool
@@ -46,26 +46,52 @@ class HumanResponse(ToolResult):
     for the ask_human tool call.
 
     Example:
-        # Caller constructs and passes in context:
-        context = {
-            "message_history": event.message_history,
-            "human_response": HumanResponse(
+        # Caller constructs RunContext with HumanResponse for resumption:
+        run_context = RunContext(
+            messages=event.data["messages"],
+            human_response=HumanResponse(
                 tool_call_id=event.data["tool_call_id"],
-                content={"response": "user's answer"}
-            ).model_dump()
-        }
+                content={"response": "user's answer"},
+            ),
+        )
 
-        # Or as a simple dict (agent validates internally):
-        context = {
-            "message_history": event.message_history,
-            "human_response": {
-                "tool_call_id": "...",
-                "content": {"response": "user's answer"}
-            }
-        }
+        # Resume agent with the run_context
+        async for event in agent.astream(input_data, run_context=run_context):
+            ...
     """
 
     tool_name: str = Field(default="ask_human", description="Tool name (defaults to ask_human)")
+
+
+class RunContext(BaseModel):
+    """Execution context for streaming and tool calling.
+
+    A typed context dict that allows arbitrary extra keys while providing
+    type safety for known fields.
+
+    Example:
+        context = RunContext(
+            human_response=HumanResponse(...),
+            messages=[...],
+            run_id="abc123",
+            custom_field="allowed",  # extra keys work
+        )
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    human_response: HumanResponse | None = Field(
+        default=None,
+        description="Human response for resumption after HUMAN_INPUT_REQUIRED",
+    )
+    messages: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Conversation history for resumption",
+    )
+    run_id: str | None = Field(
+        default=None,
+        description="Unique identifier for this execution run",
+    )
 
 
 class ToolCallingMixin:
@@ -169,4 +195,4 @@ class ToolCallingMixin:
         )
 
 
-__all__ = ["ToolCall", "ToolResult", "HumanResponse", "ToolCallingMixin"]
+__all__ = ["ToolCall", "ToolResult", "HumanResponse", "RunContext", "ToolCallingMixin"]
