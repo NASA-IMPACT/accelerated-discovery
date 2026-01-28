@@ -780,7 +780,7 @@ class LiteLLMInstructorBaseAgent[
                         event_type=StreamEventType.THINKING,
                         source=class_name,
                         message=reasoning,
-                        data={"streaming": True, "reasoning_content": reasoning},
+                        data={"streaming": True, "thinking_content": reasoning},
                         run_context=run_context,
                     )
 
@@ -811,7 +811,7 @@ class LiteLLMInstructorBaseAgent[
                                     event_type=StreamEventType.PARTIAL,
                                     source=class_name,
                                     message="Partial output",
-                                    data={"partial": partial},
+                                    data={"partial_output": partial},
                                     run_context=run_context,
                                 ),
                             )
