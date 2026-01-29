@@ -206,7 +206,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             source=self.__class__.__name__,
             message=message,
             data=data,
-            context=run_context,
+            run_context=run_context,
         )
 
     async def _handle_triage(self, query: str) -> dict:
@@ -739,7 +739,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             source=class_name,
             message=f"Starting deep literature search: {params.query[:100]}...",
             data={"query": params.query},
-            context=run_context,
+            run_context=run_context,
         )
 
         try:
@@ -894,7 +894,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                         },
                     ),
                 },
-                context=run_context,
+                run_context=run_context,
             )
 
             # Step 5: Generate report and answer
@@ -930,7 +930,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                         },
                     ),
                 },
-                context=run_context,
+                run_context=run_context,
             )
 
             yield self._emit_step_event(
@@ -969,7 +969,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 source=class_name,
                 message="Deep literature search completed",
                 data={"output": output},
-                context=run_context,
+                run_context=run_context,
             )
 
         except Exception as e:
@@ -979,7 +979,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                 source=class_name,
                 message=f"Deep literature search failed: {e!s}",
                 data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                run_context=run_context,
             )
             raise
 

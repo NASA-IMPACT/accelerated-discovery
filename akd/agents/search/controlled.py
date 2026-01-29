@@ -1041,7 +1041,7 @@ class ControlledSearchAgent(LitBaseAgent):
                         extra={"iterations_performed": iteration},
                     ),
                 },
-                context=run_context,
+                run_context=run_context,
             )
 
             # Emit synthesis events
@@ -1086,7 +1086,7 @@ class ControlledSearchAgent(LitBaseAgent):
                         },
                     ),
                 },
-                context=run_context,
+                run_context=run_context,
             )
 
             # Build output
@@ -1106,7 +1106,7 @@ class ControlledSearchAgent(LitBaseAgent):
                 source=class_name,
                 message=f"Completed {class_name}",
                 data={"output": output},
-                context=run_context,
+                run_context=run_context,
             )
 
         except Exception as e:
@@ -1116,7 +1116,7 @@ class ControlledSearchAgent(LitBaseAgent):
                 source=class_name,
                 message=f"Failed: {e!s}",
                 data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                run_context=run_context,
             )
             raise
 
