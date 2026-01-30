@@ -24,8 +24,6 @@ from akd._base.streaming import (
     FailedEventData,
     PartialEventData,
     PartialOutputEvent,
-    RunningEvent,
-    RunningEventData,
     StartingEvent,
     StartingEventData,
     StreamEvent,
@@ -179,48 +177,6 @@ class DeepLitSearchAgent(LitBaseAgent):
     @clarification_prompt.setter
     def clarification_prompt(self, prompt: str) -> None:
         self.clarification_component.config.system_prompt = prompt
-
-    def _emit_step_event(
-        self,
-        step: str,
-        message: str,
-        run_context: RunContext,
-        step_index: int | None = None,
-        total_steps: int | None = None,
-        substep: str | None = None,
-        **data_kwargs: Any,
-    ) -> StreamEvent:
-        """Create a RUNNING event for a pipeline step.
-
-        Args:
-            step: Step identifier (e.g., "triage", "research.search")
-            message: Human-readable progress message
-            run_context: Execution context with run_id, etc.
-            step_index: Current step number (1-based)
-            total_steps: Total number of main steps
-            substep: Sub-step identifier for nested progress
-            **data_kwargs: Additional data to include in event payload
-
-        Returns:
-            StreamEvent with RUNNING type and step information
-        """
-        data = {
-            "step": step,
-            **data_kwargs,
-        }
-        if step_index is not None:
-            data["step_index"] = step_index
-        if total_steps is not None:
-            data["total_steps"] = total_steps
-        if substep is not None:
-            data["substep"] = substep
-
-        return RunningEvent(
-            source=self.__class__.__name__,
-            message=message,
-            data=RunningEventData(**data),
-            run_context=run_context,
-        )
 
     async def _handle_triage(self, query: str) -> dict:
         """Handle query triage using embedded component."""

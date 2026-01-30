@@ -21,8 +21,6 @@ from akd._base.streaming import (
     FailedEventData,
     PartialEventData,
     PartialOutputEvent,
-    RunningEvent,
-    RunningEventData,
     StartingEvent,
     StartingEventData,
     StreamEvent,
@@ -749,45 +747,6 @@ class ControlledSearchAgent(LitBaseAgent):
                 "analysis": rubric_analysis,
                 "query": " AND ".join(queries),
             },
-        )
-
-    def _emit_step_event(
-        self,
-        step: str,
-        message: str,
-        run_context: RunContext,
-        step_index: int | None = None,
-        total_steps: int | None = None,
-        substep: str | None = None,
-        **data_kwargs: Any,
-    ) -> StreamEvent:
-        """Create a RUNNING event for a pipeline step.
-
-        Args:
-            step: Step identifier (e.g., "iteration", "search", "evaluate")
-            message: Human-readable description
-            run_context: Execution context
-            step_index: Current step number (optional)
-            total_steps: Total number of steps (optional)
-            substep: Sub-step identifier (optional)
-            **data_kwargs: Additional data fields
-
-        Returns:
-            StreamEvent with RUNNING type and step metadata
-        """
-        data = {"step": step, **data_kwargs}
-        if step_index is not None:
-            data["step_index"] = step_index
-        if total_steps is not None:
-            data["total_steps"] = total_steps
-        if substep is not None:
-            data["substep"] = substep
-
-        return RunningEvent(
-            source=self.__class__.__name__,
-            message=message,
-            data=RunningEventData(**data),
-            run_context=run_context,
         )
 
     async def _generate_report(
