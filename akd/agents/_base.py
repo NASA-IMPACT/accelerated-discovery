@@ -659,7 +659,7 @@ class LiteLLMInstructorBaseAgent[
         messages: list[dict[str, str]],
         response_model: type[OutputSchema] | None = None,
         token_batch_size: int = 10,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[StreamEvent]:
         """Stream LLM response with thinking tokens and validated partial output.
 
         Uses raw LiteLLM streaming to access thinking tokens (reasoning_content).
@@ -670,10 +670,10 @@ class LiteLLMInstructorBaseAgent[
             token_batch_size: Batch N tokens before emitting STREAMING event (default=1)
 
         Yields:
-            - {"type": StreamEventType.STREAMING, "token": str} for batched raw tokens
-            - {"type": StreamEventType.THINKING, "content": str} for reasoning tokens
-            - {"type": StreamEventType.PARTIAL, "partial": PartialModel} for validated partials
-            - {"type": StreamEventType.COMPLETED, "output": OutputSchema} for final output
+            - StreamingTokenEvent for batched raw tokens
+            - ThinkingEvent for reasoning tokens
+            - PartialOutputEvent for validated partials
+            - CompletedEvent for final output
         """
         response_model = response_model or self.output_schema
         PartialResponseModel = PartialModel[response_model]
@@ -714,7 +714,11 @@ class LiteLLMInstructorBaseAgent[
                 None,
             )
             if reasoning:
-                yield {"type": StreamEventType.THINKING, "content": reasoning}
+                yield ThinkingEvent(
+                    source=self.__class__.__name__,
+                    message="Reasoning...",
+                    data=ThinkingEventData(thinking_content=reasoning),
+                )
 
             # Content tokens - batch, then accumulate and validate as partial
             if delta.content:
@@ -723,7 +727,10 @@ class LiteLLMInstructorBaseAgent[
 
                 # Emit batched tokens
                 if len(token_buffer) >= token_batch_size:
-                    yield {"type": StreamEventType.STREAMING, "token": token_buffer}
+                    yield StreamingTokenEvent(
+                        source=self.__class__.__name__,
+                        data=StreamingEventData(token=token_buffer),
+                    )
                     token_buffer = ""
 
                 # Try to validate as partial
@@ -732,17 +739,27 @@ class LiteLLMInstructorBaseAgent[
                     last_partial_dict = parsed
                     try:
                         partial = PartialResponseModel.model_validate(parsed)
-                        yield {"type": StreamEventType.PARTIAL, "partial": partial}
+                        yield PartialOutputEvent(
+                            source=self.__class__.__name__,
+                            message="Partial...",
+                            data=PartialEventData(partial_output=partial),
+                        )
                     except Exception:
                         pass  # Skip invalid partials
 
         # Emit remaining tokens
         if token_buffer:
-            yield {"type": StreamEventType.STREAMING, "token": token_buffer}
+            yield StreamingTokenEvent(
+                source=self.__class__.__name__,
+                data=StreamingEventData(token=token_buffer),
+            )
 
         # Final validation
         output = response_model.model_validate_json(accumulated)
-        yield {"type": StreamEventType.COMPLETED, "output": output}
+        yield CompletedEvent(
+            source=self.__class__.__name__,
+            data=CompletedEventData(output=output),
+        )
 
     async def _run_tool_loop(
         self,
@@ -1174,29 +1191,12 @@ class LiteLLMInstructorBaseAgent[
                 else:
                     # === STREAMING MODE (no tools) ===
                     # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
-                    async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
-                        if chunk["type"] == StreamEventType.STREAMING:
-                            yield StreamingTokenEvent(
-                                source=class_name,
-                                data=StreamingEventData(token=chunk["token"]),
-                                run_context=run_context,
-                            )
-                        elif chunk["type"] == StreamEventType.THINKING:
-                            yield ThinkingEvent(
-                                source=class_name,
-                                message="Reasoning...",
-                                data=ThinkingEventData(thinking_content=chunk["content"]),
-                                run_context=run_context,
-                            )
-                        elif chunk["type"] == StreamEventType.PARTIAL:
-                            yield PartialOutputEvent(
-                                source=class_name,
-                                message="Partial...",
-                                data=PartialEventData(partial_output=chunk["partial"]),
-                                run_context=run_context,
-                            )
-                        elif chunk["type"] == StreamEventType.COMPLETED:
-                            output = chunk["output"]
+                    async for event in self._stream_llm_response(messages, token_batch_size=token_batch_size):
+                        event.run_context = run_context
+                        if isinstance(event, CompletedEvent):
+                            output = event.data.output
+                        else:
+                            yield event
 
                     if output is None:
                         raise UnexpectedModelBehavior("No output received from LLM")
