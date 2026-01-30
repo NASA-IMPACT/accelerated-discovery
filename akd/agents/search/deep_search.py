@@ -24,6 +24,8 @@ from akd._base.streaming import (
     FailedEventData,
     PartialEventData,
     PartialOutputEvent,
+    RunningEvent,
+    RunningEventData,
     StartingEvent,
     StartingEventData,
     StreamEvent,
@@ -213,11 +215,10 @@ class DeepLitSearchAgent(LitBaseAgent):
         if substep is not None:
             data["substep"] = substep
 
-        return StreamEvent(
-            event_type=StreamEventType.RUNNING,
+        return RunningEvent(
             source=self.__class__.__name__,
             message=message,
-            data=data,
+            data=RunningEventData(**data),
             run_context=run_context,
         )
 
@@ -295,11 +296,11 @@ class DeepLitSearchAgent(LitBaseAgent):
         original_query: str,
         max_results: int,
         run_context: RunContext,
-    ) -> AsyncIterator[StreamEvent | dict]:
+    ) -> AsyncIterator[StreamEvent]:
         """Stream the deep research loop with iteration events.
 
-        Yields StreamEvent for progress updates, and a dict with "result" key
-        containing the final research output.
+        Yields RunningEvent for progress updates and a final PartialOutputEvent
+        containing the research output.
 
         Args:
             instructions: Research instructions from instruction builder
@@ -308,7 +309,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             run_context: Execution context for event correlation
 
         Yields:
-            StreamEvent: Progress events for each research step
+            StreamEvent: Progress events for each research step, ending with PartialOutputEvent
             dict: Final result with {"result": research_output_dict}
         """
         # Initialize research tracking
@@ -488,18 +489,25 @@ class DeepLitSearchAgent(LitBaseAgent):
             key_findings_count=len(research_output.key_findings) if research_output.key_findings else 0,
         )
 
-        # Yield final result as dict
-        yield {
-            "result": {
-                "research_report": research_output.research_report,
-                "key_findings": research_output.key_findings,
-                "evidence_quality_score": research_output.evidence_quality_score,
-                "citations": research_output.citations,
-                "iterations_performed": iterations,
-                "results": all_results,
-                "research_traces": research_trace,
-            },
-        }
+        # Yield final research results as a typed PartialOutputEvent
+        yield PartialOutputEvent(
+            source=self.__class__.__name__,
+            message="Research results available",
+            data=PartialEventData(
+                partial_output=PartialModel[LitSearchAgentOutputSchema](
+                    results=all_results,
+                    extra={
+                        "research_report": research_output.research_report,
+                        "key_findings": research_output.key_findings,
+                        "evidence_quality_score": research_output.evidence_quality_score,
+                        "citations": research_output.citations,
+                        "iterations_performed": iterations,
+                        "research_traces": research_trace,
+                    },
+                ),
+            ),
+            run_context=run_context,
+        )
 
     async def _generate_initial_queries(self, instructions: str) -> List[str]:
         """Generate initial search queries from research instructions."""
@@ -862,47 +870,40 @@ class DeepLitSearchAgent(LitBaseAgent):
                 max_iterations=self.config.max_research_iterations,
             )
 
-            research_output = None
-            async for item in self._stream_deep_research(
+            event = None
+            async for event in self._stream_deep_research(
                 instructions,
                 original_query,
                 max_results,
                 run_context,
             ):
-                if isinstance(item, StreamEvent):
-                    yield item
-                elif isinstance(item, dict) and "result" in item:
-                    research_output = item["result"]
+                yield event
 
-            if research_output is None:
-                raise RuntimeError("No research output received from _stream_deep_research")
+            # Last event is always PartialOutputEvent with research results
+            if event is None or not isinstance(event, PartialOutputEvent):
+                yield FailedEvent(
+                    source=class_name,
+                    message="No research output received from deep research loop",
+                    data=FailedEventData(
+                        error="No research output received from _stream_deep_research",
+                        error_type="RuntimeError",
+                    ),
+                    run_context=run_context,
+                )
+                return
+
+            # Extract research data from the last partial
+            partial_model = event.data.partial_output
+            research_extra = partial_model.extra
 
             yield self._emit_step_event(
                 "research",
-                f"Deep research complete: {len(research_output['results'])} results in {research_output['iterations_performed']} iterations",
+                f"Deep research complete: {len(partial_model.results)} results in {research_extra['iterations_performed']} iterations",
                 run_context,
                 step_index=4,
                 total_steps=5,
-                total_results=len(research_output["results"]),
-                iterations_performed=research_output["iterations_performed"],
-            )
-
-            # PARTIAL event: research results available
-            yield PartialOutputEvent(
-                source=class_name,
-                message="Research results available",
-                data=PartialEventData(
-                    partial_output=PartialModel[LitSearchAgentOutputSchema](
-                        results=research_output["results"],
-                        extra={
-                            "key_findings": research_output["key_findings"],
-                            "evidence_quality_score": research_output["evidence_quality_score"],
-                            "citations": research_output["citations"],
-                            "iterations_performed": research_output["iterations_performed"],
-                        },
-                    ),
-                ),
-                run_context=run_context,
+                total_results=len(partial_model.results),
+                iterations_performed=research_extra["iterations_performed"],
             )
 
             # Step 5: Generate report and answer
@@ -917,8 +918,8 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             detailed_report = await self._generate_report(
                 query=original_query,
-                results=research_output["results"],
-                research_report=research_output["research_report"],
+                results=partial_model.results,
+                research_report=research_extra["research_report"],
             )
 
             # PARTIAL event: report now available
@@ -927,13 +928,13 @@ class DeepLitSearchAgent(LitBaseAgent):
                 message="Report generated",
                 data=PartialEventData(
                     partial_output=PartialModel[LitSearchAgentOutputSchema](
-                        results=research_output["results"],
+                        results=partial_model.results,
                         report=detailed_report,
                         extra={
-                            "key_findings": research_output["key_findings"],
-                            "evidence_quality_score": research_output["evidence_quality_score"],
-                            "citations": research_output["citations"],
-                            "iterations_performed": research_output["iterations_performed"],
+                            "key_findings": research_extra["key_findings"],
+                            "evidence_quality_score": research_extra["evidence_quality_score"],
+                            "citations": research_extra["citations"],
+                            "iterations_performed": research_extra["iterations_performed"],
                         },
                     ),
                 ),
@@ -951,7 +952,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             shortform_answer = await self._generate_answer(
                 query=original_query,
-                search_results=research_output["results"],
+                search_results=partial_model.results,
                 additional_context=detailed_report,
             )
 
@@ -959,14 +960,14 @@ class DeepLitSearchAgent(LitBaseAgent):
             output = LitSearchAgentOutputSchema(
                 answer=shortform_answer.answer,
                 report=detailed_report,
-                results=research_output["results"],
+                results=partial_model.results,
                 extra={
-                    "key_findings": research_output["key_findings"],
-                    "evidence_quality_score": research_output["evidence_quality_score"],
-                    "citations": research_output["citations"],
+                    "key_findings": research_extra["key_findings"],
+                    "evidence_quality_score": research_extra["evidence_quality_score"],
+                    "citations": research_extra["citations"],
                     "answer_reasoning_traces": shortform_answer.reasoning_traces,
-                    "research_traces": research_output.get("research_traces", []),
-                    "iterations_performed": research_output["iterations_performed"],
+                    "research_traces": research_extra.get("research_traces", []),
+                    "iterations_performed": research_extra["iterations_performed"],
                 },
             )
 

@@ -867,11 +867,10 @@ class LiteLLMInstructorBaseAgent[
                         try:
                             partial = PartialResponseModel.model_validate(parsed)
                             buffered_partials.append(
-                                StreamEvent(
-                                    event_type=StreamEventType.PARTIAL,
+                                PartialOutputEvent(
                                     source=class_name,
                                     message="Partial output",
-                                    data={"partial_output": partial},
+                                    data=PartialEventData(partial_output=partial),
                                     run_context=run_context,
                                 ),
                             )

@@ -21,6 +21,8 @@ from akd._base.streaming import (
     FailedEventData,
     PartialEventData,
     PartialOutputEvent,
+    RunningEvent,
+    RunningEventData,
     StartingEvent,
     StartingEventData,
     StreamEvent,
@@ -781,12 +783,11 @@ class ControlledSearchAgent(LitBaseAgent):
         if substep is not None:
             data["substep"] = substep
 
-        return StreamEvent(
-            event_type=StreamEventType.RUNNING,
+        return RunningEvent(
             source=self.__class__.__name__,
             message=message,
-            data=data,
-            context=run_context,
+            data=RunningEventData(**data),
+            run_context=run_context,
         )
 
     async def _generate_report(
