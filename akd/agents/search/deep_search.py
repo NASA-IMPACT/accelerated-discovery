@@ -17,7 +17,18 @@ from loguru import logger
 from pydantic import Field
 
 from akd._base import exposed_param
-from akd._base.streaming import StreamEvent, StreamEventType
+from akd._base.streaming import (
+    CompletedEvent,
+    CompletedEventData,
+    FailedEvent,
+    FailedEventData,
+    PartialEventData,
+    PartialOutputEvent,
+    StartingEvent,
+    StartingEventData,
+    StreamEvent,
+    StreamEventType,
+)
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -734,11 +745,10 @@ class DeepLitSearchAgent(LitBaseAgent):
         run_context["query"] = params.query
 
         # STARTING event
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting deep literature search: {params.query[:100]}...",
-            data={"query": params.query},
+            data=StartingEventData(params=params),
             run_context=run_context,
         )
 
@@ -879,12 +889,11 @@ class DeepLitSearchAgent(LitBaseAgent):
             )
 
             # PARTIAL event: research results available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
+            yield PartialOutputEvent(
                 source=class_name,
                 message="Research results available",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
+                data=PartialEventData(
+                    partial_output=PartialModel[LitSearchAgentOutputSchema](
                         results=research_output["results"],
                         extra={
                             "key_findings": research_output["key_findings"],
@@ -893,7 +902,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                             "iterations_performed": research_output["iterations_performed"],
                         },
                     ),
-                },
+                ),
                 run_context=run_context,
             )
 
@@ -914,12 +923,11 @@ class DeepLitSearchAgent(LitBaseAgent):
             )
 
             # PARTIAL event: report now available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
+            yield PartialOutputEvent(
                 source=class_name,
                 message="Report generated",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
+                data=PartialEventData(
+                    partial_output=PartialModel[LitSearchAgentOutputSchema](
                         results=research_output["results"],
                         report=detailed_report,
                         extra={
@@ -929,7 +937,7 @@ class DeepLitSearchAgent(LitBaseAgent):
                             "iterations_performed": research_output["iterations_performed"],
                         },
                     ),
-                },
+                ),
                 run_context=run_context,
             )
 
@@ -964,21 +972,19 @@ class DeepLitSearchAgent(LitBaseAgent):
             )
 
             # COMPLETED event with full output
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
+            yield CompletedEvent(
                 source=class_name,
                 message="Deep literature search completed",
-                data={"output": output},
+                data=CompletedEventData(output=output),
                 run_context=run_context,
             )
 
         except Exception as e:
             # FAILED event
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Deep literature search failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
                 run_context=run_context,
             )
             raise

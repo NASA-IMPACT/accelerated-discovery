@@ -34,6 +34,29 @@ from akd._base.errors import (
     MaxToolIterationsExceeded,
     UnexpectedModelBehavior,
 )
+from akd._base.streaming import (
+    CompletedEvent,
+    CompletedEventData,
+    FailedEvent,
+    FailedEventData,
+    HumanInputRequiredEvent,
+    HumanInputRequiredEventData,
+    HumanResponseEvent,
+    HumanResponseEventData,
+    PartialEventData,
+    PartialOutputEvent,
+    RunningEvent,
+    StartingEvent,
+    StartingEventData,
+    StreamingEventData,
+    StreamingTokenEvent,
+    ThinkingEvent,
+    ThinkingEventData,
+    ToolCallingEvent,
+    ToolCallingEventData,
+    ToolResultEvent,
+    ToolResultEventData,
+)
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
@@ -763,11 +786,10 @@ class LiteLLMInstructorBaseAgent[
             )
 
             # Emit event so caller knows we resumed with human input
-            yield StreamEvent(
-                event_type=StreamEventType.HUMAN_RESPONSE,
+            yield HumanResponseEvent(
                 source=class_name,
                 message="Resumed with human input",
-                data={"tool_call_id": tool_call_id, "response": content},
+                data=HumanResponseEventData(tool_call_id=tool_call_id, response=content),
                 run_context=run_context,
             )
 
@@ -816,11 +838,10 @@ class LiteLLMInstructorBaseAgent[
                     None,
                 )
                 if reasoning:
-                    yield StreamEvent(
-                        event_type=StreamEventType.THINKING,
+                    yield ThinkingEvent(
                         source=class_name,
                         message=reasoning,
-                        data={"streaming": True, "thinking_content": reasoning},
+                        data=ThinkingEventData(streaming=True, thinking_content=reasoning),
                         run_context=run_context,
                     )
 
@@ -831,11 +852,10 @@ class LiteLLMInstructorBaseAgent[
 
                     # Emit batched tokens when buffer is full
                     if len(token_buffer) >= token_batch_size:
-                        yield StreamEvent(
-                            event_type=StreamEventType.STREAMING,
+                        yield StreamingTokenEvent(
                             source=class_name,
                             message=token_buffer,
-                            data={"token": token_buffer},
+                            data=StreamingEventData(token=token_buffer),
                             run_context=run_context,
                         )
                         token_buffer = ""
@@ -879,11 +899,10 @@ class LiteLLMInstructorBaseAgent[
 
             # Emit remaining tokens in buffer
             if token_buffer:
-                yield StreamEvent(
-                    event_type=StreamEventType.STREAMING,
+                yield StreamingTokenEvent(
                     source=class_name,
                     message=token_buffer,
-                    data={"token": token_buffer},
+                    data=StreamingEventData(token=token_buffer),
                     run_context=run_context,
                 )
 
@@ -903,11 +922,10 @@ class LiteLLMInstructorBaseAgent[
                 )
                 output = self.output_schema.model_validate_json(accumulated_content)
 
-                yield StreamEvent(
-                    event_type=StreamEventType.COMPLETED,
+                yield CompletedEvent(
                     source=class_name,
                     message=f"Completed {class_name}",
-                    data={"output": output},
+                    data=CompletedEventData[self.output_schema](output=output),
                     run_context=run_context,
                 )
                 return
@@ -930,11 +948,10 @@ class LiteLLMInstructorBaseAgent[
                         "function": {"name": tc_data["name"], "arguments": tc_data["arguments"]},
                     },
                 )
-                yield StreamEvent(
-                    event_type=StreamEventType.TOOL_CALLING,
+                yield ToolCallingEvent(
                     source=class_name,
                     message=f"Calling {tool_call.tool_name}",
-                    data=tool_call.model_dump(),
+                    data=ToolCallingEventData(tool_call=tool_call),
                     run_context=run_context,
                 )
 
@@ -961,15 +978,14 @@ class LiteLLMInstructorBaseAgent[
                     run_context.messages = list(messages)
 
                     # Yield HUMAN_INPUT_REQUIRED with full state for resumption
-                    yield StreamEvent(
-                        event_type=StreamEventType.HUMAN_INPUT_REQUIRED,
+                    yield HumanInputRequiredEvent(
                         source=class_name,
                         message=f"Human input required: {human_input.question}",
-                        data={
-                            "human_input": human_input,
-                            "tool_call_id": tool_call.tool_call_id,
-                            "tool_name": tool_call.tool_name,
-                        },
+                        data=HumanInputRequiredEventData(
+                            human_input=human_input,
+                            tool_call_id=tool_call.tool_call_id,
+                            tool_name=tool_call.tool_name,
+                        ),
                         run_context=run_context,
                     )
                     # End generator gracefully - caller will resume with fresh astream() call
@@ -995,22 +1011,20 @@ class LiteLLMInstructorBaseAgent[
                     # Validation done in _execute_tool via input_schema(**arguments)
                     # result.content is dict from model_dump(), reconstruct the model
                     output = self.output_schema.model_validate(result.content)
-                    yield StreamEvent(
-                        event_type=StreamEventType.COMPLETED,
+                    yield CompletedEvent(
                         source=class_name,
                         message=f"Completed {class_name}",
-                        data={"output": output},
+                        data=CompletedEventData[self.output_schema](output=output),
                         run_context=run_context,
                     )
                     return
 
             # Yield TOOL_RESULT events for regular tools
             for result in results:
-                yield StreamEvent(
-                    event_type=StreamEventType.TOOL_RESULT,
+                yield ToolResultEvent(
                     source=class_name,
                     message=f"Result from {result.tool_name}",
-                    data=result.model_dump(),
+                    data=ToolResultEventData(result=result),
                     run_context=run_context,
                 )
 
@@ -1043,11 +1057,10 @@ class LiteLLMInstructorBaseAgent[
                         "content": self.reflection_prompt,
                     },
                 )
-                yield StreamEvent(
-                    event_type=StreamEventType.THINKING,
+                yield ThinkingEvent(
                     source=class_name,
                     message="Reflecting on results...",
-                    data={"reflection_prompt": self.reflection_prompt},
+                    data=ThinkingEventData(reflection_prompt=self.reflection_prompt),
                     run_context=run_context,
                 )
 
@@ -1098,10 +1111,10 @@ class LiteLLMInstructorBaseAgent[
         run_context = (run_context or RunContext()).model_copy()
         run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting {class_name}",
+            data=StartingEventData[self.input_schema](params=params),
             run_context=run_context,
         )
 
@@ -1127,8 +1140,7 @@ class LiteLLMInstructorBaseAgent[
                         },
                     )
 
-                yield StreamEvent(
-                    event_type=StreamEventType.RUNNING,
+                yield RunningEvent(
                     source=class_name,
                     message=f"Running {class_name}",
                     run_context=run_context,
@@ -1165,26 +1177,23 @@ class LiteLLMInstructorBaseAgent[
                     # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
                     async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
                         if chunk["type"] == StreamEventType.STREAMING:
-                            yield StreamEvent(
-                                event_type=StreamEventType.STREAMING,
+                            yield StreamingTokenEvent(
                                 source=class_name,
-                                data={"token": chunk["token"]},
+                                data=StreamingEventData(token=chunk["token"]),
                                 run_context=run_context,
                             )
                         elif chunk["type"] == StreamEventType.THINKING:
-                            yield StreamEvent(
-                                event_type=StreamEventType.THINKING,
+                            yield ThinkingEvent(
                                 source=class_name,
                                 message="Reasoning...",
-                                data={"thinking_content": chunk["content"]},
+                                data=ThinkingEventData(thinking_content=chunk["content"]),
                                 run_context=run_context,
                             )
                         elif chunk["type"] == StreamEventType.PARTIAL:
-                            yield StreamEvent(
-                                event_type=StreamEventType.PARTIAL,
+                            yield PartialOutputEvent(
                                 source=class_name,
                                 message="Partial...",
-                                data={"partial_output": chunk["partial"]},
+                                data=PartialEventData(partial_output=chunk["partial"]),
                                 run_context=run_context,
                             )
                         elif chunk["type"] == StreamEventType.COMPLETED:
@@ -1201,20 +1210,18 @@ class LiteLLMInstructorBaseAgent[
                         },
                     )
 
-                    yield StreamEvent(
-                        event_type=StreamEventType.COMPLETED,
+                    yield CompletedEvent(
                         source=class_name,
                         message=f"Completed {class_name}",
-                        data={"output": output},
+                        data=CompletedEventData[self.output_schema](output=output),
                         run_context=run_context,
                     )
 
         except Exception as e:
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
                 run_context=run_context,
             )
             raise

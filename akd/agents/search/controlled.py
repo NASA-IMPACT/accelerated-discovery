@@ -14,7 +14,18 @@ from typing import Any, List, Optional
 from loguru import logger
 from pydantic import Field
 
-from akd._base.streaming import StreamEvent, StreamEventType
+from akd._base.streaming import (
+    CompletedEvent,
+    CompletedEventData,
+    FailedEvent,
+    FailedEventData,
+    PartialEventData,
+    PartialOutputEvent,
+    StartingEvent,
+    StartingEventData,
+    StreamEvent,
+    StreamEventType,
+)
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -825,12 +836,11 @@ class ControlledSearchAgent(LitBaseAgent):
             run_context["run_id"] = uuid.uuid4().hex[:8]
 
         # STARTING event
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting {class_name}",
-            data={"query": params.query},
-            context=run_context,
+            data=StartingEventData(params=params),
+            run_context=run_context,
         )
 
         try:
@@ -1031,16 +1041,15 @@ class ControlledSearchAgent(LitBaseAgent):
             logger.debug(f"Final Stopping Criteria :: {criteria}")
 
             # PARTIAL event: search results available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
+            yield PartialOutputEvent(
                 source=class_name,
                 message="Search results available",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
+                data=PartialEventData(
+                    partial_output=PartialModel[LitSearchAgentOutputSchema](
                         results=all_results,
                         extra={"iterations_performed": iteration},
                     ),
-                },
+                ),
                 run_context=run_context,
             )
 
@@ -1072,12 +1081,11 @@ class ControlledSearchAgent(LitBaseAgent):
             )
 
             # PARTIAL event: report available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
+            yield PartialOutputEvent(
                 source=class_name,
                 message="Report generated",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
+                data=PartialEventData(
+                    partial_output=PartialModel[LitSearchAgentOutputSchema](
                         results=all_results,
                         report=detailed_report,
                         extra={
@@ -1085,7 +1093,7 @@ class ControlledSearchAgent(LitBaseAgent):
                             "iterations_performed": iteration,
                         },
                     ),
-                },
+                ),
                 run_context=run_context,
             )
 
@@ -1101,21 +1109,19 @@ class ControlledSearchAgent(LitBaseAgent):
             )
 
             # COMPLETED event
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
+            yield CompletedEvent(
                 source=class_name,
                 message=f"Completed {class_name}",
-                data={"output": output},
+                data=CompletedEventData(output=output),
                 run_context=run_context,
             )
 
         except Exception as e:
             # FAILED event
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
                 run_context=run_context,
             )
             raise
