@@ -1179,6 +1179,8 @@ class LiteLLMInstructorBaseAgent[
                     if isinstance(event, CompletedEvent):
                         output = event.data.output
                     yield event
+                    if isinstance(event, HumanInputRequiredEvent):
+                        return
 
                 if output is None:
                     raise UnexpectedModelBehavior("No output received from LLM")
