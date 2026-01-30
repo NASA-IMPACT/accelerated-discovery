@@ -594,8 +594,6 @@ class LiteLLMInstructorBaseAgent[
         Returns:
             Output matching output_schema.
         """
-        class_name = self.__class__.__name__
-
         async with self.memory.asession(
             stateless=self.stateless,
             run_context=run_context,
@@ -627,7 +625,6 @@ class LiteLLMInstructorBaseAgent[
                 run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
                 async for event in self._run_tool_loop(
                     messages,
-                    class_name,
                     run_context,
                 ):
                     if event.event_type == StreamEventType.COMPLETED:
@@ -657,6 +654,7 @@ class LiteLLMInstructorBaseAgent[
     async def _stream_llm_response(
         self,
         messages: list[dict[str, str]],
+        run_context: RunContext,
         response_model: type[OutputSchema] | None = None,
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
@@ -666,6 +664,7 @@ class LiteLLMInstructorBaseAgent[
 
         Args:
             messages: Chat messages
+            run_context: Execution context for event correlation
             response_model: Output schema (defaults to self.output_schema)
             token_batch_size: Batch N tokens before emitting STREAMING event (default=1)
 
@@ -699,6 +698,7 @@ class LiteLLMInstructorBaseAgent[
         if self.reasoning_effort:
             completion_kwargs["reasoning_effort"] = self.reasoning_effort
 
+        class_name = self.__class__.__name__
         accumulated = ""
         token_buffer = ""
         last_partial_dict = None
@@ -715,9 +715,10 @@ class LiteLLMInstructorBaseAgent[
             )
             if reasoning:
                 yield ThinkingEvent(
-                    source=self.__class__.__name__,
+                    source=class_name,
                     message="Reasoning...",
                     data=ThinkingEventData(thinking_content=reasoning),
+                    run_context=run_context,
                 )
 
             # Content tokens - batch, then accumulate and validate as partial
@@ -728,8 +729,9 @@ class LiteLLMInstructorBaseAgent[
                 # Emit batched tokens
                 if len(token_buffer) >= token_batch_size:
                     yield StreamingTokenEvent(
-                        source=self.__class__.__name__,
+                        source=class_name,
                         data=StreamingEventData(token=token_buffer),
+                        run_context=run_context,
                     )
                     token_buffer = ""
 
@@ -740,9 +742,10 @@ class LiteLLMInstructorBaseAgent[
                     try:
                         partial = PartialResponseModel.model_validate(parsed)
                         yield PartialOutputEvent(
-                            source=self.__class__.__name__,
+                            source=class_name,
                             message="Partial...",
                             data=PartialEventData(partial_output=partial),
+                            run_context=run_context,
                         )
                     except Exception:
                         pass  # Skip invalid partials
@@ -750,21 +753,23 @@ class LiteLLMInstructorBaseAgent[
         # Emit remaining tokens
         if token_buffer:
             yield StreamingTokenEvent(
-                source=self.__class__.__name__,
+                source=class_name,
                 data=StreamingEventData(token=token_buffer),
+                run_context=run_context,
             )
 
         # Final validation
         output = response_model.model_validate_json(accumulated)
         yield CompletedEvent(
-            source=self.__class__.__name__,
+            source=class_name,
+            message=f"Completed {class_name}",
             data=CompletedEventData(output=output),
+            run_context=run_context,
         )
 
     async def _run_tool_loop(
         self,
         messages: list[dict[str, Any]],
-        class_name: str,
         run_context: RunContext,
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
@@ -776,7 +781,6 @@ class LiteLLMInstructorBaseAgent[
 
         Args:
             messages: Conversation history (mutated in place)
-            class_name: For event source
             run_context: RunContext (may contain human_response for resumption)
             token_batch_size: Batch N characters before emitting STREAMING event
 
@@ -785,6 +789,7 @@ class LiteLLMInstructorBaseAgent[
                         HUMAN_INPUT_REQUIRED, or COMPLETED
         """
         # Attach messages reference to run_context (caller can access live state via any event)
+        class_name = self.__class__.__name__
         run_context.messages = messages
 
         # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
@@ -1164,57 +1169,26 @@ class LiteLLMInstructorBaseAgent[
 
                 # Route: tool calling mode vs streaming mode
                 output = None
+                streamer = (
+                    self._run_tool_loop(messages, run_context, token_batch_size=token_batch_size)
+                    if self.tools
+                    else self._stream_llm_response(messages, run_context, token_batch_size=token_batch_size)
+                )
 
-                if self.tools:
-                    # === TOOL CALLING MODE ===
-                    # Yields STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT, then COMPLETED
-                    # Tool loop mutates `messages` in place during iterations
-                    async for event in self._run_tool_loop(
-                        messages,
-                        class_name,
-                        run_context,
-                        token_batch_size=token_batch_size,
-                    ):
-                        if event.event_type == StreamEventType.COMPLETED:
-                            output = event.output
-                        yield event
+                async for event in streamer:
+                    if isinstance(event, CompletedEvent):
+                        output = event.data.output
+                    yield event
 
-                    # Persistence happens after loop completes (single point)
-                    if output is not None:
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": output.model_dump_json(exclude={"type"}),
-                            },
-                        )
+                if output is None:
+                    raise UnexpectedModelBehavior("No output received from LLM")
 
-                else:
-                    # === STREAMING MODE (no tools) ===
-                    # Yields STREAMING, THINKING, PARTIAL, then COMPLETED
-                    async for event in self._stream_llm_response(messages, token_batch_size=token_batch_size):
-                        event.run_context = run_context
-                        if isinstance(event, CompletedEvent):
-                            output = event.data.output
-                        else:
-                            yield event
-
-                    if output is None:
-                        raise UnexpectedModelBehavior("No output received from LLM")
-
-                    # Add final assistant message (auto-synced to memory via reference)
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": output.model_dump_json(exclude={"type"}),
-                        },
-                    )
-
-                    yield CompletedEvent(
-                        source=class_name,
-                        message=f"Completed {class_name}",
-                        data=CompletedEventData[self.output_schema](output=output),
-                        run_context=run_context,
-                    )
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": output.model_dump_json(exclude={"type"}),
+                    },
+                )
 
         except Exception as e:
             yield FailedEvent(
