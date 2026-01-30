@@ -29,6 +29,7 @@ from akd._base.streaming import (
     StreamEvent,
     StreamEventType,
 )
+from akd._base.tool_calling import RunContext
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -181,7 +182,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         self,
         step: str,
         message: str,
-        run_context: dict[str, Any],
+        run_context: RunContext,
         step_index: int | None = None,
         total_steps: int | None = None,
         substep: str | None = None,
@@ -192,7 +193,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         Args:
             step: Step identifier (e.g., "triage", "research.search")
             message: Human-readable progress message
-            run_context: Execution context with run_id, query, etc.
+            run_context: Execution context with run_id, etc.
             step_index: Current step number (1-based)
             total_steps: Total number of main steps
             substep: Sub-step identifier for nested progress
@@ -293,7 +294,7 @@ class DeepLitSearchAgent(LitBaseAgent):
         instructions: str,
         original_query: str,
         max_results: int,
-        run_context: dict[str, Any],
+        run_context: RunContext,
     ) -> AsyncIterator[StreamEvent | dict]:
         """Stream the deep research loop with iteration events.
 
@@ -713,7 +714,7 @@ class DeepLitSearchAgent(LitBaseAgent):
     async def _astream(
         self,
         params: LitSearchAgentInputSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Stream the deep literature search with progress events.
@@ -739,10 +740,8 @@ class DeepLitSearchAgent(LitBaseAgent):
         class_name = self.__class__.__name__
 
         # Setup context with auto-generated run_id
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
-        run_context["query"] = params.query
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         # STARTING event
         yield StartingEvent(

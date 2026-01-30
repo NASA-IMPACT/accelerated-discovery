@@ -26,6 +26,7 @@ from akd._base.streaming import (
     StreamEvent,
     StreamEventType,
 )
+from akd._base.tool_calling import RunContext
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -752,7 +753,7 @@ class ControlledSearchAgent(LitBaseAgent):
         self,
         step: str,
         message: str,
-        run_context: dict[str, Any],
+        run_context: RunContext,
         step_index: int | None = None,
         total_steps: int | None = None,
         substep: str | None = None,
@@ -763,7 +764,7 @@ class ControlledSearchAgent(LitBaseAgent):
         Args:
             step: Step identifier (e.g., "iteration", "search", "evaluate")
             message: Human-readable description
-            run_context: Execution context dict
+            run_context: Execution context
             step_index: Current step number (optional)
             total_steps: Total number of steps (optional)
             substep: Sub-step identifier (optional)
@@ -812,7 +813,7 @@ class ControlledSearchAgent(LitBaseAgent):
     async def _astream(
         self,
         params: LitSearchAgentInputSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Stream events during controlled search execution.
@@ -822,7 +823,7 @@ class ControlledSearchAgent(LitBaseAgent):
 
         Args:
             params: Input parameters (already validated by astream())
-            context: Execution context
+            run_context: Execution context
             **kwargs: Additional arguments
 
         Yields:
@@ -831,9 +832,8 @@ class ControlledSearchAgent(LitBaseAgent):
         class_name = self.__class__.__name__
 
         # Setup run context
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         # STARTING event
         yield StartingEvent(
