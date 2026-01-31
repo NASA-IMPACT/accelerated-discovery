@@ -929,27 +929,48 @@ class LiteLLMInstructorBaseAgent[
 
             # After streaming: check for tool calls
             if not accumulated_tool_calls:
-                # No tool calls - model should have called final_answer but didn't
-                # Fallback: try to parse content as JSON
                 for partial_event in buffered_partials:
                     yield partial_event
 
                 if not accumulated_content:
                     raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
 
-                logger.warning(
-                    "Model gave direct response instead of calling final_answer tool. "
-                    "Attempting to parse as JSON fallback.",
-                )
-                output = self.output_schema.model_validate_json(accumulated_content)
+                # LLM responded without tool calls. Try JSON parse first — the model
+                # may have returned valid structured output without calling final_answer.
+                try:
+                    output = self.output_schema.model_validate_json(accumulated_content)
+                    logger.warning(
+                        "Model gave direct response instead of calling final_answer tool. Parsed as JSON fallback.",
+                    )
+                    yield CompletedEvent(
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data=CompletedEventData[self.output_schema](output=output),
+                        run_context=run_context,
+                    )
+                    return
+                except Exception:
+                    pass
 
-                yield CompletedEvent(
+                # Not valid JSON — treat as internal reasoning and retry.
+                # Follows the Pydantic AI pattern: append the text as assistant message
+                # and a validation feedback nudge as user message.
+                # See: https://github.com/pydantic/pydantic-ai/issues/1993
+                logger.warning("LLM responded with text instead of calling a tool. Retrying.")
+                yield ThinkingEvent(
                     source=class_name,
-                    message=f"Completed {class_name}",
-                    data=CompletedEventData[self.output_schema](output=output),
+                    message="Internal reasoning...",
+                    data=ThinkingEventData(thinking_content=accumulated_content),
                     run_context=run_context,
                 )
-                return
+                messages.append({"role": "assistant", "content": accumulated_content})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
+                    },
+                )
+                continue
 
             # Convert accumulated tool calls to ToolCall objects
             tool_calls: list[ToolCall] = []
