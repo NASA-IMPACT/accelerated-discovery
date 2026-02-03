@@ -699,6 +699,26 @@ class LiteLLMInstructorBaseAgent[
             completion_kwargs["reasoning_effort"] = self.reasoning_effort
 
         class_name = self.__class__.__name__
+
+        # Handle human response for non-tool agents (inject as user message)
+        if run_context.human_response:
+            content = run_context.human_response.content
+            messages.append(
+                {
+                    "role": "user",
+                    "content": content if isinstance(content, str) else json.dumps(content),
+                },
+            )
+            yield HumanResponseEvent(
+                source=class_name,
+                message="Resumed with human input",
+                data=HumanResponseEventData(
+                    tool_call_id=run_context.human_response.tool_call_id,
+                    response=content,
+                ),
+                run_context=run_context,
+            )
+
         accumulated = ""
         token_buffer = ""
         last_partial_dict = None
