@@ -104,6 +104,10 @@ class GraniteGuardianBaseConfig(BaseToolConfig):
         default=True,
         description="Validate that input categories match the tool's supported types.",
     )
+    think: bool = Field(
+        default=False,
+        description="Enable chain-of-thought reasoning. Returns thinking process in output.extra['thinking'].",
+    )
 
 
 class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
@@ -117,6 +121,19 @@ class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
         default_factory=lambda: list(GraniteRiskCategory),
         description="Risk categories to check (defaults to all).",
     )
+
+    @model_validator(mode="after")
+    def validate_think_support(self) -> Self:
+        """Auto-disable think if model doesn't support it."""
+        # Only granite3.3-guardian:8b supports thinking mode
+        if self.think and self.model != GuardianModelID.GUARDIAN_3_3_8B:
+            logger.warning(
+                f"[GraniteGuardianToolConfig] Model {self.model} does not support think=True. "
+                f"Only {GuardianModelID.GUARDIAN_3_3_8B} supports chain-of-thought reasoning. "
+                f"Automatically disabling think parameter.",
+            )
+            self.think = False
+        return self
 
 
 class GraniteGuardianTool(
@@ -178,11 +195,15 @@ class GraniteGuardianTool(
         # Collect detected risks and per-risk results
         detected_risks: list[GraniteRiskCategory] = []
         risk_results: dict[RiskCategory, dict[str, Any]] = {}
+        thinking_map: dict[str, str] = {}
 
         for cat, result in zip(categories_to_check, results):
             risk_results[cat] = result
             if result.get("is_risky"):
                 detected_risks.append(cat)
+            # Collect thinking if present
+            if result.get("thinking"):
+                thinking_map[cat.value] = result["thinking"]
 
         if self.debug:
             logger.debug(
@@ -190,10 +211,14 @@ class GraniteGuardianTool(
                 f"{[r.value for r in detected_risks]}",
             )
 
+        # Build extra dict with thinking if available
+        extra = {"thinking": thinking_map} if thinking_map else {}
+
         return GuardrailOutput(
             detected_risks=detected_risks,
             risk_results=risk_results,
             provider=self.__class__.__name__,
+            extra=extra,
         )
 
     async def _check_single_risk(
@@ -221,8 +246,10 @@ class GraniteGuardianTool(
             result = await self._call_guardian_cached(messages)
 
             if self.debug:
+                thinking_preview = result.get("thinking", "")[:100] if result.get("thinking") else "N/A"
                 logger.debug(
-                    f"[{self.__class__.__name__}] Risk {risk_category.value}: is_risky={result.get('is_risky')}",
+                    f"[{self.__class__.__name__}] Risk {risk_category.value}: "
+                    f"is_risky={result.get('is_risky')}, thinking={thinking_preview}...",
                 )
             return result
 
@@ -243,13 +270,16 @@ class GraniteGuardianTool(
                     "model": self.config.model.value,
                     "messages": messages_list,
                     "stream": False,
+                    "think": self.config.think,
                     "options": {"num_ctx": 8192, "temperature": 0, "seed": 42},
                 },
             )
             response.raise_for_status()
 
             data = response.json()
-            content = data.get("message", {}).get("content", "")
+            message = data.get("message", {})
+            content = message.get("content", "")
+            thinking = message.get("thinking", "")
 
             # Parse yes/no from response
             match = re.search(r"\b(yes|no)\b", content or "", flags=re.IGNORECASE)
@@ -259,11 +289,17 @@ class GraniteGuardianTool(
             label = match.group(1).lower()
             is_risky = label == "yes"
 
-            return {
+            result = {
                 "risk_label": label,
                 "is_risky": is_risky,
                 "raw_response": content,
             }
+
+            # Include thinking if present
+            if thinking:
+                result["thinking"] = thinking
+
+            return result
         except Exception as e:
             logger.error(f"[GraniteGuardianTool] Error: {e}")
             return {"error": str(e)}
@@ -302,6 +338,18 @@ class MultiRiskGraniteGuardianToolConfig(GraniteGuardianBaseConfig):
                 f"[MultiRiskGraniteGuardianTool] Model {self.model} may not support multi-risk detection. "
                 f"Using {GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM} is recommended.",
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_think_support(self) -> Self:
+        """Auto-disable think as multi-risk models don't support it."""
+        if self.think:
+            logger.warning(
+                f"[MultiRiskGraniteGuardianToolConfig] Multi-risk models do not support think=True. "
+                f"Chain-of-thought reasoning is not available in multi-harm detection mode. "
+                f"Automatically disabling think parameter.",
+            )
+            self.think = False
         return self
 
 
