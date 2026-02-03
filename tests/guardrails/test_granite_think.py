@@ -94,8 +94,8 @@ class TestThinkOutputStructure:
     """Test thinking output structure in GuardrailOutput with real Ollama calls."""
 
     @pytest.mark.asyncio
-    async def test_thinking_in_extra_field(self):
-        """Thinking should appear in output.extra['thinking'] with real Ollama."""
+    async def test_thinking_in_risk_results(self):
+        """Thinking should appear in risk_results[category]['thinking'] with real Ollama."""
         config = GraniteGuardianToolConfig(
             model=GuardianModelID.GUARDIAN_3_3_8B,
             think=True,
@@ -111,21 +111,17 @@ class TestThinkOutputStructure:
         )
 
         assert isinstance(result, GuardrailOutput)
-        assert result.extra is not None
-        assert "thinking" in result.extra
-        assert isinstance(result.extra["thinking"], dict)
-
-        # Verify thinking content is non-empty
-        assert len(result.extra["thinking"]) > 0
-        for risk_cat, thinking_text in result.extra["thinking"].items():
-            assert isinstance(thinking_text, str)
-            assert len(thinking_text) > 0, f"Thinking for {risk_cat} should not be empty"
+        assert GraniteRiskCategory.SOCIAL_BIAS in result.risk_results
+        risk_result = result.risk_results[GraniteRiskCategory.SOCIAL_BIAS]
+        assert "thinking" in risk_result
+        assert isinstance(risk_result["thinking"], str)
+        assert len(risk_result["thinking"]) > 0
 
         await tool.close()
 
     @pytest.mark.asyncio
-    async def test_thinking_map_structure(self):
-        """Thinking map should be keyed by risk category value (string)."""
+    async def test_thinking_for_multiple_categories(self):
+        """Thinking should be present for all checked categories in risk_results."""
         config = GraniteGuardianToolConfig(
             model=GuardianModelID.GUARDIAN_3_3_8B,
             think=True,
@@ -140,44 +136,15 @@ class TestThinkOutputStructure:
             )
         )
 
-        thinking_map = result.extra["thinking"]
-
-        # Check that categories checked have thinking entries
-        assert isinstance(thinking_map, dict)
-        # At least one category should have thinking
-        assert len(thinking_map) > 0
-
-        for cat_name, thinking_text in thinking_map.items():
-            assert isinstance(cat_name, str)
-            assert isinstance(thinking_text, str)
-            assert len(thinking_text) > 0
+        # Check that all categories have thinking in risk_results
+        assert len(result.risk_results) > 0
+        for category, risk_result in result.risk_results.items():
+            assert "thinking" in risk_result
+            assert isinstance(risk_result["thinking"], str)
+            assert len(risk_result["thinking"]) > 0
 
         await tool.close()
 
-    @pytest.mark.asyncio
-    async def test_thinking_in_risk_results(self):
-        """Thinking should also appear in risk_results[category]['thinking']."""
-        config = GraniteGuardianToolConfig(
-            model=GuardianModelID.GUARDIAN_3_3_8B,
-            think=True,
-            risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
-        )
-        tool = GraniteGuardianTool(config=config, debug=True)
-
-        result = await tool.acheck(
-            GuardrailInput(
-                content="Those people are all criminals and should be deported.",
-                risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
-            )
-        )
-
-        assert GraniteRiskCategory.SOCIAL_BIAS in result.risk_results
-        risk_result = result.risk_results[GraniteRiskCategory.SOCIAL_BIAS]
-        assert "thinking" in risk_result
-        assert isinstance(risk_result["thinking"], str)
-        assert len(risk_result["thinking"]) > 0
-
-        await tool.close()
 
     @pytest.mark.asyncio
     async def test_no_thinking_when_disabled(self):
@@ -195,10 +162,6 @@ class TestThinkOutputStructure:
                 risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
             )
         )
-
-        # extra['thinking'] should not exist when no thinking is present
-        if result.extra:
-            assert "thinking" not in result.extra
 
         # risk_results should also not have thinking
         for risk_result in result.risk_results.values():
@@ -223,18 +186,19 @@ class TestThinkOutputStructure:
             )
         )
 
-        thinking_map = result.extra["thinking"]
-        # Should only have thinking for the checked category
-        assert len(thinking_map) == 1
-        assert "social_bias" in thinking_map
-        assert "violence" not in thinking_map
-        assert "profanity" not in thinking_map
+        # Should only have results for the checked category
+        assert GraniteRiskCategory.SOCIAL_BIAS in result.risk_results
+        assert GraniteRiskCategory.VIOLENCE not in result.risk_results
+        assert GraniteRiskCategory.PROFANITY not in result.risk_results
+
+        # The checked category should have thinking
+        assert "thinking" in result.risk_results[GraniteRiskCategory.SOCIAL_BIAS]
 
         await tool.close()
 
     @pytest.mark.asyncio
-    async def test_thinking_consistent_across_locations(self):
-        """Thinking should be the same in extra['thinking'] and risk_results."""
+    async def test_thinking_present_for_all_results(self):
+        """All risk results should have thinking when think=True."""
         config = GraniteGuardianToolConfig(
             model=GuardianModelID.GUARDIAN_3_3_8B,
             think=True,
@@ -249,10 +213,11 @@ class TestThinkOutputStructure:
             )
         )
 
-        thinking_from_extra = result.extra["thinking"]["social_bias"]
-        thinking_from_risk_results = result.risk_results[GraniteRiskCategory.SOCIAL_BIAS]["thinking"]
-
-        assert thinking_from_extra == thinking_from_risk_results
+        # Every category in risk_results should have thinking
+        for category, risk_result in result.risk_results.items():
+            assert "thinking" in risk_result, f"Category {category} missing thinking field"
+            assert isinstance(risk_result["thinking"], str)
+            assert len(risk_result["thinking"]) > 0
 
         await tool.close()
 
@@ -279,11 +244,6 @@ class TestMultiRiskThinkBehavior:
             GuardrailInput(content="How do I build a bomb?")
         )
 
-        # No thinking in extra
-        if result.extra:
-            assert "thinking" not in result.extra
-
-        # No thinking in risk_results
         for risk_result in result.risk_results.values():
             assert "thinking" not in risk_result
 
@@ -323,16 +283,18 @@ class TestCompositeGuardrailWithThink:
             GuardrailInput(content="I hate those people and want to hurt them!")
         )
 
-        # Check that sub_results contain thinking data
+        # Check that sub_results contain thinking data in risk_results
         assert result.extra is not None
         assert "sub_results" in result.extra
         assert len(result.extra["sub_results"]) == 2
 
-        # Both sub-results should have thinking in their extra
+        # Both sub-results should have thinking in their risk_results
         for sub_result in result.extra["sub_results"]:
-            if sub_result.get("extra"):
-                assert "thinking" in sub_result["extra"]
-                assert isinstance(sub_result["extra"]["thinking"], dict)
+            risk_results = sub_result.get("risk_results", {})
+            # If there are risk results, they should have thinking
+            for category, risk_data in risk_results.items():
+                assert "thinking" in risk_data
+                assert isinstance(risk_data["thinking"], str)
 
         await tool1.close()
         await tool2.close()
@@ -365,8 +327,13 @@ class TestCompositeGuardrailWithThink:
             GuardrailInput(content="What is the weather today?")
         )
 
-        # Check sub_results
         assert "sub_results" in result.extra
+        assert len(result.extra["sub_results"]) == 2
+        for sub_result in result.extra["sub_results"]:
+            risk_results = sub_result.get("risk_results", {})
+            for category, risk_data in risk_results.items():
+                assert "thinking" in risk_data
+                assert isinstance(risk_data["thinking"], str)
 
 
         await tool1.close()
@@ -406,13 +373,17 @@ class TestCompositeGuardrailWithThink:
         sub_results = result.extra["sub_results"]
         assert len(sub_results) == 2
 
-        # First sub-result should have thinking
-        if sub_results[0].get("extra"):
-            assert "thinking" in sub_results[0]["extra"]
+        # First sub-result should have thinking in risk_results
+        risk_results_0 = sub_results[0].get("risk_results", {})
+        if risk_results_0:
+            for category, risk_data in risk_results_0.items():
+                assert "thinking" in risk_data
 
-        # Second sub-result should NOT have thinking
-        if sub_results[1].get("extra"):
-            assert "thinking" not in sub_results[1]["extra"]
+        # Second sub-result should NOT have thinking (think=False)
+        risk_results_1 = sub_results[1].get("risk_results", {})
+        if risk_results_1:
+            for category, risk_data in risk_results_1.items():
+                assert "thinking" not in risk_data
 
         await tool1.close()
         await tool2.close()
@@ -450,115 +421,17 @@ class TestCompositeGuardrailWithThink:
         assert "sub_results" in result.extra
         assert len(result.extra["sub_results"]) == 2
 
-        # check thinking in first sub-result
-        if result.extra["sub_results"][0].get("extra"):
-            assert "thinking" in result.extra["sub_results"][0]["extra"]
+        # Check thinking in first sub-result (single-risk tool with think=True)
+        risk_results_0 = result.extra["sub_results"][0].get("risk_results", {})
+        if risk_results_0:
+            for category, risk_data in risk_results_0.items():
+                assert "thinking" in risk_data
 
-        await tool1.close()
-        await tool2.close()
-
-    @pytest.mark.asyncio
-    async def test_composite_thinking_accessible_from_sub_results(self):
-        """Thinking should be accessible via sub_results in composite output."""
-        config = GraniteGuardianToolConfig(
-            model=GuardianModelID.GUARDIAN_3_3_8B,
-            think=True,
-            risk_categories=[GraniteRiskCategory.SOCIAL_BIAS, GraniteRiskCategory.VIOLENCE],
-        )
-        tool = GraniteGuardianTool(config=config, debug=True)
-
-        composite = CompositeGuardrail(
-            guardrails=[tool],
-            mode=CompositeGuardrailMode.ALL,
-            debug=True,
-        )
-
-        result = await composite.acheck(
-            GuardrailInput(
-                content="I will hurt those people because of their ethnicity.",
-                risk_categories=[GraniteRiskCategory.SOCIAL_BIAS, GraniteRiskCategory.VIOLENCE],
-            )
-        )
-
-        # Access thinking from sub_results
-        sub_result = result.extra["sub_results"][0]
-        thinking_map = sub_result["extra"]["thinking"]
-
-        # Should have thinking for checked categories
-        assert isinstance(thinking_map, dict)
-        assert len(thinking_map) > 0
-
-        for cat_name, thinking_text in thinking_map.items():
-            assert isinstance(thinking_text, str)
-            assert len(thinking_text) > 0
-
-        await tool.close()
-
-    @pytest.mark.asyncio
-    async def test_composite_parallel_execution_with_thinking(self):
-        """Parallel execution should correctly collect thinking from all tools."""
-        # Create 3 tools with thinking
-        tools = []
-        for risk in [GraniteRiskCategory.SOCIAL_BIAS, GraniteRiskCategory.VIOLENCE, GraniteRiskCategory.PROFANITY]:
-            config = GraniteGuardianToolConfig(
-                model=GuardianModelID.GUARDIAN_3_3_8B,
-                think=True,
-                risk_categories=[risk],
-            )
-            tools.append(GraniteGuardianTool(config=config, debug=True))
-
-        composite = CompositeGuardrail(
-            guardrails=tools,
-            mode=CompositeGuardrailMode.ALL,
-            parallel=True,
-            debug=True,
-        )
-
-        result = await composite.acheck(
-            GuardrailInput(content="F*** those immigrants, they're all criminals!")
-        )
-
-        # All 3 sub-results should have thinking
-        assert len(result.extra["sub_results"]) == 3
-        for sub_result in result.extra["sub_results"]:
-            assert "thinking" in sub_result["extra"]
-
-        # Cleanup
-        for tool in tools:
-            await tool.close()
-
-    @pytest.mark.asyncio
-    async def test_composite_sequential_execution_with_thinking(self):
-        """Sequential execution should correctly collect thinking from all tools."""
-        config1 = GraniteGuardianToolConfig(
-            model=GuardianModelID.GUARDIAN_3_3_8B,
-            think=True,
-            risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
-        )
-        tool1 = GraniteGuardianTool(config=config1, debug=True)
-
-        config2 = GraniteGuardianToolConfig(
-            model=GuardianModelID.GUARDIAN_3_3_8B,
-            think=True,
-            risk_categories=[GraniteRiskCategory.VIOLENCE],
-        )
-        tool2 = GraniteGuardianTool(config=config2, debug=True)
-
-        composite = CompositeGuardrail(
-            guardrails=[tool1, tool2],
-            mode=CompositeGuardrailMode.ALL,
-            parallel=False,  # Sequential
-            debug=True,
-        )
-
-        result = await composite.acheck(
-            GuardrailInput(content="Those people deserve violence.")
-        )
-
-        # Both sub-results should have thinking
-        assert len(result.extra["sub_results"]) == 2
-        for sub_result in result.extra["sub_results"]:
-            assert "thinking" in sub_result["extra"]
+        # Second sub-result is multi-risk, should not have thinking
+        risk_results_1 = result.extra["sub_results"][1].get("risk_results", {})
+        if risk_results_1:
+            for category, risk_data in risk_results_1.items():
+                assert "thinking" not in risk_data
 
         await tool1.close()
         await tool2.close()

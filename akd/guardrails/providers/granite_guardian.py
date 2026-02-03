@@ -106,7 +106,7 @@ class GraniteGuardianBaseConfig(BaseToolConfig):
     )
     think: bool = Field(
         default=False,
-        description="Enable chain-of-thought reasoning. Returns thinking process in output.extra['thinking'].",
+        description="Enable chain-of-thought reasoning. Returns thinking process in risk_results['risk']['thinking'].",
     )
 
 
@@ -195,15 +195,11 @@ class GraniteGuardianTool(
         # Collect detected risks and per-risk results
         detected_risks: list[GraniteRiskCategory] = []
         risk_results: dict[RiskCategory, dict[str, Any]] = {}
-        thinking_map: dict[str, str] = {}
 
         for cat, result in zip(categories_to_check, results):
             risk_results[cat] = result
             if result.get("is_risky"):
                 detected_risks.append(cat)
-            # Collect thinking if present
-            if result.get("thinking"):
-                thinking_map[cat.value] = result["thinking"]
 
         if self.debug:
             logger.debug(
@@ -211,14 +207,10 @@ class GraniteGuardianTool(
                 f"{[r.value for r in detected_risks]}",
             )
 
-        # Build extra dict with thinking if available
-        extra = {"thinking": thinking_map} if thinking_map else {}
-
         return GuardrailOutput(
             detected_risks=detected_risks,
             risk_results=risk_results,
             provider=self.__class__.__name__,
-            extra=extra,
         )
 
     async def _check_single_risk(
