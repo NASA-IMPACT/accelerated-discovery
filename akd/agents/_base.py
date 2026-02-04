@@ -60,7 +60,7 @@ from akd._base.streaming import (
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
-from akd.tools.human import HumanToolInput
+from akd.tools.human import HumanTool, HumanToolInput
 from akd.tools.output import OutputTool
 from akd.utils import PartialModel
 
@@ -1036,9 +1036,9 @@ class LiteLLMInstructorBaseAgent[
                     run_context=run_context,
                 )
 
-            # Check for ask_human tool BEFORE execution - intercept and yield HUMAN_INPUT_REQUIRED
+            # Check for human tool BEFORE execution - intercept and yield HUMAN_INPUT_REQUIRED
             for tool_call in tool_calls:
-                if tool_call.tool_name == "ask_human":
+                if isinstance(self._find_tool(tool_call.tool_name), HumanTool):
                     try:
                         human_input = HumanToolInput(**tool_call.arguments)
                     except Exception:
