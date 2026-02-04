@@ -233,6 +233,25 @@ class BaseAgent[
             "content": self._system_prompt,
         }
 
+    async def arun(
+        self,
+        params: InSchema,
+        run_context: RunContext | None = None,
+        **kwargs,
+    ) -> OutSchema:
+        """Run the agent with the provided parameters asynchronously.
+
+        Args:
+            params: The structured input parameters for the agent.
+            run_context: Optional RunContext for execution context
+                (messages, human_response, run_id, etc.)
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Output matching the agent's output_schema.
+        """
+        return await super().arun(params, run_context=run_context, **kwargs)
+
     async def achat(
         self,
         params: Any,

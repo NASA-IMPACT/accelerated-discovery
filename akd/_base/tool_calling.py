@@ -44,19 +44,23 @@ class HumanResponse(ToolResult):
     """Human's response to a HUMAN_INPUT_REQUIRED event.
 
     Inherits from ToolResult since a human response IS a tool result
-    for the ask_human tool call.
+    for the ask_human tool call. The content field is Any (inherited from
+    ToolResult) and is serialized via json.dumps() when injected back into
+    the conversation. Plain text strings are the simplest and recommended format.
+
+    Note: HumanToolOutput (in akd/tools/human.py) exists only to satisfy
+    BaseTool's generic type signature. It is never instantiated at runtime.
+    HumanResponse is the actual type callers construct for resumption.
 
     Example:
-        # Caller constructs RunContext with HumanResponse for resumption:
         run_context = RunContext(
-            messages=event.data["messages"],
+            messages=event.run_context.messages,
             human_response=HumanResponse(
-                tool_call_id=event.data["tool_call_id"],
-                content={"response": "user's answer"},
+                tool_call_id=event.data.tool_call_id,
+                content="I mean ML transformers like BERT and GPT",
             ),
         )
 
-        # Resume agent with the run_context
         async for event in agent.astream(input_data, run_context=run_context):
             ...
     """
