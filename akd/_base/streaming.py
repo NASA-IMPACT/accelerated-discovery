@@ -10,7 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .tool_calling import RunContext, ToolCall, ToolResult
+from .structures import RunContext
+from .tool_calling import ToolCall, ToolResult
 
 
 class StreamEventType(str, Enum):

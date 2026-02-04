@@ -29,7 +29,7 @@ from akd._base.streaming import (
     StreamEvent,
     StreamEventType,
 )
-from akd._base.tool_calling import RunContext
+from akd._base.structures import RunContext
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,

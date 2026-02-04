@@ -12,7 +12,7 @@ from akd._base.streaming import (
     HumanInputRequiredEvent,
     HumanResponseEvent,
 )
-from akd._base.tool_calling import HumanResponse, RunContext
+from akd._base.structures import HumanResponse, RunContext
 from akd.tools.human import HumanTool
 
 from .conftest import LiteLLMTestInputSchema, TestLiteLLMAgent

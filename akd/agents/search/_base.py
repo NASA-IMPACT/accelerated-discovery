@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
 from akd._base.streaming import RunningEvent, RunningEventData
-from akd._base.tool_calling import RunContext
+from akd._base.structures import RunContext
 from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResult
 from akd.tools.reranker import (

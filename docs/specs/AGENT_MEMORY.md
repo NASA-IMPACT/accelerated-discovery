@@ -353,7 +353,7 @@ async for event in agent.astream(input_data):
 ## Complete Example: Stateful Multi-Turn with Human Interrupt
 
 ```python
-from akd._base.tool_calling import HumanResponse, RunContext
+from akd._base.structures import HumanResponse, RunContext
 from akd._base.streaming import HumanInputRequiredEvent, HumanResponseEvent, CompletedEvent
 from akd.tools.human import HumanTool
 

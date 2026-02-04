@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from akd.tools._base import BaseTool
@@ -38,65 +38,6 @@ class ToolResult(BaseModel):
     content: Any = Field(description="Return value from tool")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     error: str | None = Field(default=None, description="Error message if failed")
-
-
-class HumanResponse(ToolResult):
-    """Human's response to a HUMAN_INPUT_REQUIRED event.
-
-    Inherits from ToolResult since a human response IS a tool result
-    for the ask_human tool call. The content field is Any (inherited from
-    ToolResult) and is serialized via json.dumps() when injected back into
-    the conversation. Plain text strings are the simplest and recommended format.
-
-    Note: HumanToolOutput (in akd/tools/human.py) exists only to satisfy
-    BaseTool's generic type signature. It is never instantiated at runtime.
-    HumanResponse is the actual type callers construct for resumption.
-
-    Example:
-        run_context = RunContext(
-            messages=event.run_context.messages,
-            human_response=HumanResponse(
-                tool_call_id=event.data.tool_call_id,
-                content="I mean ML transformers like BERT and GPT",
-            ),
-        )
-
-        async for event in agent.astream(input_data, run_context=run_context):
-            ...
-    """
-
-    tool_name: str = Field(default="ask_human", description="Tool name (defaults to ask_human)")
-
-
-class RunContext(BaseModel):
-    """Execution context for streaming and tool calling.
-
-    A typed context dict that allows arbitrary extra keys while providing
-    type safety for known fields.
-
-    Example:
-        context = RunContext(
-            human_response=HumanResponse(...),
-            messages=[...],
-            run_id="abc123",
-            custom_field="allowed",  # extra keys work
-        )
-    """
-
-    model_config = ConfigDict(extra="allow")
-
-    human_response: HumanResponse | None = Field(
-        default=None,
-        description="Human response for resumption after HUMAN_INPUT_REQUIRED",
-    )
-    messages: list[dict[str, Any]] | None = Field(
-        default=None,
-        description="Conversation history for resumption",
-    )
-    run_id: str | None = Field(
-        default=None,
-        description="Unique identifier for this execution run",
-    )
 
 
 class ToolCallingMixin:
@@ -201,4 +142,4 @@ class ToolCallingMixin:
         )
 
 
-__all__ = ["ToolCall", "ToolResult", "HumanResponse", "RunContext", "ToolCallingMixin"]
+__all__ = ["ToolCall", "ToolResult", "ToolCallingMixin"]

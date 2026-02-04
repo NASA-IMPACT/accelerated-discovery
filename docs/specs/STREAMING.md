@@ -486,7 +486,7 @@ from akd._base.streaming import (
     RunningEvent, RunningEventData, CompletedEvent, CompletedEventData,
     FailedEvent, FailedEventData,
 )
-from akd._base.tool_calling import RunContext
+from akd._base.structures import RunContext
 
 class MyAgent(LiteLLMInstructorBaseAgent):
 
@@ -637,7 +637,7 @@ async for chunk in response:
 
 ```python
 from akd._base.streaming import *
-from akd._base.tool_calling import HumanResponse, RunContext
+from akd._base.structures import HumanResponse, RunContext
 
 agent = MyAgent(config=config)
 input_data = MyInputSchema(query="climate change research")

@@ -9,7 +9,7 @@ from litellm.utils import trim_messages
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from .tool_calling import RunContext
+    from .structures import RunContext
 
 
 class Memory[T](BaseModel):

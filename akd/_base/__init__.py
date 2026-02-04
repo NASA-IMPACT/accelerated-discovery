@@ -43,13 +43,8 @@ from .streaming import (
     ToolResultEvent,
     ToolResultEventData,
 )
-from .tool_calling import (
-    HumanResponse,
-    RunContext,
-    ToolCall,
-    ToolCallingMixin,
-    ToolResult,
-)
+from .structures import HumanResponse, RunContext
+from .tool_calling import ToolCall, ToolCallingMixin, ToolResult
 
 __all__ = [
     # Base classes

@@ -62,7 +62,7 @@ When the LLM calls `ask_human`, the tool loop:
 To resume, construct a `RunContext` with:
 
 ```python
-from akd._base.tool_calling import HumanResponse, RunContext
+from akd._base.structures import HumanResponse, RunContext
 
 resume_context = RunContext(
     run_id=event.run_context.run_id,
@@ -91,7 +91,7 @@ When `astream()` is called with a `RunContext` containing `human_response`:
 
 ```python
 from akd._base.streaming import CompletedEvent, HumanInputRequiredEvent, HumanResponseEvent
-from akd._base.tool_calling import HumanResponse, RunContext
+from akd._base.structures import HumanResponse, RunContext
 from akd.tools.human import HumanTool
 
 # Agent with HumanTool

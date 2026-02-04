@@ -342,7 +342,7 @@ Agent has both `SerperSearchTool` and `HumanTool`. When it encounters ambiguity,
 
 ```python
 from akd._base.streaming import CompletedEvent, HumanInputRequiredEvent, HumanResponseEvent
-from akd._base.tool_calling import HumanResponse, RunContext
+from akd._base.structures import HumanResponse, RunContext
 
 agent = SearchAgent(BaseAgentConfig(
     tools=[SerperSearchTool(), HumanTool()],
