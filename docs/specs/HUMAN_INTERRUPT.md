@@ -45,7 +45,7 @@ Tool loop checks run_context.human_response
 
 ### Pause: HUMAN_INPUT_REQUIRED Event
 
-When the LLM calls `ask_human`, the tool loop:
+When the LLM calls a `HumanTool` (detected via `isinstance`, not by name), the tool loop:
 
 1. Parses `HumanToolInput` from tool call arguments
 2. Appends the assistant message (with `tool_calls`) to the conversation

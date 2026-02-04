@@ -141,7 +141,7 @@ class HumanToolOutput(OutputSchema):
     response: str                    # The human's response
 ```
 
-The `_arun()` method raises `HumanInputRequired` exception. This exception is never actually caught by the tool executor - the tool loop intercepts `ask_human` calls **before** execution and emits a `HUMAN_INPUT_REQUIRED` streaming event instead.
+The `_arun()` method raises `HumanInputRequired` exception. This exception is never actually caught by the tool executor - the tool loop detects `HumanTool` instances (via `isinstance` check) **before** execution and emits a `HUMAN_INPUT_REQUIRED` streaming event instead.
 
 See [HUMAN_INTERRUPT.md](./HUMAN_INTERRUPT.md) for the full human interaction lifecycle.
 
@@ -172,8 +172,8 @@ See [HUMAN_INTERRUPT.md](./HUMAN_INTERRUPT.md) for the full human interaction li
 3. Convert accumulated chunks → ToolCall objects
    └─ Emit TOOL_CALLING event per tool call
 
-4. Check for special tools
-   ├─ ask_human: Intercept BEFORE execution
+4. Check for special tools (isinstance-based, not name-based)
+   ├─ HumanTool: Intercept BEFORE execution
    │   ├─ Add assistant message with tool_calls to messages
    │   ├─ Store messages in run_context for resumption
    │   ├─ Yield HUMAN_INPUT_REQUIRED event
