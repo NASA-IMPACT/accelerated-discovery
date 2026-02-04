@@ -69,12 +69,12 @@ resume_context = RunContext(
     messages=event.run_context.messages,
     human_response=HumanResponse(
         tool_call_id=event.data.tool_call_id,
-        content={"response": "The human's answer"},  # Dict matching HumanToolOutput
+        content="I mean ML transformers like BERT and GPT",
     ),
 )
 ```
 
-The `content` field must be a dict matching `HumanToolOutput` schema: `{"response": "..."}`. This is because the response is injected as a tool result message and the LLM expects it in the schema format.
+The `content` field accepts any JSON-serializable value (typed as `Any` on `ToolResult`). Plain text strings are the recommended format. The value is serialized via `json.dumps()` when injected as the tool result message.
 
 ### Resume: Processing
 
@@ -121,7 +121,7 @@ resume_context = RunContext(
     messages=human_event.run_context.messages,
     human_response=HumanResponse(
         tool_call_id=human_event.data.tool_call_id,
-        content={"response": user_answer},
+        content=user_answer,
     ),
 )
 
@@ -156,7 +156,7 @@ _stream_llm_response()
 | Aspect | Tool Calling Mode | Non-Tool Mode |
 |--------|------------------|---------------|
 | Message role | `"tool"` | `"user"` |
-| Content format | `json.dumps({"response": "..."})` | Plain string or `json.dumps(content)` |
+| Content format | `json.dumps(content)` (plain text recommended) | Plain string or `json.dumps(content)` |
 | Trigger | LLM calls `ask_human` | Caller provides `human_response` directly |
 | Interception | Tool loop intercepts before execution | Checked at start of `_stream_llm_response()` |
 
@@ -274,6 +274,14 @@ class HumanResponseEvent(StreamEvent):
 
 ---
 
+## HumanResponse vs HumanToolOutput
+
+`HumanToolOutput` (`akd/tools/human.py`) exists only to satisfy `BaseTool[HumanToolInput, HumanToolOutput]`'s generic type signature. It is **never instantiated** at runtime — `HumanTool._arun()` raises `HumanInputRequired` before returning.
+
+`HumanResponse` (`akd/_base/tool_calling.py`) is the actual type callers construct for resumption. Its `content` field is `Any` (inherited from `ToolResult`). Plain text strings are recommended.
+
+---
+
 ## User Message Skip on Resume
 
 When resuming with `human_response`, the agent skips adding a new user message to avoid duplicating input. In `_astream()`:
@@ -299,7 +307,7 @@ After `ask_human` interception, the messages look like:
 [user]   Original query
 [assistant] { tool_calls: [{ name: "ask_human", arguments: { question: "..." } }] }
   ── pause ──
-[tool]   { "response": "human's answer" }  ← injected on resume
+[tool]   "human's answer"  ← injected on resume (json.dumps of content)
 [assistant] Final response using human's input
 ```
 

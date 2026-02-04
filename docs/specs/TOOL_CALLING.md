@@ -370,7 +370,7 @@ if human_event:
         messages=human_event.run_context.messages,
         human_response=HumanResponse(
             tool_call_id=human_event.data.tool_call_id,
-            content={"response": "I mean ML transformers like BERT and GPT"},
+            content="I mean ML transformers like BERT and GPT",
         ),
     )
 

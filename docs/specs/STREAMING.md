@@ -442,7 +442,7 @@ HumanResponseEvent(
     message="Resumed with human input",
     data=HumanResponseEventData(
         tool_call_id="call_human_456",
-        response={"response": "Alice"},
+        response="Alice",
     ),
     run_context=run_context,
 )
@@ -678,7 +678,7 @@ async for event in agent.astream(input_data):
             messages=event.run_context.messages,
             human_response=HumanResponse(
                 tool_call_id=event.data.tool_call_id,
-                content={"response": answer},
+                content=answer,
             ),
         )
         break
@@ -794,7 +794,7 @@ async def test_human_interrupt_flow():
         messages=human_event.run_context.messages,
         human_response=HumanResponse(
             tool_call_id=human_event.data.tool_call_id,
-            content={"response": "Test answer"},
+            content="Test answer",
         ),
     )
 

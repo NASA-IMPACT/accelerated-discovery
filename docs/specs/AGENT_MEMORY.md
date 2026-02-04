@@ -303,7 +303,7 @@ Messages are mutated in place during each iteration:
 {
     "role": "tool",
     "tool_call_id": "call_human_456",
-    "content": '{"response": "Alice"}'
+    "content": '"Alice"'  # json.dumps("Alice")
 }
 
 # Human response (non-tool mode - injected as user message)
@@ -374,7 +374,7 @@ resume_ctx = RunContext(
     messages=human_event.run_context.messages,
     human_response=HumanResponse(
         tool_call_id=human_event.data.tool_call_id,
-        content={"response": "Focus on quantum computing"},
+        content="Focus on quantum computing",
     ),
 )
 
