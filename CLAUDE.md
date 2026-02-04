@@ -131,4 +131,28 @@ akd/
 
 tests/                 # Mirrors akd/ structure — pytest + asyncio + xdist
 docs/specs/            # Detailed specifications (see links above)
+agent-stuff/           # Local-only (gitignored) plans and PR docs
 ```
+
+## Agent Workspace (`agent-stuff/`)
+
+Local-only directory (gitignored) for plans and PR docs.
+
+```
+agent-stuff/
+├── plans/
+│   ├── active/        # In-progress or upcoming plans
+│   └── completed/     # Archived after implementation
+└── prs/
+    ├── open/          # Docs for open PRs
+    └── closed/        # Merged/closed PR docs
+```
+
+### Conventions
+
+- **Plan files**: prefix with date — `YYYY-MM-DD-<descriptive-name>.md`
+  - Example: `2026-02-04-human-chat-flow.md`
+- **PR files**: name by PR number — `<number>.md`
+  - Example: `335.md`
+- When a plan is implemented, move it from `active/` → `completed/`
+- When a PR is merged/closed, move its doc from `open/` → `closed/`
