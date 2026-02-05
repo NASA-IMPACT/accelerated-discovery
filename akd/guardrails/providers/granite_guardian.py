@@ -106,7 +106,7 @@ class GraniteGuardianBaseConfig(BaseToolConfig):
     )
     think: bool = Field(
         default=False,
-        description="Enable chain-of-thought reasoning. Returns thinking process in risk_results['risk']['thinking'].",
+        description="Enable chain-of-thought reasoning. Returns thinking process in risk_results[<RiskCategory>]['thinking'].",
     )
 
 
