@@ -47,16 +47,19 @@ def is_docker_cdp_available(host: str = "127.0.0.1", port: int = 9222) -> bool:
 
 def is_playwright_installed() -> bool:
     """
-    Check if Playwright is installed locally.
+    Check if Playwright is installed with browser binaries.
 
     Returns:
-        True if Playwright is available, False otherwise
+        True if Playwright and chromium browser binary are available, False otherwise
     """
     try:
-        from playwright.async_api import async_playwright  # noqa
+        from playwright.sync_api import sync_playwright
 
-        return True
-    except ImportError:
+        with sync_playwright() as p:
+            return p.chromium.executable_path is not None and os.path.exists(
+                p.chromium.executable_path,
+            )
+    except Exception:
         return False
 
 
@@ -153,6 +156,10 @@ class TestCrawl4AIScraperDockerMode:
     @pytest.mark.skipif(
         is_docker_cdp_available(),
         reason="Docker CDP is available - cannot test unavailable case",
+    )
+    @pytest.mark.skipif(
+        not is_playwright_installed(),
+        reason="Playwright not installed - fallback to local requires browser binaries",
     )
     async def test_docker_mode_success_if_docker_unavailable(self, docker_config, test_url):
         """Test that scraper falls back to local mode when Docker is unavailable."""

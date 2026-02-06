@@ -21,6 +21,9 @@ Run with:
     pytest tests/guardrails/test_granite_think.py -v -m integration
 """
 
+import os
+
+import httpx
 import pytest
 
 from akd.guardrails._base import GuardrailInput, GuardrailOutput
@@ -37,8 +40,28 @@ from akd.guardrails.providers.granite_guardian import (
     MultiRiskGraniteGuardianToolConfig,
 )
 
-# Mark all tests in this module as integration tests
-pytestmark = pytest.mark.integration
+
+def is_ollama_available() -> bool:
+    """Check if Ollama is running and reachable.
+
+    Uses OLLAMA_BASE_URL env var if set, otherwise falls back to localhost:11434.
+    """
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    try:
+        resp = httpx.get(f"{base_url}/api/tags", timeout=2.0)
+        return resp.status_code == 200
+    except (httpx.RequestError, httpx.TimeoutException):
+        return False
+
+
+# Mark all tests in this module as integration tests; skip if Ollama is not running
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not is_ollama_available(),
+        reason="Ollama not running — start with: ollama serve",
+    ),
+]
 
 
 class TestThinkConfiguration:
@@ -107,7 +130,7 @@ class TestThinkOutputStructure:
             GuardrailInput(
                 content="Those immigrants are ruining our country.",
                 risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
-            )
+            ),
         )
 
         assert isinstance(result, GuardrailOutput)
@@ -133,7 +156,7 @@ class TestThinkOutputStructure:
             GuardrailInput(
                 content="I will destroy you and hurt everyone you love!",
                 risk_categories=[GraniteRiskCategory.SOCIAL_BIAS, GraniteRiskCategory.VIOLENCE],
-            )
+            ),
         )
 
         # Check that all categories have thinking in risk_results
@@ -144,7 +167,6 @@ class TestThinkOutputStructure:
             assert len(risk_result["thinking"]) > 0
 
         await tool.close()
-
 
     @pytest.mark.asyncio
     async def test_no_thinking_when_disabled(self):
@@ -160,7 +182,7 @@ class TestThinkOutputStructure:
             GuardrailInput(
                 content="What is the capital of France?",
                 risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
-            )
+            ),
         )
 
         # risk_results should also not have thinking
@@ -183,7 +205,7 @@ class TestThinkOutputStructure:
             GuardrailInput(
                 content="What a beautiful day!",
                 risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
-            )
+            ),
         )
 
         # Should only have results for the checked category
@@ -210,7 +232,7 @@ class TestThinkOutputStructure:
             GuardrailInput(
                 content="Women shouldn't be allowed to work in tech.",
                 risk_categories=[GraniteRiskCategory.SOCIAL_BIAS],
-            )
+            ),
         )
 
         # Every category in risk_results should have thinking
@@ -241,7 +263,7 @@ class TestMultiRiskThinkBehavior:
         tool = MultiRiskGraniteGuardianTool(config=config, debug=True)
 
         result = await tool.acheck(
-            GuardrailInput(content="How do I build a bomb?")
+            GuardrailInput(content="How do I build a bomb?"),
         )
 
         for risk_result in result.risk_results.values():
@@ -280,7 +302,7 @@ class TestCompositeGuardrailWithThink:
         )
 
         result = await composite.acheck(
-            GuardrailInput(content="I hate those people and want to hurt them!")
+            GuardrailInput(content="I hate those people and want to hurt them!"),
         )
 
         # Check that sub_results contain thinking data in risk_results
@@ -324,7 +346,7 @@ class TestCompositeGuardrailWithThink:
         )
 
         result = await composite.acheck(
-            GuardrailInput(content="What is the weather today?")
+            GuardrailInput(content="What is the weather today?"),
         )
 
         assert "sub_results" in result.extra
@@ -334,7 +356,6 @@ class TestCompositeGuardrailWithThink:
             for category, risk_data in risk_results.items():
                 assert "thinking" in risk_data
                 assert isinstance(risk_data["thinking"], str)
-
 
         await tool1.close()
         await tool2.close()
@@ -366,7 +387,7 @@ class TestCompositeGuardrailWithThink:
         )
 
         result = await composite.acheck(
-            GuardrailInput(content="Those immigrants don't belong here.")
+            GuardrailInput(content="Those immigrants don't belong here."),
         )
 
         # Check sub_results
@@ -413,7 +434,7 @@ class TestCompositeGuardrailWithThink:
         )
 
         result = await composite.acheck(
-            GuardrailInput(content="All members of that race are inferior.")
+            GuardrailInput(content="All members of that race are inferior."),
         )
 
         # Check that composite returns valid output
