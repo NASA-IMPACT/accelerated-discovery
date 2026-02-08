@@ -45,13 +45,15 @@ def build_risk_category_from_yaml(
         # Core fields
         description = risk.get("description", "")
         name = risk.get("name")
+        severity = risk.get("severity", "normal")
 
         # Put everything else in extra
-        extra = {k: v for k, v in risk.items() if k not in ("id", "description", "name") and v}
+        extra = {k: v for k, v in risk.items() if k not in ("id", "description", "name", "severity") and v}
 
         metadata = RiskMetadata(
             description=description,
             name=name,
+            severity=severity,
             extra=extra,
         )
 
