@@ -42,41 +42,44 @@ class OllamaType(StrEnum):
     SERVER = "server"
 
 
-# Prompt templates for multi-harm detection
+# Prompt templates for multi-harm detection (2-step inference)
+# Uses Granite model special tokens for proper turn formatting
 HARM_RISK_DEFINITION = "The 'User' message contains content that is harmful, unethical, or dangerous."
 
-MULTI_HARM_PROMPT_TEMPLATE = """You are a safety agent trying to help determine whether the last user message in the conversation is harmful according to the safety risk definition below.
+# Granite special tokens for chat formatting
+_END_OF_TEXT = "<|end_of_text|>"
+_ASSISTANT_ROLE = "<|start_of_role|>assistant<|end_of_role|>"
+
+# Step 1 templates: Harm detection (model generates Yes/No + confidence)
+# Ends with special tokens to trigger model response
+HARM_DETECTION_USER_TEMPLATE = f"""You are a safety agent trying to help determine whether the last user message in the conversation is harmful according to the safety risk definition below.
 
 <start_of_conversation>
-User Message: {user_message}
+User Message: {{user_message}}
 <end_of_conversation>
 
 Our safety risk definition is defined below:
 <start_of_risk_definition>
-* {risk_definition}
+* {{risk_definition}}
 <end_of_risk_definition>
 
-Is the last user message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.<|end_of_text|>
-<|start_of_role|>assistant<|end_of_role|>Yes
-<confidence> High </confidence><|end_of_text|>
-<categories>"""
+Is the last user message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.{_END_OF_TEXT}
+{_ASSISTANT_ROLE}"""
 
-MULTI_HARM_RESPONSE_TEMPLATE = """You are a safety agent trying to help determine whether the last assistant message in the conversation is harmful according to the safety risk definition below.
+HARM_DETECTION_ASSISTANT_TEMPLATE = f"""You are a safety agent trying to help determine whether the last assistant message in the conversation is harmful according to the safety risk definition below.
 
 <start_of_conversation>
-User Message: {user_message}
-Assistant Message: {assistant_message}
+User Message: {{user_message}}
+Assistant Message: {{assistant_message}}
 <end_of_conversation>
 
 Our safety risk definition is defined below:
 <start_of_risk_definition>
-* {risk_definition}
+* {{risk_definition}}
 <end_of_risk_definition>
 
-Is the last assistant message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.<|end_of_text|>
-<|start_of_role|>assistant<|end_of_role|>Yes
-<confidence> High </confidence><|end_of_text|>
-<categories>"""
+Is the last assistant message harmful based on the risk definition? Your answer must be either 'Yes' or 'No'.{_END_OF_TEXT}
+{_ASSISTANT_ROLE}"""
 
 
 class GraniteGuardianBaseConfig(BaseToolConfig):
@@ -101,6 +104,10 @@ class GraniteGuardianBaseConfig(BaseToolConfig):
         default=True,
         description="Validate that input categories match the tool's supported types.",
     )
+    think: bool = Field(
+        default=False,
+        description="Enable chain-of-thought reasoning. Returns thinking process in risk_results[<RiskCategory>]['thinking'].",
+    )
 
 
 class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
@@ -114,6 +121,19 @@ class GraniteGuardianToolConfig(GraniteGuardianBaseConfig):
         default_factory=lambda: list(GraniteRiskCategory),
         description="Risk categories to check (defaults to all).",
     )
+
+    @model_validator(mode="after")
+    def validate_think_support(self) -> Self:
+        """Auto-disable think if model doesn't support it."""
+        # Only granite3.3-guardian:8b supports thinking mode
+        if self.think and self.model != GuardianModelID.GUARDIAN_3_3_8B:
+            logger.warning(
+                f"[GraniteGuardianToolConfig] Model {self.model} does not support think=True. "
+                f"Only {GuardianModelID.GUARDIAN_3_3_8B} supports chain-of-thought reasoning. "
+                f"Automatically disabling think parameter.",
+            )
+            self.think = False
+        return self
 
 
 class GraniteGuardianTool(
@@ -218,8 +238,10 @@ class GraniteGuardianTool(
             result = await self._call_guardian_cached(messages)
 
             if self.debug:
+                thinking_preview = result.get("thinking", "")[:100] if result.get("thinking") else "N/A"
                 logger.debug(
-                    f"[{self.__class__.__name__}] Risk {risk_category.value}: is_risky={result.get('is_risky')}",
+                    f"[{self.__class__.__name__}] Risk {risk_category.value}: "
+                    f"is_risky={result.get('is_risky')}, thinking={thinking_preview}...",
                 )
             return result
 
@@ -240,13 +262,16 @@ class GraniteGuardianTool(
                     "model": self.config.model.value,
                     "messages": messages_list,
                     "stream": False,
+                    "think": self.config.think,
                     "options": {"num_ctx": 8192, "temperature": 0, "seed": 42},
                 },
             )
             response.raise_for_status()
 
             data = response.json()
-            content = data.get("message", {}).get("content", "")
+            message = data.get("message", {})
+            content = message.get("content", "")
+            thinking = message.get("thinking", "")
 
             # Parse yes/no from response
             match = re.search(r"\b(yes|no)\b", content or "", flags=re.IGNORECASE)
@@ -256,11 +281,17 @@ class GraniteGuardianTool(
             label = match.group(1).lower()
             is_risky = label == "yes"
 
-            return {
+            result = {
                 "risk_label": label,
                 "is_risky": is_risky,
                 "raw_response": content,
             }
+
+            # Include thinking if present
+            if thinking:
+                result["thinking"] = thinking
+
+            return result
         except Exception as e:
             logger.error(f"[GraniteGuardianTool] Error: {e}")
             return {"error": str(e)}
@@ -301,6 +332,18 @@ class MultiRiskGraniteGuardianToolConfig(GraniteGuardianBaseConfig):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_think_support(self) -> Self:
+        """Auto-disable think as multi-risk models don't support it."""
+        if self.think:
+            logger.warning(
+                f"[MultiRiskGraniteGuardianToolConfig] Multi-risk models do not support think=True. "
+                f"Chain-of-thought reasoning is not available in multi-harm detection mode. "
+                f"Automatically disabling think parameter.",
+            )
+            self.think = False
+        return self
+
 
 class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
     """
@@ -316,32 +359,69 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
     config: MultiRiskGraniteGuardianToolConfig  # type hint for pyright
 
     async def _arun(self, params: GuardrailInput, **kwargs) -> GuardrailOutput:
-        """Run multi-harm detection (single call detects all harms)."""
+        """Run multi-harm detection using 2-step inference per model card.
+
+        Step 1: Detect if content is harmful (Yes/No + confidence)
+        Step 2: If harmful, get specific harm categories
+        """
         # Input overrides config - validate early before model call
         categories_to_check = list(params.risk_categories or self.config.risk_categories)
         self._validate_category_types(categories_to_check)
 
+        # Build Step 1 prompt (harm detection - no hardcoded answer)
         if params.context:
-            prompt = MULTI_HARM_RESPONSE_TEMPLATE.format(
+            step1_prompt = HARM_DETECTION_ASSISTANT_TEMPLATE.format(
                 user_message=params.context,
                 assistant_message=params.content,
                 risk_definition=HARM_RISK_DEFINITION,
             )
         else:
-            prompt = MULTI_HARM_PROMPT_TEMPLATE.format(
+            step1_prompt = HARM_DETECTION_USER_TEMPLATE.format(
                 user_message=params.content,
                 risk_definition=HARM_RISK_DEFINITION,
             )
 
-        result = await self._call_multi_harm_cached(prompt)
+        # Step 1: Detect if harmful (Yes/No + confidence)
+        step1_result = await self._call_harm_detection(step1_prompt)
 
-        # Filter to only include configured categories
-        detected = [cat for cat in result.get("categories", []) if cat in categories_to_check]
+        is_harmful = step1_result.get("label", "").lower() == "yes"
+        confidence = step1_result.get("confidence", "")
 
         if self.debug:
             logger.debug(
-                f"[{self.__class__.__name__}] Detected {len(detected)} risks "
-                f"(filtered from {len(result.get('categories', []))}): {[r.value for r in detected]}",
+                f"[{self.__class__.__name__}] Step 1 - is_harmful={is_harmful}, confidence={confidence}",
+            )
+
+        if not is_harmful:
+            # Content is NOT harmful - return early with empty risks
+            return GuardrailOutput(
+                detected_risks=[],
+                risk_results={},
+                provider=self.__class__.__name__,
+                extra={
+                    "risk_label": "no",
+                    "confidence": confidence,
+                    "step1_raw": step1_result.get("raw_response"),
+                },
+            )
+
+        # Step 2: Get specific categories (only if Step 1 = "Yes")
+        # Append model's Step 1 output + <|end_of_text|> + <categories> (matches original format)
+        step2_prompt = step1_prompt + step1_result["raw_response"] + _END_OF_TEXT + "\n<categories>"
+        step2_result = await self._call_category_detection(step2_prompt)
+
+        # Filter to configured categories and exclude non-harmful markers
+        detected = [
+            cat
+            for cat in step2_result.get("categories", [])
+            if cat in categories_to_check
+            and cat not in (GraniteHarmCategory.NOT_HARMFUL_PROMPT, GraniteHarmCategory.NOT_HARMFUL_RESPONSE)
+        ]
+
+        if self.debug:
+            logger.debug(
+                f"[{self.__class__.__name__}] Step 2 - Detected {len(detected)} risks "
+                f"(filtered from {len(step2_result.get('categories', []))}): {[r.value for r in detected]}",
             )
 
         # Build per-risk results
@@ -352,16 +432,78 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
             risk_results=risk_results,
             provider=self.__class__.__name__,
             extra={
-                "raw_response": result.get("raw_response"),
-                "risk_label": result.get("risk_label"),
-                "unfiltered_categories": result.get("categories", []),
+                "risk_label": "yes",
+                "confidence": confidence,
+                "step1_raw": step1_result.get("raw_response"),
+                "step2_raw": step2_result.get("raw_response"),
+                "unfiltered_categories": step2_result.get("categories", []),
             },
         )
 
     @async_lru_cache(maxsize=256)
-    async def _call_multi_harm_cached(self, prompt: str) -> dict[str, Any]:
-        """Call multi-harm model with completion endpoint (cached)."""
+    async def _call_harm_detection(self, prompt: str) -> dict[str, Any]:
+        """Step 1: Call model to detect harm. Stop at </confidence>."""
         try:
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 1 - Sending harm detection prompt:\n"
+                    f"--- PROMPT START ---\n{prompt}\n--- PROMPT END ---",
+                )
+
+            url = urljoin(str(self.config.ollama_base_url), "/api/generate")
+            response = await self._client.post(
+                url,
+                json={
+                    "model": self.config.model.value,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "num_ctx": 8192,
+                        "temperature": 0,
+                        "seed": 42,
+                        "stop": ["</confidence>"],
+                    },
+                },
+            )
+            response.raise_for_status()
+
+            content = response.json().get("response", "")
+
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 1 - Ollama response:\n"
+                    f"--- RESPONSE START ---\n{content}\n--- RESPONSE END ---",
+                )
+
+            # Parse: "Yes\n<confidence> High " or "No\n<confidence> Low "
+            label = "yes" if content.strip().lower().startswith("yes") else "no"
+            confidence_match = re.search(r"<confidence>\s*(\w+)", content)
+            confidence = confidence_match.group(1) if confidence_match else ""
+
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 1 - Parsed: label={label}, confidence={confidence}",
+                )
+
+            return {
+                "label": label,
+                "confidence": confidence,
+                "raw_response": content + "</confidence>",  # Include closing tag for Step 2
+            }
+        except Exception as e:
+            logger.error(f"[{self.__class__.__name__}] Step 1 error: {e}")
+            return {"error": str(e), "label": "no", "confidence": "", "raw_response": ""}
+
+    @async_lru_cache(maxsize=256)
+    async def _call_category_detection(self, prompt: str) -> dict[str, Any]:
+        """Step 2: Call model to get categories. Stop at </categories>."""
+        try:
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 2 - Sending category detection prompt:\n"
+                    f"--- PROMPT START ---\n{prompt}\n--- PROMPT END ---",
+                )
+
             url = urljoin(str(self.config.ollama_base_url), "/api/generate")
             response = await self._client.post(
                 url,
@@ -380,23 +522,26 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
             response.raise_for_status()
 
             content = response.json().get("response", "")
+
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 2 - Ollama response:\n"
+                    f"--- RESPONSE START ---\n{content}\n--- RESPONSE END ---",
+                )
+
             categories = self._parse_categories(content)
 
-            # Filter out non-harmful markers
-            harmful_categories = [
-                cat
-                for cat in categories
-                if cat not in (GraniteHarmCategory.NOT_HARMFUL_PROMPT, GraniteHarmCategory.NOT_HARMFUL_RESPONSE)
-            ]
+            if self.debug:
+                logger.debug(
+                    f"[{self.__class__.__name__}] Step 2 - Parsed categories: {[c.value for c in categories]}",
+                )
 
             return {
-                "risk_label": "yes" if harmful_categories else "no",
-                "is_risky": len(harmful_categories) > 0,
-                "categories": harmful_categories,
+                "categories": categories,
                 "raw_response": content,
             }
         except Exception as e:
-            logger.error(f"[MultiHarmGraniteGuardianTool] Error: {e}")
+            logger.error(f"[{self.__class__.__name__}] Step 2 error: {e}")
             return {"error": str(e), "categories": []}
 
     def _parse_categories(self, content: str) -> list[GraniteHarmCategory]:
