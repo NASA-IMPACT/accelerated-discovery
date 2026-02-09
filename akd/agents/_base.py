@@ -1089,6 +1089,14 @@ class LiteLLMInstructorBaseAgent[
             # Check if final_answer was called - signals completion
             for result in results:
                 if result.tool_name == "final_answer":
+                    if result.error:
+                        # Validation failed — fall through to regular tool result handling
+                        # so the error gets fed back to the LLM as a tool message,
+                        # giving it a chance to retry with correct schema fields.
+                        logger.warning(
+                            f"final_answer validation failed, feeding error back to LLM for retry: {result.error}",
+                        )
+                        break
                     # Validation done in _execute_tool via input_schema(**arguments)
                     # result.content is dict from model_dump(), reconstruct the model
                     output = self.output_schema.model_validate(result.content)
