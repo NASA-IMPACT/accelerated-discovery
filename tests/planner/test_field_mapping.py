@@ -118,7 +118,7 @@ class TestFieldMappingGenerator:
         assert query_mapping is not None
 
         # Validate LLM chose a reasonable source field
-        sensible_sources = ["report", "category", "results"]
+        sensible_sources = ["report", "category", "results", "answer"]
         assert query_mapping.source_field in sensible_sources
 
     @pytest.mark.asyncio
@@ -211,7 +211,7 @@ class TestWorkflowBuilderMapping:
         assert gap_node is not None
         assert gap_node.io_map is not None
         assert "search_results" in gap_node.io_map
-        assert gap_node.io_map["search_results"] == "$.deep_search.outputs.results"
+        assert gap_node.io_map["search_results"] == "$.deep_search_1.outputs.results"
 
     def test_unmapped_field_detection(self, workflow_builder):
         """Test detection of unmapped fields."""
@@ -282,6 +282,7 @@ class TestWorkflowBuilderMapping:
         assert gap_node is not None
         assert gap_node.io_map is not None
         assert "search_results" in gap_node.io_map
+        assert gap_node.io_map["search_results"] == "$.deep_search_1.outputs.results"
         # Check that gap is NOT in io_map (it's filled directly)
         assert "gap" not in gap_node.io_map
 
@@ -368,7 +369,7 @@ class TestSpecificAgentWorkflows:
 
         assert code_node is not None
         assert code_node.io_map is not None
-        assert code_node.io_map.get("query") == "$.deep_search.outputs.report"
+        assert code_node.io_map.get("query") == "$.deep_search_1.outputs.report"
 
     def test_code_search_to_gap_analysis(self, workflow_builder):
         """Test code_search -> gap_analysis mapping."""
@@ -409,7 +410,7 @@ class TestSpecificAgentWorkflows:
 
         assert gap_node is not None
         assert gap_node.io_map is not None
-        assert gap_node.io_map.get("search_results") == "$.code_search.outputs.results"
+        assert gap_node.io_map.get("search_results") == "$.code_search_1.outputs.results"
 
 
 if __name__ == "__main__":

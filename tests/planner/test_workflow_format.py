@@ -14,17 +14,18 @@ class TestWorkflowFormatValidation:
         """Test that validation detects invalid node references in io_map."""
         workflow = WorkflowFormat(
             nodes=[
-                WorkflowNode(type="agent_a", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO()),
                 WorkflowNode(
+                    id="agent_b_1",
                     type="agent_b",
                     input=WorkflowNodeIO(),
                     io_map={"field1": "$.non_existent_agent.outputs.field"},
                 ),
             ],
             edges=[
-                WorkflowEdge(from_node="START", to_node="agent_a"),
-                WorkflowEdge(from_node="agent_a", to_node="agent_b"),
-                WorkflowEdge(from_node="agent_b", to_node="END"),
+                WorkflowEdge(from_node="START", to_node="agent_a_1"),
+                WorkflowEdge(from_node="agent_a_1", to_node="agent_b_1"),
+                WorkflowEdge(from_node="agent_b_1", to_node="END"),
             ],
         )
 
@@ -36,17 +37,18 @@ class TestWorkflowFormatValidation:
         """Test that validation detects invalid JSONPath format."""
         workflow = WorkflowFormat(
             nodes=[
-                WorkflowNode(type="agent_a", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO()),
                 WorkflowNode(
+                    id="agent_b_1",
                     type="agent_b",
                     input=WorkflowNodeIO(),
                     io_map={"field1": "invalid_path"},
                 ),
             ],
             edges=[
-                WorkflowEdge(from_node="START", to_node="agent_a"),
-                WorkflowEdge(from_node="agent_a", to_node="agent_b"),
-                WorkflowEdge(from_node="agent_b", to_node="END"),
+                WorkflowEdge(from_node="START", to_node="agent_a_1"),
+                WorkflowEdge(from_node="agent_a_1", to_node="agent_b_1"),
+                WorkflowEdge(from_node="agent_b_1", to_node="END"),
             ],
         )
 
@@ -58,17 +60,18 @@ class TestWorkflowFormatValidation:
         """Test that validation passes for valid io_map."""
         workflow = WorkflowFormat(
             nodes=[
-                WorkflowNode(type="agent_a", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO()),
                 WorkflowNode(
+                    id="agent_b_1",
                     type="agent_b",
                     input=WorkflowNodeIO(),
-                    io_map={"field1": "$.agent_a.outputs.result"},
+                    io_map={"field1": "$.agent_a_1.outputs.result"},
                 ),
             ],
             edges=[
-                WorkflowEdge(from_node="START", to_node="agent_a"),
-                WorkflowEdge(from_node="agent_a", to_node="agent_b"),
-                WorkflowEdge(from_node="agent_b", to_node="END"),
+                WorkflowEdge(from_node="START", to_node="agent_a_1"),
+                WorkflowEdge(from_node="agent_a_1", to_node="agent_b_1"),
+                WorkflowEdge(from_node="agent_b_1", to_node="END"),
             ],
         )
 
@@ -79,14 +82,14 @@ class TestWorkflowFormatValidation:
         """Test that validation detects orphaned nodes."""
         workflow = WorkflowFormat(
             nodes=[
-                WorkflowNode(type="agent_a", input=WorkflowNodeIO()),
-                WorkflowNode(type="agent_b", input=WorkflowNodeIO()),
-                WorkflowNode(type="orphaned_agent", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_b_1", type="agent_b", input=WorkflowNodeIO()),
+                WorkflowNode(id="orphaned_agent_1", type="orphaned_agent", input=WorkflowNodeIO()),
             ],
             edges=[
-                WorkflowEdge(from_node="START", to_node="agent_a"),
-                WorkflowEdge(from_node="agent_a", to_node="agent_b"),
-                WorkflowEdge(from_node="agent_b", to_node="END"),
+                WorkflowEdge(from_node="START", to_node="agent_a_1"),
+                WorkflowEdge(from_node="agent_a_1", to_node="agent_b_1"),
+                WorkflowEdge(from_node="agent_b_1", to_node="END"),
             ],
         )
 
@@ -97,8 +100,8 @@ class TestWorkflowFormatValidation:
     def test_validate_edges_missing_start(self):
         """Test that validation detects missing START edge."""
         workflow = WorkflowFormat(
-            nodes=[WorkflowNode(type="agent_a", input=WorkflowNodeIO())],
-            edges=[WorkflowEdge(from_node="agent_a", to_node="END")],
+            nodes=[WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO())],
+            edges=[WorkflowEdge(from_node="agent_a_1", to_node="END")],
         )
 
         issues = workflow.validate_edges(strict=False)
@@ -108,8 +111,8 @@ class TestWorkflowFormatValidation:
     def test_validate_edges_missing_end(self):
         """Test that validation detects missing END edge."""
         workflow = WorkflowFormat(
-            nodes=[WorkflowNode(type="agent_a", input=WorkflowNodeIO())],
-            edges=[WorkflowEdge(from_node="START", to_node="agent_a")],
+            nodes=[WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO())],
+            edges=[WorkflowEdge(from_node="START", to_node="agent_a_1")],
         )
 
         issues = workflow.validate_edges(strict=False)
@@ -120,13 +123,13 @@ class TestWorkflowFormatValidation:
         """Test that validation passes for valid edges."""
         workflow = WorkflowFormat(
             nodes=[
-                WorkflowNode(type="agent_a", input=WorkflowNodeIO()),
-                WorkflowNode(type="agent_b", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_b_1", type="agent_b", input=WorkflowNodeIO()),
             ],
             edges=[
-                WorkflowEdge(from_node="START", to_node="agent_a"),
-                WorkflowEdge(from_node="agent_a", to_node="agent_b"),
-                WorkflowEdge(from_node="agent_b", to_node="END"),
+                WorkflowEdge(from_node="START", to_node="agent_a_1"),
+                WorkflowEdge(from_node="agent_a_1", to_node="agent_b_1"),
+                WorkflowEdge(from_node="agent_b_1", to_node="END"),
             ],
         )
 
@@ -146,8 +149,9 @@ class TestWorkflowFormatValidation:
         """Test comprehensive validation with multiple issues."""
         workflow = WorkflowFormat(
             nodes=[
-                WorkflowNode(type="agent_a", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO()),
                 WorkflowNode(
+                    id="agent_b_1",
                     type="agent_b",
                     input=WorkflowNodeIO(),
                     io_map={"field1": "invalid"},  # Invalid JSONPath
@@ -155,8 +159,8 @@ class TestWorkflowFormatValidation:
             ],
             edges=[
                 # Missing START edge
-                WorkflowEdge(from_node="agent_a", to_node="agent_b"),
-                WorkflowEdge(from_node="agent_b", to_node="END"),
+                WorkflowEdge(from_node="agent_a_1", to_node="agent_b_1"),
+                WorkflowEdge(from_node="agent_b_1", to_node="END"),
             ],
         )
 
@@ -175,17 +179,18 @@ class TestWorkflowFormatValidation:
         """Test workflow summary generation."""
         workflow = WorkflowFormat(
             nodes=[
-                WorkflowNode(type="agent_a", input=WorkflowNodeIO()),
+                WorkflowNode(id="agent_a_1", type="agent_a", input=WorkflowNodeIO()),
                 WorkflowNode(
+                    id="agent_b_1",
                     type="agent_b",
                     input=WorkflowNodeIO(),
-                    io_map={"field1": "$.agent_a.outputs.result"},
+                    io_map={"field1": "$.agent_a_1.outputs.result"},
                 ),
             ],
             edges=[
-                WorkflowEdge(from_node="START", to_node="agent_a"),
-                WorkflowEdge(from_node="agent_a", to_node="agent_b"),
-                WorkflowEdge(from_node="agent_b", to_node="END"),
+                WorkflowEdge(from_node="START", to_node="agent_a_1"),
+                WorkflowEdge(from_node="agent_a_1", to_node="agent_b_1"),
+                WorkflowEdge(from_node="agent_b_1", to_node="END"),
             ],
         )
 
@@ -195,6 +200,7 @@ class TestWorkflowFormatValidation:
         assert summary["total_edges"] == 3
         assert summary["nodes_with_io_map"] == 1
         assert summary["total_io_map_entries"] == 1
+        assert summary["node_ids"] == ["agent_a_1", "agent_b_1"]
         assert summary["node_types"] == ["agent_a", "agent_b"]
         assert summary["version"] == "1.0.0"
         assert summary["workflow_type"] == "AKDResearchWorkflow"

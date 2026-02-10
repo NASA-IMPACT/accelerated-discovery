@@ -91,11 +91,12 @@ class PlannerResponse(OutputSchema):
     @classmethod
     def auto_set_ready_when_plan_exists(cls, v: bool, info) -> bool:
         """
-        Automatically set ready_to_generate=True if workflow_plan exists AND no question is asked.
+        Bidirectional auto-correction for ready_to_generate flag.
 
-        This prevents infinite loops when the LLM says "workflow is ready" but forgets
-        to set the flag, while still allowing the LLM to present a plan and ask for
-        confirmation or clarification.
+        SAFETY CORRECTION (ready=True but plan missing/empty):
+        - If ready_to_generate=True but workflow_plan=None, then correct to False
+        - If ready_to_generate=True but workflow_plan has no agents, then correct to False
+        This prevents "Workflow complete!" followed by "No workflow plan available" error.
 
         Auto-correction only happens when:
         - workflow_plan exists (plan is complete)
@@ -110,13 +111,22 @@ class PlannerResponse(OutputSchema):
         question = info.data.get("question")
         message = info.data.get("message", "")
 
-        # Only auto-correct if:
-        # 1. Plan exists
-        # 2. No question being asked
-        # 3. Message indicates finality (ready/generate keywords)
-        # 4. But flag is False
+        # SAFETY: Cannot be ready without a complete plan
+        if v:  # ready_to_generate is True
+            if workflow_plan is None:
+                logger.warning(
+                    "SAFETY: ready_to_generate=True but workflow_plan=None. Auto-correcting to False.",
+                )
+                return False
+
+            if not workflow_plan.suggested_agents:
+                logger.warning(
+                    "SAFETY: ready_to_generate=True but workflow_plan has no agents. Auto-correcting to False.",
+                )
+                return False
+
+        # CONVENIENCE: Auto-set True if plan exists, no question, and message indicates ready
         if workflow_plan is not None and not v and question is None:
-            # Check if message indicates the workflow is actually ready
             ready_keywords = ["ready", "will be generated", "workflow is complete", "finalized"]
             message_lower = message.lower()
 
@@ -176,7 +186,9 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         # Set up system prompt for workflow planning (uses self.registry)
         agent_config = config or BaseAgentConfig()
         agent_config.system_prompt = self._get_planner_system_prompt()
-        # Use planner config temperature
+        # Use planner config model_name and temperature if not explicitly set
+        if not agent_config.model_name or agent_config.model_name == "gpt-4o-mini":
+            agent_config.model_name = self.planner_config.model_name
         if not agent_config.temperature:
             agent_config.temperature = self.planner_config.temperature
 

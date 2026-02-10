@@ -60,27 +60,26 @@ class WorkflowBuilder:
         self.mapping_registry = mapping_registry or FieldMappingRegistry()
         self.debug = debug
 
-    def _build_and_validate_jsonpath(self, agent_id: str, field_name: str) -> str:
+    def _build_and_validate_jsonpath(self, node_id: str, field_name: str) -> str:
         """
         Build and validate JSONPath expression for field mapping.
 
         Args:
-            agent_id: Agent identifier to reference in JSONPath
+            node_id: Unique node identifier to reference in JSONPath (e.g., code_search_0)
             field_name: Field name to reference in JSONPath
 
         Returns:
-            Validated JSONPath expression (e.g., "$.agent_id.outputs.field_name")
+            Validated JSONPath expression (e.g., "$.node_id.outputs.field_name")
 
         Raises:
-            ValueError: If agent_id or field_name contains invalid characters
+            ValueError: If node_id or field_name contains invalid characters
                        or if the resulting JSONPath expression is malformed
         """
         # Sanitize identifiers - only allow alphanumeric and underscore
         # This prevents JSONPath injection and ensures valid syntax
-        if not re.match(r"^[a-zA-Z0-9_]+$", agent_id):
+        if not re.match(r"^[a-zA-Z0-9_]+$", node_id):
             raise ValueError(
-                f"Invalid agent_id for JSONPath: '{agent_id}'. "
-                f"Only alphanumeric characters and underscores are allowed.",
+                f"Invalid node_id for JSONPath: '{node_id}'. Only alphanumeric characters and underscores are allowed.",
             )
 
         if not re.match(r"^[a-zA-Z0-9_]+$", field_name):
@@ -90,7 +89,7 @@ class WorkflowBuilder:
             )
 
         # Build JSONPath expression
-        path_str = f"$.{agent_id}.outputs.{field_name}"
+        path_str = f"$.{node_id}.outputs.{field_name}"
 
         # Validate JSONPath syntax using jsonpath_ng
         try:
@@ -107,6 +106,8 @@ class WorkflowBuilder:
         filled_inputs: dict[str, AgentInputs],
         agent_id: str,
         prev_agent_id: str,
+        node_id: str,
+        prev_node_id: str,
     ) -> dict[str, str]:
         """
         Build io_map for runtime data flow from previous agent to current agent.
@@ -120,12 +121,14 @@ class WorkflowBuilder:
             agent: Current agent instance
             prev_agent: Previous agent instance
             filled_inputs: Pre-filled inputs for all agents
-            agent_id: Current agent ID
-            prev_agent_id: Previous agent ID
+            agent_id: Current agent type ID (for registry lookup)
+            prev_agent_id: Previous agent type ID (for registry lookup)
+            node_id: Current node unique ID (for JSONPath)
+            prev_node_id: Previous node unique ID (for JSONPath)
 
         Returns:
             Dictionary mapping current agent field names to JSONPath expressions
-            (e.g., {"field_name": "$.prev_agent_id.outputs.source_field"})
+            (e.g., {"field_name": "$.prev_node_id.outputs.source_field"})
         """
         io_map = {}
         inputs = filled_inputs.get(agent_id, {})
@@ -136,7 +139,7 @@ class WorkflowBuilder:
         # Map each required input using three-tier strategy
         for field in agent.input_schema.fields:
             if field.required and field.name not in inputs:
-                # Get field mapping from registry
+                # Get field mapping from registry (uses agent types, not node IDs)
                 mapping = self.mapping_registry.get_mapping(
                     prev_agent_id,
                     agent_id,
@@ -149,8 +152,8 @@ class WorkflowBuilder:
                     # VALIDATION: Check source field exists in prev_agent outputs
                     if source_field not in source_field_names:
                         logger.error(
-                            f"Invalid mapping: {agent_id}.{field.name} <- "
-                            f"{prev_agent_id}.{source_field} "
+                            f"Invalid mapping: {node_id}.{field.name} <- "
+                            f"{prev_node_id}.{source_field} "
                             f"(source field '{source_field}' does not exist in {prev_agent_id} output schema)",
                         )
                         if self.debug:
@@ -160,27 +163,27 @@ class WorkflowBuilder:
                                 f"Available fields: {source_field_names}",
                             )
                         # Skip invalid mapping in production mode
-                        logger.warning(f"Skipping invalid mapping for {agent_id}.{field.name}")
+                        logger.warning(f"Skipping invalid mapping for {node_id}.{field.name}")
                         continue
 
-                    # Build and validate JSONPath expression
-                    io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, source_field)
+                    # Build and validate JSONPath expression using node ID
+                    io_map[field.name] = self._build_and_validate_jsonpath(prev_node_id, source_field)
                     logger.debug(
-                        f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{source_field} (from registry, validated)",
+                        f"Mapped {node_id}.{field.name} <- {prev_node_id}.{source_field} (from registry, validated)",
                     )
                 else:
                     # Priority 3: Exact name match fallback
                     if field.name in source_field_names:
-                        # Build and validate JSONPath expression
-                        io_map[field.name] = self._build_and_validate_jsonpath(prev_agent_id, field.name)
+                        # Build and validate JSONPath expression using node ID
+                        io_map[field.name] = self._build_and_validate_jsonpath(prev_node_id, field.name)
                         logger.debug(
-                            f"Mapped {agent_id}.{field.name} <- {prev_agent_id}.{field.name} (exact match, validated)",
+                            f"Mapped {node_id}.{field.name} <- {prev_node_id}.{field.name} (exact match, validated)",
                         )
                     else:
                         # No mapping available - will need LLM generation
                         logger.warning(
-                            f"No mapping found for {agent_id}.{field.name} from "
-                            f"{prev_agent_id}. Field will be missing unless LLM mapping "
+                            f"No mapping found for {node_id}.{field.name} from "
+                            f"{prev_node_id}. Field will be missing unless LLM mapping "
                             f"is generated.",
                         )
 
@@ -210,6 +213,11 @@ class WorkflowBuilder:
                 edges=[],
             )
 
+        # Track agent type counts for generating unique node IDs
+        agent_counts: dict[str, int] = {}
+        # Map from index to node_id for edge creation
+        node_ids: list[str] = []
+
         # Build nodes with io_map for sequential data flow
         for i, agent_suggestion in enumerate(agents):
             agent_id = agent_suggestion.agent_id
@@ -219,6 +227,12 @@ class WorkflowBuilder:
                 logger.warning(f"Agent {agent_id} not in registry, skipping")
                 continue
 
+            # Generate unique node ID: {agent_id}_{count} (starting from 1)
+            count = agent_counts.get(agent_id, 1)
+            node_id = f"{agent_id}_{count}"
+            agent_counts[agent_id] = count + 1
+            node_ids.append(node_id)
+
             # Get filled inputs for this agent
             inputs = filled_inputs.get(agent_id, {})
 
@@ -227,6 +241,7 @@ class WorkflowBuilder:
             if i > 0:
                 prev_agent_id = agents[i - 1].agent_id
                 prev_agent = self.registry.get_agent(prev_agent_id)
+                prev_node_id = node_ids[i - 1]
 
                 if not prev_agent:
                     logger.warning(f"Previous agent {prev_agent_id} not in registry")
@@ -237,10 +252,13 @@ class WorkflowBuilder:
                         filled_inputs,
                         agent_id,
                         prev_agent_id,
+                        node_id,
+                        prev_node_id,
                     )
 
-            # Create node
+            # Create node with unique id and type
             node = WorkflowNode(
+                id=node_id,
                 type=agent_id,
                 input=WorkflowNodeIO(fields=[{k: v} for k, v in inputs.items()]),
                 output=WorkflowNodeIO(fields=[]),  # Runtime fills this
@@ -248,12 +266,12 @@ class WorkflowBuilder:
             )
             nodes.append(node)
 
-        # Build sequential edges
+        # Build sequential edges using node IDs
         if nodes:
-            edges.append(WorkflowEdge(from_node="START", to_node=nodes[0].type))
+            edges.append(WorkflowEdge(from_node="START", to_node=nodes[0].id))
             for i in range(len(nodes) - 1):
-                edges.append(WorkflowEdge(from_node=nodes[i].type, to_node=nodes[i + 1].type))
-            edges.append(WorkflowEdge(from_node=nodes[-1].type, to_node="END"))
+                edges.append(WorkflowEdge(from_node=nodes[i].id, to_node=nodes[i + 1].id))
+            edges.append(WorkflowEdge(from_node=nodes[-1].id, to_node="END"))
 
         return WorkflowFormat(
             workflow_type=WORKFLOW_TYPE,

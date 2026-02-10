@@ -93,7 +93,7 @@ class FieldMappingResult(OutputSchema):
 class PlannerConfig(BaseModel):
     """Configuration for workflow planners."""
 
-    model_name: str = Field(default="gpt-4", description="LLM model to use for planning")
+    model_name: str = Field(default="gpt-5.2", description="LLM model to use for planning")
     temperature: float = Field(default=0.3, description="Temperature for LLM generation (deterministic planning)")
     max_conversation_turns: int = Field(default=25, description="Maximum conversation turns before forcing completion")
     field_mapping_confidence_threshold: float = Field(

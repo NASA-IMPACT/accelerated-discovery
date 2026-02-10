@@ -118,10 +118,10 @@ class TestWorkflowGeneration:
 
         assert isinstance(workflow, WorkflowFormat)
         assert len(workflow.nodes) == 2
-        assert len(workflow.edges) == 3  # START->deep_search, deep_search->gap_analysis, gap_analysis->END
+        assert len(workflow.edges) == 3  # START->deep_search_1, deep_search_1->gap_analysis_1, gap_analysis_1->END
 
     def test_workflow_has_correct_nodes(self, workflow_builder, simple_workflow_plan):
-        """Test that workflow contains correct agent nodes."""
+        """Test that workflow contains correct agent nodes with unique IDs."""
         filled_inputs = {
             "deep_search": {"query": "test"},
             "gap_analysis": {},
@@ -130,9 +130,12 @@ class TestWorkflowGeneration:
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
 
         node_types = [node.type for node in workflow.nodes]
+        node_ids = [node.id for node in workflow.nodes]
 
         assert "deep_search" in node_types
         assert "gap_analysis" in node_types
+        assert "deep_search_1" in node_ids
+        assert "gap_analysis_1" in node_ids
 
     def test_workflow_has_io_map(self, workflow_builder, simple_workflow_plan):
         """Test that workflow generates io_map for data routing."""
@@ -147,11 +150,12 @@ class TestWorkflowGeneration:
         gap_node = next((n for n in workflow.nodes if n.type == "gap_analysis"), None)
 
         assert gap_node is not None
+        assert gap_node.id == "gap_analysis_1"
         assert gap_node.io_map is not None
         assert len(gap_node.io_map) > 0
 
     def test_workflow_edges(self, workflow_builder, simple_workflow_plan):
-        """Test that workflow generates correct edges."""
+        """Test that workflow generates correct edges using node IDs."""
         filled_inputs = {
             "deep_search": {"query": "test"},
             "gap_analysis": {},
@@ -165,8 +169,47 @@ class TestWorkflowGeneration:
 
         assert len(start_edges) == 1
         assert len(end_edges) == 1
-        assert start_edges[0].to_node == "deep_search"
-        assert end_edges[0].from_node == "gap_analysis"
+        assert start_edges[0].to_node == "deep_search_1"
+        assert end_edges[0].from_node == "gap_analysis_1"
+
+    def test_duplicate_agent_types_get_unique_ids(self, workflow_builder):
+        """Test that duplicate agent types get unique IDs."""
+        plan = WorkflowPlan(
+            workflow_description="Dual search workflow",
+            research_goal="Search twice",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="First search",
+                    confidence=1.0,
+                ),
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Second search",
+                    confidence=1.0,
+                ),
+            ],
+        )
+
+        filled_inputs = {
+            "deep_search": {"query": "test"},
+        }
+
+        workflow = workflow_builder.build(plan, filled_inputs)
+
+        assert len(workflow.nodes) == 2
+        assert workflow.nodes[0].id == "deep_search_1"
+        assert workflow.nodes[1].id == "deep_search_2"
+        assert workflow.nodes[0].type == "deep_search"
+        assert workflow.nodes[1].type == "deep_search"
+
+        # Edges should use unique IDs
+        assert workflow.edges[0].to_node == "deep_search_1"
+        assert workflow.edges[1].from_node == "deep_search_1"
+        assert workflow.edges[1].to_node == "deep_search_2"
+        assert workflow.edges[2].from_node == "deep_search_2"
 
 
 class TestWorkflowSerialization:
@@ -190,6 +233,11 @@ class TestWorkflowSerialization:
         assert "nodes" in data
         assert "edges" in data
         assert data["workflow_type"] == "AKDResearchWorkflow"
+
+        # Verify nodes have both id and type
+        for node in data["nodes"]:
+            assert "id" in node
+            assert "type" in node
 
     def test_workflow_model_dump(self, workflow_builder, simple_workflow_plan):
         """Test that workflow can be dumped to dict."""
@@ -256,6 +304,7 @@ class TestWorkflowInputHandling:
         # deep_search node should have input
         deep_node = next((n for n in workflow.nodes if n.type == "deep_search"), None)
         assert deep_node is not None
+        assert deep_node.id == "deep_search_1"
         assert len(deep_node.input.fields) > 0
 
     def test_input_fields_preserved(self, workflow_builder, simple_workflow_plan):
@@ -320,6 +369,7 @@ class TestWorkflowValidation:
 
         assert len(workflow.nodes) == 1
         assert workflow.nodes[0].type == "deep_search"
+        assert workflow.nodes[0].id == "deep_search_1"
 
 
 class TestJSONPathValidation:
@@ -328,12 +378,12 @@ class TestJSONPathValidation:
     def test_validate_jsonpath_with_valid_identifiers(self, workflow_builder):
         """Test that valid identifiers (alphanumeric + underscore) pass validation."""
         # Test with simple alphanumeric
-        result = workflow_builder._build_and_validate_jsonpath("agent_a", "field1")
-        assert result == "$.agent_a.outputs.field1"
+        result = workflow_builder._build_and_validate_jsonpath("agent_a_1", "field1")
+        assert result == "$.agent_a_1.outputs.field1"
 
         # Test with underscores
-        result = workflow_builder._build_and_validate_jsonpath("deep_search_agent", "research_results")
-        assert result == "$.deep_search_agent.outputs.research_results"
+        result = workflow_builder._build_and_validate_jsonpath("deep_search_agent_1", "research_results")
+        assert result == "$.deep_search_agent_1.outputs.research_results"
 
         # Test with numbers
         result = workflow_builder._build_and_validate_jsonpath("agent123", "field456")
@@ -343,19 +393,19 @@ class TestJSONPathValidation:
         result = workflow_builder._build_and_validate_jsonpath("AgentA", "FieldB")
         assert result == "$.AgentA.outputs.FieldB"
 
-    def test_validate_jsonpath_with_hyphenated_agent_id(self, workflow_builder):
-        """Test that agent IDs with hyphens are rejected."""
-        with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
+    def test_validate_jsonpath_with_hyphenated_node_id(self, workflow_builder):
+        """Test that node IDs with hyphens are rejected."""
+        with pytest.raises(ValueError, match="Invalid node_id for JSONPath"):
             workflow_builder._build_and_validate_jsonpath("test-agent", "field")
 
     def test_validate_jsonpath_with_hyphenated_field_name(self, workflow_builder):
         """Test that field names with hyphens are rejected."""
         with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
-            workflow_builder._build_and_validate_jsonpath("agent", "test-field")
+            workflow_builder._build_and_validate_jsonpath("agent_1", "test-field")
 
-    def test_validate_jsonpath_with_special_characters_in_agent_id(self, workflow_builder):
-        """Test that agent IDs with special characters are rejected."""
-        invalid_agent_ids = [
+    def test_validate_jsonpath_with_special_characters_in_node_id(self, workflow_builder):
+        """Test that node IDs with special characters are rejected."""
+        invalid_node_ids = [
             "agent@123",  # @ symbol
             "agent.name",  # period
             "agent$id",  # dollar sign
@@ -366,9 +416,9 @@ class TestJSONPathValidation:
             "agent\nagent",  # newline
         ]
 
-        for agent_id in invalid_agent_ids:
-            with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
-                workflow_builder._build_and_validate_jsonpath(agent_id, "field")
+        for node_id in invalid_node_ids:
+            with pytest.raises(ValueError, match="Invalid node_id for JSONPath"):
+                workflow_builder._build_and_validate_jsonpath(node_id, "field")
 
     def test_validate_jsonpath_with_special_characters_in_field_name(self, workflow_builder):
         """Test that field names with special characters are rejected."""
@@ -383,17 +433,17 @@ class TestJSONPathValidation:
 
         for field_name in invalid_field_names:
             with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
-                workflow_builder._build_and_validate_jsonpath("agent", field_name)
+                workflow_builder._build_and_validate_jsonpath("agent_1", field_name)
 
-    def test_validate_jsonpath_with_empty_agent_id(self, workflow_builder):
-        """Test that empty agent IDs are rejected."""
-        with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
+    def test_validate_jsonpath_with_empty_node_id(self, workflow_builder):
+        """Test that empty node IDs are rejected."""
+        with pytest.raises(ValueError, match="Invalid node_id for JSONPath"):
             workflow_builder._build_and_validate_jsonpath("", "field")
 
     def test_validate_jsonpath_with_empty_field_name(self, workflow_builder):
         """Test that empty field names are rejected."""
         with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
-            workflow_builder._build_and_validate_jsonpath("agent", "")
+            workflow_builder._build_and_validate_jsonpath("agent_1", "")
 
     def test_validate_jsonpath_prevents_path_injection(self, workflow_builder):
         """Test that path traversal attempts are blocked."""
@@ -406,21 +456,21 @@ class TestJSONPathValidation:
         ]
 
         for malicious_input in malicious_inputs:
-            # Test in agent_id
-            with pytest.raises(ValueError, match="Invalid agent_id for JSONPath"):
+            # Test in node_id
+            with pytest.raises(ValueError, match="Invalid node_id for JSONPath"):
                 workflow_builder._build_and_validate_jsonpath(malicious_input, "field")
 
             # Test in field_name
             with pytest.raises(ValueError, match="Invalid field_name for JSONPath"):
-                workflow_builder._build_and_validate_jsonpath("agent", malicious_input)
+                workflow_builder._build_and_validate_jsonpath("agent_1", malicious_input)
 
     def test_validate_jsonpath_with_very_long_identifiers(self, workflow_builder):
         """Test that very long but valid identifiers work."""
-        long_agent_id = "a" * 100
+        long_node_id = "a" * 100
         long_field_name = "f" * 100
 
-        result = workflow_builder._build_and_validate_jsonpath(long_agent_id, long_field_name)
-        assert result == f"$.{long_agent_id}.outputs.{long_field_name}"
+        result = workflow_builder._build_and_validate_jsonpath(long_node_id, long_field_name)
+        assert result == f"$.{long_node_id}.outputs.{long_field_name}"
 
     def test_validate_jsonpath_integration_with_build(self, workflow_builder, agent_registry):
         """Test that JSONPath validation is applied during workflow building."""
@@ -455,12 +505,13 @@ class TestJSONPathValidation:
         workflow = workflow_builder.build(plan, filled_inputs)
         assert len(workflow.nodes) == 2
 
-        # Check that io_map was built with validated JSONPath
+        # Check that io_map was built with validated JSONPath using node IDs
         gap_node = next(node for node in workflow.nodes if node.type == "gap_analysis")
+        assert gap_node.id == "gap_analysis_1"
         assert gap_node.io_map is not None
-        # JSONPath should be validated and well-formed
+        # JSONPath should reference the node ID, not the type
         for jsonpath in gap_node.io_map.values():
-            assert jsonpath.startswith("$.deep_search.outputs.")
+            assert jsonpath.startswith("$.deep_search_1.outputs.")
 
 
 if __name__ == "__main__":
