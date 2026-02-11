@@ -4,11 +4,13 @@ Real-time progress and partial output streaming for AKD agents.
 
 ## Overview
 
-The streaming system enables agents to emit events during execution, providing:
+The streaming system enables agents to emit typed events during execution, providing:
 
 - **Progress visibility**: Track multi-step pipelines in real-time
 - **Partial outputs**: Access structured results as they build progressively
 - **Reasoning transparency**: Observe LLM thinking tokens (Claude extended thinking, o1)
+- **Tool calling**: Track tool invocations and results
+- **Human interaction**: Pause for human input and resume with responses
 - **Error handling**: Immediate failure notification with context
 
 Streaming follows a simple pattern: call `agent.astream()` instead of `agent.arun()` and iterate over events.
@@ -17,11 +19,23 @@ Streaming follows a simple pattern: call `agent.astream()` instead of `agent.aru
 async for event in agent.astream(input_data):
     match event.event_type:
         case StreamEventType.RUNNING:
-            print(f"Step: {event.data.get('step')}")
+            print(f"Step: {event.message}")
         case StreamEventType.PARTIAL:
             print(f"Partial: {event.partial_output}")
         case StreamEventType.COMPLETED:
             result = event.output
+```
+
+Or use `isinstance` checks with typed event subclasses:
+
+```python
+async for event in agent.astream(input_data):
+    if isinstance(event, CompletedEvent):
+        print(event.data.output)       # Fully typed access
+    elif isinstance(event, StreamingTokenEvent):
+        print(event.data.token, end="")
+    elif isinstance(event, HumanInputRequiredEvent):
+        print(f"Question: {event.data.human_input.question}")
 ```
 
 ---
@@ -36,13 +50,15 @@ Enum defining all event types (`akd/_base/streaming.py`):
 |------------|---------|--------------|
 | `STARTING` | Lifecycle | Beginning of execution |
 | `RUNNING` | Progress | Each pipeline step or substep |
-| `STREAMING` | Raw tokens | LLM token-by-token output |
+| `STREAMING` | Raw tokens | LLM token-by-token output (batched) |
 | `THINKING` | Reasoning | Claude extended thinking, o1 reasoning tokens |
 | `PARTIAL` | Structured | Validated partial model as JSON builds |
 | `COMPLETED` | Lifecycle | Successful completion with output |
 | `FAILED` | Lifecycle | Error with details |
-| `TOOL_CALLING` | Tools | Tool invocation (Stage 2) |
-| `TOOL_RESULT` | Tools | Tool completion (Stage 2) |
+| `TOOL_CALLING` | Tools | Tool invocation |
+| `TOOL_RESULT` | Tools | Tool completion |
+| `HUMAN_INPUT_REQUIRED` | Human | Agent needs human input to continue |
+| `HUMAN_RESPONSE` | Human | Resumed with human input |
 
 ### StreamEvent
 
@@ -57,14 +73,14 @@ class StreamEvent(BaseModel):
     source: str | None      # Class name that generated event
     message: str | None     # Human-readable description
 
-    # Flexible payload
-    data: dict[str, Any]    # Event-specific data
+    # Typed EventData or legacy dict payload
+    data: EventData | dict[str, Any]
 
     # Execution context
-    context: dict[str, Any] # node_id, query, run_id, etc.
+    run_context: RunContext  # run_id, messages, human_response, etc.
 ```
 
-**Convenience properties** provide typed access to common data fields:
+**Convenience properties** provide typed access with dict fallback:
 
 ```python
 event.output           # COMPLETED: final output
@@ -75,7 +91,24 @@ event.partial_output   # PARTIAL: partial model instance
 event.tool_name        # TOOL_CALLING/TOOL_RESULT: tool name
 event.tool_input       # TOOL_CALLING: tool parameters
 event.tool_output      # TOOL_RESULT: tool return value
+event.human_prompt     # HUMAN_INPUT_REQUIRED: question string
+event.message_history  # run_context.messages for resumption
 ```
+
+### RunContext
+
+Execution context carried by every event (`akd/_base/tool_calling.py`):
+
+```python
+class RunContext(BaseModel):
+    model_config = ConfigDict(extra="allow")  # Accepts arbitrary extra keys
+
+    human_response: HumanResponse | None = None  # For resumption after human input
+    messages: list[dict[str, Any]] | None = None  # Conversation history
+    run_id: str | None = None                     # Unique execution run ID
+```
+
+`RunContext` replaces the previous `context: dict[str, Any]` parameter. It provides type safety for known fields while allowing arbitrary extra keys via `extra="allow"`.
 
 ### StreamingMixin
 
@@ -86,20 +119,25 @@ class StreamingMixin:
     async def astream(
         self,
         params: Any,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Public streaming API with input/output validation."""
         params = self._validate_input(params)
 
-        async for event in self._astream(params, context, **kwargs):
+        async for event in self._astream(params, run_context, **kwargs):
             if event.event_type == StreamEventType.COMPLETED:
-                output = self._validate_output(event.data.get("output"))
-                yield StreamEvent(..., data={"output": output})
+                output = self._validate_output(event.output)
+                yield CompletedEvent(
+                    source=event.source,
+                    message=event.message,
+                    data=CompletedEventData(output=output),
+                    run_context=event.run_context,
+                )
             else:
                 yield event
 
-    async def _astream(self, params, context, **kwargs):
+    async def _astream(self, params, run_context, **kwargs):
         """Override this for custom streaming logic."""
         # Default: STARTING -> RUNNING -> _arun() -> COMPLETED/FAILED
         ...
@@ -110,6 +148,131 @@ Key design:
 - Input validation happens before any events are yielded
 - Output validation happens on COMPLETED event before yielding
 - Default `_astream()` wraps `_arun()` for backward compatibility
+- `run_context` auto-generates a `run_id` if not provided
+
+---
+
+## Typed Event Data Models
+
+Each event type has a corresponding typed data model (`akd/_base/streaming.py`). These provide type safety and IDE autocompletion.
+
+### Data Models
+
+| Event Type | Data Model | Fields |
+|------------|-----------|--------|
+| `STARTING` | `StartingEventData[T]` | `params: T \| None` |
+| `RUNNING` | `RunningEventData` | `extra="allow"` (flexible) |
+| `COMPLETED` | `CompletedEventData[T]` | `output: T` |
+| `FAILED` | `FailedEventData` | `error: str`, `error_type: str` |
+| `STREAMING` | `StreamingEventData` | `token: str` |
+| `THINKING` | `ThinkingEventData` | `thinking_content: str \| None`, `reflection_prompt: str \| None`, `streaming: bool` |
+| `PARTIAL` | `PartialEventData[T]` | `partial_output: T` |
+| `TOOL_CALLING` | `ToolCallingEventData` | `tool_call: ToolCall` |
+| `TOOL_RESULT` | `ToolResultEventData` | `result: ToolResult` |
+| `HUMAN_INPUT_REQUIRED` | `HumanInputRequiredEventData` | `human_input: Any`, `tool_call_id: str`, `tool_name: str` |
+| `HUMAN_RESPONSE` | `HumanResponseEventData` | `tool_call_id: str`, `response: Any` |
+
+The `EventData` union type represents all data models:
+
+```python
+EventData = (
+    StartingEventData | RunningEventData | CompletedEventData
+    | FailedEventData | StreamingEventData | ThinkingEventData
+    | PartialEventData | ToolCallingEventData | ToolResultEventData
+    | HumanInputRequiredEventData | HumanResponseEventData
+)
+```
+
+### Generic Data Models
+
+`StartingEventData[T]`, `CompletedEventData[T]`, and `PartialEventData[T]` are generic. The type parameter matches the agent's input/output schema:
+
+```python
+# STARTING carries input params
+StartingEventData[MyInputSchema](params=input_data)
+
+# COMPLETED carries validated output
+CompletedEventData[MyOutputSchema](output=result)
+
+# PARTIAL carries partial output
+PartialEventData[PartialModel[MyOutputSchema]](partial_output=partial)
+```
+
+---
+
+## Discriminated Event Subclasses
+
+Each event type has a typed subclass with a `Literal` discriminator. These enable `isinstance` checks and provide fully typed `data` access.
+
+| Subclass | Event Type | Data Type |
+|----------|-----------|-----------|
+| `StartingEvent` | `STARTING` | `StartingEventData` |
+| `RunningEvent` | `RUNNING` | `RunningEventData` |
+| `CompletedEvent` | `COMPLETED` | `CompletedEventData` |
+| `FailedEvent` | `FAILED` | `FailedEventData` |
+| `StreamingTokenEvent` | `STREAMING` | `StreamingEventData` |
+| `ThinkingEvent` | `THINKING` | `ThinkingEventData` |
+| `PartialOutputEvent` | `PARTIAL` | `PartialEventData` |
+| `ToolCallingEvent` | `TOOL_CALLING` | `ToolCallingEventData` |
+| `ToolResultEvent` | `TOOL_RESULT` | `ToolResultEventData` |
+| `HumanInputRequiredEvent` | `HUMAN_INPUT_REQUIRED` | `HumanInputRequiredEventData` |
+| `HumanResponseEvent` | `HUMAN_RESPONSE` | `HumanResponseEventData` |
+
+### isinstance Pattern (Recommended)
+
+```python
+from akd._base.streaming import (
+    CompletedEvent, FailedEvent, StreamingTokenEvent,
+    ThinkingEvent, PartialOutputEvent, ToolCallingEvent,
+    ToolResultEvent, HumanInputRequiredEvent, HumanResponseEvent,
+)
+
+async for event in agent.astream(input_data):
+    if isinstance(event, StreamingTokenEvent):
+        print(event.data.token, end="")        # Typed: str
+
+    elif isinstance(event, ThinkingEvent):
+        print(event.data.thinking_content)      # Typed: str | None
+
+    elif isinstance(event, PartialOutputEvent):
+        print(event.data.partial_output)        # Typed: T
+
+    elif isinstance(event, ToolCallingEvent):
+        tc = event.data.tool_call               # Typed: ToolCall
+        print(f"Calling {tc.tool_name}({tc.arguments})")
+
+    elif isinstance(event, ToolResultEvent):
+        r = event.data.result                   # Typed: ToolResult
+        print(f"{r.tool_name} → {r.content}")
+
+    elif isinstance(event, HumanInputRequiredEvent):
+        print(event.data.human_input.question)  # Typed access
+        saved = event.run_context.messages      # For resumption
+
+    elif isinstance(event, HumanResponseEvent):
+        print(f"Human said: {event.data.response}")
+
+    elif isinstance(event, CompletedEvent):
+        print(event.data.output)                # Typed: T
+
+    elif isinstance(event, FailedEvent):
+        print(event.data.error)                 # Typed: str
+```
+
+### event_type Pattern (Alternative)
+
+```python
+async for event in agent.astream(input_data):
+    match event.event_type:
+        case StreamEventType.STREAMING:
+            print(event.token, end="")          # Convenience property
+        case StreamEventType.THINKING:
+            print(event.thinking_content)
+        case StreamEventType.COMPLETED:
+            result = event.output
+        case StreamEventType.FAILED:
+            print(event.error)
+```
 
 ---
 
@@ -117,37 +280,32 @@ Key design:
 
 ### STARTING
 
-Emitted once at execution start:
+Emitted once at execution start. Carries input params.
 
 ```python
-StreamEvent(
-    event_type=StreamEventType.STARTING,
+StartingEvent(
     source="DeepLitSearchAgent",
-    message="Starting deep literature search: climate change...",
-    data={"query": "climate change research"},
-    context={"run_id": "abc123", "query": "climate change research"},
+    message="Starting deep literature search",
+    data=StartingEventData(params=input_data),
+    run_context=run_context,
 )
 ```
 
 ### RUNNING
 
-Emitted for pipeline progress. Use `data["step"]` for step tracking:
+Emitted for pipeline progress. `RunningEventData` uses `extra="allow"` for flexible data.
 
 ```python
-StreamEvent(
-    event_type=StreamEventType.RUNNING,
+RunningEvent(
     source="DeepLitSearchAgent",
     message="Starting research iteration 2/5",
-    data={
-        "step": "research.iteration",
-        "substep": "iteration_2",
-        "step_index": 4,
-        "total_steps": 5,
-        "iteration": 2,
-        "max_iterations": 5,
-        "current_results_count": 15,
-    },
-    context={"run_id": "abc123"},
+    data=RunningEventData(
+        step="research.iteration",
+        substep="iteration_2",
+        step_index=4,
+        total_steps=5,
+    ),
+    run_context=run_context,
 )
 ```
 
@@ -161,87 +319,160 @@ Common step patterns:
 
 ### STREAMING
 
-Raw LLM tokens as they arrive (batched for efficiency):
+Raw LLM tokens as they arrive (batched for efficiency, default `token_batch_size=10`):
 
 ```python
-StreamEvent(
-    event_type=StreamEventType.STREAMING,
+StreamingTokenEvent(
     source="LiteLLMInstructorBaseAgent",
-    data={"token": "The research shows"},
-    context={"run_id": "abc123"},
+    data=StreamingEventData(token="The research shows"),
+    run_context=run_context,
 )
 ```
-
-Access via `event.token`.
 
 ### THINKING
 
-Reasoning tokens from Claude extended thinking or o1:
+Reasoning tokens from Claude extended thinking, o1, or reflection prompts:
 
 ```python
-StreamEvent(
-    event_type=StreamEventType.THINKING,
+ThinkingEvent(
     source="LiteLLMInstructorBaseAgent",
     message="Reasoning...",
-    data={"thinking_content": "Let me analyze the query structure..."},
-    context={"run_id": "abc123"},
+    data=ThinkingEventData(
+        thinking_content="Let me analyze the query structure...",
+        streaming=True,  # True during streaming, False for reflection
+    ),
+    run_context=run_context,
 )
 ```
 
-Access via `event.thinking_content`.
+Also emitted when `reflection_prompt` is injected after tool results:
+
+```python
+ThinkingEvent(
+    message="Reflecting on results...",
+    data=ThinkingEventData(reflection_prompt="Reflect on the results..."),
+    run_context=run_context,
+)
+```
 
 ### PARTIAL
 
 Validated partial output as JSON builds:
 
 ```python
-StreamEvent(
-    event_type=StreamEventType.PARTIAL,
+PartialOutputEvent(
     source="DeepLitSearchAgent",
     message="Research results available",
-    data={
-        "partial_output": PartialModel[LitSearchAgentOutputSchema](
+    data=PartialEventData(
+        partial_output=PartialModel[LitSearchAgentOutputSchema](
             results=[...],
             extra={"key_findings": [...]},
         )
-    },
-    context={"run_id": "abc123"},
+    ),
+    run_context=run_context,
 )
 ```
 
-Access via `event.partial_output`. The partial model has all fields Optional.
+The partial model has all fields Optional via `PartialModel[T]`.
+
+### TOOL_CALLING
+
+Emitted for each tool call before execution:
+
+```python
+ToolCallingEvent(
+    source="LiteLLMInstructorBaseAgent",
+    message="Calling search_papers",
+    data=ToolCallingEventData(
+        tool_call=ToolCall(
+            tool_call_id="call_abc123",
+            tool_name="search_papers",
+            arguments={"query": "quantum computing"},
+        )
+    ),
+    run_context=run_context,
+)
+```
+
+### TOOL_RESULT
+
+Emitted after tool execution completes:
+
+```python
+ToolResultEvent(
+    source="LiteLLMInstructorBaseAgent",
+    message="Result from search_papers",
+    data=ToolResultEventData(
+        result=ToolResult(
+            tool_call_id="call_abc123",
+            tool_name="search_papers",
+            content={"results": [...]},
+        )
+    ),
+    run_context=run_context,
+)
+```
+
+### HUMAN_INPUT_REQUIRED
+
+Emitted when the agent calls `ask_human` and pauses for input:
+
+```python
+HumanInputRequiredEvent(
+    source="LiteLLMInstructorBaseAgent",
+    message="Human input required: What is your name?",
+    data=HumanInputRequiredEventData(
+        human_input=HumanToolInput(question="What is your name?"),
+        tool_call_id="call_human_456",
+        tool_name="ask_human",
+    ),
+    run_context=run_context,  # .messages contains conversation history
+)
+```
+
+The stream ends gracefully after this event. See [HUMAN_INTERRUPT.md](./HUMAN_INTERRUPT.md) for the full pause/resume lifecycle.
+
+### HUMAN_RESPONSE
+
+Emitted when resuming with a human response:
+
+```python
+HumanResponseEvent(
+    source="LiteLLMInstructorBaseAgent",
+    message="Resumed with human input",
+    data=HumanResponseEventData(
+        tool_call_id="call_human_456",
+        response="Alice",
+    ),
+    run_context=run_context,
+)
+```
 
 ### COMPLETED
 
 Successful completion with validated output:
 
 ```python
-StreamEvent(
-    event_type=StreamEventType.COMPLETED,
+CompletedEvent(
     source="DeepLitSearchAgent",
-    message="Deep literature search completed",
-    data={"output": LitSearchAgentOutputSchema(...)},
-    context={"run_id": "abc123"},
+    message="Completed DeepLitSearchAgent",
+    data=CompletedEventData(output=LitSearchAgentOutputSchema(...)),
+    run_context=run_context,
 )
 ```
-
-Access via `event.output`.
 
 ### FAILED
 
-Error with details:
+Error with details. The original exception is re-raised after this event.
 
 ```python
-StreamEvent(
-    event_type=StreamEventType.FAILED,
+FailedEvent(
     source="DeepLitSearchAgent",
     message="Failed: Connection timeout",
-    data={"error": "Connection timeout", "error_type": "TimeoutError"},
-    context={"run_id": "abc123"},
+    data=FailedEventData(error="Connection timeout", error_type="TimeoutError"),
+    run_context=run_context,
 )
 ```
-
-Access via `event.error`. The original exception is re-raised after this event.
 
 ---
 
@@ -250,61 +481,62 @@ Access via `event.error`. The original exception is re-raised after this event.
 ### Step 1: Override `_astream()`
 
 ```python
-from akd._base.streaming import StreamEvent, StreamEventType
+from akd._base.streaming import (
+    StreamEvent, StreamEventType, StartingEvent, StartingEventData,
+    RunningEvent, RunningEventData, CompletedEvent, CompletedEventData,
+    FailedEvent, FailedEventData,
+)
+from akd._base.structures import RunContext
 
 class MyAgent(LiteLLMInstructorBaseAgent):
 
     async def _astream(
         self,
         params: MyInputSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Stream execution with progress events."""
         class_name = self.__class__.__name__
 
         # Setup context with auto-generated run_id
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         # STARTING event
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting {class_name}",
-            context=run_context,
+            data=StartingEventData(params=params),
+            run_context=run_context,
         )
 
         try:
             # Your pipeline steps here...
-            yield StreamEvent(
-                event_type=StreamEventType.RUNNING,
+            yield RunningEvent(
                 source=class_name,
                 message="Processing step 1",
-                data={"step": "step1"},
-                context=run_context,
+                data=RunningEventData(step="step1"),
+                run_context=run_context,
             )
 
             result = await self._do_work(params)
 
             # COMPLETED event
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
+            yield CompletedEvent(
                 source=class_name,
                 message=f"Completed {class_name}",
-                data={"output": result},
-                context=run_context,
+                data=CompletedEventData(output=result),
+                run_context=run_context,
             )
 
         except Exception as e:
             # FAILED event
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
+                run_context=run_context,
             )
             raise  # Re-raise after yielding FAILED
 ```
@@ -322,45 +554,12 @@ async def _arun(
     """Run by collecting output from _astream()."""
     output = None
     async for event in self._astream(params, **kwargs):
-        if event.event_type == StreamEventType.COMPLETED:
-            output = event.output
+        if isinstance(event, CompletedEvent):
+            output = event.data.output
 
     if output is None:
         raise RuntimeError("No output received from _astream()")
     return output
-```
-
-### Step 3: Helper for RUNNING Events
-
-Create a helper method for consistent step events:
-
-```python
-def _emit_step_event(
-    self,
-    step: str,
-    message: str,
-    run_context: dict[str, Any],
-    step_index: int | None = None,
-    total_steps: int | None = None,
-    substep: str | None = None,
-    **data_kwargs: Any,
-) -> StreamEvent:
-    """Create a RUNNING event for a pipeline step."""
-    data = {"step": step, **data_kwargs}
-    if step_index is not None:
-        data["step_index"] = step_index
-    if total_steps is not None:
-        data["total_steps"] = total_steps
-    if substep is not None:
-        data["substep"] = substep
-
-    return StreamEvent(
-        event_type=StreamEventType.RUNNING,
-        source=self.__class__.__name__,
-        message=message,
-        data=data,
-        context=run_context,
-    )
 ```
 
 ---
@@ -391,33 +590,16 @@ partial.model_dump()
 Emit PARTIAL events as pipeline produces partial results:
 
 ```python
-# After search completes but before synthesis
-yield StreamEvent(
-    event_type=StreamEventType.PARTIAL,
+yield PartialOutputEvent(
     source=class_name,
     message="Search results available",
-    data={
-        "partial_output": PartialModel[LitSearchAgentOutputSchema](
+    data=PartialEventData(
+        partial_output=PartialModel[LitSearchAgentOutputSchema](
             results=all_results,
             extra={"iterations_performed": iteration},
         ),
-    },
-    context=run_context,
-)
-
-# After report generation
-yield StreamEvent(
-    event_type=StreamEventType.PARTIAL,
-    source=class_name,
-    message="Report generated",
-    data={
-        "partial_output": PartialModel[LitSearchAgentOutputSchema](
-            results=all_results,
-            report=detailed_report,
-            extra={"iterations_performed": iteration},
-        ),
-    },
-    context=run_context,
+    ),
+    run_context=run_context,
 )
 ```
 
@@ -426,26 +608,88 @@ yield StreamEvent(
 `LiteLLMInstructorBaseAgent._stream_llm_response()` validates partial JSON as it streams:
 
 ```python
-async def _stream_llm_response(self, messages, response_model, token_batch_size=10):
-    PartialResponseModel = PartialModel[response_model]
-    accumulated = ""
+PartialResponseModel = PartialModel[response_model]
+accumulated = ""
 
-    async for chunk in response:
-        accumulated += delta.content
+async for chunk in response:
+    accumulated += delta.content
 
-        # Try to validate as partial
-        parsed = self._try_parse_json(accumulated)
-        if parsed:
-            try:
-                partial = PartialResponseModel.model_validate(parsed)
-                yield {"type": StreamEventType.PARTIAL, "partial": partial}
-            except Exception:
-                pass  # Skip invalid partials
+    parsed = self._try_parse_json(accumulated)
+    if parsed and parsed != last_partial_dict:
+        last_partial_dict = parsed
+        try:
+            partial = PartialResponseModel.model_validate(parsed)
+            yield PartialOutputEvent(
+                source=class_name,
+                message="Partial...",
+                data=PartialEventData(partial_output=partial),
+                run_context=run_context,
+            )
+        except Exception:
+            pass  # Skip invalid partials
 ```
 
 ---
 
 ## Usage Examples
+
+### Full Event Handling with Typed Subclasses
+
+```python
+from akd._base.streaming import *
+from akd._base.structures import HumanResponse, RunContext
+
+agent = MyAgent(config=config)
+input_data = MyInputSchema(query="climate change research")
+
+async for event in agent.astream(input_data):
+    if isinstance(event, StartingEvent):
+        print(f"Started: {event.message}")
+
+    elif isinstance(event, RunningEvent):
+        print(f"Progress: {event.message}")
+
+    elif isinstance(event, StreamingTokenEvent):
+        print(event.data.token, end="", flush=True)
+
+    elif isinstance(event, ThinkingEvent):
+        if event.data.thinking_content:
+            print(f"\n[Thinking] {event.data.thinking_content}")
+
+    elif isinstance(event, PartialOutputEvent):
+        partial = event.data.partial_output
+        if hasattr(partial, 'results') and partial.results:
+            print(f"\n  Results so far: {len(partial.results)}")
+
+    elif isinstance(event, ToolCallingEvent):
+        tc = event.data.tool_call
+        print(f"\nCalling tool: {tc.tool_name}")
+
+    elif isinstance(event, ToolResultEvent):
+        r = event.data.result
+        status = "error" if r.error else "ok"
+        print(f"  {r.tool_name}: {status}")
+
+    elif isinstance(event, HumanInputRequiredEvent):
+        question = event.data.human_input.question
+        answer = input(f"\n{question}: ")
+        # Save for resumption
+        resume_ctx = RunContext(
+            messages=event.run_context.messages,
+            human_response=HumanResponse(
+                tool_call_id=event.data.tool_call_id,
+                content=answer,
+            ),
+        )
+        break
+
+    elif isinstance(event, CompletedEvent):
+        result = event.data.output
+        print(f"\nComplete: {result}")
+
+    elif isinstance(event, FailedEvent):
+        print(f"\nError: {event.data.error}")
+```
 
 ### DeepLitSearchAgent - Multi-Step Pipeline
 
@@ -456,77 +700,29 @@ agent = DeepLitSearchAgent()
 input_data = LitSearchAgentInputSchema(query="climate change mitigation strategies")
 
 async for event in agent.astream(input_data):
-    match event.event_type:
-        case StreamEventType.STARTING:
-            print(f"Starting: {event.message}")
-
-        case StreamEventType.RUNNING:
-            step = event.data.get("step", "")
-            if step.startswith("research.iteration"):
-                iteration = event.data.get("iteration", 0)
-                print(f"Iteration {iteration}: {event.message}")
-            else:
-                print(f"  {event.message}")
-
-        case StreamEventType.PARTIAL:
-            partial = event.partial_output
-            if partial.results:
-                print(f"  Results so far: {len(partial.results)}")
-
-        case StreamEventType.COMPLETED:
-            result = event.output
-            print(f"Complete: {len(result.results)} results")
-            print(f"Answer: {result.answer[:200]}...")
-
-        case StreamEventType.FAILED:
-            print(f"Error: {event.error}")
-```
-
-### ControlledSearchAgent - Iteration-Based
-
-```python
-from akd.agents.search.controlled import ControlledSearchAgent
-
-agent = ControlledSearchAgent()
-
-async for event in agent.astream({"query": "machine learning optimization"}):
-    match event.event_type:
-        case StreamEventType.RUNNING:
-            step = event.data.get("step", "")
-
-            if step == "iteration":
-                step_index = event.data.get("step_index", 0)
-                total = event.data.get("total_steps", 5)
-                results = event.data.get("results_so_far", 0)
-                print(f"[{step_index}/{total}] Results: {results}")
-
-            elif step == "iteration.evaluate":
-                positive = event.data.get("positive_rubrics", 0)
-                strong = event.data.get("strong_rubrics", [])
-                print(f"  Quality: {positive}/6 - Strong: {strong}")
+    if isinstance(event, RunningEvent):
+        print(f"  {event.message}")
+    elif isinstance(event, PartialOutputEvent):
+        partial = event.data.partial_output
+        if partial.results:
+            print(f"  Results so far: {len(partial.results)}")
+    elif isinstance(event, CompletedEvent):
+        result = event.data.output
+        print(f"Complete: {len(result.results)} results")
 ```
 
 ### Base Agent LLM Streaming
 
 ```python
-from akd.agents._base import LiteLLMInstructorBaseAgent
-
-class MyAgent(LiteLLMInstructorBaseAgent):
-    ...
-
 async for event in agent.astream(input_data, token_batch_size=20):
-    match event.event_type:
-        case StreamEventType.STREAMING:
-            print(event.token, end="", flush=True)
-
-        case StreamEventType.THINKING:
-            print(f"\n[Thinking] {event.thinking_content}")
-
-        case StreamEventType.PARTIAL:
-            # Partial structured output
-            partial = event.partial_output
-            if partial and hasattr(partial, 'answer') and partial.answer:
-                print(f"\nPartial answer: {partial.answer[:100]}...")
+    if isinstance(event, StreamingTokenEvent):
+        print(event.data.token, end="", flush=True)
+    elif isinstance(event, ThinkingEvent):
+        print(f"\n[Thinking] {event.data.thinking_content}")
+    elif isinstance(event, PartialOutputEvent):
+        partial = event.data.partial_output
+        if partial and hasattr(partial, 'answer') and partial.answer:
+            print(f"\nPartial answer: {partial.answer[:100]}...")
 ```
 
 ---
@@ -540,20 +736,19 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_agent_streaming():
-    agent = DeepLitSearchAgent()
+    agent = MyAgent(config=config)
     events = []
 
-    async for event in agent.astream({"query": "test query"}):
+    async for event in agent.astream(input_data):
         events.append(event)
 
     # Verify event sequence
-    assert events[0].event_type == StreamEventType.STARTING
-    assert events[-1].event_type == StreamEventType.COMPLETED
+    assert isinstance(events[0], StartingEvent)
+    assert isinstance(events[-1], (CompletedEvent, FailedEvent))
 
     # Check for expected steps
-    running_steps = [e.data.get("step") for e in events if e.event_type == StreamEventType.RUNNING]
-    assert "triage" in running_steps
-    assert "research.iteration" in running_steps
+    running_events = [e for e in events if isinstance(e, RunningEvent)]
+    assert len(running_events) > 0
 ```
 
 ### Event Type Assertions
@@ -561,21 +756,58 @@ async def test_agent_streaming():
 ```python
 def assert_streaming_contract(events: list[StreamEvent]):
     """Verify streaming contract is followed."""
-    event_types = [e.event_type for e in events]
-
     # Must start with STARTING
-    assert event_types[0] == StreamEventType.STARTING
+    assert isinstance(events[0], StartingEvent)
 
     # Must end with COMPLETED or FAILED
-    assert event_types[-1] in (StreamEventType.COMPLETED, StreamEventType.FAILED)
+    assert isinstance(events[-1], (CompletedEvent, FailedEvent))
 
     # COMPLETED must have output
-    if event_types[-1] == StreamEventType.COMPLETED:
-        assert events[-1].output is not None
+    if isinstance(events[-1], CompletedEvent):
+        assert events[-1].data.output is not None
 
     # FAILED must have error
-    if event_types[-1] == StreamEventType.FAILED:
-        assert events[-1].error is not None
+    if isinstance(events[-1], FailedEvent):
+        assert events[-1].data.error is not None
+```
+
+### Human Interrupt Testing
+
+```python
+@pytest.mark.asyncio
+async def test_human_interrupt_flow():
+    agent = MyAgent(config=MyAgentConfig(tools=[HumanTool()]))
+
+    # First call - pause for human input
+    human_event = None
+    async for event in agent.astream(input_data):
+        if isinstance(event, HumanInputRequiredEvent):
+            human_event = event
+            break
+
+    assert human_event is not None
+    assert human_event.run_context.messages is not None
+
+    # Resume with human response
+    resume_ctx = RunContext(
+        run_id=human_event.run_context.run_id,
+        messages=human_event.run_context.messages,
+        human_response=HumanResponse(
+            tool_call_id=human_event.data.tool_call_id,
+            content="Test answer",
+        ),
+    )
+
+    got_response = False
+    got_completed = False
+    async for event in agent.astream(input_data, run_context=resume_ctx):
+        if isinstance(event, HumanResponseEvent):
+            got_response = True
+        if isinstance(event, CompletedEvent):
+            got_completed = True
+
+    assert got_response
+    assert got_completed
 ```
 
 ### Mock Event Consumer
@@ -585,8 +817,8 @@ class StreamEventCollector:
     """Collect and categorize stream events for testing."""
 
     def __init__(self):
-        self.events = []
-        self.by_type = {}
+        self.events: list[StreamEvent] = []
+        self.by_type: dict[str, list[StreamEvent]] = {}
 
     async def collect(self, stream: AsyncIterator[StreamEvent]):
         async for event in stream:
@@ -596,18 +828,42 @@ class StreamEventCollector:
 
     @property
     def output(self):
-        completed = self.by_type.get(StreamEventType.COMPLETED, [])
-        return completed[0].output if completed else None
+        completed = [e for e in self.events if isinstance(e, CompletedEvent)]
+        return completed[0].data.output if completed else None
 
     @property
     def partials(self):
-        return [e.partial_output for e in self.by_type.get(StreamEventType.PARTIAL, [])]
+        return [e.data.partial_output for e in self.events if isinstance(e, PartialOutputEvent)]
 
 # Usage
 collector = StreamEventCollector()
 await collector.collect(agent.astream(input_data))
 assert collector.output is not None
-assert len(collector.partials) >= 1
+```
+
+---
+
+## Exports
+
+All streaming types are exported from `akd._base`:
+
+```python
+from akd._base import (
+    # Core
+    StreamEvent, StreamEventType, StreamingMixin,
+    # Event data models
+    StartingEventData, RunningEventData, CompletedEventData,
+    FailedEventData, StreamingEventData, ThinkingEventData,
+    PartialEventData, ToolCallingEventData, ToolResultEventData,
+    HumanInputRequiredEventData, HumanResponseEventData, EventData,
+    # Discriminated event subclasses
+    StartingEvent, RunningEvent, CompletedEvent, FailedEvent,
+    StreamingTokenEvent, ThinkingEvent, PartialOutputEvent,
+    ToolCallingEvent, ToolResultEvent,
+    HumanInputRequiredEvent, HumanResponseEvent,
+    # Tool calling support
+    ToolCall, ToolResult, RunContext, ToolCallingMixin, HumanResponse,
+)
 ```
 
 ---
@@ -615,10 +871,12 @@ assert len(collector.partials) >= 1
 ## Best Practices
 
 1. **Always yield STARTING first** - Consumers expect it for initialization
-2. **Always yield COMPLETED or FAILED last** - Never leave streams hanging
+2. **Always yield COMPLETED or FAILED last** - Never leave streams hanging (exception: `HUMAN_INPUT_REQUIRED` also ends the stream)
 3. **Re-raise after FAILED** - Allow error propagation after event emission
-4. **Use consistent step naming** - `parent.child` pattern (e.g., `research.search`)
-5. **Include context in all events** - Enables filtering and correlation
-6. **Batch tokens for efficiency** - Default `token_batch_size=10` balances latency/overhead
-7. **Emit PARTIAL progressively** - Let consumers see results as they become available
-8. **Delegate `_arun()` to `_astream()`** - Single source of truth for execution logic
+4. **Use typed event subclasses** - Prefer `isinstance` checks with typed subclasses for type safety
+5. **Use consistent step naming** - `parent.child` pattern (e.g., `research.search`)
+6. **Include run_context in all events** - Enables filtering, correlation, and resumption
+7. **Batch tokens for efficiency** - Default `token_batch_size=10` balances latency/overhead
+8. **Emit PARTIAL progressively** - Let consumers see results as they become available
+9. **Delegate `_arun()` to `_astream()`** - Single source of truth for execution logic
+10. **Use RunContext for resumption** - Carry messages and human_response for pause/resume workflows

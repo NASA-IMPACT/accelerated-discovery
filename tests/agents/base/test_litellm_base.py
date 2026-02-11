@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from akd._base.memory import Memory
 from akd.agents._base import InstructorBaseAgent
 
 from .conftest import (
@@ -32,7 +33,7 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.client is not None
 
         # Check memory initialization
-        assert isinstance(agent.memory, list)
+        assert isinstance(agent.memory, Memory)
         assert len(agent.memory) == 0
 
     def test_config_access(self, litellm_config):
@@ -158,9 +159,7 @@ class TestLiteLLMInstructorBaseAgent:
 
         with patch("akd.agents._base.trim_messages") as mock_trim_messages:
             # Mock trim_messages to return shortened messages
-            mock_trim_messages.side_effect = lambda messages, **kwargs: messages[
-                :1
-            ]  # Keep only first message
+            mock_trim_messages.side_effect = lambda messages, **kwargs: messages[:1]  # Keep only first message
 
             # Run the agent
             result = await agent.arun(test_input)
@@ -253,9 +252,7 @@ class TestLiteLLMInstructorBaseAgent:
 
         with patch("akd.agents._base.trim_messages") as mock_trim_messages:
             # Simulate trimming to a reasonable size
-            mock_trim_messages.return_value = large_messages[
-                :10
-            ]  # Keep only first 10 messages
+            mock_trim_messages.return_value = large_messages[:10]  # Keep only first 10 messages
 
             result = await agent.get_response_async(large_messages)
 

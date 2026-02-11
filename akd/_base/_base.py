@@ -7,9 +7,9 @@ from typing import Any, Type, cast
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
 
-from akd.errors import SchemaValidationError
 from akd.utils import get_model_fields, to_snake_case
 
+from .errors import HumanInputRequired, SchemaValidationError
 from .streaming import StreamingMixin
 from .utils import AsyncRunMixin
 
@@ -90,6 +90,54 @@ class OutputSchema(IOSchema):
         if self.__response_field__ is not None:
             return getattr(self, self.__response_field__, "")
         return ""
+
+
+class TextInput(InputSchema):
+    """Simple text-based input schema for unstructured content.
+
+    Use this schema when you need a simple input format without structured fields,
+    such as for conversational agents, chat interfaces, or any scenario where
+    the input is just free-form text content.
+
+    This is the text-specific implementation of InputSchema. For other modalities,
+    use corresponding schemas like ImageInput, DocumentInput, etc. (when available).
+
+    Example:
+        # Simple chat agent usage
+        agent = ChatAgent(config=config)
+        result = await agent.arun(TextInput(content="Hello, how are you?"))
+
+        # Multi-turn conversation with stateless=False
+        await agent.arun(TextInput(content="My name is Alice"))
+        await agent.arun(TextInput(content="What's my name?"))  # Remembers context
+    """
+
+    content: str = Field(description="The text content to process")
+
+
+class TextOutput(OutputSchema):
+    """Simple text-based output schema for unstructured content.
+
+    Use this schema when your agent produces free-form text output without
+    structured fields, such as for conversational responses, summaries,
+    or any scenario where the output is just text content.
+
+    This is the text-specific implementation of OutputSchema. For other modalities,
+    use corresponding schemas like ImageOutput, DocumentOutput, etc. (when available).
+
+    Example:
+        class ChatAgent(LiteLLMInstructorBaseAgent[TextInput, TextOutput]):
+            '''Simple conversational agent.'''
+            input_schema = TextInput
+            output_schema = TextOutput
+
+        result = await agent.arun(TextInput(content="Tell me a joke"))
+        print(result.content)  # The agent's text response
+    """
+
+    __response_field__: str | None = "content"
+
+    content: str = Field(description="The text content response")
 
 
 def _make_config_property(field_name: str):
@@ -399,6 +447,9 @@ class AbstractBase[
         try:
             output = await self._arun(params, **kwargs)
             output = self._validate_output(output)
+        except HumanInputRequired:
+            logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
+            raise
         except Exception as e:
             logger.error(f"Error running {self.__class__.__name__}: {e}")
             raise
@@ -528,6 +579,9 @@ class UnrestrictedAbstractBase[
         try:
             output = await self._arun(params, **kwargs)
             output = self._validate_output(output)
+        except HumanInputRequired:
+            logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
+            raise
         except Exception as e:
             logger.error(f"Error running {self.__class__.__name__}: {e}")
             raise

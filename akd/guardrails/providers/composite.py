@@ -6,7 +6,7 @@ from enum import StrEnum
 
 from loguru import logger
 
-from akd.errors import GuardrailError
+from akd._base.errors import GuardrailError
 from akd.guardrails._base import (
     GuardrailInput,
     GuardrailOperatorMixin,

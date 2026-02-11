@@ -17,7 +17,19 @@ from loguru import logger
 from pydantic import Field
 
 from akd._base import exposed_param
-from akd._base.streaming import StreamEvent, StreamEventType
+from akd._base.streaming import (
+    CompletedEvent,
+    CompletedEventData,
+    FailedEvent,
+    FailedEventData,
+    PartialEventData,
+    PartialOutputEvent,
+    StartingEvent,
+    StartingEventData,
+    StreamEvent,
+    StreamEventType,
+)
+from akd._base.structures import RunContext
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -166,49 +178,6 @@ class DeepLitSearchAgent(LitBaseAgent):
     def clarification_prompt(self, prompt: str) -> None:
         self.clarification_component.config.system_prompt = prompt
 
-    def _emit_step_event(
-        self,
-        step: str,
-        message: str,
-        run_context: dict[str, Any],
-        step_index: int | None = None,
-        total_steps: int | None = None,
-        substep: str | None = None,
-        **data_kwargs: Any,
-    ) -> StreamEvent:
-        """Create a RUNNING event for a pipeline step.
-
-        Args:
-            step: Step identifier (e.g., "triage", "research.search")
-            message: Human-readable progress message
-            run_context: Execution context with run_id, query, etc.
-            step_index: Current step number (1-based)
-            total_steps: Total number of main steps
-            substep: Sub-step identifier for nested progress
-            **data_kwargs: Additional data to include in event payload
-
-        Returns:
-            StreamEvent with RUNNING type and step information
-        """
-        data = {
-            "step": step,
-            **data_kwargs,
-        }
-        if step_index is not None:
-            data["step_index"] = step_index
-        if total_steps is not None:
-            data["total_steps"] = total_steps
-        if substep is not None:
-            data["substep"] = substep
-
-        return StreamEvent(
-            event_type=StreamEventType.RUNNING,
-            source=self.__class__.__name__,
-            message=message,
-            data=data,
-            context=run_context,
-        )
-
     async def _handle_triage(self, query: str) -> dict:
         """Handle query triage using embedded component."""
         if self.debug:
@@ -282,12 +251,12 @@ class DeepLitSearchAgent(LitBaseAgent):
         instructions: str,
         original_query: str,
         max_results: int,
-        run_context: dict[str, Any],
-    ) -> AsyncIterator[StreamEvent | dict]:
+        run_context: RunContext,
+    ) -> AsyncIterator[StreamEvent]:
         """Stream the deep research loop with iteration events.
 
-        Yields StreamEvent for progress updates, and a dict with "result" key
-        containing the final research output.
+        Yields RunningEvent for progress updates and a final PartialOutputEvent
+        containing the research output.
 
         Args:
             instructions: Research instructions from instruction builder
@@ -296,7 +265,7 @@ class DeepLitSearchAgent(LitBaseAgent):
             run_context: Execution context for event correlation
 
         Yields:
-            StreamEvent: Progress events for each research step
+            StreamEvent: Progress events for each research step, ending with PartialOutputEvent
             dict: Final result with {"result": research_output_dict}
         """
         # Initialize research tracking
@@ -476,18 +445,25 @@ class DeepLitSearchAgent(LitBaseAgent):
             key_findings_count=len(research_output.key_findings) if research_output.key_findings else 0,
         )
 
-        # Yield final result as dict
-        yield {
-            "result": {
-                "research_report": research_output.research_report,
-                "key_findings": research_output.key_findings,
-                "evidence_quality_score": research_output.evidence_quality_score,
-                "citations": research_output.citations,
-                "iterations_performed": iterations,
-                "results": all_results,
-                "research_traces": research_trace,
-            },
-        }
+        # Yield final research results as a typed PartialOutputEvent
+        yield PartialOutputEvent(
+            source=self.__class__.__name__,
+            message="Research results available",
+            data=PartialEventData(
+                partial_output=PartialModel[LitSearchAgentOutputSchema](
+                    results=all_results,
+                    extra={
+                        "research_report": research_output.research_report,
+                        "key_findings": research_output.key_findings,
+                        "evidence_quality_score": research_output.evidence_quality_score,
+                        "citations": research_output.citations,
+                        "iterations_performed": iterations,
+                        "research_traces": research_trace,
+                    },
+                ),
+            ),
+            run_context=run_context,
+        )
 
     async def _generate_initial_queries(self, instructions: str) -> List[str]:
         """Generate initial search queries from research instructions."""
@@ -702,7 +678,7 @@ class DeepLitSearchAgent(LitBaseAgent):
     async def _astream(
         self,
         params: LitSearchAgentInputSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Stream the deep literature search with progress events.
@@ -728,18 +704,15 @@ class DeepLitSearchAgent(LitBaseAgent):
         class_name = self.__class__.__name__
 
         # Setup context with auto-generated run_id
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
-        run_context["query"] = params.query
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         # STARTING event
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting deep literature search: {params.query[:100]}...",
-            data={"query": params.query},
-            context=run_context,
+            data=StartingEventData(params=params),
+            run_context=run_context,
         )
 
         try:
@@ -853,48 +826,40 @@ class DeepLitSearchAgent(LitBaseAgent):
                 max_iterations=self.config.max_research_iterations,
             )
 
-            research_output = None
-            async for item in self._stream_deep_research(
+            event = None
+            async for event in self._stream_deep_research(
                 instructions,
                 original_query,
                 max_results,
                 run_context,
             ):
-                if isinstance(item, StreamEvent):
-                    yield item
-                elif isinstance(item, dict) and "result" in item:
-                    research_output = item["result"]
+                yield event
 
-            if research_output is None:
-                raise RuntimeError("No research output received from _stream_deep_research")
+            # Last event is always PartialOutputEvent with research results
+            if event is None or not isinstance(event, PartialOutputEvent):
+                yield FailedEvent(
+                    source=class_name,
+                    message="No research output received from deep research loop",
+                    data=FailedEventData(
+                        error="No research output received from _stream_deep_research",
+                        error_type="RuntimeError",
+                    ),
+                    run_context=run_context,
+                )
+                return
+
+            # Extract research data from the last partial
+            partial_model = event.data.partial_output
+            research_extra = partial_model.extra
 
             yield self._emit_step_event(
                 "research",
-                f"Deep research complete: {len(research_output['results'])} results in {research_output['iterations_performed']} iterations",
+                f"Deep research complete: {len(partial_model.results)} results in {research_extra['iterations_performed']} iterations",
                 run_context,
                 step_index=4,
                 total_steps=5,
-                total_results=len(research_output["results"]),
-                iterations_performed=research_output["iterations_performed"],
-            )
-
-            # PARTIAL event: research results available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
-                source=class_name,
-                message="Research results available",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
-                        results=research_output["results"],
-                        extra={
-                            "key_findings": research_output["key_findings"],
-                            "evidence_quality_score": research_output["evidence_quality_score"],
-                            "citations": research_output["citations"],
-                            "iterations_performed": research_output["iterations_performed"],
-                        },
-                    ),
-                },
-                context=run_context,
+                total_results=len(partial_model.results),
+                iterations_performed=research_extra["iterations_performed"],
             )
 
             # Step 5: Generate report and answer
@@ -909,28 +874,27 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             detailed_report = await self._generate_report(
                 query=original_query,
-                results=research_output["results"],
-                research_report=research_output["research_report"],
+                results=partial_model.results,
+                research_report=research_extra["research_report"],
             )
 
             # PARTIAL event: report now available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
+            yield PartialOutputEvent(
                 source=class_name,
                 message="Report generated",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
-                        results=research_output["results"],
+                data=PartialEventData(
+                    partial_output=PartialModel[LitSearchAgentOutputSchema](
+                        results=partial_model.results,
                         report=detailed_report,
                         extra={
-                            "key_findings": research_output["key_findings"],
-                            "evidence_quality_score": research_output["evidence_quality_score"],
-                            "citations": research_output["citations"],
-                            "iterations_performed": research_output["iterations_performed"],
+                            "key_findings": research_extra["key_findings"],
+                            "evidence_quality_score": research_extra["evidence_quality_score"],
+                            "citations": research_extra["citations"],
+                            "iterations_performed": research_extra["iterations_performed"],
                         },
                     ),
-                },
-                context=run_context,
+                ),
+                run_context=run_context,
             )
 
             yield self._emit_step_event(
@@ -944,7 +908,7 @@ class DeepLitSearchAgent(LitBaseAgent):
 
             shortform_answer = await self._generate_answer(
                 query=original_query,
-                search_results=research_output["results"],
+                search_results=partial_model.results,
                 additional_context=detailed_report,
             )
 
@@ -952,34 +916,32 @@ class DeepLitSearchAgent(LitBaseAgent):
             output = LitSearchAgentOutputSchema(
                 answer=shortform_answer.answer,
                 report=detailed_report,
-                results=research_output["results"],
+                results=partial_model.results,
                 extra={
-                    "key_findings": research_output["key_findings"],
-                    "evidence_quality_score": research_output["evidence_quality_score"],
-                    "citations": research_output["citations"],
+                    "key_findings": research_extra["key_findings"],
+                    "evidence_quality_score": research_extra["evidence_quality_score"],
+                    "citations": research_extra["citations"],
                     "answer_reasoning_traces": shortform_answer.reasoning_traces,
-                    "research_traces": research_output.get("research_traces", []),
-                    "iterations_performed": research_output["iterations_performed"],
+                    "research_traces": research_extra.get("research_traces", []),
+                    "iterations_performed": research_extra["iterations_performed"],
                 },
             )
 
             # COMPLETED event with full output
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
+            yield CompletedEvent(
                 source=class_name,
                 message="Deep literature search completed",
-                data={"output": output},
-                context=run_context,
+                data=CompletedEventData(output=output),
+                run_context=run_context,
             )
 
         except Exception as e:
             # FAILED event
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Deep literature search failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
+                run_context=run_context,
             )
             raise
 

@@ -14,7 +14,19 @@ from typing import Any, List, Optional
 from loguru import logger
 from pydantic import Field
 
-from akd._base.streaming import StreamEvent, StreamEventType
+from akd._base.streaming import (
+    CompletedEvent,
+    CompletedEventData,
+    FailedEvent,
+    FailedEventData,
+    PartialEventData,
+    PartialOutputEvent,
+    StartingEvent,
+    StartingEventData,
+    StreamEvent,
+    StreamEventType,
+)
+from akd._base.structures import RunContext
 from akd.agents.query import (
     FollowUpQueryAgent,
     FollowUpQueryAgentInputSchema,
@@ -737,46 +749,6 @@ class ControlledSearchAgent(LitBaseAgent):
             },
         )
 
-    def _emit_step_event(
-        self,
-        step: str,
-        message: str,
-        run_context: dict[str, Any],
-        step_index: int | None = None,
-        total_steps: int | None = None,
-        substep: str | None = None,
-        **data_kwargs: Any,
-    ) -> StreamEvent:
-        """Create a RUNNING event for a pipeline step.
-
-        Args:
-            step: Step identifier (e.g., "iteration", "search", "evaluate")
-            message: Human-readable description
-            run_context: Execution context dict
-            step_index: Current step number (optional)
-            total_steps: Total number of steps (optional)
-            substep: Sub-step identifier (optional)
-            **data_kwargs: Additional data fields
-
-        Returns:
-            StreamEvent with RUNNING type and step metadata
-        """
-        data = {"step": step, **data_kwargs}
-        if step_index is not None:
-            data["step_index"] = step_index
-        if total_steps is not None:
-            data["total_steps"] = total_steps
-        if substep is not None:
-            data["substep"] = substep
-
-        return StreamEvent(
-            event_type=StreamEventType.RUNNING,
-            source=self.__class__.__name__,
-            message=message,
-            data=data,
-            context=run_context,
-        )
-
     async def _generate_report(
         self,
         query: str,
@@ -801,7 +773,7 @@ class ControlledSearchAgent(LitBaseAgent):
     async def _astream(
         self,
         params: LitSearchAgentInputSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Stream events during controlled search execution.
@@ -811,7 +783,7 @@ class ControlledSearchAgent(LitBaseAgent):
 
         Args:
             params: Input parameters (already validated by astream())
-            context: Execution context
+            run_context: Execution context
             **kwargs: Additional arguments
 
         Yields:
@@ -820,17 +792,15 @@ class ControlledSearchAgent(LitBaseAgent):
         class_name = self.__class__.__name__
 
         # Setup run context
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         # STARTING event
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting {class_name}",
-            data={"query": params.query},
-            context=run_context,
+            data=StartingEventData(params=params),
+            run_context=run_context,
         )
 
         try:
@@ -1031,17 +1001,16 @@ class ControlledSearchAgent(LitBaseAgent):
             logger.debug(f"Final Stopping Criteria :: {criteria}")
 
             # PARTIAL event: search results available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
+            yield PartialOutputEvent(
                 source=class_name,
                 message="Search results available",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
+                data=PartialEventData(
+                    partial_output=PartialModel[LitSearchAgentOutputSchema](
                         results=all_results,
                         extra={"iterations_performed": iteration},
                     ),
-                },
-                context=run_context,
+                ),
+                run_context=run_context,
             )
 
             # Emit synthesis events
@@ -1072,12 +1041,11 @@ class ControlledSearchAgent(LitBaseAgent):
             )
 
             # PARTIAL event: report available
-            yield StreamEvent(
-                event_type=StreamEventType.PARTIAL,
+            yield PartialOutputEvent(
                 source=class_name,
                 message="Report generated",
-                data={
-                    "partial_output": PartialModel[LitSearchAgentOutputSchema](
+                data=PartialEventData(
+                    partial_output=PartialModel[LitSearchAgentOutputSchema](
                         results=all_results,
                         report=detailed_report,
                         extra={
@@ -1085,8 +1053,8 @@ class ControlledSearchAgent(LitBaseAgent):
                             "iterations_performed": iteration,
                         },
                     ),
-                },
-                context=run_context,
+                ),
+                run_context=run_context,
             )
 
             # Build output
@@ -1101,22 +1069,20 @@ class ControlledSearchAgent(LitBaseAgent):
             )
 
             # COMPLETED event
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
+            yield CompletedEvent(
                 source=class_name,
                 message=f"Completed {class_name}",
-                data={"output": output},
-                context=run_context,
+                data=CompletedEventData(output=output),
+                run_context=run_context,
             )
 
         except Exception as e:
             # FAILED event
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
+                run_context=run_context,
             )
             raise
 

@@ -20,6 +20,7 @@ notebooks/artifacts/
 notebooks/marimo/
 tmp/
 temp/
+agent-stuff/
 data/
 models/
 evals/

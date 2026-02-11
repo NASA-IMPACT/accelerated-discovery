@@ -25,8 +25,12 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from pydantic import BaseModel, computed_field, create_model
 
+from akd._base.errors import (
+    GuardrailError,
+    InputGuardrailTriggered,
+    OutputGuardrailTriggered,
+)
 from akd.configs.project import CONFIG
-from akd.errors import GuardrailError, InputGuardrailTriggered, OutputGuardrailTriggered
 from akd.guardrails._base import GuardrailInput, GuardrailOutput, GuardrailProtocol
 from akd.guardrails.utils import extract_text_content
 

@@ -12,26 +12,56 @@ import openai
 from litellm import acompletion
 from litellm.utils import get_model_info, supports_reasoning, trim_messages
 from loguru import logger
-from pydantic import (
-    AnyUrl,
-    BaseModel,
-    Field,
-    create_model,
-    field_validator,
-    model_validator,
-)
+from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
 from akd._base import (
     AbstractBase,
     BaseConfig,
     InputSchema,
+    Memory,
     OutputSchema,
     ParamExposureMixin,
+    RunContext,
+    StreamEvent,
+    StreamEventType,
+    TextInput,
+    TextOutput,
+    ToolCall,
+    ToolCallingMixin,
 )
-from akd._base.streaming import StreamEvent, StreamEventType
+from akd._base.errors import (
+    MaxToolCallsExceeded,
+    MaxToolIterationsExceeded,
+    UnexpectedModelBehavior,
+)
+from akd._base.streaming import (
+    CompletedEvent,
+    CompletedEventData,
+    FailedEvent,
+    FailedEventData,
+    HumanInputRequiredEvent,
+    HumanInputRequiredEventData,
+    HumanResponseEvent,
+    HumanResponseEventData,
+    PartialEventData,
+    PartialOutputEvent,
+    RunningEvent,
+    StartingEvent,
+    StartingEventData,
+    StreamingEventData,
+    StreamingTokenEvent,
+    ThinkingEvent,
+    ThinkingEventData,
+    ToolCallingEvent,
+    ToolCallingEventData,
+    ToolResultEvent,
+    ToolResultEventData,
+)
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
+from akd.tools.human import HumanTool, HumanToolInput
+from akd.tools.output import OutputTool
 from akd.utils import PartialModel
 
 
@@ -53,10 +83,6 @@ class BaseAgentConfig(BaseConfig):
     stateless: bool = Field(
         default=True,
         description="Whether to maintain conversation history/state",
-    )
-    input_hints: bool = Field(
-        default=False,
-        description="Whether to include input schema field information in system prompt",
     )
 
     # Token management
@@ -96,6 +122,21 @@ class BaseAgentConfig(BaseConfig):
         default_factory=list,
         description="List of tools available to the agent",
     )
+    max_tool_iterations: int = Field(
+        default=25,
+        ge=1,
+        le=50,
+        description="Maximum tool calling iterations (ReAct loop turns) before stopping",
+    )
+    max_tool_calls: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum total tool calls across the run (None = unlimited)",
+    )
+    reflection_prompt: str | None = Field(
+        default=None,
+        description="Reflection prompt injected after tool results to force reasoning. If None, no reflection step.",
+    )
 
     @model_validator(mode="after")
     def validate_max_tokens_against_model(self):
@@ -130,19 +171,6 @@ class BaseAgentConfig(BaseConfig):
 
         return self
 
-    @field_validator("input_hints", mode="before")
-    @classmethod
-    def warn_input_hints_deprecated(cls, v):
-        """Emit deprecation warning when input_hints is explicitly set."""
-        # Only warn if a non-default value is being set
-        if v is not None:
-            logger.warning(
-                "The 'input_hints' parameter is deprecated and will be removed in a future version. "
-                "Please use 'io_hints' instead, which is now available in the base BaseConfig class."
-                "Setting input_hints doesn't have any effect.",
-            )
-        return v
-
 
 class BaseAgent[
     InSchema: InputSchema,
@@ -163,43 +191,104 @@ class BaseAgent[
 
     config_schema = BaseAgentConfig
 
-    @property
-    def memory(self) -> Any:
-        """
-        Returns the memory of the agent, implemented by subclasses.
-        This property should return the memory structure used by the agent,
-        which typically includes past messages or interactions.
-        Raises:
-            NotImplementedError: If the property is not implemented in a subclass.
-        Args:
-            None
-
-        Returns:
-            list[Any | BaseModel]: The memory of the agent.
-        """
-        raise NotImplementedError("Attribute 'memory' not implemented.")
+    def __init__(
+        self,
+        config: BaseAgentConfig | None = None,
+        memory: Memory | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(config=config, **kwargs)
+        self.memory = memory or Memory()
 
     def reset_memory(self) -> None:
-        pass
+        """Clear memory."""
+        self.memory.clear()
 
     @property
     def _system_prompt(self) -> str:
         """
-        Enhanced system prompt with optional input hints.
+        Enhanced system prompt with agent description.
+
+        The description includes IO field hints if io_hints=True (default).
 
         Returns:
-            str: System prompt with input schema information if enabled.
+            str: System prompt with agent description if available.
         """
         content = self.system_prompt
 
-        # Early return if input hints disabled
-        if not self.input_hints:
-            return content
-
-        # Add agent description if available
+        # Add agent description (includes IO hints if io_hints=True)
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
         return content
+
+    @property
+    def tool_definitions(self) -> list[dict[str, Any]]:
+        """Convert tools to function calling format."""
+        return [tool.as_tool_definition() for tool in self.tools]
+
+    def _default_system_message(self) -> dict[str, str]:
+        """Return default system message."""
+        return {
+            "role": "system",
+            "content": self._system_prompt,
+        }
+
+    async def arun(
+        self,
+        params: InSchema,
+        run_context: RunContext | None = None,
+        **kwargs,
+    ) -> OutSchema:
+        """Run the agent with the provided parameters asynchronously.
+
+        Args:
+            params: The structured input parameters for the agent.
+            run_context: Optional RunContext for execution context
+                (messages, human_response, run_id, etc.)
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Output matching the agent's output_schema.
+        """
+        return await super().arun(params, run_context=run_context, **kwargs)
+
+    async def achat(
+        self,
+        params: Any,
+        run_context: RunContext | None = None,
+    ) -> TextOutput:
+        """Convenience method for simple text-based conversations.
+
+        Converts any agent into a chat-style interface by routing through _arun(),
+        preserving tool calling, guardrails, and streaming support. Wraps input
+        in TextInput and converts the agent's response to TextOutput.
+
+        Note: Messages in memory will be JSON-serialized (e.g. {"content": "hello"})
+        rather than plain text, since this goes through the standard _arun() pipeline.
+
+        Args:
+            params: The input content. If already a TextInput, used directly.
+                    Otherwise, stringified and wrapped in TextInput.
+            run_context: Optional context for resumption after human input.
+
+        Returns:
+            TextOutput: The agent's text response.
+
+        Example:
+            # Works with any agent, not just TextInput/TextOutput agents
+            response = await search_agent.achat("Find papers on quantum computing")
+            print(response.content)
+
+            # Multi-turn with stateless=False
+            agent = MyAgent(config=BaseAgentConfig(stateless=False))
+            await agent.achat("My name is Alice")
+            response = await agent.achat("What's my name?")  # response.content == "Alice"
+        """
+        text_input = params if isinstance(params, TextInput) else TextInput(content=str(params))
+        result = await self._arun(text_input, run_context=run_context)
+        if isinstance(result, TextOutput):
+            return result
+        return TextOutput(content=result._response or str(result))
 
     @abstractmethod
     async def get_response_async(
@@ -233,9 +322,10 @@ class InstructorBaseAgent[
     def __init__(
         self,
         config: BaseAgentConfig | None = None,
+        memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
-        super().__init__(config=config, debug=debug)
+        super().__init__(config=config, memory=memory, debug=debug)
 
         # Create the OpenAI client
         self.client = instructor.from_openai(
@@ -244,9 +334,6 @@ class InstructorBaseAgent[
                 base_url=str(self.base_url),
             ),
         )
-
-        # Initialize memory
-        self._memory = []
 
     def __deepcopy__(self, memo: dict[int, Any]) -> InstructorBaseAgent:
         """Custom deepcopy that recreates the client instead of copying it.
@@ -282,29 +369,6 @@ class InstructorBaseAgent[
         )
 
         return result
-
-    @property
-    def memory(self) -> list[dict[str, str]]:
-        return self._memory
-
-    def reset_memory(self) -> None:
-        """
-        Resets the memory of the agent.
-        This method clears the chat message history, effectively resetting the agent's memory.
-        """
-        self.memory.clear()
-
-    def _default_system_message(self) -> dict[str, str]:
-        """
-        Returns the default system message.
-
-        Returns:
-            dict[str, str]: System message dictionary with role and content.
-        """
-        return {
-            "role": "system",
-            "content": self._system_prompt,
-        }
 
     def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
         """Create a model that's compatible with instructor but avoids IOSchema validation."""
@@ -379,59 +443,60 @@ class InstructorBaseAgent[
     async def _arun(
         self,
         params: InSchema,
+        run_context: RunContext | None = None,
         **kwargs,
     ) -> OutSchema:
         """
         Runs the chat agent with the given user input asynchronously.
 
         Args:
-            user_input (Optional[InputSchema]):
-                The input from the user.
-                If not provided, skips adding to memory.
+            params: The input from the user.
+            run_context: Optional RunContext with messages, human_response, etc.
 
         Returns:
             OutputSchema: The response from the chat agent.
         """
+        async with self.memory.asession(
+            stateless=self.stateless,
+            run_context=run_context,
+            enable_trimming=self.enable_trimming,
+            model_name=self.model_name,
+            max_tokens=self.max_tokens,
+            trim_ratio=self.trim_ratio,
+        ) as messages:
+            # Add system message if empty
+            if not messages:
+                messages.append(self._default_system_message())
 
-        # start fresh if no tracking required
-        messages = [] if self.stateless else self.memory
+            # Add user message (skip if resuming with human response)
+            if params and not (run_context and run_context.human_response):
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": params.model_dump_json(exclude={"type"}),
+                    },
+                )
 
-        # if empty, add system message
-        if not messages:
-            messages.append(self._default_system_message())
-
-        # add user message
-        if params:
-            messages.append(
-                dict(
-                    role="user",
-                    content=params.model_dump_json(exclude={"type"}),
-                ),
+            response = await self.get_response_async(
+                messages=messages,
+                response_model=self.output_schema,
             )
 
-        response = await self.get_response_async(
-            messages=messages,
-            response_model=self.output_schema,
-        )
+            # Add assistant response
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.model_dump_json(exclude={"type"}),
+                },
+            )
 
-        messages.append(
-            dict(
-                role="assistant",
-                content=response.model_dump_json(exclude={"type"}),
-            ),
-        )
-
-        # update memory only if stateful
-        if not self.stateless:
-            self._memory = messages
-
-        return response
+            return response
 
 
 class LiteLLMInstructorBaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](InstructorBaseAgent):
+](ToolCallingMixin, InstructorBaseAgent):
     """InstructorBaseAgent with LiteLLM integration and automatic message trimming.
 
     This agent extends InstructorBaseAgent to use LiteLLM with automatic message trimming
@@ -442,10 +507,11 @@ class LiteLLMInstructorBaseAgent[
     def __init__(
         self,
         config: BaseAgentConfig | None = None,
+        memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
         # Initialize base class but we'll replace the client
-        super().__init__(config=config, debug=debug)
+        super().__init__(config=config, memory=memory, debug=debug)
 
         # Replace instructor client with LiteLLM version
         self.client = instructor.from_litellm(acompletion)
@@ -529,26 +595,103 @@ class LiteLLMInstructorBaseAgent[
         response = response_model(**response_data)
         return cast(OutSchema, response)
 
+    async def _arun(
+        self,
+        params: InSchema,
+        run_context: RunContext | None = None,
+        **kwargs,
+    ) -> OutSchema:
+        """Run agent with optional tool calling support.
+
+        If tools are configured, uses the tool loop (ReAct pattern).
+        Otherwise, uses direct LLM call with structured output.
+
+        Args:
+            params: Input parameters matching input_schema.
+            run_context: Optional RunContext with messages, human_response, etc.
+
+        Returns:
+            Output matching output_schema.
+        """
+        async with self.memory.asession(
+            stateless=self.stateless,
+            run_context=run_context,
+            enable_trimming=self.enable_trimming,
+            model_name=self.model_name,
+            max_tokens=self.max_tokens,
+            trim_ratio=self.trim_ratio,
+        ) as messages:
+            # Add system message if empty
+            if not messages:
+                messages.append(self._default_system_message())
+
+            # Add user message (skip if resuming with human response)
+            if params and not (run_context and run_context.human_response):
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": params.model_dump_json(exclude={"type"}),
+                    },
+                )
+
+            output: OutSchema | None = None
+
+            if self.tools:
+                # === TOOL CALLING MODE ===
+                # Use _run_tool_loop and consume events to get final output
+                # Note: Tool loop mutates `messages` in place during iterations
+                run_context = (run_context or RunContext()).model_copy()
+                run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+                async for event in self._run_tool_loop(
+                    messages,
+                    run_context,
+                ):
+                    if event.event_type == StreamEventType.COMPLETED:
+                        output = event.output
+                        break
+
+                if output is None:
+                    raise UnexpectedModelBehavior("Tool loop completed without producing output")
+
+            else:
+                # === DIRECT MODE (no tools) ===
+                output = await self.get_response_async(
+                    messages=messages,
+                    response_model=self.output_schema,
+                )
+
+            # Add final assistant message
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": output.model_dump_json(exclude={"type"}),
+                },
+            )
+
+            return output
+
     async def _stream_llm_response(
         self,
         messages: list[dict[str, str]],
+        run_context: RunContext,
         response_model: type[OutputSchema] | None = None,
         token_batch_size: int = 10,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[StreamEvent]:
         """Stream LLM response with thinking tokens and validated partial output.
 
         Uses raw LiteLLM streaming to access thinking tokens (reasoning_content).
 
         Args:
             messages: Chat messages
+            run_context: Execution context for event correlation
             response_model: Output schema (defaults to self.output_schema)
             token_batch_size: Batch N tokens before emitting STREAMING event (default=1)
 
         Yields:
-            - {"type": StreamEventType.STREAMING, "token": str} for batched raw tokens
-            - {"type": StreamEventType.THINKING, "content": str} for reasoning tokens
-            - {"type": StreamEventType.PARTIAL, "partial": PartialModel} for validated partials
-            - {"type": StreamEventType.COMPLETED, "output": OutputSchema} for final output
+            - StreamingTokenEvent for batched raw tokens
+            - ThinkingEvent for reasoning tokens
+            - PartialOutputEvent for validated partials
+            - CompletedEvent for final output
         """
         response_model = response_model or self.output_schema
         PartialResponseModel = PartialModel[response_model]
@@ -574,6 +717,27 @@ class LiteLLMInstructorBaseAgent[
         if self.reasoning_effort:
             completion_kwargs["reasoning_effort"] = self.reasoning_effort
 
+        class_name = self.__class__.__name__
+
+        # Handle human response for non-tool agents (inject as user message)
+        if run_context.human_response:
+            content = run_context.human_response.content
+            messages.append(
+                {
+                    "role": "user",
+                    "content": content if isinstance(content, str) else json.dumps(content),
+                },
+            )
+            yield HumanResponseEvent(
+                source=class_name,
+                message="Resumed with human input",
+                data=HumanResponseEventData(
+                    tool_call_id=run_context.human_response.tool_call_id,
+                    response=content,
+                ),
+                run_context=run_context,
+            )
+
         accumulated = ""
         token_buffer = ""
         last_partial_dict = None
@@ -589,7 +753,12 @@ class LiteLLMInstructorBaseAgent[
                 None,
             )
             if reasoning:
-                yield {"type": StreamEventType.THINKING, "content": reasoning}
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Reasoning...",
+                    data=ThinkingEventData(thinking_content=reasoning),
+                    run_context=run_context,
+                )
 
             # Content tokens - batch, then accumulate and validate as partial
             if delta.content:
@@ -598,7 +767,11 @@ class LiteLLMInstructorBaseAgent[
 
                 # Emit batched tokens
                 if len(token_buffer) >= token_batch_size:
-                    yield {"type": StreamEventType.STREAMING, "token": token_buffer}
+                    yield StreamingTokenEvent(
+                        source=class_name,
+                        data=StreamingEventData(token=token_buffer),
+                        run_context=run_context,
+                    )
                     token_buffer = ""
 
                 # Try to validate as partial
@@ -607,22 +780,385 @@ class LiteLLMInstructorBaseAgent[
                     last_partial_dict = parsed
                     try:
                         partial = PartialResponseModel.model_validate(parsed)
-                        yield {"type": StreamEventType.PARTIAL, "partial": partial}
+                        yield PartialOutputEvent(
+                            source=class_name,
+                            message="Partial...",
+                            data=PartialEventData(partial_output=partial),
+                            run_context=run_context,
+                        )
                     except Exception:
                         pass  # Skip invalid partials
 
         # Emit remaining tokens
         if token_buffer:
-            yield {"type": StreamEventType.STREAMING, "token": token_buffer}
+            yield StreamingTokenEvent(
+                source=class_name,
+                data=StreamingEventData(token=token_buffer),
+                run_context=run_context,
+            )
 
         # Final validation
         output = response_model.model_validate_json(accumulated)
-        yield {"type": StreamEventType.COMPLETED, "output": output}
+        yield CompletedEvent(
+            source=class_name,
+            message=f"Completed {class_name}",
+            data=CompletedEventData(output=output),
+            run_context=run_context,
+        )
+
+    async def _run_tool_loop(
+        self,
+        messages: list[dict[str, Any]],
+        run_context: RunContext,
+        token_batch_size: int = 10,
+    ) -> AsyncIterator[StreamEvent]:
+        """ReAct loop: call LLM with tools until final answer.
+
+        Streams thinking/reasoning tokens in real-time.
+        Tool calls are IO events (TOOL_CALLING, TOOL_RESULT).
+        Human tool calls yield HUMAN_INPUT_REQUIRED and return.
+
+        Args:
+            messages: Conversation history (mutated in place)
+            run_context: RunContext (may contain human_response for resumption)
+            token_batch_size: Batch N characters before emitting STREAMING event
+
+        Yields:
+            StreamEvent: STREAMING, THINKING, TOOL_CALLING, TOOL_RESULT,
+                        HUMAN_INPUT_REQUIRED, or COMPLETED
+        """
+        # Attach messages reference to run_context (caller can access live state via any event)
+        class_name = self.__class__.__name__
+        run_context.messages = messages
+
+        # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
+        human_response = run_context.human_response
+        if human_response:
+            tool_call_id = human_response.tool_call_id
+            content = human_response.content
+
+            # Inject human's response as tool result
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": json.dumps(content),
+                },
+            )
+
+            # Emit event so caller knows we resumed with human input
+            yield HumanResponseEvent(
+                source=class_name,
+                message="Resumed with human input",
+                data=HumanResponseEventData(tool_call_id=tool_call_id, response=content),
+                run_context=run_context,
+            )
+
+        # For partial output validation (only for final answer)
+        PartialResponseModel = PartialModel[self.output_schema]
+
+        # Add output tool for structured final answer (Pydantic AI pattern)
+        output_tool = OutputTool(self.output_schema)
+        # Add to tools list so _find_tool can find it
+        all_tool_instances = self.tools + [output_tool]
+        all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
+
+        total_tool_calls = 0  # Track total tool calls for max_tool_calls limit
+
+        for iteration in range(self.max_tool_iterations):
+            # Call LLM with tools (no response_format - output tool handles structured output)
+            completion_kwargs: dict[str, Any] = {
+                "model": self.model_name,
+                "messages": messages,
+                "tools": all_tool_definitions,
+                "temperature": self.temperature,
+                "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
+                "api_key": self.api_key,
+                "drop_params": True,
+                "stream": True,
+            }
+            if self.reasoning_effort:
+                completion_kwargs["reasoning_effort"] = self.reasoning_effort
+
+            response = await acompletion(**completion_kwargs)
+
+            # Accumulate streamed response
+            accumulated_content = ""
+            token_buffer = ""  # Batch tokens before emitting
+            last_partial_dict: dict[str, Any] | None = None  # For deduplicating PARTIAL events
+            accumulated_tool_calls: dict[int, dict[str, Any]] = {}  # index -> {id, name, arguments}
+            buffered_partials: list[StreamEvent] = []  # Buffer partials until we know it's final
+
+            async for chunk in response:
+                delta = chunk.choices[0].delta
+
+                # Stream reasoning/thinking tokens (o1, o3, Claude extended thinking)
+                reasoning = getattr(delta, "reasoning_content", None) or getattr(
+                    delta,
+                    "thinking",
+                    None,
+                )
+                if reasoning:
+                    yield ThinkingEvent(
+                        source=class_name,
+                        message=reasoning,
+                        data=ThinkingEventData(streaming=True, thinking_content=reasoning),
+                        run_context=run_context,
+                    )
+
+                # Batch and stream content tokens
+                if delta.content:
+                    accumulated_content += delta.content
+                    token_buffer += delta.content
+
+                    # Emit batched tokens when buffer is full
+                    if len(token_buffer) >= token_batch_size:
+                        yield StreamingTokenEvent(
+                            source=class_name,
+                            message=token_buffer,
+                            data=StreamingEventData(token=token_buffer),
+                            run_context=run_context,
+                        )
+                        token_buffer = ""
+
+                    # Try to validate as partial (buffer until we know it's final)
+                    parsed = self._try_parse_json(accumulated_content)
+                    if parsed and parsed != last_partial_dict:
+                        last_partial_dict = parsed
+                        try:
+                            partial = PartialResponseModel.model_validate(parsed)
+                            buffered_partials.append(
+                                PartialOutputEvent(
+                                    source=class_name,
+                                    message="Partial output",
+                                    data=PartialEventData(partial_output=partial),
+                                    run_context=run_context,
+                                ),
+                            )
+                        except Exception:
+                            pass  # Skip invalid partials
+
+                # Accumulate tool calls (may be split across chunks)
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        idx = tc.index
+                        if idx not in accumulated_tool_calls:
+                            accumulated_tool_calls[idx] = {
+                                "id": tc.id or "",
+                                "name": tc.function.name if tc.function else "",
+                                "arguments": tc.function.arguments if tc.function else "",
+                            }
+                        else:
+                            # Append to existing tool call
+                            if tc.id:
+                                accumulated_tool_calls[idx]["id"] = tc.id
+                            if tc.function and tc.function.name:
+                                accumulated_tool_calls[idx]["name"] = tc.function.name
+                            if tc.function and tc.function.arguments:
+                                accumulated_tool_calls[idx]["arguments"] += tc.function.arguments
+
+            # Emit remaining tokens in buffer
+            if token_buffer:
+                yield StreamingTokenEvent(
+                    source=class_name,
+                    message=token_buffer,
+                    data=StreamingEventData(token=token_buffer),
+                    run_context=run_context,
+                )
+
+            # After streaming: check for tool calls
+            if not accumulated_tool_calls:
+                for partial_event in buffered_partials:
+                    yield partial_event
+
+                if not accumulated_content:
+                    raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
+
+                # LLM responded without tool calls. Try JSON parse first — the model
+                # may have returned valid structured output without calling final_answer.
+                try:
+                    output = self.output_schema.model_validate_json(accumulated_content)
+                    logger.warning(
+                        "Model gave direct response instead of calling final_answer tool. Parsed as JSON fallback.",
+                    )
+                    yield CompletedEvent(
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data=CompletedEventData[self.output_schema](output=output),
+                        run_context=run_context,
+                    )
+                    return
+                except Exception:
+                    pass
+
+                # Not valid JSON — treat as internal reasoning and retry.
+                # Follows the Pydantic AI pattern: append the text as assistant message
+                # and a validation feedback nudge as user message.
+                # See: https://github.com/pydantic/pydantic-ai/issues/1993
+                logger.warning("LLM responded with text instead of calling a tool. Retrying.")
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Internal reasoning...",
+                    data=ThinkingEventData(thinking_content=accumulated_content),
+                    run_context=run_context,
+                )
+                messages.append({"role": "assistant", "content": accumulated_content})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
+                    },
+                )
+                continue
+
+            # Convert accumulated tool calls to ToolCall objects
+            tool_calls: list[ToolCall] = []
+            tool_calls_for_message: list[dict[str, Any]] = []
+            for idx in sorted(accumulated_tool_calls.keys()):
+                tc_data = accumulated_tool_calls[idx]
+                tool_call = ToolCall(
+                    tool_call_id=tc_data["id"],
+                    tool_name=tc_data["name"],
+                    arguments=json.loads(tc_data["arguments"]),
+                )
+                tool_calls.append(tool_call)
+                tool_calls_for_message.append(
+                    {
+                        "id": tc_data["id"],
+                        "type": "function",
+                        "function": {"name": tc_data["name"], "arguments": tc_data["arguments"]},
+                    },
+                )
+                yield ToolCallingEvent(
+                    source=class_name,
+                    message=f"Calling {tool_call.tool_name}",
+                    data=ToolCallingEventData(tool_call=tool_call),
+                    run_context=run_context,
+                )
+
+            # Check for human tool BEFORE execution - intercept and yield HUMAN_INPUT_REQUIRED
+            for tool_call in tool_calls:
+                if isinstance(self._find_tool(tool_call.tool_name), HumanTool):
+                    try:
+                        human_input = HumanToolInput(**tool_call.arguments)
+                    except Exception:
+                        human_input = HumanToolInput(
+                            question=str(tool_call.arguments.get("question", "Input needed")),
+                        )
+
+                    # Add assistant message with tool_calls to memory
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": accumulated_content or None,
+                            "tool_calls": tool_calls_for_message,
+                        },
+                    )
+
+                    # Store messages in run_context for resumption
+                    run_context.messages = list(messages)
+
+                    # Yield HUMAN_INPUT_REQUIRED with full state for resumption
+                    yield HumanInputRequiredEvent(
+                        source=class_name,
+                        message=f"Human input required: {human_input.question}",
+                        data=HumanInputRequiredEventData(
+                            human_input=human_input,
+                            tool_call_id=tool_call.tool_call_id,
+                            tool_name=tool_call.tool_name,
+                        ),
+                        run_context=run_context,
+                    )
+                    # End generator gracefully - caller will resume with fresh astream() call
+                    return
+
+            # Check max_tool_calls limit before executing
+            if self.max_tool_calls is not None:
+                if total_tool_calls + len(tool_calls) > self.max_tool_calls:
+                    raise MaxToolCallsExceeded(
+                        f"Exceeded {self.max_tool_calls} total tool calls "
+                        f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
+                    )
+
+            # Execute all tools in parallel (including OutputTool if called)
+            # Pass all_tool_instances directly to avoid mutating self.tools (race condition)
+            results = await self._execute_tools_parallel(tool_calls, tools=all_tool_instances)
+
+            total_tool_calls += len(tool_calls)
+
+            # Check if final_answer was called - signals completion
+            for result in results:
+                if result.tool_name == "final_answer":
+                    if result.error:
+                        # Validation failed — fall through to regular tool result handling
+                        # so the error gets fed back to the LLM as a tool message,
+                        # giving it a chance to retry with correct schema fields.
+                        logger.warning(
+                            f"final_answer validation failed, feeding error back to LLM for retry: {result.error}",
+                        )
+                        break
+                    # Validation done in _execute_tool via input_schema(**arguments)
+                    # result.content is dict from model_dump(), reconstruct the model
+                    output = self.output_schema.model_validate(result.content)
+                    yield CompletedEvent(
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data=CompletedEventData[self.output_schema](output=output),
+                        run_context=run_context,
+                    )
+                    return
+
+            # Yield TOOL_RESULT events for regular tools
+            for result in results:
+                yield ToolResultEvent(
+                    source=class_name,
+                    message=f"Result from {result.tool_name}",
+                    data=ToolResultEventData(result=result),
+                    run_context=run_context,
+                )
+
+            # Add assistant message (reconstructed from stream) and tool results to history
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": accumulated_content or None,
+                    "tool_calls": tool_calls_for_message,
+                },
+            )
+            for result in results:
+                content = json.dumps(result.content) if result.content else (result.error or "")
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": result.tool_call_id,
+                        "content": content,
+                    },
+                )
+
+            # Note: Memory persistence moved to caller (_arun/_astream)
+            # Tool loop only mutates working messages, doesn't persist
+
+            # Inject reflection prompt if configured (forces reasoning before next iteration)
+            if self.reflection_prompt:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": self.reflection_prompt,
+                    },
+                )
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Reflecting on results...",
+                    data=ThinkingEventData(reflection_prompt=self.reflection_prompt),
+                    run_context=run_context,
+                )
+
+        raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
 
     async def _astream(
         self,
         params: InSchema,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         token_batch_size: int = 10,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
@@ -637,7 +1173,7 @@ class LiteLLMInstructorBaseAgent[
 
         Args:
             params: Input parameters (already validated by astream())
-            context: Execution context (node_id, query, etc.)
+            run_context: RunContext with messages, human_response, run_id, etc.
             token_batch_size: Batch N characters before emitting STREAMING event (default=10)
             **kwargs: Additional keyword arguments
 
@@ -661,108 +1197,74 @@ class LiteLLMInstructorBaseAgent[
         class_name = self.__class__.__name__
 
         # Auto-generate run_id for event correlation
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting {class_name}",
-            context=run_context,
+            data=StartingEventData[self.input_schema](params=params),
+            run_context=run_context,
         )
 
         try:
-            # Note: Input validation handled by parent astream()
+            async with self.memory.asession(
+                stateless=self.stateless,
+                run_context=run_context,
+                enable_trimming=self.enable_trimming,
+                model_name=self.model_name,
+                max_tokens=self.max_tokens,
+                trim_ratio=self.trim_ratio,
+            ) as messages:
+                # Add system message if empty
+                if not messages:
+                    messages.append(self._default_system_message())
 
-            # Build messages (same logic as _arun)
-            messages = [] if self.stateless else self.memory
-            if not messages:
-                messages.append(self._default_system_message())
+                # Add user message (skip if resuming with human response)
+                if params and not (run_context and run_context.human_response):
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": params.model_dump_json(exclude={"type"}),
+                        },
+                    )
 
-            if params:
+                yield RunningEvent(
+                    source=class_name,
+                    message=f"Running {class_name}",
+                    run_context=run_context,
+                )
+
+                # Route: tool calling mode vs streaming mode
+                output = None
+                streamer = (
+                    self._run_tool_loop(messages, run_context, token_batch_size=token_batch_size)
+                    if self.tools
+                    else self._stream_llm_response(messages, run_context, token_batch_size=token_batch_size)
+                )
+
+                async for event in streamer:
+                    if isinstance(event, CompletedEvent):
+                        output = event.data.output
+                    yield event
+                    if isinstance(event, HumanInputRequiredEvent):
+                        return
+
+                if output is None:
+                    raise UnexpectedModelBehavior("No output received from LLM")
+
                 messages.append(
                     {
-                        "role": "user",
-                        "content": params.model_dump_json(exclude={"type"}),
+                        "role": "assistant",
+                        "content": output.model_dump_json(exclude={"type"}),
                     },
                 )
 
-            # Apply trimming if enabled
-            if self.enable_trimming:
-                messages = trim_messages(
-                    messages,
-                    model=self.model_name,
-                    max_tokens=self.max_tokens,
-                    trim_ratio=self.trim_ratio,
-                )
-
-            yield StreamEvent(
-                event_type=StreamEventType.RUNNING,
-                source=class_name,
-                message=f"Running {class_name}",
-                context=run_context,
-            )
-
-            # Stream LLM response with raw tokens, thinking, and partial output
-            final_output = None
-            async for chunk in self._stream_llm_response(messages, token_batch_size=token_batch_size):
-                if chunk["type"] == StreamEventType.STREAMING:
-                    yield StreamEvent(
-                        event_type=StreamEventType.STREAMING,
-                        source=class_name,
-                        data={"token": chunk["token"]},
-                        context=run_context,
-                    )
-                elif chunk["type"] == StreamEventType.THINKING:
-                    yield StreamEvent(
-                        event_type=StreamEventType.THINKING,
-                        source=class_name,
-                        message="Reasoning...",
-                        data={"thinking_content": chunk["content"]},
-                        context=run_context,
-                    )
-                elif chunk["type"] == StreamEventType.PARTIAL:
-                    yield StreamEvent(
-                        event_type=StreamEventType.PARTIAL,
-                        source=class_name,
-                        message="Partial...",
-                        data={"partial_output": chunk["partial"]},
-                        context=run_context,
-                    )
-                elif chunk["type"] == StreamEventType.COMPLETED:
-                    final_output = chunk["output"]
-
-            if final_output is None:
-                raise ValueError("No output received from LLM")
-
-            # Note: Output validation handled by parent astream()
-            output = final_output
-
-            # Update memory if stateful
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": output.model_dump_json(exclude={"type"}),
-                },
-            )
-            if not self.stateless:
-                self._memory = messages
-
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
-                source=class_name,
-                message=f"Completed {class_name}",
-                data={"output": output},
-                context=run_context,
-            )
-
         except Exception as e:
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
+                run_context=run_context,
             )
             raise

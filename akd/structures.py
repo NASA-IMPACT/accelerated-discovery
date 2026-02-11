@@ -18,6 +18,7 @@ from pydantic import (
 )
 
 from akd._base import IOSchema
+from akd._base.structures import HumanResponse
 
 # from akd.common_types import ToolType
 from akd.configs.project import CONFIG
@@ -342,4 +343,6 @@ __all__ = [
     "SingleEstimation",
     # Tool Models
     "ToolSearchResult",
+    # Human interaction (re-exported from akd._base.structures)
+    "HumanResponse",
 ]

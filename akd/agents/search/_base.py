@@ -9,6 +9,8 @@ from typing import Any, List
 from pydantic import BaseModel, Field
 
 from akd._base import InputSchema, OutputSchema
+from akd._base.streaming import RunningEvent, RunningEventData
+from akd._base.structures import RunContext
 from akd.agents._base import BaseAgent, BaseAgentConfig
 from akd.structures import SearchResult
 from akd.tools.reranker import (
@@ -275,6 +277,48 @@ class LitBaseAgent(SearchAgent[LitSearchAgentInputSchema, LitSearchAgentOutputSc
         if quality_score >= quality_threshold:
             return False
         return True
+
+    def _emit_step_event(
+        self,
+        step: str,
+        message: str,
+        run_context: RunContext,
+        step_index: int | None = None,
+        total_steps: int | None = None,
+        substep: str | None = None,
+        **data_kwargs: Any,
+    ) -> RunningEvent:
+        """Create a RUNNING event for a pipeline step.
+
+        Args:
+            step: Step identifier (e.g., "triage", "research.search")
+            message: Human-readable progress message
+            run_context: Execution context with run_id, etc.
+            step_index: Current step number (1-based)
+            total_steps: Total number of main steps
+            substep: Sub-step identifier for nested progress
+            **data_kwargs: Additional data to include in event payload
+
+        Returns:
+            RunningEvent with step information
+        """
+        data = {
+            "step": step,
+            **data_kwargs,
+        }
+        if step_index is not None:
+            data["step_index"] = step_index
+        if total_steps is not None:
+            data["total_steps"] = total_steps
+        if substep is not None:
+            data["substep"] = substep
+
+        return RunningEvent(
+            source=self.__class__.__name__,
+            message=message,
+            data=RunningEventData(**data),
+            run_context=run_context,
+        )
 
     def _format_search_summary(
         self,

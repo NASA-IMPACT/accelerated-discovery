@@ -1,12 +1,17 @@
 """Streaming support for akd agents and tools."""
 
+from __future__ import annotations
+
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from .structures import RunContext
+from .tool_calling import ToolCall, ToolResult
 
 
 class StreamEventType(str, Enum):
@@ -27,13 +32,122 @@ class StreamEventType(str, Enum):
     TOOL_CALLING = "tool_calling"
     TOOL_RESULT = "tool_result"
 
+    # Human interaction (Stage 3)
+    HUMAN_INPUT_REQUIRED = "human_input_required"
+    HUMAN_RESPONSE = "human_response"  # Resumed with human input
+
+
+# ---------------------------------------------------------------------------
+# Typed Event Data Models
+# ---------------------------------------------------------------------------
+
+
+class StartingEventData[T](BaseModel):
+    """Data for STARTING events."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    params: T | None = None
+
+
+class RunningEventData(BaseModel):
+    """Data for RUNNING events."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class CompletedEventData[T](BaseModel):
+    """Data for COMPLETED events."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    output: T
+
+
+class FailedEventData(BaseModel):
+    """Data for FAILED events."""
+
+    error: str
+    error_type: str
+
+
+class StreamingEventData(BaseModel):
+    """Data for STREAMING events (raw token chunks)."""
+
+    token: str
+
+
+class ThinkingEventData(BaseModel):
+    """Data for THINKING events (reasoning tokens)."""
+
+    thinking_content: str | None = None
+    reflection_prompt: str | None = None
+    streaming: bool = False
+
+
+class PartialEventData[T](BaseModel):
+    """Data for PARTIAL events (partial structured output)."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    partial_output: T
+
+
+class ToolCallingEventData(BaseModel):
+    """Data for TOOL_CALLING events."""
+
+    tool_call: ToolCall
+
+
+class ToolResultEventData(BaseModel):
+    """Data for TOOL_RESULT events."""
+
+    result: ToolResult
+
+
+class HumanInputRequiredEventData(BaseModel):
+    """Data for HUMAN_INPUT_REQUIRED events."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    human_input: Any
+    tool_call_id: str
+    tool_name: str
+
+
+class HumanResponseEventData(BaseModel):
+    """Data for HUMAN_RESPONSE events."""
+
+    tool_call_id: str
+    response: Any
+
+
+EventData = (
+    StartingEventData
+    | RunningEventData
+    | CompletedEventData
+    | FailedEventData
+    | StreamingEventData
+    | ThinkingEventData
+    | PartialEventData
+    | ToolCallingEventData
+    | ToolResultEventData
+    | HumanInputRequiredEventData
+    | HumanResponseEventData
+)
+
+
+# ---------------------------------------------------------------------------
+# StreamEvent
+# ---------------------------------------------------------------------------
+
 
 class StreamEvent(BaseModel):
     """Streaming event with CloudEvents-inspired design.
 
-    Minimal core envelope with flexible payload. All event-specific
-    data goes in `data` dict. Convenience properties provide ergonomic
-    access to common fields.
+    Supports both typed EventData models and legacy dict payloads.
+    Use factory methods (``mk_*``) for type-safe construction.
+    Convenience properties check typed data first, then fall back to dict.
 
     Core Fields:
         event_type: Type of event (STARTING, COMPLETED, FAILED, etc.)
@@ -41,30 +155,20 @@ class StreamEvent(BaseModel):
         event_id: Unique identifier for this event
         source: Class name that generated this event
         message: Human-readable description
-        data: Flexible payload for all event-specific data
+        data: Typed EventData model or legacy dict payload
+        run_context: RunContext (extra="allow", accepts arbitrary keys)
 
-    Data Keys by Event Type:
-        COMPLETED: {"output": <OutputSchema>}
-        FAILED: {"error": str, "error_type": str}
-        STREAMING: {"token": str} for raw tokens as they arrive
-        THINKING: {"thinking_content": str} for reasoning tokens (Claude/o1)
-        PARTIAL: {"partial_output": Any} for partial structured output
-        TOOL_CALLING: {"tool_name": str, "tool_input": dict}
-        TOOL_RESULT: {"tool_name": str, "tool_output": Any}
-
-    Example:
+    Example (isinstance checks - typed access):
         async for event in agent.astream(input_data):
-            match event.event_type:
-                case StreamEventType.STREAMING:
-                    print(event.token, end="")  # Raw tokens
-                case StreamEventType.THINKING:
-                    print(f"Reasoning: {event.thinking_content}")
-                case StreamEventType.PARTIAL:
-                    print(f"Partial: {event.partial_output}")
-                case StreamEventType.COMPLETED:
-                    result = event.output
-                case StreamEventType.FAILED:
-                    print(f"Error: {event.error}")
+            if isinstance(event, CompletedEvent):
+                print(event.data.output)  # fully typed
+            elif isinstance(event, StreamingTokenEvent):
+                print(event.data.token)  # fully typed
+
+    Example (convenience properties):
+        async for event in agent.astream(input_data):
+            if event.event_type == StreamEventType.COMPLETED:
+                print(event.output)
     """
 
     model_config = ConfigDict(use_enum_values=True)
@@ -73,59 +177,173 @@ class StreamEvent(BaseModel):
     event_type: StreamEventType
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     event_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:8])
-    source: str | None = None  # Class name that generated this event
+    source: str | None = None
     message: str | None = None
 
-    # Flexible payload
-    data: dict[str, Any] = Field(default_factory=dict)
+    # Typed EventData or legacy dict
+    data: EventData | dict[str, Any] = Field(default_factory=dict)
 
-    # Execution context
-    context: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Execution context (node_id, query, etc.)",
+    # Execution context (RunContext has extra="allow" so arbitrary keys work)
+    run_context: RunContext = Field(
+        default_factory=RunContext,
+        description="Execution context (run_id, human_response, messages, etc.)",
     )
 
-    # Convenience properties
+    # -----------------------------------------------------------------------
+    # Convenience properties (typed data first, dict fallback)
+    # -----------------------------------------------------------------------
 
     @property
     def output(self) -> Any | None:
         """COMPLETED event output."""
-        return self.data.get("output")
+        if isinstance(self.data, CompletedEventData):
+            return self.data.output
+        return self.data.get("output") if isinstance(self.data, dict) else None
 
     @property
     def error(self) -> str | None:
         """FAILED event error message."""
-        return self.data.get("error")
+        if isinstance(self.data, FailedEventData):
+            return self.data.error
+        return self.data.get("error") if isinstance(self.data, dict) else None
 
     @property
     def tool_name(self) -> str | None:
         """TOOL_CALLING/TOOL_RESULT tool name."""
-        return self.data.get("tool_name")
+        if isinstance(self.data, ToolCallingEventData):
+            return self.data.tool_call.tool_name
+        if isinstance(self.data, ToolResultEventData):
+            return self.data.result.tool_name
+        return self.data.get("tool_name") if isinstance(self.data, dict) else None
 
     @property
     def tool_input(self) -> dict[str, Any] | None:
         """TOOL_CALLING input parameters."""
-        return self.data.get("tool_input")
+        if isinstance(self.data, ToolCallingEventData):
+            return self.data.tool_call.arguments
+        return self.data.get("tool_input") if isinstance(self.data, dict) else None
 
     @property
     def tool_output(self) -> Any | None:
         """TOOL_RESULT output value."""
-        return self.data.get("tool_output")
+        if isinstance(self.data, ToolResultEventData):
+            return self.data.result.content
+        return self.data.get("tool_output") if isinstance(self.data, dict) else None
 
     @property
     def partial_output(self) -> Any | None:
-        """PARTIAL event partial output (validated partial model as JSON builds)."""
-        return self.data.get("partial_output")
+        """PARTIAL event partial output."""
+        if isinstance(self.data, PartialEventData):
+            return self.data.partial_output
+        return self.data.get("partial_output") if isinstance(self.data, dict) else None
 
     @property
     def thinking_content(self) -> str | None:
-        """THINKING event reasoning content (Claude extended thinking, o1 reasoning)."""
-        return self.data.get("thinking_content")
+        """THINKING event reasoning content."""
+        if isinstance(self.data, ThinkingEventData):
+            return self.data.thinking_content
+        return self.data.get("thinking_content") if isinstance(self.data, dict) else None
 
     @property
     def token(self) -> str | None:
         """STREAMING event raw token."""
-        return self.data.get("token")
+        if isinstance(self.data, StreamingEventData):
+            return self.data.token
+        return self.data.get("token") if isinstance(self.data, dict) else None
+
+    @property
+    def human_prompt(self) -> str | None:
+        """HUMAN_INPUT_REQUIRED event prompt."""
+        if isinstance(self.data, HumanInputRequiredEventData):
+            return getattr(self.data.human_input, "question", None)
+        return self.data.get("prompt") if isinstance(self.data, dict) else None
+
+    @property
+    def message_history(self) -> list[dict[str, Any]] | None:
+        """Message history for resumption (from run_context)."""
+        return self.run_context.messages
+
+
+# ---------------------------------------------------------------------------
+# Inherited Event Subclasses (Literal discriminated)
+# ---------------------------------------------------------------------------
+
+
+class StartingEvent(StreamEvent):
+    """Typed STARTING event."""
+
+    event_type: Literal[StreamEventType.STARTING] = StreamEventType.STARTING
+    data: StartingEventData = Field(default_factory=StartingEventData)
+
+
+class RunningEvent(StreamEvent):
+    """Typed RUNNING event."""
+
+    event_type: Literal[StreamEventType.RUNNING] = StreamEventType.RUNNING
+    data: RunningEventData = Field(default_factory=RunningEventData)
+
+
+class CompletedEvent(StreamEvent):
+    """Typed COMPLETED event."""
+
+    event_type: Literal[StreamEventType.COMPLETED] = StreamEventType.COMPLETED
+    data: CompletedEventData
+
+
+class FailedEvent(StreamEvent):
+    """Typed FAILED event."""
+
+    event_type: Literal[StreamEventType.FAILED] = StreamEventType.FAILED
+    data: FailedEventData
+
+
+class StreamingTokenEvent(StreamEvent):
+    """Typed STREAMING event."""
+
+    event_type: Literal[StreamEventType.STREAMING] = StreamEventType.STREAMING
+    data: StreamingEventData
+
+
+class ThinkingEvent(StreamEvent):
+    """Typed THINKING event."""
+
+    event_type: Literal[StreamEventType.THINKING] = StreamEventType.THINKING
+    data: ThinkingEventData = Field(default_factory=ThinkingEventData)
+
+
+class PartialOutputEvent(StreamEvent):
+    """Typed PARTIAL event."""
+
+    event_type: Literal[StreamEventType.PARTIAL] = StreamEventType.PARTIAL
+    data: PartialEventData
+
+
+class ToolCallingEvent(StreamEvent):
+    """Typed TOOL_CALLING event."""
+
+    event_type: Literal[StreamEventType.TOOL_CALLING] = StreamEventType.TOOL_CALLING
+    data: ToolCallingEventData
+
+
+class ToolResultEvent(StreamEvent):
+    """Typed TOOL_RESULT event."""
+
+    event_type: Literal[StreamEventType.TOOL_RESULT] = StreamEventType.TOOL_RESULT
+    data: ToolResultEventData
+
+
+class HumanInputRequiredEvent(StreamEvent):
+    """Typed HUMAN_INPUT_REQUIRED event."""
+
+    event_type: Literal[StreamEventType.HUMAN_INPUT_REQUIRED] = StreamEventType.HUMAN_INPUT_REQUIRED
+    data: HumanInputRequiredEventData
+
+
+class HumanResponseEvent(StreamEvent):
+    """Typed HUMAN_RESPONSE event."""
+
+    event_type: Literal[StreamEventType.HUMAN_RESPONSE] = StreamEventType.HUMAN_RESPONSE
+    data: HumanResponseEventData
 
 
 class StreamingMixin:
@@ -150,7 +368,7 @@ class StreamingMixin:
     async def astream(
         self,
         params: Any,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Public streaming API with input/output validation.
@@ -161,7 +379,7 @@ class StreamingMixin:
 
         Args:
             params: Input parameters
-            context: Execution context (node_id, query, etc.). Auto-generates run_id if not provided.
+            run_context: RunContext with run_id, messages, human_response, etc.
             **kwargs: Passed to _astream()
 
         Yields:
@@ -174,21 +392,17 @@ class StreamingMixin:
         params = self._validate_input(params)
 
         # Stream from internal implementation
-        async for event in self._astream(params, context, **kwargs):
+        async for event in self._astream(params, run_context, **kwargs):
             if event.event_type == StreamEventType.COMPLETED:
                 # Validate output before yielding COMPLETED
-                output = event.data.get("output")
+                output = event.output
                 if output is not None:
                     output = self._validate_output(output)
-                    # Yield event with validated output
-                    yield StreamEvent(
-                        event_type=event.event_type,
-                        timestamp=event.timestamp,
-                        event_id=event.event_id,
+                    yield CompletedEvent(
                         source=event.source,
                         message=event.message,
-                        data={"output": output},
-                        context=event.context,
+                        data=CompletedEventData(output=output),
+                        run_context=event.run_context,
                     )
                     continue
             yield event
@@ -196,7 +410,7 @@ class StreamingMixin:
     async def _astream(
         self,
         params: Any,
-        context: dict[str, Any] | None = None,
+        run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Internal streaming implementation. Override for custom streaming.
@@ -214,7 +428,7 @@ class StreamingMixin:
 
         Args:
             params: Input parameters (already validated by astream())
-            context: Execution context
+            run_context: RunContext with run_id, messages, human_response, etc.
             **kwargs: Additional arguments
 
         Yields:
@@ -223,47 +437,68 @@ class StreamingMixin:
         class_name = self.__class__.__name__
 
         # Auto-generate run_id for event correlation
-        run_context = context.copy() if context else {}
-        if "run_id" not in run_context:
-            run_context["run_id"] = uuid.uuid4().hex[:8]
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
-        yield StreamEvent(
-            event_type=StreamEventType.STARTING,
+        yield StartingEvent(
             source=class_name,
             message=f"Starting {class_name}",
-            context=run_context,
+            run_context=run_context,
         )
 
         try:
-            yield StreamEvent(
-                event_type=StreamEventType.RUNNING,
+            yield RunningEvent(
                 source=class_name,
                 message=f"Running {class_name}",
-                context=run_context,
+                run_context=run_context,
             )
 
             output = await self._arun(params, **kwargs)
 
-            yield StreamEvent(
-                event_type=StreamEventType.COMPLETED,
+            yield CompletedEvent(
                 source=class_name,
                 message=f"Completed {class_name}",
-                data={"output": output},
-                context=run_context,
+                data=CompletedEventData(output=output),
+                run_context=run_context,
             )
         except Exception as e:
-            yield StreamEvent(
-                event_type=StreamEventType.FAILED,
+            yield FailedEvent(
                 source=class_name,
                 message=f"Failed: {e!s}",
-                data={"error": str(e), "error_type": type(e).__name__},
-                context=run_context,
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
+                run_context=run_context,
             )
             raise
 
 
 __all__ = [
+    # Core
     "StreamEvent",
     "StreamEventType",
     "StreamingMixin",
+    # Event data models
+    "StartingEventData",
+    "RunningEventData",
+    "CompletedEventData",
+    "FailedEventData",
+    "StreamingEventData",
+    "ThinkingEventData",
+    "PartialEventData",
+    "ToolCallingEventData",
+    "ToolResultEventData",
+    "HumanInputRequiredEventData",
+    "HumanResponseEventData",
+    "EventData",
+    # Event subclasses
+    "StartingEvent",
+    "RunningEvent",
+    "CompletedEvent",
+    "FailedEvent",
+    "StreamingTokenEvent",
+    "ThinkingEvent",
+    "PartialOutputEvent",
+    "ToolCallingEvent",
+    "ToolResultEvent",
+    "HumanInputRequiredEvent",
+    "HumanResponseEvent",
 ]
