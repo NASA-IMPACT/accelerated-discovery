@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from akd._base import OutputSchema
 
+from akd.configs.project import CONFIG
+
 
 class AgentSuggestion(OutputSchema):
     """Agent suggestion for workflow planning."""
@@ -93,7 +95,10 @@ class FieldMappingResult(OutputSchema):
 class PlannerConfig(BaseModel):
     """Configuration for workflow planners."""
 
-    model_name: str = Field(default="gpt-5.2", description="LLM model to use for planning")
+    model_name: str = Field(
+        default_factory=lambda: CONFIG.model_config_settings.planner_model_name,
+        description="LLM model to use for planning",
+    )
     temperature: float = Field(default=0.3, description="Temperature for LLM generation (deterministic planning)")
     max_conversation_turns: int = Field(default=25, description="Maximum conversation turns before forcing completion")
     field_mapping_confidence_threshold: float = Field(

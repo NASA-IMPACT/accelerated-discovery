@@ -46,7 +46,7 @@ class FieldMappingGenerator:
             temperature: Generation temperature (0.0 for deterministic)
             api_key: API key (defaults to CONFIG setting)
         """
-        self.model = model or CONFIG.model_config_settings.model_name
+        self.model = model or CONFIG.model_config_settings.planner_model_name
         self.temperature = temperature
         self.api_key = api_key or CONFIG.model_config_settings.api_keys.openai
 

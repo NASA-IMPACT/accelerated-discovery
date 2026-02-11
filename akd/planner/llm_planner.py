@@ -75,7 +75,7 @@ class PlannerResponse(OutputSchema):
 
     message: str = Field(..., description="Response message to the user")
     phase: ConversationPhase = Field(..., description="Current conversation phase")
-    question: Optional[PlannerQuestion] = Field(default=None, description="Follow-up question if needed")
+    question: PlannerQuestion | None = Field(default=None, description="Follow-up question if needed")
     workflow_plan: Optional[WorkflowPlan] = Field(default=None, description="Generated workflow plan")
     ready_to_generate: bool = Field(default=False, description="Whether ready to generate final workflow")
 
@@ -157,8 +157,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
 
     def __init__(
         self,
-        config: Optional[BaseAgentConfig] = None,
-        planner_config: Optional[PlannerConfig] = None,
+        config: PlannerConfig | None = None,
         registry: Optional[AgentRegistry] = None,
         mapping_registry: Optional[FieldMappingRegistry] = None,
         mapping_generator: Optional[FieldMappingGenerator] = None,
@@ -168,8 +167,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         Initialize the planner.
 
         Args:
-            config: Agent-level configuration (model, API keys, etc.)
-            planner_config: Planner-specific configuration (thresholds, temperatures, etc.)
+            config: Planner configuration (model, temperature, thresholds, etc.)
             registry: Agent registry
             mapping_registry: Field mapping registry
             mapping_generator: Field mapping generator
@@ -180,17 +178,14 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         self.mapping_generator = mapping_generator or FieldMappingGenerator()
         self.builder = WorkflowBuilder(self.registry, self.mapping_registry, debug=debug)
         self.conversation_state: dict[str, Any] = {}
-        self.planner_config = planner_config or PlannerConfig()
+        self.planner_config = config or PlannerConfig()
         self.debug = debug
 
-        # Set up system prompt for workflow planning (uses self.registry)
-        agent_config = config or BaseAgentConfig()
-        agent_config.system_prompt = self._get_planner_system_prompt()
-        # Use planner config model_name and temperature if not explicitly set
-        if not agent_config.model_name or agent_config.model_name == "gpt-4o-mini":
-            agent_config.model_name = self.planner_config.model_name
-        if not agent_config.temperature:
-            agent_config.temperature = self.planner_config.temperature
+        agent_config = BaseAgentConfig(
+            model_name=self.planner_config.model_name,
+            temperature=self.planner_config.temperature,
+            system_prompt=self._get_planner_system_prompt(),
+        )
 
         super().__init__(config=agent_config, debug=debug)
 
@@ -727,14 +722,14 @@ These fields should be OMITTED from your output entirely."""
 
 # Convenience functions
 async def create_planner(
-    config: Optional[BaseAgentConfig] = None,
+    config: Optional[PlannerConfig] = None,
     registry: Optional[AgentRegistry] = None,
 ) -> LLMWorkflowPlanner:
     """Create a new workflow planner instance."""
     return LLMWorkflowPlanner(config=config, registry=registry)
 
 
-async def quick_plan(research_goal: str, config: Optional[BaseAgentConfig] = None) -> InteractivePlannerSession:
+async def quick_plan(research_goal: str, config: Optional[PlannerConfig] = None) -> InteractivePlannerSession:
     """Create a quick planning session for a research goal."""
     planner = await create_planner(config=config)
     return await planner.init_planner_session(research_goal)
