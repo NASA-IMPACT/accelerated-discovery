@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError, computed_field, create_m
 
 from akd.utils import get_model_fields, to_snake_case
 
-from .errors import SchemaValidationError
+from .errors import HumanInputRequired, SchemaValidationError
 from .streaming import StreamingMixin
 from .utils import AsyncRunMixin
 
@@ -447,6 +447,9 @@ class AbstractBase[
         try:
             output = await self._arun(params, **kwargs)
             output = self._validate_output(output)
+        except HumanInputRequired:
+            logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
+            raise
         except Exception as e:
             logger.error(f"Error running {self.__class__.__name__}: {e}")
             raise
@@ -576,6 +579,9 @@ class UnrestrictedAbstractBase[
         try:
             output = await self._arun(params, **kwargs)
             output = self._validate_output(output)
+        except HumanInputRequired:
+            logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
+            raise
         except Exception as e:
             logger.error(f"Error running {self.__class__.__name__}: {e}")
             raise
