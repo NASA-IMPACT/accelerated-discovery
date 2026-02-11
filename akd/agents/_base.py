@@ -79,7 +79,11 @@ class BaseAgentConfig(BaseConfig):
         le=2.0,
         description="Sampling temperature",
     )
-    system_prompt: str | None = Field(default=DEFAULT_SYSTEM_PROMPT)
+    system_prompt: str = Field(default=DEFAULT_SYSTEM_PROMPT)
+    hitl_instruction: str = Field(
+        default="""HUMAN INTERACTION\nWhen you need clarification, confirmation, or any missing information from the user, you CAN use your available tools to ask them.""".strip(),
+        description="Instruction to inject for Human-in-the-Loop (HITL) scenarios",
+    )
     stateless: bool = Field(
         default=True,
         description="Whether to maintain conversation history/state",
@@ -137,6 +141,31 @@ class BaseAgentConfig(BaseConfig):
         default=None,
         description="Reflection prompt injected after tool results to force reasoning. If None, no reflection step.",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def inject_hitl_instruction(cls, data: Any) -> Any:
+        """Inject HITL instruction into system prompt if HumanTool is present.
+
+        Uses mode="before" so it sees raw tools before downstream field_validators
+        (e.g., OpenAIBaseAgentConfig) convert them to non-BaseTool formats.
+        """
+        if not isinstance(data, dict):
+            logger.warning(f"inject_hitl_instruction: expected dict, got {type(data).__name__}, skipping")
+            return data
+
+        hitl_instruction = data.get("hitl_instruction", cls.model_fields["hitl_instruction"].default)
+        system_prompt = data.get("system_prompt", cls.model_fields["system_prompt"].default)
+
+        if (
+            hitl_instruction
+            and system_prompt
+            and any(isinstance(t, HumanTool) for t in data.get("tools", []))
+            and hitl_instruction not in system_prompt
+        ):
+            data["system_prompt"] = f"{system_prompt}\n\n{hitl_instruction}"
+
+        return data
 
     @model_validator(mode="after")
     def validate_max_tokens_against_model(self):
