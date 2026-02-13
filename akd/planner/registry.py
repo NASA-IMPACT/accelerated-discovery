@@ -4,11 +4,13 @@ Agent Registry for the AKD Planner module.
 This module provides agent registration and discovery capabilities for the AKD framework.
 """
 
+from __future__ import annotations
+
 import importlib
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any, Optional, Type
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -28,7 +30,7 @@ class FieldDefinition(BaseModel):
     description: str = Field(..., description="Field description")
     required: bool = Field(default=True, description="Whether field is required")
     default: str | int | float | bool | list[Any] | None = Field(default=None, description="Default value if any")
-    items_type: Optional[str] = Field(default=None, description="Array item type")
+    items_type: str | None = Field(default=None, description="Array item type")
 
 
 class AgentSchemaDefinition(BaseModel):
@@ -92,13 +94,13 @@ class AgentRegistry:
         "code_search": ("akd.agents.search.code_search", "CodeSearchAgent"),
     }
 
-    def __new__(cls, config: Optional[AgentRegistryConfig] = None):
+    def __new__(cls, config: AgentRegistryConfig | None = None):
         """Create or return the singleton instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, config: Optional[AgentRegistryConfig] = None):
+    def __init__(self, config: AgentRegistryConfig | None = None):
         """Initialize the agent registry (only once due to singleton pattern)."""
         if not self._initialized:
             self.config = config or AgentRegistryConfig()
@@ -251,7 +253,7 @@ class AgentRegistry:
         self.registry_data = AgentRegistryData(agents=discovered)
         logger.info(f"Auto-discovered {len(discovered)} agents")
 
-    def _extract_schema(self, schema_class: Optional[Type[IOSchema]]) -> AgentSchemaDefinition:
+    def _extract_schema(self, schema_class: type[IOSchema] | None) -> AgentSchemaDefinition:
         """Extract schema from an agent IOSchema class (InputSchema/OutputSchema)."""
         if not schema_class:
             return AgentSchemaDefinition()
@@ -309,7 +311,7 @@ class AgentRegistry:
         except Exception as e:
             logger.error(f"Failed to save registry: {e}")
 
-    def get_agent(self, agent_id: str) -> Optional[AgentEntry]:
+    def get_agent(self, agent_id: str) -> AgentEntry | None:
         """Get a specific agent by ID."""
         return self.registry_data.agents.get(agent_id)
 
@@ -452,6 +454,6 @@ class AgentRegistry:
         cls._initialized = False
 
 
-def get_agent_registry(config: Optional[AgentRegistryConfig] = None) -> AgentRegistry:
+def get_agent_registry(config: AgentRegistryConfig | None = None) -> AgentRegistry:
     """Get the singleton agent registry instance."""
     return AgentRegistry(config)

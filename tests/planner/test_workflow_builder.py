@@ -129,7 +129,7 @@ class TestWorkflowGeneration:
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
 
-        node_types = [node.type for node in workflow.nodes]
+        node_types = [node.type_ for node in workflow.nodes]
         node_ids = [node.id for node in workflow.nodes]
 
         assert "deep_search" in node_types
@@ -147,7 +147,7 @@ class TestWorkflowGeneration:
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
 
         # gap_analysis should have io_map
-        gap_node = next((n for n in workflow.nodes if n.type == "gap_analysis"), None)
+        gap_node = next((n for n in workflow.nodes if n.type_ == "gap_analysis"), None)
 
         assert gap_node is not None
         assert gap_node.id == "gap_analysis_1"
@@ -202,8 +202,8 @@ class TestWorkflowGeneration:
         assert len(workflow.nodes) == 2
         assert workflow.nodes[0].id == "deep_search_1"
         assert workflow.nodes[1].id == "deep_search_2"
-        assert workflow.nodes[0].type == "deep_search"
-        assert workflow.nodes[1].type == "deep_search"
+        assert workflow.nodes[0].type_ == "deep_search"
+        assert workflow.nodes[1].type_ == "deep_search"
 
         # Edges should use unique IDs
         assert workflow.edges[0].to_node == "deep_search_1"
@@ -302,7 +302,7 @@ class TestWorkflowInputHandling:
         assert len(workflow.nodes) == 2
 
         # deep_search node should have input
-        deep_node = next((n for n in workflow.nodes if n.type == "deep_search"), None)
+        deep_node = next((n for n in workflow.nodes if n.type_ == "deep_search"), None)
         assert deep_node is not None
         assert deep_node.id == "deep_search_1"
         assert len(deep_node.input.fields) > 0
@@ -318,7 +318,7 @@ class TestWorkflowInputHandling:
 
         workflow = workflow_builder.build(simple_workflow_plan, filled_inputs)
 
-        deep_node = next((n for n in workflow.nodes if n.type == "deep_search"), None)
+        deep_node = next((n for n in workflow.nodes if n.type_ == "deep_search"), None)
         assert deep_node is not None
 
         # Check that input fields contain the values
@@ -368,7 +368,7 @@ class TestWorkflowValidation:
         workflow = workflow_builder.build(plan, filled_inputs)
 
         assert len(workflow.nodes) == 1
-        assert workflow.nodes[0].type == "deep_search"
+        assert workflow.nodes[0].type_ == "deep_search"
         assert workflow.nodes[0].id == "deep_search_1"
 
 
@@ -506,7 +506,7 @@ class TestJSONPathValidation:
         assert len(workflow.nodes) == 2
 
         # Check that io_map was built with validated JSONPath using node IDs
-        gap_node = next(node for node in workflow.nodes if node.type == "gap_analysis")
+        gap_node = next(node for node in workflow.nodes if node.type_ == "gap_analysis")
         assert gap_node.id == "gap_analysis_1"
         assert gap_node.io_map is not None
         # JSONPath should reference the node ID, not the type

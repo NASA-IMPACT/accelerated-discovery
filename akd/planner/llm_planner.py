@@ -54,9 +54,9 @@ class PlannerQuestion(OutputSchema):
 
     question: str = Field(..., description="The question to ask the user")
     question_type: PlannerQuestionType = Field(..., description="Type of question")
-    options: Optional[list[str]] = Field(default=None, description="Options for multiple choice questions")
+    options: list[str] | None = Field(default=None, description="Options for multiple choice questions")
     context: str = Field(..., description="Context explaining why this question is important")
-    suggested_answer: Optional[str] = Field(default=None, description="Suggested answer if applicable")
+    suggested_answer: str | None = Field(default=None, description="Suggested answer if applicable")
 
     @field_validator("question_type", mode="before")
     @classmethod
@@ -76,7 +76,7 @@ class PlannerResponse(OutputSchema):
     message: str = Field(..., description="Response message to the user")
     phase: ConversationPhase = Field(..., description="Current conversation phase")
     question: PlannerQuestion | None = Field(default=None, description="Follow-up question if needed")
-    workflow_plan: Optional[WorkflowPlan] = Field(default=None, description="Generated workflow plan")
+    workflow_plan: WorkflowPlan | None = Field(default=None, description="Generated workflow plan")
     ready_to_generate: bool = Field(default=False, description="Whether ready to generate final workflow")
 
     @field_validator("phase", mode="before")
@@ -158,9 +158,9 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
     def __init__(
         self,
         config: PlannerConfig | None = None,
-        registry: Optional[AgentRegistry] = None,
-        mapping_registry: Optional[FieldMappingRegistry] = None,
-        mapping_generator: Optional[FieldMappingGenerator] = None,
+        registry: AgentRegistry | None = None,
+        mapping_registry: FieldMappingRegistry | None = None,
+        mapping_generator: FieldMappingGenerator | None = None,
         debug: bool = False,
     ):
         """
@@ -306,8 +306,8 @@ class InteractivePlannerSession:
         self.initial_request = initial_request
         self.conversation_history = conversation_history or []
         self.current_phase = ConversationPhase.INITIAL_REQUIREMENTS
-        self.workflow_plan: Optional[WorkflowPlan] = None
-        self.final_workflow: Optional[WorkflowFormat] = None
+        self.workflow_plan: WorkflowPlan | None = None
+        self.final_workflow: WorkflowFormat | None = None
 
     async def start(self) -> PlannerResponse:
         """Start the planning conversation."""
@@ -399,7 +399,7 @@ class InteractivePlannerSession:
     async def _handle_unmapped_fields(
         self,
         unmapped: list[dict[str, Any]],
-        confidence_threshold: Optional[float] = None,
+        confidence_threshold: float | None = None,
     ) -> None:
         """
         Generate LLM mappings for unmapped fields and handle user approval.
@@ -513,7 +513,7 @@ class InteractivePlannerSession:
         agent: Any,
         agent_id: str,
         agent_suggestion: AgentSuggestion,
-        workflow_plan: Optional[WorkflowPlan] = None,
+        workflow_plan: WorkflowPlan | None = None,
     ) -> dict[str, Any]:
         """
         Use Instructor LLM to extract structured input values from full conversation context.
@@ -722,14 +722,14 @@ These fields should be OMITTED from your output entirely."""
 
 # Convenience functions
 async def create_planner(
-    config: Optional[PlannerConfig] = None,
-    registry: Optional[AgentRegistry] = None,
+    config: PlannerConfig | None = None,
+    registry: AgentRegistry | None = None,
 ) -> LLMWorkflowPlanner:
     """Create a new workflow planner instance."""
     return LLMWorkflowPlanner(config=config, registry=registry)
 
 
-async def quick_plan(research_goal: str, config: Optional[PlannerConfig] = None) -> InteractivePlannerSession:
+async def quick_plan(research_goal: str, config: PlannerConfig | None = None) -> InteractivePlannerSession:
     """Create a quick planning session for a research goal."""
     planner = await create_planner(config=config)
     return await planner.init_planner_session(research_goal)

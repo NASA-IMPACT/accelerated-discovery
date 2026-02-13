@@ -259,7 +259,7 @@ class WorkflowBuilder:
             # Create node with unique id and type
             node = WorkflowNode(
                 id=node_id,
-                type=agent_id,
+                type_=agent_id,
                 input=WorkflowNodeIO(fields=[{k: v} for k, v in inputs.items()]),
                 output=WorkflowNodeIO(fields=[]),  # Runtime fills this
                 io_map=io_map if io_map else None,
@@ -307,7 +307,7 @@ class WorkflowBuilder:
             {
                 "source_agent_id": str,
                 "target_agent_id": str,
-                "unmapped_fields": List[str]  # Target field names
+                "unmapped_fields": list[str]  # Target field names
             }
         ]
         """

@@ -166,7 +166,7 @@ async def interactive_planning_session():
 
                     for node in nodes_with_io_map:
                         for field, jsonpath in node.io_map.items():
-                            table.add_row(node.type, field, jsonpath)
+                            table.add_row(node.type_, field, jsonpath)
 
                     console.print(table)
 
@@ -308,7 +308,7 @@ async def automated_planning_session(
 
                     for node in nodes_with_io_map:
                         for field, jsonpath in node.io_map.items():
-                            table.add_row(node.type, field, jsonpath)
+                            table.add_row(node.type_, field, jsonpath)
 
                     console.print(table)
 
@@ -367,7 +367,7 @@ async def demo_workflow_display():
         # Show nodes with io_map
         console.print("\n[bold]Runtime Data Flow (io_map):[/bold]")
         for node in workflow.nodes:
-            console.print(f"\nNode: [cyan]{node.type}[/cyan]")
+            console.print(f"\nNode: [cyan]{node.type_}[/cyan]")
             if node.io_map:
                 for field, jsonpath in node.io_map.items():
                     console.print(f"  {field} ← [yellow]{jsonpath}[/yellow]")

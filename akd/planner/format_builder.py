@@ -8,14 +8,14 @@ that can be executed by the AKD framework.
 from __future__ import annotations
 
 import json
-from typing import Any, Union
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 # Type for workflow field values (supports common JSON-serializable types)
 # Note: list and dict items are not recursively typed to avoid complexity
-FieldValue = Union[str, int, float, bool, list[Any], dict[str, Any], None]
+FieldValue = str | int | float | bool | list[Any] | dict[str, Any] | None
 
 # Workflow format metadata
 WORKFLOW_TYPE = "AKDResearchWorkflow"
@@ -61,13 +61,18 @@ class WorkflowNode(BaseModel):
     """Individual node in a workflow definition."""
 
     id: str = Field(..., description="Unique node identifier (e.g., code_search_0, gap_analysis_0)")
-    type: str = Field(..., description="Node type corresponding to agent type for registry lookup")
+    type_: str = Field(..., alias="type", description="Node type corresponding to agent type for registry lookup")
     input: WorkflowNodeIO = Field(default_factory=WorkflowNodeIO)
     output: WorkflowNodeIO | None = Field(default=None)
     io_map: dict[str, str] | None = Field(
         default=None,
         description="JSONPath mappings for cross-node data access (target_field: jsonpath_expr using node id)",
     )
+
+    model_config = {
+        "populate_by_name": True,
+        "serialize_by_alias": True,
+    }
 
 
 class WorkflowEdge(BaseModel):
@@ -78,6 +83,7 @@ class WorkflowEdge(BaseModel):
 
     model_config = {
         "populate_by_name": True,
+        "serialize_by_alias": True,
     }
 
 
@@ -287,7 +293,7 @@ class WorkflowFormat(BaseModel):
             "nodes_with_io_map": len(nodes_with_io_map),
             "total_io_map_entries": io_map_count,
             "node_ids": [node.id for node in self.nodes],
-            "node_types": [node.type for node in self.nodes],
+            "node_types": [node.type_ for node in self.nodes],
             "version": self.version,
             "workflow_type": self.workflow_type,
         }

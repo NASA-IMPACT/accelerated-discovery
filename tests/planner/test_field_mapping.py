@@ -206,7 +206,7 @@ class TestWorkflowBuilderMapping:
         assert len(workflow.nodes) == 2
 
         # Check io_map in gap_analysis node
-        gap_node = next((n for n in workflow.nodes if n.type == "gap_analysis"), None)
+        gap_node = next((n for n in workflow.nodes if n.type_ == "gap_analysis"), None)
 
         assert gap_node is not None
         assert gap_node.io_map is not None
@@ -277,7 +277,7 @@ class TestWorkflowBuilderMapping:
         }
 
         workflow = workflow_builder.build(plan, filled_inputs)
-        gap_node = next((n for n in workflow.nodes if n.type == "gap_analysis"), None)
+        gap_node = next((n for n in workflow.nodes if n.type_ == "gap_analysis"), None)
 
         assert gap_node is not None
         assert gap_node.io_map is not None
@@ -365,7 +365,7 @@ class TestSpecificAgentWorkflows:
         assert len(workflow.nodes) == 2
 
         # Check io_map in code_search node
-        code_node = next((n for n in workflow.nodes if n.type == "code_search"), None)
+        code_node = next((n for n in workflow.nodes if n.type_ == "code_search"), None)
 
         assert code_node is not None
         assert code_node.io_map is not None
@@ -406,7 +406,7 @@ class TestSpecificAgentWorkflows:
         assert len(workflow.nodes) == 2
 
         # Check io_map in gap_analysis node
-        gap_node = next((n for n in workflow.nodes if n.type == "gap_analysis"), None)
+        gap_node = next((n for n in workflow.nodes if n.type_ == "gap_analysis"), None)
 
         assert gap_node is not None
         assert gap_node.io_map is not None
