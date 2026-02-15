@@ -812,6 +812,7 @@ class LiteLLMInstructorBaseAgent[
 
         response = await acompletion(**completion_kwargs)
         async for chunk in response:
+            run_context.usage += self._extract_usage(chunk)
             delta = chunk.choices[0].delta
 
             # Thinking tokens (Claude extended thinking, o1 reasoning)
@@ -958,6 +959,7 @@ class LiteLLMInstructorBaseAgent[
             buffered_partials: list[StreamEvent] = []  # Buffer partials until we know it's final
 
             async for chunk in response:
+                run_context.usage += self._extract_usage(chunk)
                 delta = chunk.choices[0].delta
 
                 # Stream reasoning/thinking tokens (o1, o3, Claude extended thinking)
