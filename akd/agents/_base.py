@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 import instructor
 import openai
 from litellm import acompletion
-from litellm.utils import get_model_info, supports_reasoning, trim_messages
+from litellm.utils import get_model_info, supports_reasoning
 from loguru import logger
 from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
@@ -57,6 +57,7 @@ from akd._base.streaming import (
     ToolResultEvent,
     ToolResultEventData,
 )
+from akd._base.structures import RunUsage
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
@@ -279,7 +280,27 @@ class BaseAgent[
         Returns:
             Output matching the agent's output_schema.
         """
+        # only reference, no copy
+        run_context = run_context or RunContext()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
         return await super().arun(params, run_context=run_context, **kwargs)
+
+    async def astream(
+        self,
+        params: Any,
+        run_context: RunContext | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream agent execution with run_context initialization.
+
+        Centralizes run_context creation and run_id assignment,
+        then delegates to parent astream().
+        """
+        # only reference, no copy
+        run_context = run_context or RunContext()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+        async for event in super().astream(params, run_context=run_context, **kwargs):
+            yield event
 
     async def achat(
         self,
@@ -573,6 +594,7 @@ class LiteLLMInstructorBaseAgent[
         self,
         messages: list[dict[str, str]],
         response_model: type[OutputSchema] | None = None,
+        run_context: RunContext | None = None,
     ) -> OutSchema:
         """
         Obtains a response from the language model asynchronously with automatic message trimming.
@@ -588,15 +610,6 @@ class LiteLLMInstructorBaseAgent[
         Returns:
             Type[BaseModel]: The response from the language model.
         """
-        # Trim messages if enabled to prevent token limit errors
-        if self.enable_trimming:
-            messages = trim_messages(
-                messages,
-                model=self.model_name,
-                max_tokens=self.max_tokens,
-                trim_ratio=self.trim_ratio,
-            )
-
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
 
@@ -618,16 +631,40 @@ class LiteLLMInstructorBaseAgent[
         if self.reasoning_summary:
             completion_kwargs["reasoning_summary"] = self.reasoning_summary
 
-        response = await self.client.chat.completions.create(**completion_kwargs)
+        response, completion = await self.client.chat.completions.create_with_completion(
+            **completion_kwargs,
+        )
+
+        # Capture token usage from the raw completion
+        if run_context is not None:
+            run_context.usage += self._extract_usage(completion)
 
         response_data = response.model_dump()
         response = response_model(**response_data)
         return cast(OutSchema, response)
 
+    @staticmethod
+    def _extract_usage(completion: Any) -> RunUsage:
+        """Extract token usage from a raw LLM completion.
+
+        Args:
+            completion: Raw completion object from create_with_completion.
+
+        Returns:
+            RunUsage with extracted token counts (zeros if unavailable).
+        """
+        run_usage = RunUsage()
+        usage = getattr(completion, "usage", None)
+        if usage:
+            run_usage.input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            run_usage.output_tokens = getattr(usage, "completion_tokens", 0) or 0
+            run_usage.requests = 1
+        return run_usage
+
     async def _arun(
         self,
         params: InSchema,
-        run_context: RunContext | None = None,
+        run_context: RunContext,
         **kwargs,
     ) -> OutSchema:
         """Run agent with optional tool calling support.
@@ -669,8 +706,6 @@ class LiteLLMInstructorBaseAgent[
                 # === TOOL CALLING MODE ===
                 # Use _run_tool_loop and consume events to get final output
                 # Note: Tool loop mutates `messages` in place during iterations
-                run_context = (run_context or RunContext()).model_copy()
-                run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
                 async for event in self._run_tool_loop(
                     messages,
                     run_context,
@@ -687,6 +722,7 @@ class LiteLLMInstructorBaseAgent[
                 output = await self.get_response_async(
                     messages=messages,
                     response_model=self.output_schema,
+                    run_context=run_context,
                 )
 
             # Add final assistant message
@@ -1187,7 +1223,7 @@ class LiteLLMInstructorBaseAgent[
     async def _astream(
         self,
         params: InSchema,
-        run_context: RunContext | None = None,
+        run_context: RunContext,
         token_batch_size: int = 10,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
@@ -1224,10 +1260,6 @@ class LiteLLMInstructorBaseAgent[
                         print(f"Error: {event.error}")
         """
         class_name = self.__class__.__name__
-
-        # Auto-generate run_id for event correlation
-        run_context = (run_context or RunContext()).model_copy()
-        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         yield StartingEvent(
             source=class_name,
