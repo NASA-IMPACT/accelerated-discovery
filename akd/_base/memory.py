@@ -108,6 +108,9 @@ class Memory[T](BaseModel):
         try:
             yield self.messages
         finally:
+            if run_context is not None:
+                # prevent references to prevent self.clear() affecting run_context
+                run_context.messages = list(self.messages)
             if stateless:
                 self.clear()
 
