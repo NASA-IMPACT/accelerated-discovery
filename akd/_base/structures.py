@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from .tool_calling import ToolResult
 
@@ -37,6 +37,51 @@ class HumanResponse(ToolResult):
     tool_name: str = Field(default="ask_human", description="Tool name (defaults to ask_human)")
 
 
+class RunUsage(BaseModel):
+    """Token usage statistics for an agent run.
+
+    Accumulates across tool loop iterations via ``incr()``.
+    Inspired by pydantic-ai's RunUsage pattern.
+
+    Example:
+        usage = RunUsage()
+        usage.incr(RunUsage(input_tokens=100, output_tokens=50, requests=1))
+        usage.incr(RunUsage(input_tokens=200, output_tokens=80, requests=1))
+        print(usage)  # RunUsage(input_tokens=300, output_tokens=130, requests=2, total_tokens=430)
+    """
+
+    input_tokens: int = Field(default=0, description="Total input/prompt tokens")
+    output_tokens: int = Field(default=0, description="Total output/completion tokens")
+    requests: int = Field(default=0, description="Number of LLM API requests")
+    details: dict[str, int] = Field(
+        default_factory=dict,
+        description="Provider-specific extra usage details",
+    )
+
+    @computed_field
+    @property
+    def total_tokens(self) -> int:
+        """Sum of input_tokens + output_tokens."""
+        return self.input_tokens + self.output_tokens
+
+    def incr(self, other: RunUsage) -> None:
+        """Increment usage in place.
+
+        Args:
+            other: The usage to add.
+        """
+        self.input_tokens += other.input_tokens
+        self.output_tokens += other.output_tokens
+        self.requests += other.requests
+        for k, v in other.details.items():
+            self.details[k] = self.details.get(k, 0) + v
+
+    def __iadd__(self, other: RunUsage) -> RunUsage:
+        """Support ``usage += other_usage`` syntax."""
+        self.incr(other)
+        return self
+
+
 class RunContext(BaseModel):
     """Execution context for streaming and tool calling.
 
@@ -66,6 +111,10 @@ class RunContext(BaseModel):
         default=None,
         description="Unique identifier for this execution run",
     )
+    usage: RunUsage = Field(
+        default_factory=RunUsage,
+        description="Accumulated token usage for this run",
+    )
 
 
-__all__ = ["HumanResponse", "RunContext"]
+__all__ = ["HumanResponse", "RunContext", "RunUsage"]
