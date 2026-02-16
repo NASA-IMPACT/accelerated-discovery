@@ -5,7 +5,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import AsyncRunMixin
-from akd.agents import InstructorBaseAgent
+from akd.agents import LiteLLMInstructorBaseAgent
 from akd.structures import ExtractionSchema, SingleEstimation
 
 from .intents import Intent
@@ -58,6 +58,6 @@ class EstimationExtractionOutputSchema(BaseModel):
     )
 
 
-class EstimationExtractionAgent(InstructorBaseAgent):
+class EstimationExtractionAgent(LiteLLMInstructorBaseAgent):
     input_schema = ExtractionInputSchema
     output_schema = EstimationExtractionOutputSchema

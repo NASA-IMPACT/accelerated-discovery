@@ -4,7 +4,7 @@ import pytest
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents import InstructorBaseAgent
+from akd.agents import Agent
 from akd.nodes.states import GlobalState, NodeState
 from akd.nodes.templates import SingleAgentNodeTemplate
 
@@ -23,7 +23,7 @@ class TestAgentOutputSchema(OutputSchema):
 
 
 # Test agent
-class TestAgent(InstructorBaseAgent[TestAgentInputSchema, TestAgentOutputSchema]):
+class TestAgent(Agent[TestAgentInputSchema, TestAgentOutputSchema]):
     """Test agent for testing."""
 
     input_schema = TestAgentInputSchema
