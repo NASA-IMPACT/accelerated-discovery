@@ -285,7 +285,7 @@ class BaseAgent[
         run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
         output = await super().arun(params, run_context=run_context, **kwargs)
         # attach run_context (with accumulated usage) to final output
-        object.__setattr__(output, "run_context", run_context)
+        output._run_context = run_context
         return output
 
     async def astream(
@@ -343,7 +343,7 @@ class BaseAgent[
         run_context = run_context or RunContext()
         run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
         result = await self._arun(text_input, run_context=run_context, **kwargs)
-        object.__setattr__(result, "run_context", run_context)
+        result._run_context = run_context
         if isinstance(result, TextOutput):
             return result
         return TextOutput(content=result._response or str(result))
