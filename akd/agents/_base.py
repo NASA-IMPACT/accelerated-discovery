@@ -383,6 +383,14 @@ class InstructorBaseAgent[
         memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
+        import warnings
+
+        if not isinstance(self, LiteLLMInstructorBaseAgent):
+            warnings.warn(
+                "InstructorBaseAgent is deprecated. Use LiteLLMInstructorBaseAgent instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         super().__init__(config=config, memory=memory, debug=debug)
 
         # Create the OpenAI client
@@ -1339,3 +1347,6 @@ class LiteLLMInstructorBaseAgent[
                 run_context=run_context,
             )
             raise
+
+
+Agent = LiteLLMInstructorBaseAgent

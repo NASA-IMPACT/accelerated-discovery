@@ -1,13 +1,8 @@
-from ._base import (
-    BaseAgent,
-    BaseAgentConfig,
-    InstructorBaseAgent,
-    LiteLLMInstructorBaseAgent,
-)
+from ._base import Agent, BaseAgent, BaseAgentConfig, LiteLLMInstructorBaseAgent
 
 __all__ = [
+    "Agent",
     "BaseAgent",
     "BaseAgentConfig",
-    "InstructorBaseAgent",
     "LiteLLMInstructorBaseAgent",
 ]
