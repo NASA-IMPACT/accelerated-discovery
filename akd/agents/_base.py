@@ -201,6 +201,20 @@ class BaseAgentConfig(BaseConfig):
 
         return self
 
+    @model_validator(mode="after")
+    def openai_responses_model_name(self):
+        if not self.model_name or not (self.reasoning_effort or self.reasoning_summary):
+            return self
+
+        try:
+            if supports_reasoning(model=self.model_name) and self.model_name.startswith("gpt-5"):
+                self.model_name = f"openai/responses/{self.model_name}"
+                logger.info(f"Converting to {self.model_name}")
+        except Exception:
+            pass
+
+        return self
+
 
 class BaseAgent[
     InSchema: InputSchema,
