@@ -96,6 +96,10 @@ class Memory[T](BaseModel):
         if run_context and run_context.messages:
             self.sync(run_context.messages)
 
+        # Share live reference so run_context.messages updates in real-time
+        if run_context is not None:
+            run_context.messages = self.messages
+
         if enable_trimming and model_name and max_tokens:
             trimmed = trim_messages(
                 self.messages,
@@ -109,7 +113,7 @@ class Memory[T](BaseModel):
             yield self.messages
         finally:
             if run_context is not None:
-                # prevent references to prevent self.clear() affecting run_context
+                # Snapshot before stateless clear to preserve messages
                 run_context.messages = list(self.messages)
             if stateless:
                 self.clear()
