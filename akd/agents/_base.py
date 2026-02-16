@@ -675,6 +675,22 @@ class LiteLLMInstructorBaseAgent[
             run_usage.input_tokens = getattr(usage, "prompt_tokens", 0) or 0
             run_usage.output_tokens = getattr(usage, "completion_tokens", 0) or 0
             run_usage.requests = 1
+
+            # Capture provider-specific details (reasoning tokens, cached tokens, etc.)
+            for details_attr in ("completion_tokens_details", "prompt_tokens_details"):
+                details_obj = getattr(usage, details_attr, None)
+                if details_obj is None:
+                    continue
+                # details_obj can be a dict or a Pydantic model
+                items = (
+                    details_obj.items()
+                    if isinstance(details_obj, dict)
+                    else ((k, v) for k, v in vars(details_obj).items() if isinstance(v, int) and v > 0)
+                )
+                for k, v in items:
+                    if isinstance(v, int) and v > 0:
+                        run_usage.details[f"{details_attr}.{k}"] = v
+
         return run_usage
 
     async def _arun(
