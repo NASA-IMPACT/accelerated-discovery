@@ -809,10 +809,13 @@ class LiteLLMInstructorBaseAgent[
                     "schema": self._build_response_format_schema(response_model),
                 },
             },
+            "stream_options": {"include_usage": True},
         }
 
         if self.reasoning_effort:
             completion_kwargs["reasoning_effort"] = self.reasoning_effort
+        if self.reasoning_summary:
+            completion_kwargs["reasoning"] = {"summary": self.reasoning_summary}
 
         class_name = self.__class__.__name__
 
@@ -837,11 +840,17 @@ class LiteLLMInstructorBaseAgent[
 
         accumulated = ""
         token_buffer = ""
+        thinking_buffer = ""
         last_partial_dict = None
 
         response = await acompletion(**completion_kwargs)
         async for chunk in response:
             run_context.usage += self._extract_usage(chunk)
+
+            # Check if chunk.choices is not empty
+            if not chunk.choices:
+                continue
+
             delta = chunk.choices[0].delta
 
             # Thinking tokens (Claude extended thinking, o1 reasoning)
@@ -850,13 +859,17 @@ class LiteLLMInstructorBaseAgent[
                 "thinking",
                 None,
             )
+            # Note: Not recommended to track thinking tokens in history
             if reasoning:
-                yield ThinkingEvent(
-                    source=class_name,
-                    message="Reasoning...",
-                    data=ThinkingEventData(thinking_content=reasoning),
-                    run_context=run_context,
-                )
+                thinking_buffer += reasoning
+                if len(thinking_buffer) >= token_batch_size:
+                    yield ThinkingEvent(
+                        source=class_name,
+                        message="Reasoning...",
+                        data=ThinkingEventData(thinking_content=thinking_buffer),
+                        run_context=run_context,
+                    )
+                    thinking_buffer = ""
 
             # Content tokens - batch, then accumulate and validate as partial
             if delta.content:
@@ -886,6 +899,15 @@ class LiteLLMInstructorBaseAgent[
                         )
                     except Exception:
                         pass  # Skip invalid partials
+
+        # Emit remaining thinking tokens
+        if thinking_buffer:
+            yield ThinkingEvent(
+                source=class_name,
+                message="Reasoning...",
+                data=ThinkingEventData(thinking_content=thinking_buffer),
+                run_context=run_context,
+            )
 
         # Emit remaining tokens
         if token_buffer:
@@ -974,9 +996,12 @@ class LiteLLMInstructorBaseAgent[
                 "api_key": self.api_key,
                 "drop_params": True,
                 "stream": True,
+                "stream_options": {"include_usage": True},
             }
             if self.reasoning_effort:
                 completion_kwargs["reasoning_effort"] = self.reasoning_effort
+            if self.reasoning_summary:
+                completion_kwargs["reasoning"] = {"summary": self.reasoning_summary}
 
             response = await acompletion(**completion_kwargs)
 
@@ -986,6 +1011,7 @@ class LiteLLMInstructorBaseAgent[
             last_partial_dict: dict[str, Any] | None = None  # For deduplicating PARTIAL events
             accumulated_tool_calls: dict[int, dict[str, Any]] = {}  # index -> {id, name, arguments}
             buffered_partials: list[StreamEvent] = []  # Buffer partials until we know it's final
+            thinking_buffer = ""
 
             async for chunk in response:
                 run_context.usage += self._extract_usage(chunk)
@@ -998,12 +1024,18 @@ class LiteLLMInstructorBaseAgent[
                     None,
                 )
                 if reasoning:
-                    yield ThinkingEvent(
-                        source=class_name,
-                        message=reasoning,
-                        data=ThinkingEventData(streaming=True, thinking_content=reasoning),
-                        run_context=run_context,
-                    )
+                    thinking_buffer += reasoning
+                    if len(thinking_buffer) >= token_batch_size:
+                        yield ThinkingEvent(
+                            source=class_name,
+                            message="Reasoning...",
+                            data=ThinkingEventData(
+                                thinking_content=thinking_buffer,
+                                streaming=True,
+                            ),
+                            run_context=run_context,
+                        )
+                        thinking_buffer = ""
 
                 # Batch and stream content tokens
                 if delta.content:
@@ -1055,6 +1087,18 @@ class LiteLLMInstructorBaseAgent[
                                 accumulated_tool_calls[idx]["name"] = tc.function.name
                             if tc.function and tc.function.arguments:
                                 accumulated_tool_calls[idx]["arguments"] += tc.function.arguments
+
+            # Emit remaining thinking tokens in buffer
+            if thinking_buffer:
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Reasoning...",
+                    data=ThinkingEventData(
+                        thinking_content=thinking_buffer,
+                        streaming=True,
+                    ),
+                    run_context=run_context,
+                )
 
             # Emit remaining tokens in buffer
             if token_buffer:
