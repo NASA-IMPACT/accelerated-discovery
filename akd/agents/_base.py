@@ -201,20 +201,6 @@ class BaseAgentConfig(BaseConfig):
 
         return self
 
-    @model_validator(mode="after")
-    def openai_responses_model_name(self):
-        if not self.model_name or not (self.reasoning_effort or self.reasoning_summary):
-            return self
-
-        try:
-            if supports_reasoning(model=self.model_name) and self.model_name.startswith("gpt-5"):
-                self.model_name = f"openai/responses/{self.model_name}"
-                logger.info(f"Converting to {self.model_name}")
-        except Exception:
-            pass
-
-        return self
-
 
 class BaseAgent[
     InSchema: InputSchema,
@@ -595,6 +581,23 @@ class LiteLLMInstructorBaseAgent[
 
         # Replace instructor client with LiteLLM version
         self.client = instructor.from_litellm(acompletion)
+
+    def _post_init(self):
+        super()._post_init()
+
+        # reformat to response format for openai gpt-5* models
+        # only when reasoning is enabled
+        # only applies to litellm so
+        if (
+            self.config.model_name.startswith("gpt-5")
+            and self.config.reasoning_effort
+            and self.config.reasoning_summary
+            and supports_reasoning(model=self.config.model_name)
+        ):
+            logger.info(
+                f"Reformatting model name to {self.config.model_name} to openai/responses/{self.config.model_name}",
+            )
+            self.config.model_name = f"openai/responses/{self.config.model_name}"
 
     def __deepcopy__(self, memo: dict[int, Any]) -> LiteLLMInstructorBaseAgent:
         """Custom deepcopy that recreates the LiteLLM client instead of copying it.
