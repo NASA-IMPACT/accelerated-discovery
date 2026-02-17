@@ -7,10 +7,12 @@ Provides three-tier mapping strategy:
 3. LLM-generated mappings (intelligent fallback)
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -46,8 +48,8 @@ class FieldMappingRegistry:
 
     def __init__(
         self,
-        explicit_path: Optional[str] = None,
-        llm_path: Optional[str] = None,
+        explicit_path: str | None = None,
+        llm_path: str | None = None,
     ):
         """
         Initialize field mapping registry.
@@ -120,7 +122,7 @@ class FieldMappingRegistry:
         self,
         source_agent_id: str,
         target_agent_id: str,
-    ) -> Optional[dict[str, str]]:
+    ) -> dict[str, str] | None:
         """
         Get field mapping for source->target agent pair.
 
@@ -300,7 +302,7 @@ class FieldMappingRegistry:
         self,
         source_agent_id: str,
         target_agent_id: str,
-    ) -> Optional[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get detailed information about a mapping including metadata.
 

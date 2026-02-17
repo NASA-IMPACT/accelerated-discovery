@@ -8,14 +8,14 @@ that can be executed by the AKD framework.
 from __future__ import annotations
 
 import json
-from typing import Any, Union
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
 # Type for workflow field values (supports common JSON-serializable types)
 # Note: list and dict items are not recursively typed to avoid complexity
-FieldValue = Union[str, int, float, bool, list[Any], dict[str, Any], None]
+FieldValue = str | int | float | bool | list[Any] | dict[str, Any] | None
 
 # Workflow format metadata
 WORKFLOW_TYPE = "AKDResearchWorkflow"
@@ -60,13 +60,19 @@ class WorkflowNodeIO(BaseModel):
 class WorkflowNode(BaseModel):
     """Individual node in a workflow definition."""
 
-    type: str = Field(..., description="Node type corresponding to agent type")
+    id: str = Field(..., description="Unique node identifier (e.g., code_search_0, gap_analysis_0)")
+    type_: str = Field(..., alias="type", description="Node type corresponding to agent type for registry lookup")
     input: WorkflowNodeIO = Field(default_factory=WorkflowNodeIO)
     output: WorkflowNodeIO | None = Field(default=None)
     io_map: dict[str, str] | None = Field(
         default=None,
-        description="JSONPath mappings for cross-node data access (target_field: jsonpath_expr)",
+        description="JSONPath mappings for cross-node data access (target_field: jsonpath_expr using node id)",
     )
+
+    model_config = {
+        "populate_by_name": True,
+        "serialize_by_alias": True,
+    }
 
 
 class WorkflowEdge(BaseModel):
@@ -77,6 +83,7 @@ class WorkflowEdge(BaseModel):
 
     model_config = {
         "populate_by_name": True,
+        "serialize_by_alias": True,
     }
 
 
@@ -119,7 +126,7 @@ class WorkflowFormat(BaseModel):
 
         Checks that:
         1. JSONPath expressions are well-formed (start with $.)
-        2. Referenced nodes exist in the workflow
+        2. Referenced node IDs exist in the workflow
         3. No circular dependencies exist
 
         Args:
@@ -132,7 +139,7 @@ class WorkflowFormat(BaseModel):
             ValueError: If strict=True and validation errors found
         """
         issues = []
-        node_types = {node.type for node in self.nodes}
+        node_ids = {node.id for node in self.nodes}
 
         for node in self.nodes:
             if not node.io_map:
@@ -141,22 +148,22 @@ class WorkflowFormat(BaseModel):
             for target_field, jsonpath in node.io_map.items():
                 # Check JSONPath format
                 if not jsonpath.startswith("$."):
-                    issue = f"Node '{node.type}', field '{target_field}': Invalid JSONPath '{jsonpath}' (must start with '$.')"
+                    issue = f"Node '{node.id}', field '{target_field}': Invalid JSONPath '{jsonpath}' (must start with '$.')"
                     issues.append(issue)
                     continue
 
                 # Extract referenced node from JSONPath (format: $.node_id.outputs.field)
                 parts = jsonpath.split(".")
                 if len(parts) < 4:
-                    issue = f"Node '{node.type}', field '{target_field}': Invalid JSONPath format '{jsonpath}' (expected $.node_id.outputs.field)"
+                    issue = f"Node '{node.id}', field '{target_field}': Invalid JSONPath format '{jsonpath}' (expected $.node_id.outputs.field)"
                     issues.append(issue)
                     continue
 
                 referenced_node = parts[1]
 
                 # Check referenced node exists
-                if referenced_node not in node_types:
-                    issue = f"Node '{node.type}', field '{target_field}': Referenced node '{referenced_node}' not found in workflow"
+                if referenced_node not in node_ids:
+                    issue = f"Node '{node.id}', field '{target_field}': Referenced node '{referenced_node}' not found in workflow"
                     issues.append(issue)
 
         if strict and issues:
@@ -169,7 +176,7 @@ class WorkflowFormat(BaseModel):
         Validate workflow edges.
 
         Checks that:
-        1. All edges reference existing nodes (or START/END)
+        1. All edges reference existing node IDs (or START/END)
         2. Workflow has a valid flow from START to END
         3. No orphaned nodes exist
 
@@ -183,8 +190,8 @@ class WorkflowFormat(BaseModel):
             ValueError: If strict=True and validation errors found
         """
         issues = []
-        node_types = {node.type for node in self.nodes}
-        valid_nodes = node_types | {"START", "END"}
+        node_ids = {node.id for node in self.nodes}
+        valid_nodes = node_ids | {"START", "END"}
 
         # Check all edge references are valid
         for edge in self.edges:
@@ -210,7 +217,7 @@ class WorkflowFormat(BaseModel):
             if edge.to_node != "END":
                 nodes_in_edges.add(edge.to_node)
 
-        orphaned = node_types - nodes_in_edges
+        orphaned = node_ids - nodes_in_edges
         if orphaned:
             issues.append(f"Orphaned nodes (not connected to any edge): {orphaned}")
 
@@ -285,7 +292,8 @@ class WorkflowFormat(BaseModel):
             "total_edges": len(self.edges),
             "nodes_with_io_map": len(nodes_with_io_map),
             "total_io_map_entries": io_map_count,
-            "node_types": [node.type for node in self.nodes],
+            "node_ids": [node.id for node in self.nodes],
+            "node_types": [node.type_ for node in self.nodes],
             "version": self.version,
             "workflow_type": self.workflow_type,
         }

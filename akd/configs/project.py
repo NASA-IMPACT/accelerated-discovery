@@ -35,6 +35,7 @@ class ApiKeys(BaseModel):
 class ModelConfigSettings(BaseSettings):
     provider: ModelProvider = ModelProvider.OPENAI
     model_name: str = "gpt-4o-mini"
+    planner_model_name: str = "gpt-5.2"
     temperature: float = 0.0
     max_tokens: int = 120_000
     api_keys: ApiKeys = ApiKeys()

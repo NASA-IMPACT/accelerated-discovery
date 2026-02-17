@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "created_at": "2025-10-02T07:25:35.166590+00:00",
-  "updated_at": "2025-10-02T07:25:35.166645+00:00",
+  "created_at": "2026-02-10T16:11:27.465651+00:00",
+  "updated_at": "2026-02-10T16:11:27.465749+00:00",
   "agents": {
     "deep_search": {
       "agent_id": "deep_search",
@@ -12,34 +12,26 @@
       "input_schema": {
         "fields": [
           {
-            "name": "queries",
+            "name": "query",
             "type": "string",
-            "description": "List of additional queries to refine search",
-            "required": false,
+            "description": "Query to search for. Can be question or subject/topic of interest.",
+            "required": true,
             "default": null,
             "items_type": null
           },
           {
-            "name": "category",
+            "name": "search_mode",
             "type": "string",
-            "description": "Search category",
+            "description": "Search mode determining depth and breadth of search",
             "required": false,
-            "default": "science",
+            "default": "medium",
             "items_type": null
           },
           {
-            "name": "max_results",
-            "type": "integer",
-            "description": "Maximum number of results to return",
-            "required": false,
-            "default": 20,
-            "items_type": null
-          },
-          {
-            "name": "query",
+            "name": "additional_context",
             "type": "string",
-            "description": "Research query to search for",
-            "required": true,
+            "description": "Additional context for the search agent",
+            "required": false,
             "default": null,
             "items_type": null
           }
@@ -48,27 +40,11 @@
       "output_schema": {
         "fields": [
           {
-            "name": "results",
-            "type": "array",
-            "description": "List of search results",
-            "required": true,
-            "default": null,
-            "items_type": "string"
-          },
-          {
-            "name": "category",
+            "name": "answer",
             "type": "string",
-            "description": "Search category",
+            "description": "Concise shortform answer to the research query in few sentences.",
             "required": true,
             "default": null,
-            "items_type": null
-          },
-          {
-            "name": "iterations_performed",
-            "type": "integer",
-            "description": "Number of search iterations performed",
-            "required": false,
-            "default": 1,
             "items_type": null
           },
           {
@@ -76,8 +52,16 @@
             "type": "string",
             "description": "Synthesized research report from the literature search",
             "required": false,
-            "default": "",
+            "default": null,
             "items_type": null
+          },
+          {
+            "name": "results",
+            "type": "array",
+            "description": "List of search results",
+            "required": true,
+            "default": null,
+            "items_type": "string"
           },
           {
             "name": "extra",
@@ -143,9 +127,9 @@
           },
           {
             "name": "graph",
-            "type": "object",
+            "type": "string",
             "description": "Graph created from the ingested papers.",
-            "required": true,
+            "required": false,
             "default": null,
             "items_type": null
           }
@@ -168,34 +152,26 @@
       "input_schema": {
         "fields": [
           {
-            "name": "queries",
+            "name": "query",
             "type": "string",
-            "description": "List of additional queries to refine search",
-            "required": false,
+            "description": "Query to search for. Can be question or subject/topic of interest.",
+            "required": true,
             "default": null,
             "items_type": null
           },
           {
-            "name": "category",
+            "name": "search_mode",
             "type": "string",
-            "description": "Search category",
+            "description": "Search mode determining depth and breadth of search",
             "required": false,
-            "default": "science",
+            "default": "medium",
             "items_type": null
           },
           {
-            "name": "max_results",
-            "type": "integer",
-            "description": "Maximum number of results to return",
-            "required": false,
-            "default": 20,
-            "items_type": null
-          },
-          {
-            "name": "query",
+            "name": "additional_context",
             "type": "string",
-            "description": "Research query to search for",
-            "required": true,
+            "description": "Additional context for the search agent",
+            "required": false,
             "default": null,
             "items_type": null
           }
@@ -203,6 +179,22 @@
       },
       "output_schema": {
         "fields": [
+          {
+            "name": "answer",
+            "type": "string",
+            "description": "Concise shortform answer to the research query in few sentences.",
+            "required": true,
+            "default": null,
+            "items_type": null
+          },
+          {
+            "name": "report",
+            "type": "string",
+            "description": "Detailed report pertaining to the research query.",
+            "required": false,
+            "default": null,
+            "items_type": null
+          },
           {
             "name": "results",
             "type": "array",
@@ -212,19 +204,11 @@
             "items_type": "string"
           },
           {
-            "name": "category",
-            "type": "string",
-            "description": "Search category",
-            "required": true,
-            "default": null,
-            "items_type": null
-          },
-          {
-            "name": "iterations_performed",
-            "type": "integer",
-            "description": "Number of search iterations performed",
+            "name": "extra",
+            "type": "object",
+            "description": "Extra metadata and synthesis information",
             "required": false,
-            "default": 1,
+            "default": null,
             "items_type": null
           }
         ]

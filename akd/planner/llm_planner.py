@@ -54,9 +54,9 @@ class PlannerQuestion(OutputSchema):
 
     question: str = Field(..., description="The question to ask the user")
     question_type: PlannerQuestionType = Field(..., description="Type of question")
-    options: Optional[list[str]] = Field(default=None, description="Options for multiple choice questions")
+    options: list[str] | None = Field(default=None, description="Options for multiple choice questions")
     context: str = Field(..., description="Context explaining why this question is important")
-    suggested_answer: Optional[str] = Field(default=None, description="Suggested answer if applicable")
+    suggested_answer: str | None = Field(default=None, description="Suggested answer if applicable")
 
     @field_validator("question_type", mode="before")
     @classmethod
@@ -75,8 +75,8 @@ class PlannerResponse(OutputSchema):
 
     message: str = Field(..., description="Response message to the user")
     phase: ConversationPhase = Field(..., description="Current conversation phase")
-    question: Optional[PlannerQuestion] = Field(default=None, description="Follow-up question if needed")
-    workflow_plan: Optional[WorkflowPlan] = Field(default=None, description="Generated workflow plan")
+    question: PlannerQuestion | None = Field(default=None, description="Follow-up question if needed")
+    workflow_plan: WorkflowPlan | None = Field(default=None, description="Generated workflow plan")
     ready_to_generate: bool = Field(default=False, description="Whether ready to generate final workflow")
 
     @field_validator("phase", mode="before")
@@ -91,11 +91,12 @@ class PlannerResponse(OutputSchema):
     @classmethod
     def auto_set_ready_when_plan_exists(cls, v: bool, info) -> bool:
         """
-        Automatically set ready_to_generate=True if workflow_plan exists AND no question is asked.
+        Bidirectional auto-correction for ready_to_generate flag.
 
-        This prevents infinite loops when the LLM says "workflow is ready" but forgets
-        to set the flag, while still allowing the LLM to present a plan and ask for
-        confirmation or clarification.
+        SAFETY CORRECTION (ready=True but plan missing/empty):
+        - If ready_to_generate=True but workflow_plan=None, then correct to False
+        - If ready_to_generate=True but workflow_plan has no agents, then correct to False
+        This prevents "Workflow complete!" followed by "No workflow plan available" error.
 
         Auto-correction only happens when:
         - workflow_plan exists (plan is complete)
@@ -110,13 +111,22 @@ class PlannerResponse(OutputSchema):
         question = info.data.get("question")
         message = info.data.get("message", "")
 
-        # Only auto-correct if:
-        # 1. Plan exists
-        # 2. No question being asked
-        # 3. Message indicates finality (ready/generate keywords)
-        # 4. But flag is False
+        # SAFETY: Cannot be ready without a complete plan
+        if v:  # ready_to_generate is True
+            if workflow_plan is None:
+                logger.warning(
+                    "SAFETY: ready_to_generate=True but workflow_plan=None. Auto-correcting to False.",
+                )
+                return False
+
+            if not workflow_plan.suggested_agents:
+                logger.warning(
+                    "SAFETY: ready_to_generate=True but workflow_plan has no agents. Auto-correcting to False.",
+                )
+                return False
+
+        # CONVENIENCE: Auto-set True if plan exists, no question, and message indicates ready
         if workflow_plan is not None and not v and question is None:
-            # Check if message indicates the workflow is actually ready
             ready_keywords = ["ready", "will be generated", "workflow is complete", "finalized"]
             message_lower = message.lower()
 
@@ -147,19 +157,17 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
 
     def __init__(
         self,
-        config: Optional[BaseAgentConfig] = None,
-        planner_config: Optional[PlannerConfig] = None,
-        registry: Optional[AgentRegistry] = None,
-        mapping_registry: Optional[FieldMappingRegistry] = None,
-        mapping_generator: Optional[FieldMappingGenerator] = None,
+        config: PlannerConfig | None = None,
+        registry: AgentRegistry | None = None,
+        mapping_registry: FieldMappingRegistry | None = None,
+        mapping_generator: FieldMappingGenerator | None = None,
         debug: bool = False,
     ):
         """
         Initialize the planner.
 
         Args:
-            config: Agent-level configuration (model, API keys, etc.)
-            planner_config: Planner-specific configuration (thresholds, temperatures, etc.)
+            config: Planner configuration (model, temperature, thresholds, etc.)
             registry: Agent registry
             mapping_registry: Field mapping registry
             mapping_generator: Field mapping generator
@@ -170,15 +178,14 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         self.mapping_generator = mapping_generator or FieldMappingGenerator()
         self.builder = WorkflowBuilder(self.registry, self.mapping_registry, debug=debug)
         self.conversation_state: dict[str, Any] = {}
-        self.planner_config = planner_config or PlannerConfig()
+        self.planner_config = config or PlannerConfig()
         self.debug = debug
 
-        # Set up system prompt for workflow planning (uses self.registry)
-        agent_config = config or BaseAgentConfig()
-        agent_config.system_prompt = self._get_planner_system_prompt()
-        # Use planner config temperature
-        if not agent_config.temperature:
-            agent_config.temperature = self.planner_config.temperature
+        agent_config = BaseAgentConfig(
+            model_name=self.planner_config.model_name,
+            temperature=self.planner_config.temperature,
+            system_prompt=self._get_planner_system_prompt(),
+        )
 
         super().__init__(config=agent_config, debug=debug)
 
@@ -299,8 +306,8 @@ class InteractivePlannerSession:
         self.initial_request = initial_request
         self.conversation_history = conversation_history or []
         self.current_phase = ConversationPhase.INITIAL_REQUIREMENTS
-        self.workflow_plan: Optional[WorkflowPlan] = None
-        self.final_workflow: Optional[WorkflowFormat] = None
+        self.workflow_plan: WorkflowPlan | None = None
+        self.final_workflow: WorkflowFormat | None = None
 
     async def start(self) -> PlannerResponse:
         """Start the planning conversation."""
@@ -392,7 +399,7 @@ class InteractivePlannerSession:
     async def _handle_unmapped_fields(
         self,
         unmapped: list[dict[str, Any]],
-        confidence_threshold: Optional[float] = None,
+        confidence_threshold: float | None = None,
     ) -> None:
         """
         Generate LLM mappings for unmapped fields and handle user approval.
@@ -506,7 +513,7 @@ class InteractivePlannerSession:
         agent: Any,
         agent_id: str,
         agent_suggestion: AgentSuggestion,
-        workflow_plan: Optional[WorkflowPlan] = None,
+        workflow_plan: WorkflowPlan | None = None,
     ) -> dict[str, Any]:
         """
         Use Instructor LLM to extract structured input values from full conversation context.
@@ -715,14 +722,14 @@ These fields should be OMITTED from your output entirely."""
 
 # Convenience functions
 async def create_planner(
-    config: Optional[BaseAgentConfig] = None,
-    registry: Optional[AgentRegistry] = None,
+    config: PlannerConfig | None = None,
+    registry: AgentRegistry | None = None,
 ) -> LLMWorkflowPlanner:
     """Create a new workflow planner instance."""
     return LLMWorkflowPlanner(config=config, registry=registry)
 
 
-async def quick_plan(research_goal: str, config: Optional[BaseAgentConfig] = None) -> InteractivePlannerSession:
+async def quick_plan(research_goal: str, config: PlannerConfig | None = None) -> InteractivePlannerSession:
     """Create a quick planning session for a research goal."""
     planner = await create_planner(config=config)
     return await planner.init_planner_session(research_goal)

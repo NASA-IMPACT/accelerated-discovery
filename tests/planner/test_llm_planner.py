@@ -123,7 +123,15 @@ class TestInteractivePlannerSession:
 
         workflow_plan = WorkflowPlan(
             workflow_description="Test workflow",
-            research_goal="Test goal"
+            research_goal="Test goal",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Testing",
+                    confidence=1.0,
+                )
+            ],
         )
 
         response = PlannerResponse(
@@ -307,6 +315,114 @@ class TestPlannerErrorHandling:
 
         with pytest.raises(ValueError, match="not found in registry"):
             await session.generate_workflow()
+
+
+class TestPlannerResponseValidator:
+    """Test PlannerResponse ready_to_generate validator."""
+
+    def test_safety_correction_ready_but_no_plan(self):
+        """Test that ready_to_generate is corrected to False when plan is None."""
+        response = PlannerResponse(
+            message="Workflow is ready",
+            phase=ConversationPhase.FINALIZATION,
+            workflow_plan=None,
+            ready_to_generate=True,
+        )
+        # Safety validator should correct to False
+        assert response.ready_to_generate is False
+
+    def test_safety_correction_ready_but_no_agents(self):
+        """Test that ready_to_generate is corrected to False when plan has no agents."""
+        plan = WorkflowPlan(
+            workflow_description="Empty plan",
+            research_goal="Test",
+            suggested_agents=[],
+        )
+        response = PlannerResponse(
+            message="Workflow is ready",
+            phase=ConversationPhase.FINALIZATION,
+            workflow_plan=plan,
+            ready_to_generate=True,
+        )
+        # Safety validator should correct to False
+        assert response.ready_to_generate is False
+
+    def test_convenience_correction_plan_exists_message_says_ready(self):
+        """Test that ready_to_generate is corrected to True when plan exists and message says ready."""
+        plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="Test",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Testing",
+                    confidence=1.0,
+                )
+            ],
+        )
+        response = PlannerResponse(
+            message="Workflow is ready and will be generated",
+            phase=ConversationPhase.FINALIZATION,
+            workflow_plan=plan,
+            question=None,
+            ready_to_generate=False,
+        )
+        # Convenience validator should correct to True
+        assert response.ready_to_generate is True
+
+    def test_no_correction_when_question_asked(self):
+        """Test that ready_to_generate stays False when a question is asked."""
+        from akd.planner.llm_planner import PlannerQuestion, PlannerQuestionType
+
+        plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="Test",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Testing",
+                    confidence=1.0,
+                )
+            ],
+        )
+        response = PlannerResponse(
+            message="Workflow is ready but does this look good?",
+            phase=ConversationPhase.FINALIZATION,
+            workflow_plan=plan,
+            question=PlannerQuestion(
+                question="Does this look good?",
+                question_type=PlannerQuestionType.CONFIRMATION,
+                context="Confirming plan",
+            ),
+            ready_to_generate=False,
+        )
+        # Should stay False because a question is being asked
+        assert response.ready_to_generate is False
+
+    def test_valid_ready_with_plan_and_agents(self):
+        """Test that ready_to_generate stays True when plan has agents."""
+        plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="Test",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Testing",
+                    confidence=1.0,
+                )
+            ],
+        )
+        response = PlannerResponse(
+            message="All good",
+            phase=ConversationPhase.FINALIZATION,
+            workflow_plan=plan,
+            ready_to_generate=True,
+        )
+        # Should stay True - valid state
+        assert response.ready_to_generate is True
 
 
 class TestConversationPhases:

@@ -5,7 +5,7 @@ Generates semantic field mappings when explicit mappings don't exist,
 with confidence scoring and detailed reasoning.
 """
 
-from typing import Optional
+from __future__ import annotations
 
 from loguru import logger
 
@@ -37,7 +37,7 @@ class FieldMappingGenerator:
     field names don't match exactly between agents.
     """
 
-    def __init__(self, model: Optional[str] = None, temperature: float = 0.0, api_key: Optional[str] = None):
+    def __init__(self, model: str | None = None, temperature: float = 0.0, api_key: str | None = None):
         """
         Initialize field mapping generator.
 
@@ -46,7 +46,7 @@ class FieldMappingGenerator:
             temperature: Generation temperature (0.0 for deterministic)
             api_key: API key (defaults to CONFIG setting)
         """
-        self.model = model or CONFIG.model_config_settings.model_name
+        self.model = model or CONFIG.model_config_settings.planner_model_name
         self.temperature = temperature
         self.api_key = api_key or CONFIG.model_config_settings.api_keys.openai
 

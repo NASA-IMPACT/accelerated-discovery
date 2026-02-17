@@ -4,12 +4,14 @@ Data structures for AKD planner.
 This module contains workflow planning data models.
 """
 
-from typing import Optional
+from __future__ import annotations
 
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from akd._base import OutputSchema
+
+from akd.configs.project import CONFIG
 
 
 class AgentSuggestion(OutputSchema):
@@ -21,7 +23,7 @@ class AgentSuggestion(OutputSchema):
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in this suggestion (0.0-1.0)")
     required_inputs: list[str] = Field(default_factory=list, description="Required input fields")
     expected_outputs: list[str] = Field(default_factory=list, description="Expected output fields")
-    depends_on: Optional[list[str]] = Field(default=None, description="Agent IDs this agent depends on for input data")
+    depends_on: list[str] | None = Field(default=None, description="Agent IDs this agent depends on for input data")
 
 
 class WorkflowPlan(OutputSchema):
@@ -87,13 +89,16 @@ class FieldMappingResult(OutputSchema):
 
     mappings: list[FieldMappingEntry] = Field(..., description="List of field mappings with confidence scores")
     overall_confidence: float = Field(..., ge=0.0, le=1.0, description="Overall confidence in the entire mapping set")
-    notes: Optional[str] = Field(None, description="Additional notes or warnings about the mapping")
+    notes: str | None = Field(None, description="Additional notes or warnings about the mapping")
 
 
 class PlannerConfig(BaseModel):
     """Configuration for workflow planners."""
 
-    model_name: str = Field(default="gpt-4", description="LLM model to use for planning")
+    model_name: str = Field(
+        default_factory=lambda: CONFIG.model_config_settings.planner_model_name,
+        description="LLM model to use for planning",
+    )
     temperature: float = Field(default=0.3, description="Temperature for LLM generation (deterministic planning)")
     max_conversation_turns: int = Field(default=25, description="Maximum conversation turns before forcing completion")
     field_mapping_confidence_threshold: float = Field(
