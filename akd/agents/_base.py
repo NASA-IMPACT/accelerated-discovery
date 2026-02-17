@@ -337,8 +337,8 @@ class BaseAgent[
             response = await agent.achat("What's my name?")  # response.content == "Alice"
         """
         text_input = params if isinstance(params, TextInput) else TextInput(content=str(params))
-        # only reference, no copy
-        run_context = run_context or RunContext()
+
+        run_context = (run_context or RunContext()).model_copy()
         run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
         result = await self._arun(text_input, run_context=run_context, **kwargs)
         result._run_context = run_context
