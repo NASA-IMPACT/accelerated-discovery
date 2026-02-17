@@ -297,6 +297,8 @@ class PartialModel[T: BaseModel]:
                 fields[name] = (field_info.annotation | None, None)
             cls._cache[model] = create_model(
                 f"Partial{model.__name__}",
+                __doc__=model.__doc__,
+                __base__=model,
                 **fields,
             )
         return cls._cache[model]
