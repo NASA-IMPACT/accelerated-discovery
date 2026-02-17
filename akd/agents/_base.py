@@ -280,8 +280,7 @@ class BaseAgent[
         Returns:
             Output matching the agent's output_schema.
         """
-        # only reference, no copy
-        run_context = run_context or RunContext()
+        run_context = (run_context or RunContext()).model_copy()
         run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
         output = await super().arun(params, run_context=run_context, **kwargs)
         # attach run_context (with accumulated usage) to final output
@@ -299,8 +298,7 @@ class BaseAgent[
         Centralizes run_context creation and run_id assignment,
         then delegates to parent astream().
         """
-        # only reference, no copy
-        run_context = run_context or RunContext()
+        run_context = (run_context or RunContext()).model_copy()
         run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
         async for event in super().astream(params, run_context=run_context, **kwargs):
             yield event
