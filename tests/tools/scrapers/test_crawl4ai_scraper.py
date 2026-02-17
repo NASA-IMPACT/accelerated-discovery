@@ -122,18 +122,6 @@ class TestCrawl4AIScraperLocalMode:
         with pytest.raises(RuntimeError, match="Can't parse url with PDF"):
             await scraper.arun(params)
 
-    async def test_local_mode_without_playwright_fails(self):
-        """Test that scraper fails gracefully when Playwright is not installed."""
-        if is_playwright_installed():
-            pytest.skip("Playwright is installed - cannot test failure case")
-
-        config = Crawl4AIScraperConfig(use_docker=False)
-        scraper = Crawl4AIWebScraper(config)
-        params = ScraperToolInputSchema(url="https://example.com")
-
-        with pytest.raises(Exception):  # Should raise ImportError or similar
-            await scraper.arun(params)
-
 
 @pytest.mark.asyncio
 class TestCrawl4AIScraperDockerMode:

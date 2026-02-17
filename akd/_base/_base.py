@@ -5,12 +5,20 @@ from abc import ABC, ABCMeta, abstractmethod
 from typing import Any, Type, cast
 
 from loguru import logger
-from pydantic import BaseModel, Field, ValidationError, computed_field, create_model
+from pydantic import (
+    BaseModel,
+    Field,
+    PrivateAttr,
+    ValidationError,
+    computed_field,
+    create_model,
+)
 
 from akd.utils import get_model_fields, to_snake_case
 
 from .errors import HumanInputRequired, SchemaValidationError
 from .streaming import StreamingMixin
+from .structures import RunContext
 from .utils import AsyncRunMixin
 
 
@@ -76,6 +84,8 @@ class OutputSchema(IOSchema):
 
     __response_field__: str | None = None
 
+    _run_context: RunContext | None = PrivateAttr(default=None)
+
     @computed_field
     def _response(self) -> str:
         """
@@ -90,6 +100,11 @@ class OutputSchema(IOSchema):
         if self.__response_field__ is not None:
             return getattr(self, self.__response_field__, "")
         return ""
+
+    @property
+    def run_context(self) -> RunContext | None:
+        """Get the run context associated with this output."""
+        return self._run_context
 
 
 class TextInput(InputSchema):

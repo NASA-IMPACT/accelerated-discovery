@@ -49,7 +49,24 @@ def is_ollama_available() -> bool:
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     try:
         resp = httpx.get(f"{base_url}/api/tags", timeout=2.0)
+        print(resp.content)
         return resp.status_code == 200
+    except (httpx.RequestError, httpx.TimeoutException):
+        return False
+
+
+def is_granite_available() -> bool:
+    """Check if Ollama is running and has granite guardian models pulled.
+
+    Uses OLLAMA_BASE_URL env var if set, otherwise falls back to localhost:11434.
+    """
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    try:
+        resp = httpx.get(f"{base_url}/api/tags", timeout=2.0)
+        if resp.status_code != 200:
+            return False
+        models = [m.get("name", "") for m in resp.json().get("models", [])]
+        return any("granite" in model for model in models)
     except (httpx.RequestError, httpx.TimeoutException):
         return False
 
@@ -60,6 +77,10 @@ pytestmark = [
     pytest.mark.skipif(
         not is_ollama_available(),
         reason="Ollama not running — start with: ollama serve",
+    ),
+    pytest.mark.skipif(
+        not is_granite_available(),
+        reason="Granite models not available — ollama pull <model_id>",
     ),
 ]
 

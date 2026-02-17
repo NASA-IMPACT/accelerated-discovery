@@ -410,7 +410,7 @@ class StreamingMixin:
     async def _astream(
         self,
         params: Any,
-        run_context: RunContext | None = None,
+        run_context: RunContext,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Internal streaming implementation. Override for custom streaming.
@@ -435,10 +435,6 @@ class StreamingMixin:
             StreamEvent: STARTING, RUNNING, then COMPLETED or FAILED
         """
         class_name = self.__class__.__name__
-
-        # Auto-generate run_id for event correlation
-        run_context = (run_context or RunContext()).model_copy()
-        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         yield StartingEvent(
             source=class_name,

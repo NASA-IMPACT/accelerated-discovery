@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 import instructor
 import openai
 from litellm import acompletion
-from litellm.utils import get_model_info, supports_reasoning, trim_messages
+from litellm.utils import get_model_info, supports_reasoning
 from loguru import logger
 from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
@@ -57,6 +57,7 @@ from akd._base.streaming import (
     ToolResultEvent,
     ToolResultEventData,
 )
+from akd._base.structures import RunUsage
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
@@ -279,12 +280,34 @@ class BaseAgent[
         Returns:
             Output matching the agent's output_schema.
         """
-        return await super().arun(params, run_context=run_context, **kwargs)
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+        output = await super().arun(params, run_context=run_context, **kwargs)
+        # attach run_context (with accumulated usage) to final output
+        output._run_context = run_context
+        return output
+
+    async def astream(
+        self,
+        params: Any,
+        run_context: RunContext | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream agent execution with run_context initialization.
+
+        Centralizes run_context creation and run_id assignment,
+        then delegates to parent astream().
+        """
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+        async for event in super().astream(params, run_context=run_context, **kwargs):
+            yield event
 
     async def achat(
         self,
         params: Any,
         run_context: RunContext | None = None,
+        **kwargs: Any,
     ) -> TextOutput:
         """Convenience method for simple text-based conversations.
 
@@ -314,7 +337,11 @@ class BaseAgent[
             response = await agent.achat("What's my name?")  # response.content == "Alice"
         """
         text_input = params if isinstance(params, TextInput) else TextInput(content=str(params))
-        result = await self._arun(text_input, run_context=run_context)
+
+        run_context = (run_context or RunContext()).model_copy()
+        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+        result = await self._arun(text_input, run_context=run_context, **kwargs)
+        result._run_context = run_context
         if isinstance(result, TextOutput):
             return result
         return TextOutput(content=result._response or str(result))
@@ -354,6 +381,14 @@ class InstructorBaseAgent[
         memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
+        import warnings
+
+        if not isinstance(self, LiteLLMInstructorBaseAgent):
+            warnings.warn(
+                "InstructorBaseAgent is deprecated. Use LiteLLMInstructorBaseAgent instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         super().__init__(config=config, memory=memory, debug=debug)
 
         # Create the OpenAI client
@@ -545,6 +580,23 @@ class LiteLLMInstructorBaseAgent[
         # Replace instructor client with LiteLLM version
         self.client = instructor.from_litellm(acompletion)
 
+    def _post_init(self):
+        super()._post_init()
+
+        # reformat to response format for openai gpt-5* models
+        # only when reasoning is enabled
+        # only applies to litellm so
+        if (
+            self.config.model_name.startswith("gpt-5")
+            and self.config.reasoning_effort
+            and self.config.reasoning_summary
+            and supports_reasoning(model=self.config.model_name)
+        ):
+            logger.info(
+                f"Reformatting model name to {self.config.model_name} to openai/responses/{self.config.model_name}",
+            )
+            self.config.model_name = f"openai/responses/{self.config.model_name}"
+
     def __deepcopy__(self, memo: dict[int, Any]) -> LiteLLMInstructorBaseAgent:
         """Custom deepcopy that recreates the LiteLLM client instead of copying it.
 
@@ -573,6 +625,7 @@ class LiteLLMInstructorBaseAgent[
         self,
         messages: list[dict[str, str]],
         response_model: type[OutputSchema] | None = None,
+        run_context: RunContext | None = None,
     ) -> OutSchema:
         """
         Obtains a response from the language model asynchronously with automatic message trimming.
@@ -588,15 +641,6 @@ class LiteLLMInstructorBaseAgent[
         Returns:
             Type[BaseModel]: The response from the language model.
         """
-        # Trim messages if enabled to prevent token limit errors
-        if self.enable_trimming:
-            messages = trim_messages(
-                messages,
-                model=self.model_name,
-                max_tokens=self.max_tokens,
-                trim_ratio=self.trim_ratio,
-            )
-
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
 
@@ -618,16 +662,56 @@ class LiteLLMInstructorBaseAgent[
         if self.reasoning_summary:
             completion_kwargs["reasoning_summary"] = self.reasoning_summary
 
-        response = await self.client.chat.completions.create(**completion_kwargs)
+        response, completion = await self.client.chat.completions.create_with_completion(
+            **completion_kwargs,
+        )
+
+        # Capture token usage from the raw completion
+        if run_context is not None:
+            run_context.usage += self._extract_usage(completion)
 
         response_data = response.model_dump()
         response = response_model(**response_data)
         return cast(OutSchema, response)
 
+    @staticmethod
+    def _extract_usage(completion: Any) -> RunUsage:
+        """Extract token usage from a raw LLM completion.
+
+        Args:
+            completion: Raw completion object from create_with_completion.
+
+        Returns:
+            RunUsage with extracted token counts (zeros if unavailable).
+        """
+        run_usage = RunUsage()
+        usage = getattr(completion, "usage", None)
+        if usage:
+            run_usage.input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            run_usage.output_tokens = getattr(usage, "completion_tokens", 0) or 0
+            run_usage.requests = 1
+
+            # Capture provider-specific details (reasoning tokens, cached tokens, etc.)
+            for details_attr in ("completion_tokens_details", "prompt_tokens_details"):
+                details_obj = getattr(usage, details_attr, None)
+                if details_obj is None:
+                    continue
+                # details_obj can be a dict or a Pydantic model
+                items = (
+                    details_obj.items()
+                    if isinstance(details_obj, dict)
+                    else ((k, v) for k, v in vars(details_obj).items() if isinstance(v, int) and v > 0)
+                )
+                for k, v in items:
+                    if isinstance(v, int) and v > 0:
+                        run_usage.details[f"{details_attr}.{k}"] = v
+
+        return run_usage
+
     async def _arun(
         self,
         params: InSchema,
-        run_context: RunContext | None = None,
+        run_context: RunContext,
         **kwargs,
     ) -> OutSchema:
         """Run agent with optional tool calling support.
@@ -669,8 +753,6 @@ class LiteLLMInstructorBaseAgent[
                 # === TOOL CALLING MODE ===
                 # Use _run_tool_loop and consume events to get final output
                 # Note: Tool loop mutates `messages` in place during iterations
-                run_context = (run_context or RunContext()).model_copy()
-                run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
                 async for event in self._run_tool_loop(
                     messages,
                     run_context,
@@ -687,6 +769,7 @@ class LiteLLMInstructorBaseAgent[
                 output = await self.get_response_async(
                     messages=messages,
                     response_model=self.output_schema,
+                    run_context=run_context,
                 )
 
             # Add final assistant message
@@ -741,10 +824,13 @@ class LiteLLMInstructorBaseAgent[
                     "schema": self._build_response_format_schema(response_model),
                 },
             },
+            "stream_options": {"include_usage": True},
         }
 
         if self.reasoning_effort:
             completion_kwargs["reasoning_effort"] = self.reasoning_effort
+        if self.reasoning_summary:
+            completion_kwargs["reasoning"] = {"summary": self.reasoning_summary}
 
         class_name = self.__class__.__name__
 
@@ -769,10 +855,17 @@ class LiteLLMInstructorBaseAgent[
 
         accumulated = ""
         token_buffer = ""
+        thinking_buffer = ""
         last_partial_dict = None
 
         response = await acompletion(**completion_kwargs)
         async for chunk in response:
+            run_context.usage += self._extract_usage(chunk)
+
+            # Check if chunk.choices is not empty
+            if not chunk.choices:
+                continue
+
             delta = chunk.choices[0].delta
 
             # Thinking tokens (Claude extended thinking, o1 reasoning)
@@ -781,13 +874,17 @@ class LiteLLMInstructorBaseAgent[
                 "thinking",
                 None,
             )
+            # Note: Not recommended to track thinking tokens in history
             if reasoning:
-                yield ThinkingEvent(
-                    source=class_name,
-                    message="Reasoning...",
-                    data=ThinkingEventData(thinking_content=reasoning),
-                    run_context=run_context,
-                )
+                thinking_buffer += reasoning
+                if len(thinking_buffer) >= token_batch_size:
+                    yield ThinkingEvent(
+                        source=class_name,
+                        message="Reasoning...",
+                        data=ThinkingEventData(thinking_content=thinking_buffer),
+                        run_context=run_context,
+                    )
+                    thinking_buffer = ""
 
             # Content tokens - batch, then accumulate and validate as partial
             if delta.content:
@@ -817,6 +914,15 @@ class LiteLLMInstructorBaseAgent[
                         )
                     except Exception:
                         pass  # Skip invalid partials
+
+        # Emit remaining thinking tokens
+        if thinking_buffer:
+            yield ThinkingEvent(
+                source=class_name,
+                message="Reasoning...",
+                data=ThinkingEventData(thinking_content=thinking_buffer),
+                run_context=run_context,
+            )
 
         # Emit remaining tokens
         if token_buffer:
@@ -905,9 +1011,12 @@ class LiteLLMInstructorBaseAgent[
                 "api_key": self.api_key,
                 "drop_params": True,
                 "stream": True,
+                "stream_options": {"include_usage": True},
             }
             if self.reasoning_effort:
                 completion_kwargs["reasoning_effort"] = self.reasoning_effort
+            if self.reasoning_summary:
+                completion_kwargs["reasoning"] = {"summary": self.reasoning_summary}
 
             response = await acompletion(**completion_kwargs)
 
@@ -917,8 +1026,10 @@ class LiteLLMInstructorBaseAgent[
             last_partial_dict: dict[str, Any] | None = None  # For deduplicating PARTIAL events
             accumulated_tool_calls: dict[int, dict[str, Any]] = {}  # index -> {id, name, arguments}
             buffered_partials: list[StreamEvent] = []  # Buffer partials until we know it's final
+            thinking_buffer = ""
 
             async for chunk in response:
+                run_context.usage += self._extract_usage(chunk)
                 delta = chunk.choices[0].delta
 
                 # Stream reasoning/thinking tokens (o1, o3, Claude extended thinking)
@@ -928,12 +1039,18 @@ class LiteLLMInstructorBaseAgent[
                     None,
                 )
                 if reasoning:
-                    yield ThinkingEvent(
-                        source=class_name,
-                        message=reasoning,
-                        data=ThinkingEventData(streaming=True, thinking_content=reasoning),
-                        run_context=run_context,
-                    )
+                    thinking_buffer += reasoning
+                    if len(thinking_buffer) >= token_batch_size:
+                        yield ThinkingEvent(
+                            source=class_name,
+                            message="Reasoning...",
+                            data=ThinkingEventData(
+                                thinking_content=thinking_buffer,
+                                streaming=True,
+                            ),
+                            run_context=run_context,
+                        )
+                        thinking_buffer = ""
 
                 # Batch and stream content tokens
                 if delta.content:
@@ -985,6 +1102,18 @@ class LiteLLMInstructorBaseAgent[
                                 accumulated_tool_calls[idx]["name"] = tc.function.name
                             if tc.function and tc.function.arguments:
                                 accumulated_tool_calls[idx]["arguments"] += tc.function.arguments
+
+            # Emit remaining thinking tokens in buffer
+            if thinking_buffer:
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Reasoning...",
+                    data=ThinkingEventData(
+                        thinking_content=thinking_buffer,
+                        streaming=True,
+                    ),
+                    run_context=run_context,
+                )
 
             # Emit remaining tokens in buffer
             if token_buffer:
@@ -1187,7 +1316,7 @@ class LiteLLMInstructorBaseAgent[
     async def _astream(
         self,
         params: InSchema,
-        run_context: RunContext | None = None,
+        run_context: RunContext,
         token_batch_size: int = 10,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
@@ -1224,10 +1353,6 @@ class LiteLLMInstructorBaseAgent[
                         print(f"Error: {event.error}")
         """
         class_name = self.__class__.__name__
-
-        # Auto-generate run_id for event correlation
-        run_context = (run_context or RunContext()).model_copy()
-        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
 
         yield StartingEvent(
             source=class_name,
@@ -1297,3 +1422,6 @@ class LiteLLMInstructorBaseAgent[
                 run_context=run_context,
             )
             raise
+
+
+Agent = LiteLLMInstructorBaseAgent
