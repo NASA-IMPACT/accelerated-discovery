@@ -612,41 +612,19 @@ class InstructorBaseAgent[
         Returns:
             OutputSchema: The response from the chat agent.
         """
-        async with self.memory.asession(
-            stateless=self.stateless,
-            run_context=run_context,
-            enable_trimming=self.enable_trimming,
-            model_name=self.model_name,
-            max_tokens=self.max_tokens,
-            trim_ratio=self.trim_ratio,
-        ) as messages:
-            # Add system message if empty
-            if not messages:
-                messages.append(self._default_system_message())
+        # NOTE: Memory session and messages prep handled by BaseAgent.arun
+        # We rely on run_context.messages being set.
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be set (did you call via BaseAgent.arun?)")
 
-            # Add user message (skip if resuming with human response)
-            if params and not (run_context and run_context.human_response):
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": params.model_dump_json(exclude={"type"}),
-                    },
-                )
+        # NOTE: Not appending response to messages here anymore;
+        # BaseAgent.arun handles that now.
 
-            response = await self.get_response_async(
-                messages=messages,
-                response_model=self.output_schema,
-            )
-
-            # Add assistant response
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": response.model_dump_json(exclude={"type"}),
-                },
-            )
-
-            return response
+        return await self.get_response_async(
+            messages=messages,
+            response_model=self.output_schema,
+        )
 
 
 class LiteLLMInstructorBaseAgent[
