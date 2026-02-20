@@ -34,11 +34,11 @@ class TestBaseAgentSharedFunctionality:
             "instructor",
         )
 
-        # Create agent with stateless=False to test memory management
+        # Create agent with stateless=False
         config = BaseAgentConfig(stateless=False)
         agent = TestInstructorBaseAgent(config=config)
 
-        # Execute arun - this will call base _arun which manages memory
+        # Execute arun
         result = await agent.arun(test_input)
 
         # Verify result structure and type
@@ -46,8 +46,9 @@ class TestBaseAgentSharedFunctionality:
         assert result.response == "Test response"
         assert result.metadata == {"test": True}
 
-        # Verify memory was updated by base _arun (only in stateful mode)
-        assert len(agent.memory) == 3  # user + assistant messages
+        assert result.run_context is not None
+        assert result.run_context.messages is not None
+        assert len(result.run_context.messages) == 3
 
     @pytest.mark.asyncio
     async def test_stateless_behavior_default(
@@ -55,7 +56,7 @@ class TestBaseAgentSharedFunctionality:
         mock_instructor_client,
         mock_openai_client,
     ):
-        """Test that agents are stateless by default and don't store memory."""
+        """Test that agents are stateless by default."""
         # Setup mocks for InstructorBaseAgent
         expected_response = AgentTestOutputSchema(response="Test response")
         mock_structured_client = await setup_async_mock_response(
@@ -82,8 +83,9 @@ class TestBaseAgentSharedFunctionality:
         test_input = AgentTestInputSchema(query="test query")
         result = await instructor_agent.arun(test_input)
 
-        # Memory should remain empty in stateless mode
-        assert len(instructor_agent.memory) == 0
+        assert result.run_context is not None
+        assert result.run_context.messages is not None
+        assert len(result.run_context.messages) == 3
         assert isinstance(result, AgentTestOutputSchema)
 
         # Test InstructorBaseAgent (default stateless)
@@ -92,8 +94,9 @@ class TestBaseAgentSharedFunctionality:
 
         result = await instructor_agent.arun(test_input)
 
-        # Memory should remain empty in stateless mode
-        assert len(instructor_agent.memory) == 0
+        assert result.run_context is not None
+        assert result.run_context.messages is not None
+        assert len(result.run_context.messages) == 3
         assert isinstance(result, AgentTestOutputSchema)
 
     def test_schema_validation_integration(self, mock_instructor_client):
@@ -163,23 +166,6 @@ class TestEdgeCasesAndErrorHandling:
         # Should use default config
         assert agent.config is not None
 
-    def test_empty_memory_operations(
-        self,
-        mock_instructor_client,
-        mock_openai_client,
-    ):
-        """Test memory operations with empty memory."""
-        instructor_agent = TestInstructorBaseAgent()
-        instructor_agent = TestInstructorBaseAgent()
-
-        # Test reset on empty memory
-        instructor_agent.reset_memory()
-        instructor_agent.reset_memory()
-
-        # Verify still empty
-        assert len(instructor_agent.memory) == 0
-        assert len(instructor_agent.memory) == 0
-
     @pytest.mark.asyncio
     async def test_response_type_validation(self, mock_instructor_client):
         """Test that response types are properly validated."""
@@ -218,10 +204,8 @@ class TestEdgeCasesAndErrorHandling:
                         required_methods = [
                             "arun",
                             "get_response_async",
-                            "reset_memory",
                         ]
                         required_properties = [
-                            "memory",
                             "input_schema",
                             "output_schema",
                         ]

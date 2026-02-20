@@ -67,7 +67,7 @@ class AgentSession(BaseSession):
         self.store.clear()
 
     async def __aenter__(self) -> AgentSession:
-        await BaseSession.__aenter__(self)
+        await super(AgentSession, self).__aenter__()
 
         if self.stateless:
             self.clear()

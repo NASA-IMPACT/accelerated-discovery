@@ -226,16 +226,6 @@ class BaseAgent[
         **kwargs,
     ) -> None:
         super().__init__(config=config, **kwargs)
-        self._session_messages: list[dict[str, Any]] = []
-
-    def reset_memory(self) -> None:
-        """Clear memory."""
-        self._session_messages.clear()
-
-    @property
-    def memory(self) -> list[dict[str, Any]]:
-        """Backward-compatible access to persisted session messages."""
-        return self._session_messages
 
     @property
     def _system_prompt(self) -> str:
@@ -280,10 +270,9 @@ class BaseAgent[
         run_context: RunContext,
         mode: Literal["run", "stream", "chat"],
     ) -> AgentSession:
-        """Create an agent session bound to this agent's memory store."""
+        """Create an agent session for this run context."""
         return AgentSession(
             run_context=run_context,
-            store=self._session_messages,
             stateless=self.stateless,
             enable_trimming=self.enable_trimming,
             model_name=self.model_name,

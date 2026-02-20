@@ -208,7 +208,6 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
     def reset_conversation(self) -> None:
         """Reset the conversation state."""
         self.conversation_state = {}
-        self.reset_memory()
 
     async def init_planner_session(
         self,

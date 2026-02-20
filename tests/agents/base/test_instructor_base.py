@@ -28,8 +28,6 @@ class TestInstructorBaseAgentFunctionality:
 
         # Verify agent properties
         assert agent.client == mock_instructor_client
-        assert isinstance(agent.memory, list)
-        assert len(agent.memory) == 0
 
     def test_initialization_custom_config(
         self,
@@ -43,23 +41,6 @@ class TestInstructorBaseAgentFunctionality:
         # Verify configuration was applied
         assert agent.api_key == "test_key"
         assert str(agent.base_url) == "https://custom.api.com/v1"
-
-    def test_memory_management(self, mock_openai_client, mock_instructor_client):
-        """Test memory initialization and reset functionality."""
-        agent = TestInstructorBaseAgent()
-
-        # Test initial memory state
-        assert isinstance(agent.memory, list)
-        assert len(agent.memory) == 0
-
-        # Add test messages manually
-        agent.memory.append({"role": "user", "content": "test message"})
-        agent.memory.append({"role": "assistant", "content": "test response"})
-        assert len(agent.memory) == 2
-
-        # Test memory reset
-        agent.reset_memory()
-        assert len(agent.memory) == 0
 
     def test_instructor_compatible_model_creation(
         self,
@@ -164,8 +145,9 @@ class TestInstructorBaseAgentFunctionality:
         assert isinstance(result, AgentTestOutputSchema)
         assert result.response == "Test instructor response"
 
-        # Memory should remain empty in stateless mode
-        assert len(agent.memory) == 0
+        assert result.run_context is not None
+        assert result.run_context.messages is not None
+        assert len(result.run_context.messages) == 3
 
     @pytest.mark.asyncio
     async def test_arun_stateful_behavior(
@@ -197,8 +179,9 @@ class TestInstructorBaseAgentFunctionality:
         assert isinstance(result, AgentTestOutputSchema)
         assert result.response == "Test instructor response"
 
-        # Memory should be updated in stateful mode (system + user + assistant)
-        assert len(agent.memory) == 3
+        assert result.run_context is not None
+        assert result.run_context.messages is not None
+        assert len(result.run_context.messages) == 3
 
     def test_client_configuration(self, custom_config):
         """Test that OpenAI and instructor clients are configured correctly."""
@@ -238,10 +221,6 @@ class TestInstructorBaseAgentFunctionality:
         # Verify client exists (deepcopy should work)
         assert copied_agent.client is not None
         assert agent.client is not None
-
-        # Verify memory is separate
-        assert copied_agent.memory is not agent.memory
-        assert len(copied_agent.memory) == len(agent.memory)
 
     def test_response_model_creation_edge_cases(
         self,

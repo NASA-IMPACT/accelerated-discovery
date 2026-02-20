@@ -31,10 +31,6 @@ class TestLiteLLMInstructorBaseAgent:
         # Check that the client is properly initialized
         assert agent.client is not None
 
-        # Check memory initialization
-        assert isinstance(agent.memory, list)
-        assert len(agent.memory) == 0
-
     def test_config_access(self, litellm_config):
         """Test that config fields are accessible via self.attribute."""
         agent = TestLiteLLMAgent(config=litellm_config)
@@ -111,9 +107,6 @@ class TestLiteLLMInstructorBaseAgent:
         # Verify they have the same interface
         assert hasattr(litellm_agent, "arun")
         assert hasattr(litellm_agent, "get_response_async")
-        assert hasattr(litellm_agent, "memory")
-        assert hasattr(litellm_agent, "reset_memory")
-
         # Verify same attributes exist
         for attr in ["model_name", "temperature", "stateless", "api_key"]:
             assert hasattr(litellm_agent, attr)
@@ -134,27 +127,6 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.max_tokens == 25000
         assert agent.trim_ratio == 0.6
         assert agent.enable_trimming is False
-
-    def test_memory_management_stateful(self, litellm_config):
-        """Test memory management in stateful mode."""
-        config = create_config_with_overrides(litellm_config, stateless=False)
-        agent = TestLiteLLMAgent(config=config)
-
-        # Initially empty
-        assert len(agent.memory) == 0
-
-        # Should maintain memory when stateless=False
-        assert agent.stateless is False
-
-    def test_memory_management_stateless(self, litellm_config):
-        """Test memory management in stateless mode."""
-        agent = TestLiteLLMAgent(config=litellm_config)
-
-        # Should be stateless by default
-        assert agent.stateless is True
-
-        # Memory should be empty
-        assert len(agent.memory) == 0
 
     def test_litellm_client_initialization(self, litellm_config):
         """Test that LiteLLM client is properly initialized."""
