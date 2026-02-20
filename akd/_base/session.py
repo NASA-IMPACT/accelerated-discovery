@@ -20,8 +20,7 @@ class BaseSession:
     run_context: RunContext
 
     async def __aenter__(self) -> BaseSession:
-        if self.run_context.run_id is None:
-            self.run_context.run_id = uuid.uuid4().hex[:8]
+        self.run_context.run_id = self.run_context.run_id or uuid.uuid4().hex[:8]
         return self
 
     async def __aexit__(

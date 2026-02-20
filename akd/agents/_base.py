@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import uuid
 from abc import abstractmethod
 from collections.abc import AsyncIterator
 from typing import Any, Literal, cast
@@ -259,10 +260,7 @@ class BaseAgent[
     def _build_run_context(self, run_context: RunContext | None) -> RunContext:
         """Create a run context copy and ensure it has a run_id."""
         ctx = (run_context or RunContext()).model_copy()
-        if ctx.run_id is None:
-            import uuid
-
-            ctx.run_id = uuid.uuid4().hex[:8]
+        ctx.run_id = ctx.run_id or uuid.uuid4().hex[:8]
         return ctx
 
     def _open_session(
