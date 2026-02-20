@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from akd._base import RunContext
 from akd.agents._base import BaseAgentConfig
 
 from .conftest import (
@@ -192,7 +193,9 @@ class TestEdgeCasesAndErrorHandling:
         # This should handle type validation gracefully
         # The actual behavior depends on the AbstractBase implementation
         try:
-            result = await agent.get_response_async()
+            result = await agent.get_response_async(
+                run_context=RunContext(messages=[{"role": "user", "content": "test"}]),
+            )
             # If successful, should be properly typed
             assert isinstance(result, AgentTestOutputSchema)
         except Exception:

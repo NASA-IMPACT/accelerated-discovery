@@ -9,7 +9,7 @@ from typing import Optional
 
 from loguru import logger
 
-from akd._base import InputSchema
+from akd._base import InputSchema, RunContext
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd.configs.project import CONFIG
 from akd.planner.registry import AgentEntry
@@ -89,12 +89,15 @@ Provide detailed reasoning for each mapping explaining:
 - Whether transformation is needed"""
 
     def _build_user_prompt(
-        self, source_agent: AgentEntry, target_agent: AgentEntry, required_target_fields: list[str]
+        self,
+        source_agent: AgentEntry,
+        target_agent: AgentEntry,
+        required_target_fields: list[str],
     ) -> str:
         """Build user prompt with agent schemas and required fields."""
         # Format source outputs
         source_outputs = "\n".join(
-            [f"  - {field.name} ({field.type}): {field.description}" for field in source_agent.output_schema.fields]
+            [f"  - {field.name} ({field.type}): {field.description}" for field in source_agent.output_schema.fields],
         )
 
         # Format target inputs
@@ -103,7 +106,7 @@ Provide detailed reasoning for each mapping explaining:
                 f"  - {field.name} ({field.type}): {field.description}"
                 for field in target_agent.input_schema.fields
                 if field.name in required_target_fields
-            ]
+            ],
         )
 
         return f"""Map fields from source agent to target agent.
@@ -120,7 +123,10 @@ For each required target field, identify the best matching source output field.
 Provide confidence scores and detailed reasoning."""
 
     async def generate_mapping(
-        self, source_agent: AgentEntry, target_agent: AgentEntry, required_target_fields: list[str]
+        self,
+        source_agent: AgentEntry,
+        target_agent: AgentEntry,
+        required_target_fields: list[str],
     ) -> FieldMappingResult:
         """
         Generate semantic field mapping using LLM.
@@ -141,7 +147,8 @@ Provide confidence scores and detailed reasoning."""
         try:
             # Use the agent's get_response_async method
             result = await self.agent.get_response_async(
-                messages=[{"role": "user", "content": user_prompt}], response_model=FieldMappingResult
+                run_context=RunContext(messages=[{"role": "user", "content": user_prompt}]),
+                response_model=FieldMappingResult,
             )
 
             logger.info(f"Generated mapping with overall confidence: {result.overall_confidence:.2f}")
@@ -209,7 +216,10 @@ Provide confidence scores and detailed reasoning."""
         return False
 
     def format_approval_message(
-        self, source_agent: AgentEntry, target_agent: AgentEntry, result: FieldMappingResult
+        self,
+        source_agent: AgentEntry,
+        target_agent: AgentEntry,
+        result: FieldMappingResult,
     ) -> str:
         """
         Format human-readable approval message.
@@ -241,7 +251,7 @@ Provide confidence scores and detailed reasoning."""
                     f"   Confidence: {entry.confidence:.1%}",
                     f"   Reasoning: {entry.reasoning}",
                     "",
-                ]
+                ],
             )
 
         if result.notes:

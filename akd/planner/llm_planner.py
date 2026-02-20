@@ -13,7 +13,7 @@ from typing import Any, Optional
 from loguru import logger
 from pydantic import Field, field_validator
 
-from akd._base import InputSchema, OutputSchema
+from akd._base import InputSchema, OutputSchema, RunContext
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd.configs.planner_prompts import (
     WORKFLOW_INPUT_EXTRACTION_PROMPT_TEMPLATE,
@@ -269,7 +269,9 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
             )
 
             # Get response from LLM
-            response = await self.get_response_async(messages)
+            response = await self.get_response_async(
+                run_context=RunContext(messages=messages),
+            )
 
             if self.debug:
                 logger.debug(f"Planner response: {response}")

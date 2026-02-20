@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from akd._base.memory import Memory
 from akd.agents._base import InstructorBaseAgent
 
 from .conftest import (
@@ -33,7 +32,7 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.client is not None
 
         # Check memory initialization
-        assert isinstance(agent.memory, Memory)
+        assert isinstance(agent.memory, list)
         assert len(agent.memory) == 0
 
     def test_config_access(self, litellm_config):
@@ -50,7 +49,7 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.enable_trimming is True
 
     @pytest.mark.asyncio
-    @patch("akd._base.memory.trim_messages")
+    @patch("akd._base.session.trim_messages")
     @patch("instructor.from_litellm")
     async def test_full_arun_workflow(
         self,

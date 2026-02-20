@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from akd._base.memory import Memory
+from akd._base import RunContext
 from akd.agents._base import BaseAgentConfig
 
 from .conftest import (
@@ -28,7 +28,7 @@ class TestInstructorBaseAgentFunctionality:
 
         # Verify agent properties
         assert agent.client == mock_instructor_client
-        assert isinstance(agent.memory, Memory)
+        assert isinstance(agent.memory, list)
         assert len(agent.memory) == 0
 
     def test_initialization_custom_config(
@@ -49,7 +49,7 @@ class TestInstructorBaseAgentFunctionality:
         agent = TestInstructorBaseAgent()
 
         # Test initial memory state
-        assert isinstance(agent.memory, Memory)
+        assert isinstance(agent.memory, list)
         assert len(agent.memory) == 0
 
         # Add test messages manually
@@ -103,9 +103,11 @@ class TestInstructorBaseAgentFunctionality:
 
         agent = TestInstructorBaseAgent()
 
-        # Test response generation with messages parameter
+        # Test response generation with run_context messages
         test_messages = [{"role": "user", "content": "test message"}]
-        result = await agent.get_response_async(messages=test_messages)
+        result = await agent.get_response_async(
+            run_context=RunContext(messages=test_messages),
+        )
 
         # Verify instructor call
         mock_chat_completions.assert_called_once()
@@ -285,7 +287,7 @@ class TestInstructorBaseAgentFunctionality:
         # Test with custom response model
         test_messages = [{"role": "user", "content": "test message"}]
         result = await agent.get_response_async(
-            messages=test_messages,
+            run_context=RunContext(messages=test_messages),
             response_model=AgentTestOutputSchema,
         )
 

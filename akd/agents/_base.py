@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import json
-import uuid
 from abc import abstractmethod
 from collections.abc import AsyncIterator
 from typing import Any, Literal, cast
@@ -16,9 +15,9 @@ from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
 from akd._base import (
     AbstractBase,
+    AgentSession,
     BaseConfig,
     InputSchema,
-    Memory,
     OutputSchema,
     ParamExposureMixin,
     RunContext,
@@ -224,15 +223,19 @@ class BaseAgent[
     def __init__(
         self,
         config: BaseAgentConfig | None = None,
-        memory: Memory | None = None,
         **kwargs,
     ) -> None:
         super().__init__(config=config, **kwargs)
-        self.memory = memory or Memory()
+        self._session_messages: list[dict[str, Any]] = []
 
     def reset_memory(self) -> None:
         """Clear memory."""
-        self.memory.clear()
+        self._session_messages.clear()
+
+    @property
+    def memory(self) -> list[dict[str, Any]]:
+        """Backward-compatible access to persisted session messages."""
+        return self._session_messages
 
     @property
     def _system_prompt(self) -> str:
@@ -263,6 +266,55 @@ class BaseAgent[
             "content": self._system_prompt,
         }
 
+    def _build_run_context(self, run_context: RunContext | None) -> RunContext:
+        """Create a run context copy and ensure it has a run_id."""
+        ctx = (run_context or RunContext()).model_copy()
+        if ctx.run_id is None:
+            import uuid
+
+            ctx.run_id = uuid.uuid4().hex[:8]
+        return ctx
+
+    def _open_session(
+        self,
+        run_context: RunContext,
+        mode: Literal["run", "stream", "chat"],
+    ) -> AgentSession:
+        """Create an agent session bound to this agent's memory store."""
+        return AgentSession(
+            run_context=run_context,
+            store=self._session_messages,
+            stateless=self.stateless,
+            enable_trimming=self.enable_trimming,
+            model_name=self.model_name,
+            max_tokens=self.max_tokens,
+            trim_ratio=self.trim_ratio,
+        )
+
+    def _append_user_turn(
+        self,
+        run_context: RunContext,
+        params: InSchema,
+        mode: Literal["run", "stream", "chat"],
+    ) -> None:
+        """Append user turn unless this is a human-response resume."""
+        if run_context.human_response or params is None:
+            return
+        if mode == "chat" and isinstance(params, TextInput):
+            payload = params.content
+        else:
+            payload = params.model_dump_json(exclude={"type"})
+        run_context.messages.append({"role": "user", "content": payload})
+
+    def _finalize_success(self, run_context: RunContext, output: OutputSchema) -> None:
+        """Append final assistant turn and persist run state."""
+        run_context.messages.append(
+            {
+                "role": "assistant",
+                "content": output.model_dump_json(exclude={"type"}),
+            },
+        )
+
     async def arun(
         self,
         params: InSchema,
@@ -280,43 +332,19 @@ class BaseAgent[
         Returns:
             Output matching the agent's output_schema.
         """
-        run_context = (run_context or RunContext()).model_copy()
-        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+        params = self._validate_input(params)
+        run_context = self._build_run_context(run_context)
 
-        output = PartialModel[self.output_schema]()
-        async with self.memory.asession(
-            stateless=self.stateless,
-            run_context=run_context,
-            enable_trimming=self.enable_trimming,
-            model_name=self.model_name,
-            max_tokens=self.max_tokens,
-            trim_ratio=self.trim_ratio,
-        ) as messages:
-            # Add system message if empty
-            if not messages:
-                messages.append(self._default_system_message())
+        async with self._open_session(run_context, "run") as session:
+            if not session.messages:
+                session.append(self._default_system_message())
+            self._append_user_turn(run_context, params, "run")
 
-            # Add user message (skip if resuming with human response)
-            if params and not (run_context and run_context.human_response):
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": params.model_dump_json(exclude={"type"}),
-                    },
-                )
-
-            run_context.messages = messages
-            output = await super().arun(params, run_context=run_context, **kwargs)
-            run_context.messages.append(
-                {
-                    "role": "assistant",
-                    "content": output.model_dump_json(exclude={"type"}),
-                },
-            )
-
-        # attach run_context (with accumulated usage) to final output
-        output._run_context = run_context
-        return output
+            output = await self._arun(params, run_context=run_context, **kwargs)
+            output = self._validate_output(output)
+            self._finalize_success(run_context, output)
+            output._run_context = run_context
+            return output
 
     async def astream(
         self,
@@ -329,41 +357,25 @@ class BaseAgent[
         Centralizes run_context creation and run_id assignment,
         then delegates to parent astream().
         """
-        run_context = (run_context or RunContext()).model_copy()
-        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+        params = self._validate_input(params)
+        run_context = self._build_run_context(run_context)
 
-        output = PartialModel[self.output_schema]()
-        async with self.memory.asession(
-            stateless=self.stateless,
-            run_context=run_context,
-            enable_trimming=self.enable_trimming,
-            model_name=self.model_name,
-            max_tokens=self.max_tokens,
-            trim_ratio=self.trim_ratio,
-        ) as messages:
-            # Add system message if empty
-            if not messages:
-                messages.append(self._default_system_message())
+        async with self._open_session(run_context, "stream") as session:
+            if not session.messages:
+                session.append(self._default_system_message())
+            self._append_user_turn(run_context, params, "stream")
 
-            # Add user message (skip if resuming with human response)
-            if params and not (run_context and run_context.human_response):
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": params.model_dump_json(exclude={"type"}),
-                    },
-                )
-
-            async for event in super().astream(params, run_context=run_context, **kwargs):
-                if isinstance(event, CompletedEvent):
-                    output = event.data.output
-                    run_context.messages.append(
-                        {
-                            "role": "assistant",
-                            "content": output.model_dump_json(exclude={"type"}),
-                        },
+            async for event in self._astream(params, run_context=run_context, **kwargs):
+                if event.event_type == StreamEventType.COMPLETED:
+                    output = self._validate_output(event.output)
+                    self._finalize_success(run_context, output)
+                    yield CompletedEvent(
+                        source=event.source,
+                        message=event.message,
+                        data=CompletedEventData(output=output),
+                        run_context=run_context,
                     )
-                    event.run_context = run_context
+                    continue
                 yield event
 
     async def achat(
@@ -401,48 +413,28 @@ class BaseAgent[
         """
         params = params if isinstance(params, TextInput) else TextInput(content=str(params))
 
-        run_context = (run_context or RunContext()).model_copy()
-        run_context.run_id = run_context.run_id or uuid.uuid4().hex[:8]
+        run_context = self._build_run_context(run_context)
 
-        output = None
-        async with self.memory.asession(
-            stateless=self.stateless,
-            run_context=run_context,
-            enable_trimming=self.enable_trimming,
-            model_name=self.model_name,
-            max_tokens=self.max_tokens,
-            trim_ratio=self.trim_ratio,
-        ) as messages:
-            # Add system message if empty
-            if not messages:
-                messages.append(self._default_system_message())
+        async with self._open_session(run_context, "chat") as session:
+            if not session.messages:
+                session.append(self._default_system_message())
+            self._append_user_turn(run_context, params, "chat")
+            output = await self._arun(params, run_context=run_context, **kwargs)
+            output = self._validate_output(output)
+            self._finalize_success(run_context, output)
 
-            # Add user message (skip if resuming with human response)
-            if params and not (run_context and run_context.human_response):
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": params.content,
-                    },
-                )
-            # bypass validation maybe and run _arun directly instead of arun
-            output = await super()._arun(params, run_context=run_context, **kwargs)
-            run_context.messages.append(
-                {
-                    "role": "assistant",
-                    "content": output.model_dump_json(exclude={"type"}),
-                },
-            )
-
-        output = TextOutput(content=output._response or str(output)) if not isinstance(output, TextOutput) else output
-        output._run_context = run_context
-        return output
+        chat_output = (
+            TextOutput(content=output._response or str(output)) if not isinstance(output, TextOutput) else output
+        )
+        chat_output._run_context = run_context
+        return chat_output
 
     @abstractmethod
     async def get_response_async(
         self,
-        *args,
-        **kwargs,
+        *,
+        run_context: RunContext,
+        response_model: type[OutputSchema] | None = None,
     ) -> OutputSchema:
         """
         Obtains a response from the language model asynchronously.
@@ -470,7 +462,6 @@ class InstructorBaseAgent[
     def __init__(
         self,
         config: BaseAgentConfig | None = None,
-        memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
         import warnings
@@ -481,7 +472,7 @@ class InstructorBaseAgent[
                 DeprecationWarning,
                 stacklevel=2,
             )
-        super().__init__(config=config, memory=memory, debug=debug)
+        super().__init__(config=config, debug=debug)
 
         # Create the OpenAI client
         self.client = instructor.from_openai(
@@ -565,16 +556,14 @@ class InstructorBaseAgent[
 
     async def get_response_async(
         self,
-        messages: list[dict[str, str]],
+        *,
+        run_context: RunContext,
         response_model: type[OutputSchema] | None = None,
     ) -> OutSchema:
         """
         Obtains a response from the language model asynchronously.
 
         Args:
-            messages (list[dict[str, str]], optional):
-                The messages to send to the model. If not provided,
-                builds from system prompt and memory.
             response_model (Type[BaseModel], optional):
                 The schema for the response data. If not set,
                 self.output_schema is used.
@@ -584,6 +573,10 @@ class InstructorBaseAgent[
         """
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
+
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be initialized before get_response_async")
 
         response = await self.client.chat.completions.create(
             messages=messages,
@@ -599,7 +592,7 @@ class InstructorBaseAgent[
     async def _arun(
         self,
         params: InSchema,
-        run_context: RunContext | None = None,
+        run_context: RunContext,
         **kwargs,
     ) -> OutSchema:
         """
@@ -614,15 +607,14 @@ class InstructorBaseAgent[
         """
         # NOTE: Memory session and messages prep handled by BaseAgent.arun
         # We rely on run_context.messages being set.
-        messages = run_context.messages
-        if messages is None:
+        if run_context.messages is None:
             raise ValueError("run_context.messages must be set (did you call via BaseAgent.arun?)")
 
         # NOTE: Not appending response to messages here anymore;
         # BaseAgent.arun handles that now.
 
         return await self.get_response_async(
-            messages=messages,
+            run_context=run_context,
             response_model=self.output_schema,
         )
 
@@ -641,11 +633,10 @@ class LiteLLMInstructorBaseAgent[
     def __init__(
         self,
         config: BaseAgentConfig | None = None,
-        memory: Memory | None = None,
         debug: bool = False,
     ) -> None:
         # Initialize base class but we'll replace the client
-        super().__init__(config=config, memory=memory, debug=debug)
+        super().__init__(config=config, debug=debug)
 
         # Replace instructor client with LiteLLM version
         self.client = instructor.from_litellm(acompletion)
@@ -693,17 +684,14 @@ class LiteLLMInstructorBaseAgent[
 
     async def get_response_async(
         self,
-        messages: list[dict[str, str]],
+        *,
+        run_context: RunContext,
         response_model: type[OutputSchema] | None = None,
-        run_context: RunContext | None = None,
     ) -> OutSchema:
         """
         Obtains a response from the language model asynchronously with automatic message trimming.
 
         Args:
-            messages (list[dict[str, str]], optional):
-                The messages to send to the model. If not provided,
-                builds from system prompt and memory.
             response_model (Type[BaseModel], optional):
                 The schema for the response data. If not set,
                 self.output_schema is used.
@@ -713,10 +701,9 @@ class LiteLLMInstructorBaseAgent[
         """
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
-
-        # prioritze from run context
-        if run_context and run_context.messages:
-            messages = run_context.messages
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be initialized before get_response_async")
 
         # Build kwargs for completion call
         completion_kwargs = {
@@ -741,8 +728,7 @@ class LiteLLMInstructorBaseAgent[
         )
 
         # Capture token usage from the raw completion
-        if run_context is not None:
-            run_context.usage += self._extract_usage(completion)
+        run_context.usage += self._extract_usage(completion)
 
         response_data = response.model_dump()
         response = response_model(**response_data)
@@ -821,16 +807,14 @@ class LiteLLMInstructorBaseAgent[
         else:
             # === DIRECT MODE (no tools) ===
             output = await self.get_response_async(
-                messages=run_context.messages,
-                response_model=self.output_schema,
                 run_context=run_context,
+                response_model=self.output_schema,
             )
         return output
 
     async def _stream_llm_response(
         self,
         run_context: RunContext,
-        messages: list[dict[str, str]] = None,
         response_model: type[OutputSchema] | None = None,
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
@@ -839,7 +823,6 @@ class LiteLLMInstructorBaseAgent[
         Uses raw LiteLLM streaming to access thinking tokens (reasoning_content).
 
         Args:
-            messages: Chat messages
             run_context: Execution context for event correlation
             response_model: Output schema (defaults to self.output_schema)
             token_batch_size: Batch N tokens before emitting STREAMING event (default=1)
@@ -853,7 +836,9 @@ class LiteLLMInstructorBaseAgent[
         response_model = response_model or self.output_schema
         PartialResponseModel = PartialModel[response_model]
 
-        messages = messages or run_context.messages
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be initialized before _stream_llm_response")
 
         completion_kwargs: dict[str, Any] = {
             "model": self.model_name,
@@ -991,7 +976,6 @@ class LiteLLMInstructorBaseAgent[
     async def _run_tool_loop(
         self,
         run_context: RunContext,
-        messages: list[dict[str, str]] | None = None,
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
         """ReAct loop: call LLM with tools until final answer.
@@ -1001,7 +985,6 @@ class LiteLLMInstructorBaseAgent[
         Human tool calls yield HUMAN_INPUT_REQUIRED and return.
 
         Args:
-            messages: Conversation history (mutated in place)
             run_context: RunContext (may contain human_response for resumption)
             token_batch_size: Batch N characters before emitting STREAMING event
 
@@ -1012,9 +995,9 @@ class LiteLLMInstructorBaseAgent[
         # Attach messages reference to run_context (caller can access live state via any event)
         class_name = self.__class__.__name__
 
-        # prioritize from run context
-        if run_context and run_context.messages:
-            messages = run_context.messages
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be initialized before _run_tool_loop")
 
         # Check for human response continuation (from previous HUMAN_INPUT_REQUIRED)
         human_response = run_context.human_response
@@ -1425,13 +1408,11 @@ class LiteLLMInstructorBaseAgent[
             streamer = (
                 self._run_tool_loop(
                     run_context=run_context,
-                    messages=run_context.messages,
                     token_batch_size=token_batch_size,
                 )
                 if self.tools
                 else self._stream_llm_response(
                     run_context=run_context,
-                    messages=run_context.messages,
                     token_batch_size=token_batch_size,
                 )
             )

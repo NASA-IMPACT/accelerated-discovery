@@ -8,7 +8,7 @@ from litellm import token_counter
 from loguru import logger
 from pydantic import Field
 
-from akd._base import InputSchema, IOSchema, OutputSchema
+from akd._base import InputSchema, IOSchema, OutputSchema, RunContext
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
 from akd.configs.prompts import CONTENT_CONDENSATION_PROMPT
 from akd.structures import SearchResultItem
@@ -78,7 +78,7 @@ class _SingleContentCondensationAgent(
 
         # Get structured response
         response = await self.get_response_async(
-            messages=messages,
+            run_context=RunContext(messages=messages),
             response_model=self.output_schema,
         )
 

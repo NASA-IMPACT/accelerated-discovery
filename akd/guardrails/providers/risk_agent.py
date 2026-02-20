@@ -22,7 +22,7 @@ from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from akd._base import InputSchema, OutputSchema
+from akd._base import InputSchema, OutputSchema, RunContext
 from akd.agents import LiteLLMInstructorBaseAgent
 from akd.agents._base import BaseAgentConfig
 from akd.configs.prompts import RISK_REPORT_SYSTEM_PROMPT, RISK_SYSTEM_PROMPT
@@ -131,7 +131,7 @@ relevant_risk_definitions: {relevant_risk_definitions}
 
         response: RiskReportOutputSchema = await self.get_response_async(
             response_model=RiskReportOutputSchema,
-            messages=messages,
+            run_context=RunContext(messages=messages),
         )  # type: ignore[assignment]
 
         return response
@@ -551,7 +551,7 @@ Model Output: {content}
 
         response: RiskCriteriaOutputSchema = await self.get_response_async(
             response_model=RiskCriteriaOutputSchema,
-            messages=messages,
+            run_context=RunContext(messages=messages),
         )  # type: ignore[assignment]
 
         logger.info(f"Judge criteria obtained for risk: {risk_id}")
