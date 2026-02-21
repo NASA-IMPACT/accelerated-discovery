@@ -187,8 +187,8 @@ class TestInstructorBaseAgentFunctionality:
         """Test that OpenAI and instructor clients are configured correctly."""
         from unittest.mock import patch
 
-        with patch("akd.agents._base.instructor.from_openai") as mock_instructor:
-            with patch("akd.agents._base.openai.AsyncOpenAI") as mock_openai:
+        with patch("akd.agents._base._base.instructor.from_openai") as mock_instructor:
+            with patch("akd.agents._base._base.openai.AsyncOpenAI") as mock_openai:
                 mock_instructor_client = MagicMock()
                 mock_openai_client = MagicMock()
                 mock_instructor.return_value = mock_instructor_client

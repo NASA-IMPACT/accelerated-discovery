@@ -131,9 +131,9 @@ class TestBaseAgentSharedFunctionality:
         # Mock the imports to avoid client initialization
         from unittest.mock import patch
 
-        with patch("akd.agents._base.instructor.from_openai"):
-            with patch("akd.agents._base.instructor.from_openai"):
-                with patch("akd.agents._base.openai.AsyncOpenAI"):
+        with patch("akd.agents._base._base.instructor.from_openai"):
+            with patch("akd.agents._base._base.instructor.from_openai"):
+                with patch("akd.agents._base._base.openai.AsyncOpenAI"):
                     with patch("instructor.from_litellm"):
                         instructor_agent = TestInstructorBaseAgent(config=custom_config)
                         instructor_agent = TestInstructorBaseAgent(config=custom_config)
@@ -193,9 +193,9 @@ class TestEdgeCasesAndErrorHandling:
         # Test that all agent types have the same required interface
         from unittest.mock import patch
 
-        with patch("akd.agents._base.instructor.from_openai"):
-            with patch("akd.agents._base.instructor.from_openai"):
-                with patch("akd.agents._base.openai.AsyncOpenAI"):
+        with patch("akd.agents._base._base.instructor.from_openai"):
+            with patch("akd.agents._base._base.instructor.from_openai"):
+                with patch("akd.agents._base._base.openai.AsyncOpenAI"):
                     with patch("instructor.from_litellm"):
                         instructor_agent = TestInstructorBaseAgent()
                         instructor_agent = TestInstructorBaseAgent()

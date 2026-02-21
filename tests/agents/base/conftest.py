@@ -160,7 +160,7 @@ def litellm_expected_output() -> LiteLLMTestOutputSchema:
 @pytest.fixture
 def mock_openai_client():
     """Create a mock OpenAI client for testing."""
-    with patch("akd.agents._base.openai.AsyncOpenAI") as mock_openai:
+    with patch("akd.agents._base._base.openai.AsyncOpenAI") as mock_openai:
         mock_openai_client = MagicMock()
         mock_openai.return_value = mock_openai_client
         yield mock_openai_client
@@ -169,7 +169,7 @@ def mock_openai_client():
 @pytest.fixture
 def mock_instructor_client():
     """Create a mock instructor client for testing."""
-    with patch("akd.agents._base.instructor.from_openai") as mock_instructor:
+    with patch("akd.agents._base._base.instructor.from_openai") as mock_instructor:
         mock_client = MagicMock()
         mock_instructor.return_value = mock_client
         yield mock_client
