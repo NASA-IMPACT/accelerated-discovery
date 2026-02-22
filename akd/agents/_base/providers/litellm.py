@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from litellm import acompletion
+from pydantic import BaseModel, create_model
 
 from akd._base.structures import RunContext, RunUsage
 
@@ -78,6 +79,20 @@ class LiteLLMAdapter(ProviderAdapter):
                 )
         return normalized
 
+    @staticmethod
+    def _create_instructor_compatible_model(response_model: type[Any]) -> type[BaseModel]:
+        """Create a BaseModel-only schema for instructor response_model."""
+        fields: dict[str, tuple[Any, Any]] = {}
+        for field_name, field_info in response_model.model_fields.items():
+            fields[field_name] = (field_info.annotation, field_info)
+        instructor_model = create_model(
+            response_model.__name__,
+            __base__=BaseModel,
+            **fields,
+        )
+        instructor_model.__doc__ = response_model.__doc__
+        return instructor_model
+
     async def request_once(
         self,
         *,
@@ -102,18 +117,29 @@ class LiteLLMAdapter(ProviderAdapter):
             completion_kwargs.update(request.provider_kwargs)
         completion_kwargs = {k: v for k, v in completion_kwargs.items() if v is not None}
 
-        completion = await self._completion_callable(**completion_kwargs)
-        usage = self._extract_usage(completion)
-
         content: str | None = None
         tool_calls: list[dict[str, Any]] = []
+        completion: Any
+        usage = RunUsage()
 
-        choices = getattr(completion, "choices", None) or []
-        if choices:
-            message = getattr(choices[0], "message", None)
-            if message is not None:
-                content = getattr(message, "content", None)
-                tool_calls = self._normalize_tool_calls(message)
+        if request.output_schema is not None:
+            instructor_model = self._create_instructor_compatible_model(request.output_schema)
+            response, completion = await self.client.chat.completions.create_with_completion(
+                **completion_kwargs,
+                response_model=instructor_model,
+            )
+            usage = self._extract_usage(completion)
+            content = response.model_dump_json() if hasattr(response, "model_dump_json") else str(response)
+        else:
+            completion = await self._completion_callable(**completion_kwargs)
+            usage = self._extract_usage(completion)
+
+            choices = getattr(completion, "choices", None) or []
+            if choices:
+                message = getattr(choices[0], "message", None)
+                if message is not None:
+                    content = getattr(message, "content", None)
+                    tool_calls = self._normalize_tool_calls(message)
 
         return ProviderResponse(
             content=content,
