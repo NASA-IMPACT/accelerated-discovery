@@ -17,7 +17,7 @@ class ProviderAdapter(Protocol):
     They do not own AKD session or StreamEvent orchestration.
     """
 
-    async def stream_provider_events(
+    async def request_stream(
         self,
         *,
         run_context: RunContext,

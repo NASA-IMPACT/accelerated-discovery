@@ -65,6 +65,9 @@ from akd.tools.human import HumanTool, HumanToolInput
 from akd.tools.output import OutputTool
 from akd.utils import PartialModel
 
+from .providers._base import ProviderAdapter
+from .providers.contracts import ProviderRequest
+
 
 class BaseAgentConfig(BaseConfig):
     """Configuration class for base agents."""
@@ -276,6 +279,33 @@ class BaseAgent[
             model_name=self.model_name,
             max_tokens=self.max_tokens,
             trim_ratio=self.trim_ratio,
+        )
+
+    def _get_provider_adapter(self) -> ProviderAdapter:
+        """Return provider adapter used by the shared run engine.
+
+        Provider-specific subclasses should override this when migrating to
+        adapter-driven orchestration.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _get_provider_adapter()",
+        )
+
+    def _build_provider_request(
+        self,
+        *,
+        token_batch_size: int = 10,
+        output_schema: type[Any] | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> ProviderRequest:
+        """Build provider request payload for adapter calls."""
+        return ProviderRequest(
+            model_name=self.model_name,
+            temperature=self.temperature,
+            tools=self.tool_definitions,
+            token_batch_size=token_batch_size,
+            output_schema=output_schema or self.output_schema,
+            provider_kwargs=provider_kwargs or {},
         )
 
     def _append_user_turn(
