@@ -67,7 +67,7 @@ from akd.utils import PartialModel
 
 from .providers import LiteLLMAdapter
 from .providers._base import ProviderAdapter
-from .providers.contracts import ProviderEventType, ProviderRequest
+from .providers.contracts import ProviderEventType, ProviderRequest, ProviderResponse
 
 
 class BaseAgentConfig(BaseConfig):
@@ -748,39 +748,33 @@ class LiteLLMInstructorBaseAgent[
             Type[BaseModel]: The response from the language model.
         """
         response_model = response_model or self.output_schema
-        instructor_model = self._create_instructor_compatible_model(response_model)
-        messages = run_context.messages
-        if messages is None:
-            raise ValueError("run_context.messages must be initialized before get_response_async")
-
-        # Build kwargs for completion call
-        completion_kwargs = {
-            "messages": messages,
-            "model": self.model_name,
-            "temperature": self.temperature,
-            "response_model": instructor_model,
-            "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
-            "api_key": self.api_key,
-            "num_retries": self.num_retries,
-            "drop_params": True,  # Safely drop unsupported params at runtime
-        }
-
-        # Only add reasoning params if set (don't send None)
-        if self.reasoning_effort:
-            completion_kwargs["reasoning_effort"] = self.reasoning_effort
-        if self.reasoning_summary:
-            completion_kwargs["reasoning_summary"] = self.reasoning_summary
-
-        response, completion = await self.client.chat.completions.create_with_completion(
-            **completion_kwargs,
+        request = self._build_provider_request(
+            output_schema=response_model,
+            provider_kwargs={"stream": False},
         )
+        adapter = self._get_provider_adapter()
+        provider_response = await adapter.request_once(
+            run_context=run_context,
+            request=request,
+        )
+        run_context.usage += provider_response.usage
 
-        # Capture token usage from the raw completion
-        run_context.usage += self._extract_usage(completion)
-
-        response_data = response.model_dump()
-        response = response_model(**response_data)
+        response = self._parse_provider_response(provider_response, response_model)
         return cast(OutSchema, response)
+
+    def _parse_provider_response(
+        self,
+        provider_response: ProviderResponse,
+        response_model: type[OutputSchema],
+    ) -> OutputSchema:
+        """Parse a normalized provider response into output schema."""
+        content = provider_response.content
+        if content is None:
+            raise UnexpectedModelBehavior("Provider returned no content for structured output")
+        try:
+            return response_model.model_validate_json(content)
+        except Exception as exc:
+            raise UnexpectedModelBehavior(f"Failed to parse provider response content: {exc}") from exc
 
     @staticmethod
     def _extract_usage(completion: Any) -> RunUsage:
