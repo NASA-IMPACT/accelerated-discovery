@@ -204,6 +204,19 @@ class LiteLLMAdapter(ProviderAdapter):
                     data={"text": reasoning},
                 )
 
+            streamed_tool_calls = getattr(delta, "tool_calls", None) or []
+            for tc in streamed_tool_calls:
+                function = getattr(tc, "function", None)
+                yield ProviderEvent(
+                    kind=ProviderEventType.TOOL_CALL,
+                    data={
+                        "index": getattr(tc, "index", 0),
+                        "id": getattr(tc, "id", None),
+                        "name": getattr(function, "name", None) if function is not None else None,
+                        "arguments_delta": (getattr(function, "arguments", "") if function is not None else ""),
+                    },
+                )
+
             content = getattr(delta, "content", None)
             if content:
                 accumulated += content

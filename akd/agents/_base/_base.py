@@ -467,6 +467,163 @@ class BaseAgent[
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
+    async def _run_engine_stream(
+        self,
+        run_context: RunContext,
+        token_batch_size: int = 10,
+    ) -> AsyncIterator[StreamEvent]:
+        """Unified provider-driven stream engine for non-tool streaming path."""
+        if self.tools:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} tools path for _run_engine_stream() is not implemented in BaseAgent yet",
+            )
+
+        class_name = self.__class__.__name__
+        response_model = self.output_schema
+        PartialResponseModel = PartialModel[response_model]
+
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be initialized before _run_engine_stream")
+
+        provider_kwargs: dict[str, Any] = {
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        if hasattr(self, "_build_response_format_schema"):
+            provider_kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "strict": True,
+                    "schema": cast(Any, self)._build_response_format_schema(response_model),
+                },
+            }
+        if getattr(self, "reasoning_summary", None):
+            provider_kwargs["reasoning"] = {"summary": self.reasoning_summary}
+
+        request = self._build_provider_request(
+            token_batch_size=token_batch_size,
+            output_schema=response_model,
+            provider_kwargs=provider_kwargs,
+        )
+        adapter = self._get_provider_adapter()
+
+        # Handle human response for non-tool agents (inject as user message)
+        if run_context.human_response:
+            content = run_context.human_response.content
+            messages.append(
+                {
+                    "role": "user",
+                    "content": content if isinstance(content, str) else json.dumps(content),
+                },
+            )
+            yield HumanResponseEvent(
+                source=class_name,
+                message="Resumed with human input",
+                data=HumanResponseEventData(
+                    tool_call_id=run_context.human_response.tool_call_id,
+                    response=content,
+                ),
+                run_context=run_context,
+            )
+
+        accumulated = ""
+        token_buffer = ""
+        thinking_buffer = ""
+        last_partial_dict: dict[str, Any] | None = None
+
+        async for provider_event in adapter.request_stream(
+            run_context=run_context,
+            request=request,
+        ):
+            if provider_event.kind == ProviderEventType.USAGE:
+                usage = provider_event.data.get("usage")
+                if isinstance(usage, RunUsage):
+                    run_context.usage += usage
+                continue
+
+            if provider_event.kind == ProviderEventType.REASONING_DELTA:
+                reasoning = provider_event.data.get("text")
+                if isinstance(reasoning, str) and reasoning:
+                    thinking_buffer += reasoning
+                    if len(thinking_buffer) >= token_batch_size:
+                        yield ThinkingEvent(
+                            source=class_name,
+                            message="Reasoning...",
+                            data=ThinkingEventData(thinking_content=thinking_buffer),
+                            run_context=run_context,
+                        )
+                        thinking_buffer = ""
+                continue
+
+            if provider_event.kind == ProviderEventType.TEXT_DELTA:
+                content = provider_event.data.get("text")
+                if isinstance(content, str) and content:
+                    token_buffer += content
+                    accumulated += content
+
+                    if len(token_buffer) >= token_batch_size:
+                        yield StreamingTokenEvent(
+                            source=class_name,
+                            data=StreamingEventData(token=token_buffer),
+                            run_context=run_context,
+                        )
+                        token_buffer = ""
+
+                    try:
+                        parsed = json.loads(accumulated)
+                    except json.JSONDecodeError:
+                        parsed = None
+                    if isinstance(parsed, dict) and parsed != last_partial_dict:
+                        last_partial_dict = parsed
+                        try:
+                            partial = PartialResponseModel.model_validate(parsed)
+                            yield PartialOutputEvent(
+                                source=class_name,
+                                message="Partial...",
+                                data=PartialEventData(partial_output=partial),
+                                run_context=run_context,
+                            )
+                        except Exception:
+                            pass
+                continue
+
+            if provider_event.kind == ProviderEventType.FINAL_OUTPUT:
+                final_content = provider_event.data.get("content")
+                if isinstance(final_content, str):
+                    accumulated = final_content
+                continue
+
+            if provider_event.kind == ProviderEventType.ERROR:
+                error = provider_event.data.get("error")
+                raise UnexpectedModelBehavior(
+                    str(error) if error is not None else "Provider adapter emitted error event",
+                )
+
+        if thinking_buffer:
+            yield ThinkingEvent(
+                source=class_name,
+                message="Reasoning...",
+                data=ThinkingEventData(thinking_content=thinking_buffer),
+                run_context=run_context,
+            )
+
+        if token_buffer:
+            yield StreamingTokenEvent(
+                source=class_name,
+                data=StreamingEventData(token=token_buffer),
+                run_context=run_context,
+            )
+
+        output = response_model.model_validate_json(accumulated)
+        yield CompletedEvent(
+            source=class_name,
+            message=f"Completed {class_name}",
+            data=CompletedEventData(output=output),
+            run_context=run_context,
+        )
+
 
 class InstructorBaseAgent[
     InSchema: InputSchema,
@@ -1452,17 +1609,9 @@ class LiteLLMInstructorBaseAgent[
             # initialize to partial object for now
             output = PartialModel[self.output_schema]()
 
-            # Route: tool calling mode vs streaming mode
-            streamer = (
-                self._run_tool_loop(
-                    run_context=run_context,
-                    token_batch_size=token_batch_size,
-                )
-                if self.tools
-                else self._stream_llm_response(
-                    run_context=run_context,
-                    token_batch_size=token_batch_size,
-                )
+            streamer = self._run_engine_stream(
+                run_context=run_context,
+                token_batch_size=token_batch_size,
             )
 
             async for event in streamer:
@@ -1483,6 +1632,26 @@ class LiteLLMInstructorBaseAgent[
                 run_context=run_context,
             )
             raise
+
+    async def _run_engine_stream(
+        self,
+        run_context: RunContext,
+        token_batch_size: int = 10,
+    ) -> AsyncIterator[StreamEvent]:
+        """Bridge: tools path stays local, no-tools path uses BaseAgent engine."""
+        streamer = (
+            self._run_tool_loop(
+                run_context=run_context,
+                token_batch_size=token_batch_size,
+            )
+            if self.tools
+            else super()._run_engine_stream(
+                run_context=run_context,
+                token_batch_size=token_batch_size,
+            )
+        )
+        async for event in streamer:
+            yield event
 
 
 Agent = LiteLLMInstructorBaseAgent
