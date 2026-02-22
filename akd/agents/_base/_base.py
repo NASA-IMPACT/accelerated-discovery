@@ -548,7 +548,7 @@ class InstructorBaseAgent[
         instructor_model = create_model(
             response_model.__name__,
             __base__=BaseModel,
-            **fields,
+            **cast(dict[str, Any], fields),
         )
 
         # Copy over the docstring and other metadata

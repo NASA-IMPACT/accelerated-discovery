@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from litellm import acompletion
 from pydantic import BaseModel, create_model
 
+from akd._base.errors import UnexpectedModelBehavior
 from akd._base.structures import RunContext, RunUsage
 
 from ._base import ProviderAdapter
@@ -88,7 +90,7 @@ class LiteLLMAdapter(ProviderAdapter):
         instructor_model = create_model(
             response_model.__name__,
             __base__=BaseModel,
-            **fields,
+            **cast(dict[str, Any], fields),
         )
         instructor_model.__doc__ = response_model.__doc__
         return instructor_model
@@ -129,7 +131,13 @@ class LiteLLMAdapter(ProviderAdapter):
                 response_model=instructor_model,
             )
             usage = self._extract_usage(completion)
-            content = response.model_dump_json() if hasattr(response, "model_dump_json") else str(response)
+            if hasattr(response, "model_dump"):
+                content = json.dumps(response.model_dump())
+            elif hasattr(response, "model_dump_json"):
+                dumped = response.model_dump_json()
+                content = dumped if isinstance(dumped, str) else str(dumped)
+            else:
+                content = str(response)
         else:
             completion = await self._completion_callable(**completion_kwargs)
             usage = self._extract_usage(completion)
@@ -140,6 +148,9 @@ class LiteLLMAdapter(ProviderAdapter):
                 if message is not None:
                     content = getattr(message, "content", None)
                     tool_calls = self._normalize_tool_calls(message)
+
+        if content is None and not tool_calls:
+            raise UnexpectedModelBehavior("Provider returned neither content nor tool_calls")
 
         return ProviderResponse(
             content=content,
