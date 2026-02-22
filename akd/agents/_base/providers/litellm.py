@@ -10,7 +10,12 @@ from litellm import acompletion
 from akd._base.structures import RunContext, RunUsage
 
 from ._base import ProviderAdapter
-from .contracts import ProviderEvent, ProviderEventType, ProviderRequest
+from .contracts import (
+    ProviderEvent,
+    ProviderEventType,
+    ProviderRequest,
+    ProviderResponse,
+)
 
 
 class LiteLLMAdapter(ProviderAdapter):
@@ -48,6 +53,74 @@ class LiteLLMAdapter(ProviderAdapter):
                     if isinstance(v, int) and v > 0:
                         run_usage.details[f"{details_attr}.{k}"] = v
         return run_usage
+
+    @staticmethod
+    def _normalize_tool_calls(message: Any) -> list[dict[str, Any]]:
+        """Normalize provider tool calls to list[dict[str, Any]]."""
+        tool_calls = getattr(message, "tool_calls", None) or []
+        normalized: list[dict[str, Any]] = []
+        for call in tool_calls:
+            if hasattr(call, "model_dump"):
+                normalized.append(call.model_dump())
+            elif isinstance(call, dict):
+                normalized.append(call)
+            else:
+                function = getattr(call, "function", None)
+                normalized.append(
+                    {
+                        "id": getattr(call, "id", None),
+                        "type": getattr(call, "type", "function"),
+                        "function": {
+                            "name": getattr(function, "name", None) if function is not None else None,
+                            "arguments": (getattr(function, "arguments", None) if function is not None else None),
+                        },
+                    },
+                )
+        return normalized
+
+    async def request_once(
+        self,
+        *,
+        run_context: RunContext,
+        request: ProviderRequest,
+    ) -> ProviderResponse:
+        """Return one normalized non-stream response for a LiteLLM request."""
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be initialized before provider request")
+
+        completion_kwargs: dict[str, Any] = {
+            "model": request.model_name,
+            "messages": messages,
+            "stream": False,
+        }
+        if request.temperature is not None:
+            completion_kwargs["temperature"] = request.temperature
+        if request.tools:
+            completion_kwargs["tools"] = request.tools
+        if request.provider_kwargs:
+            completion_kwargs.update(request.provider_kwargs)
+        completion_kwargs = {k: v for k, v in completion_kwargs.items() if v is not None}
+
+        completion = await self._completion_callable(**completion_kwargs)
+        usage = self._extract_usage(completion)
+
+        content: str | None = None
+        tool_calls: list[dict[str, Any]] = []
+
+        choices = getattr(completion, "choices", None) or []
+        if choices:
+            message = getattr(choices[0], "message", None)
+            if message is not None:
+                content = getattr(message, "content", None)
+                tool_calls = self._normalize_tool_calls(message)
+
+        return ProviderResponse(
+            content=content,
+            tool_calls=tool_calls,
+            usage=usage,
+            raw=completion,
+        )
 
     async def request_stream(
         self,
