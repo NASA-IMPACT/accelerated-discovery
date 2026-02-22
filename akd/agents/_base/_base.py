@@ -67,7 +67,7 @@ from akd.utils import PartialModel
 
 from .providers import LiteLLMAdapter
 from .providers._base import ProviderAdapter
-from .providers.contracts import ProviderRequest
+from .providers.contracts import ProviderEventType, ProviderRequest
 
 
 class BaseAgentConfig(BaseConfig):
@@ -728,7 +728,7 @@ class LiteLLMInstructorBaseAgent[
 
     def _get_provider_adapter(self) -> ProviderAdapter:
         """Return the LiteLLM provider adapter for this agent."""
-        return LiteLLMAdapter(client=self.client)
+        return LiteLLMAdapter(client=self.client, completion_callable=acompletion)
 
     async def get_response_async(
         self,
@@ -888,14 +888,8 @@ class LiteLLMInstructorBaseAgent[
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _stream_llm_response")
 
-        completion_kwargs: dict[str, Any] = {
-            "model": self.model_name,
-            "messages": messages,
+        provider_kwargs: dict[str, Any] = {
             "stream": True,
-            "temperature": self.temperature,
-            "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
-            "api_key": self.api_key,
-            "drop_params": True,  # Allow unsupported params to be dropped
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
@@ -906,11 +900,15 @@ class LiteLLMInstructorBaseAgent[
             },
             "stream_options": {"include_usage": True},
         }
-
-        if self.reasoning_effort:
-            completion_kwargs["reasoning_effort"] = self.reasoning_effort
         if self.reasoning_summary:
-            completion_kwargs["reasoning"] = {"summary": self.reasoning_summary}
+            provider_kwargs["reasoning"] = {"summary": self.reasoning_summary}
+
+        request = self._build_provider_request(
+            token_batch_size=token_batch_size,
+            output_schema=response_model,
+            provider_kwargs=provider_kwargs,
+        )
+        adapter = self._get_provider_adapter()
 
         class_name = self.__class__.__name__
 
@@ -938,62 +936,70 @@ class LiteLLMInstructorBaseAgent[
         thinking_buffer = ""
         last_partial_dict = None
 
-        response = await acompletion(**completion_kwargs)
-        async for chunk in response:
-            run_context.usage += self._extract_usage(chunk)
-
-            # Check if chunk.choices is not empty
-            if not chunk.choices:
+        async for provider_event in adapter.request_stream(
+            run_context=run_context,
+            request=request,
+        ):
+            if provider_event.kind == ProviderEventType.USAGE:
+                usage = provider_event.data.get("usage")
+                if isinstance(usage, RunUsage):
+                    run_context.usage += usage
                 continue
 
-            delta = chunk.choices[0].delta
-
-            # Thinking tokens (Claude extended thinking, o1 reasoning)
-            reasoning = getattr(delta, "reasoning_content", None) or getattr(
-                delta,
-                "thinking",
-                None,
-            )
-            # Note: Not recommended to track thinking tokens in history
-            if reasoning:
-                thinking_buffer += reasoning
-                if len(thinking_buffer) >= token_batch_size:
-                    yield ThinkingEvent(
-                        source=class_name,
-                        message="Reasoning...",
-                        data=ThinkingEventData(thinking_content=thinking_buffer),
-                        run_context=run_context,
-                    )
-                    thinking_buffer = ""
-
-            # Content tokens - batch, then accumulate and validate as partial
-            if delta.content:
-                token_buffer += delta.content
-                accumulated += delta.content
-
-                # Emit batched tokens
-                if len(token_buffer) >= token_batch_size:
-                    yield StreamingTokenEvent(
-                        source=class_name,
-                        data=StreamingEventData(token=token_buffer),
-                        run_context=run_context,
-                    )
-                    token_buffer = ""
-
-                # Try to validate as partial
-                parsed = self._try_parse_json(accumulated)
-                if parsed and parsed != last_partial_dict:
-                    last_partial_dict = parsed
-                    try:
-                        partial = PartialResponseModel.model_validate(parsed)
-                        yield PartialOutputEvent(
+            if provider_event.kind == ProviderEventType.REASONING_DELTA:
+                reasoning = provider_event.data.get("text")
+                if isinstance(reasoning, str) and reasoning:
+                    thinking_buffer += reasoning
+                    if len(thinking_buffer) >= token_batch_size:
+                        yield ThinkingEvent(
                             source=class_name,
-                            message="Partial...",
-                            data=PartialEventData(partial_output=partial),
+                            message="Reasoning...",
+                            data=ThinkingEventData(thinking_content=thinking_buffer),
                             run_context=run_context,
                         )
-                    except Exception:
-                        pass  # Skip invalid partials
+                        thinking_buffer = ""
+                continue
+
+            if provider_event.kind == ProviderEventType.TEXT_DELTA:
+                content = provider_event.data.get("text")
+                if isinstance(content, str) and content:
+                    token_buffer += content
+                    accumulated += content
+
+                    if len(token_buffer) >= token_batch_size:
+                        yield StreamingTokenEvent(
+                            source=class_name,
+                            data=StreamingEventData(token=token_buffer),
+                            run_context=run_context,
+                        )
+                        token_buffer = ""
+
+                    parsed = self._try_parse_json(accumulated)
+                    if parsed and parsed != last_partial_dict:
+                        last_partial_dict = parsed
+                        try:
+                            partial = PartialResponseModel.model_validate(parsed)
+                            yield PartialOutputEvent(
+                                source=class_name,
+                                message="Partial...",
+                                data=PartialEventData(partial_output=partial),
+                                run_context=run_context,
+                            )
+                        except Exception:
+                            pass
+                continue
+
+            if provider_event.kind == ProviderEventType.FINAL_OUTPUT:
+                final_content = provider_event.data.get("content")
+                if isinstance(final_content, str):
+                    accumulated = final_content
+                continue
+
+            if provider_event.kind == ProviderEventType.ERROR:
+                error = provider_event.data.get("error")
+                raise UnexpectedModelBehavior(
+                    str(error) if error is not None else "Provider adapter emitted error event",
+                )
 
         # Emit remaining thinking tokens
         if thinking_buffer:

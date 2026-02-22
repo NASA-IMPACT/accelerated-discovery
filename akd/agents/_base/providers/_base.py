@@ -7,7 +7,7 @@ from typing import Protocol
 
 from akd._base.structures import RunContext
 
-from .contracts import ProviderEvent, ProviderRequest
+from .contracts import ProviderEvent, ProviderRequest, ProviderResponse
 
 
 class ProviderAdapter(Protocol):
@@ -16,6 +16,15 @@ class ProviderAdapter(Protocol):
     Adapters parse backend-specific streams and emit normalized ProviderEvent values.
     They do not own AKD session or StreamEvent orchestration.
     """
+
+    async def request_once(
+        self,
+        *,
+        run_context: RunContext,
+        request: ProviderRequest,
+    ) -> ProviderResponse:
+        """Return one normalized provider response for a single run."""
+        ...
 
     def request_stream(
         self,

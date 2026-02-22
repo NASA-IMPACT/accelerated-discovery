@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from akd._base.structures import RunUsage
+
 
 class ProviderEventType(StrEnum):
     """Normalized internal event types emitted by provider adapters."""
@@ -39,4 +41,13 @@ class ProviderRequest(BaseModel):
     provider_kwargs: dict[str, Any] = Field(default_factory=dict)
 
 
-__all__ = ["ProviderEvent", "ProviderEventType", "ProviderRequest"]
+class ProviderResponse(BaseModel):
+    """Provider-agnostic non-stream response payload."""
+
+    content: str | None = None
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    usage: RunUsage = Field(default_factory=RunUsage)
+    raw: Any | None = None
+
+
+__all__ = ["ProviderEvent", "ProviderEventType", "ProviderRequest", "ProviderResponse"]
