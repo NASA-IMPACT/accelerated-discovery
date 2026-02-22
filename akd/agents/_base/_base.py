@@ -65,6 +65,7 @@ from akd.tools.human import HumanTool, HumanToolInput
 from akd.tools.output import OutputTool
 from akd.utils import PartialModel
 
+from .providers import LiteLLMAdapter
 from .providers._base import ProviderAdapter
 from .providers.contracts import ProviderRequest
 
@@ -698,6 +699,36 @@ class LiteLLMInstructorBaseAgent[
         result.client = instructor.from_litellm(acompletion)
 
         return result
+
+    def _build_provider_request(
+        self,
+        *,
+        token_batch_size: int = 10,
+        output_schema: type[Any] | None = None,
+        provider_kwargs: dict[str, Any] | None = None,
+    ) -> ProviderRequest:
+        """Build provider request with LiteLLM-specific kwargs."""
+        base_kwargs: dict[str, Any] = {
+            "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
+            "api_key": self.api_key,
+            "num_retries": self.num_retries,
+            "drop_params": True,
+        }
+        if self.reasoning_effort:
+            base_kwargs["reasoning_effort"] = self.reasoning_effort
+        if self.reasoning_summary:
+            base_kwargs["reasoning_summary"] = self.reasoning_summary
+        if provider_kwargs:
+            base_kwargs.update(provider_kwargs)
+        return super()._build_provider_request(
+            token_batch_size=token_batch_size,
+            output_schema=output_schema,
+            provider_kwargs=base_kwargs,
+        )
+
+    def _get_provider_adapter(self) -> ProviderAdapter:
+        """Return the LiteLLM provider adapter for this agent."""
+        return LiteLLMAdapter(client=self.client)
 
     async def get_response_async(
         self,
