@@ -473,46 +473,19 @@ class BaseAgent[
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
         """Unified provider-driven stream engine for tools and non-tools."""
-        if self.tools:
-            async for event in self._run_tool_loop(
-                run_context=run_context,
-                token_batch_size=token_batch_size,
-            ):
-                yield event
-            return
-
         class_name = self.__class__.__name__
-        response_model = self.output_schema
-        PartialResponseModel = PartialModel[response_model]
-
         messages = run_context.messages
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _run_engine_stream")
-
-        provider_kwargs: dict[str, Any] = {
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-        if hasattr(self, "_build_response_format_schema"):
-            provider_kwargs["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": response_model.__name__,
-                    "strict": True,
-                    "schema": cast(Any, self)._build_response_format_schema(response_model),
-                },
-            }
-        if getattr(self, "reasoning_summary", None):
-            provider_kwargs["reasoning"] = {"summary": self.reasoning_summary}
+        response_model = self.output_schema
+        partial_response_model = PartialModel[response_model]
 
         request = self._build_provider_request(
             token_batch_size=token_batch_size,
             output_schema=response_model,
-            provider_kwargs=provider_kwargs,
         )
         adapter = self._get_provider_adapter()
 
-        # Handle human response for non-tool agents (inject as user message)
         if run_context.human_response:
             content = run_context.human_response.content
             messages.append(
@@ -581,7 +554,7 @@ class BaseAgent[
                     if isinstance(parsed, dict) and parsed != last_partial_dict:
                         last_partial_dict = parsed
                         try:
-                            partial = PartialResponseModel.model_validate(parsed)
+                            partial = partial_response_model.model_validate(parsed)
                             yield PartialOutputEvent(
                                 source=class_name,
                                 message="Partial...",
@@ -626,299 +599,6 @@ class BaseAgent[
             data=CompletedEventData(output=output),
             run_context=run_context,
         )
-
-    async def _run_tool_loop(
-        self,
-        run_context: RunContext,
-        token_batch_size: int = 10,
-    ) -> AsyncIterator[StreamEvent]:
-        """ReAct loop: call LLM with tools until final answer."""
-        class_name = self.__class__.__name__
-
-        messages = run_context.messages
-        if messages is None:
-            raise ValueError("run_context.messages must be initialized before _run_tool_loop")
-
-        human_response = run_context.human_response
-        if human_response:
-            tool_call_id = human_response.tool_call_id
-            content = human_response.content
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": json.dumps(content),
-                },
-            )
-            yield HumanResponseEvent(
-                source=class_name,
-                message="Resumed with human input",
-                data=HumanResponseEventData(tool_call_id=tool_call_id, response=content),
-                run_context=run_context,
-            )
-
-        PartialResponseModel = PartialModel[self.output_schema]
-        output_tool = OutputTool(self.output_schema)
-        all_tool_instances = self.tools + [output_tool]
-        all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
-        total_tool_calls = 0
-
-        for _ in range(self.max_tool_iterations):
-            completion_kwargs: dict[str, Any] = {
-                "model": self.model_name,
-                "messages": messages,
-                "tools": all_tool_definitions,
-                "temperature": self.temperature,
-                "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
-                "api_key": self.api_key,
-                "drop_params": True,
-                "stream": True,
-                "stream_options": {"include_usage": True},
-            }
-            if self.reasoning_effort:
-                completion_kwargs["reasoning_effort"] = self.reasoning_effort
-            if self.reasoning_summary:
-                completion_kwargs["reasoning"] = {"summary": self.reasoning_summary}
-
-            response = await acompletion(**completion_kwargs)
-            accumulated_content = ""
-            token_buffer = ""
-            last_partial_dict: dict[str, Any] | None = None
-            accumulated_tool_calls: dict[int, dict[str, Any]] = {}
-            buffered_partials: list[StreamEvent] = []
-            thinking_buffer = ""
-
-            async for chunk in response:
-                extract_usage = getattr(self, "_extract_usage", None)
-                if extract_usage is not None:
-                    run_context.usage += extract_usage(chunk)
-                delta = chunk.choices[0].delta
-
-                reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "thinking", None)
-                if reasoning:
-                    thinking_buffer += reasoning
-                    if len(thinking_buffer) >= token_batch_size:
-                        yield ThinkingEvent(
-                            source=class_name,
-                            message="Reasoning...",
-                            data=ThinkingEventData(thinking_content=thinking_buffer, streaming=True),
-                            run_context=run_context,
-                        )
-                        thinking_buffer = ""
-
-                if delta.content:
-                    accumulated_content += delta.content
-                    token_buffer += delta.content
-                    if len(token_buffer) >= token_batch_size:
-                        yield StreamingTokenEvent(
-                            source=class_name,
-                            message=token_buffer,
-                            data=StreamingEventData(token=token_buffer),
-                            run_context=run_context,
-                        )
-                        token_buffer = ""
-
-                    parsed = self._try_parse_json(accumulated_content)
-                    if parsed and parsed != last_partial_dict:
-                        last_partial_dict = parsed
-                        try:
-                            partial = PartialResponseModel.model_validate(parsed)
-                            buffered_partials.append(
-                                PartialOutputEvent(
-                                    source=class_name,
-                                    message="Partial output",
-                                    data=PartialEventData(partial_output=partial),
-                                    run_context=run_context,
-                                ),
-                            )
-                        except Exception:
-                            pass
-
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        idx = tc.index
-                        if idx not in accumulated_tool_calls:
-                            accumulated_tool_calls[idx] = {
-                                "id": tc.id or "",
-                                "name": tc.function.name if tc.function else "",
-                                "arguments": tc.function.arguments if tc.function else "",
-                            }
-                        else:
-                            if tc.id:
-                                accumulated_tool_calls[idx]["id"] = tc.id
-                            if tc.function and tc.function.name:
-                                accumulated_tool_calls[idx]["name"] = tc.function.name
-                            if tc.function and tc.function.arguments:
-                                accumulated_tool_calls[idx]["arguments"] += tc.function.arguments
-
-            if thinking_buffer:
-                yield ThinkingEvent(
-                    source=class_name,
-                    message="Reasoning...",
-                    data=ThinkingEventData(thinking_content=thinking_buffer, streaming=True),
-                    run_context=run_context,
-                )
-
-            if token_buffer:
-                yield StreamingTokenEvent(
-                    source=class_name,
-                    message=token_buffer,
-                    data=StreamingEventData(token=token_buffer),
-                    run_context=run_context,
-                )
-
-            if not accumulated_tool_calls:
-                for partial_event in buffered_partials:
-                    yield partial_event
-                if not accumulated_content:
-                    raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
-                try:
-                    output = self.output_schema.model_validate_json(accumulated_content)
-                    logger.warning(
-                        "Model gave direct response instead of calling final_answer tool. Parsed as JSON fallback.",
-                    )
-                    yield CompletedEvent(
-                        source=class_name,
-                        message=f"Completed {class_name}",
-                        data=CompletedEventData[self.output_schema](output=output),
-                        run_context=run_context,
-                    )
-                    return
-                except Exception:
-                    pass
-
-                logger.warning("LLM responded with text instead of calling a tool. Retrying.")
-                yield ThinkingEvent(
-                    source=class_name,
-                    message="Internal reasoning...",
-                    data=ThinkingEventData(thinking_content=accumulated_content),
-                    run_context=run_context,
-                )
-                messages.append({"role": "assistant", "content": accumulated_content})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
-                    },
-                )
-                continue
-
-            tool_calls: list[ToolCall] = []
-            tool_calls_for_message: list[dict[str, Any]] = []
-            for idx in sorted(accumulated_tool_calls.keys()):
-                tc_data = accumulated_tool_calls[idx]
-                tool_call = ToolCall(
-                    tool_call_id=tc_data["id"],
-                    tool_name=tc_data["name"],
-                    arguments=json.loads(tc_data["arguments"]),
-                )
-                tool_calls.append(tool_call)
-                tool_calls_for_message.append(
-                    {
-                        "id": tc_data["id"],
-                        "type": "function",
-                        "function": {"name": tc_data["name"], "arguments": tc_data["arguments"]},
-                    },
-                )
-                yield ToolCallingEvent(
-                    source=class_name,
-                    message=f"Calling {tool_call.tool_name}",
-                    data=ToolCallingEventData(tool_call=tool_call),
-                    run_context=run_context,
-                )
-
-            for tool_call in tool_calls:
-                if isinstance(self._find_tool(tool_call.tool_name), HumanTool):
-                    try:
-                        human_input = HumanToolInput(**tool_call.arguments)
-                    except Exception:
-                        human_input = HumanToolInput(question=str(tool_call.arguments.get("question", "Input needed")))
-
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": accumulated_content or None,
-                            "tool_calls": tool_calls_for_message,
-                        },
-                    )
-                    run_context.messages = list(messages)
-                    yield HumanInputRequiredEvent(
-                        source=class_name,
-                        message=f"Human input required: {human_input.question}",
-                        data=HumanInputRequiredEventData(
-                            human_input=human_input,
-                            tool_call_id=tool_call.tool_call_id,
-                            tool_name=tool_call.tool_name,
-                        ),
-                        run_context=run_context,
-                    )
-                    return
-
-            if self.max_tool_calls is not None and total_tool_calls + len(tool_calls) > self.max_tool_calls:
-                raise MaxToolCallsExceeded(
-                    f"Exceeded {self.max_tool_calls} total tool calls "
-                    f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
-                )
-
-            results = await self._execute_tools_parallel(tool_calls, tools=all_tool_instances)
-            total_tool_calls += len(tool_calls)
-
-            for result in results:
-                if result.tool_name == "final_answer":
-                    if result.error:
-                        logger.warning(
-                            f"final_answer validation failed, feeding error back to LLM for retry: {result.error}",
-                        )
-                        break
-                    output = self.output_schema.model_validate(result.content)
-                    yield CompletedEvent(
-                        source=class_name,
-                        message=f"Completed {class_name}",
-                        data=CompletedEventData[self.output_schema](output=output),
-                        run_context=run_context,
-                    )
-                    return
-
-            for result in results:
-                yield ToolResultEvent(
-                    source=class_name,
-                    message=f"Result from {result.tool_name}",
-                    data=ToolResultEventData(result=result),
-                    run_context=run_context,
-                )
-
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": accumulated_content or None,
-                    "tool_calls": tool_calls_for_message,
-                },
-            )
-            for result in results:
-                content = json.dumps(result.content) if result.content else (result.error or "")
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": result.tool_call_id,
-                        "content": content,
-                    },
-                )
-
-            if self.reflection_prompt:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": self.reflection_prompt,
-                    },
-                )
-                yield ThinkingEvent(
-                    source=class_name,
-                    message="Reflecting on results...",
-                    data=ThinkingEventData(reflection_prompt=self.reflection_prompt),
-                    run_context=run_context,
-                )
-
-        raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
 
 
 class InstructorBaseAgent[
@@ -1286,9 +966,8 @@ class LiteLLMInstructorBaseAgent[
         token_batch_size = kwargs.pop("token_batch_size", 10)
         if self.tools:
             # === TOOL CALLING MODE ===
-            # Use _run_tool_loop and consume events to get final output
-            # Note: Tool loop mutates `messages` in place during iterations
-            async for event in self._run_tool_loop(
+            # Consume unified streaming engine until completion.
+            async for event in self._run_engine_stream(
                 run_context=run_context,
                 token_batch_size=token_batch_size,
             ):
@@ -1394,20 +1073,320 @@ class LiteLLMInstructorBaseAgent[
         run_context: RunContext,
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
-        """Bridge: tools path stays local, no-tools path uses BaseAgent engine."""
-        streamer = (
-            self._run_tool_loop(
+        """LiteLLM-specific engine: provider stream plus AKD-managed ReAct loop for tools."""
+        if not self.tools:
+            async for event in super()._run_engine_stream(
                 run_context=run_context,
                 token_batch_size=token_batch_size,
+            ):
+                yield event
+            return
+
+        class_name = self.__class__.__name__
+        messages = run_context.messages
+        if messages is None:
+            raise ValueError("run_context.messages must be initialized before _run_engine_stream")
+
+        human_response = run_context.human_response
+        if human_response:
+            tool_call_id = human_response.tool_call_id
+            content = human_response.content
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": json.dumps(content),
+                },
             )
-            if self.tools
-            else super()._run_engine_stream(
+            yield HumanResponseEvent(
+                source=class_name,
+                message="Resumed with human input",
+                data=HumanResponseEventData(tool_call_id=tool_call_id, response=content),
                 run_context=run_context,
-                token_batch_size=token_batch_size,
             )
-        )
-        async for event in streamer:
-            yield event
+
+        partial_response_model = PartialModel[self.output_schema]
+        output_tool = OutputTool(self.output_schema)
+        all_tool_instances = self.tools + [output_tool]
+        all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
+        total_tool_calls = 0
+
+        for _ in range(self.max_tool_iterations):
+            request = self._build_provider_request(
+                token_batch_size=token_batch_size,
+                output_schema=self.output_schema,
+                provider_kwargs={
+                    "stream": True,
+                    "tools": all_tool_definitions,
+                    "stream_options": {"include_usage": True},
+                    "reasoning": {"summary": self.reasoning_summary} if self.reasoning_summary else None,
+                },
+            )
+            adapter = self._get_provider_adapter()
+
+            accumulated_content = ""
+            token_buffer = ""
+            last_partial_dict: dict[str, Any] | None = None
+            accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+            buffered_partials: list[StreamEvent] = []
+            thinking_buffer = ""
+
+            async for provider_event in adapter.request_stream(
+                run_context=run_context,
+                request=request,
+            ):
+                if provider_event.kind == ProviderEventType.USAGE:
+                    usage = provider_event.data.get("usage")
+                    if isinstance(usage, RunUsage):
+                        run_context.usage += usage
+                    continue
+
+                if provider_event.kind == ProviderEventType.REASONING_DELTA:
+                    reasoning = provider_event.data.get("text")
+                    if isinstance(reasoning, str) and reasoning:
+                        thinking_buffer += reasoning
+                        if len(thinking_buffer) >= token_batch_size:
+                            yield ThinkingEvent(
+                                source=class_name,
+                                message="Reasoning...",
+                                data=ThinkingEventData(thinking_content=thinking_buffer, streaming=True),
+                                run_context=run_context,
+                            )
+                            thinking_buffer = ""
+                    continue
+
+                if provider_event.kind == ProviderEventType.TEXT_DELTA:
+                    content = provider_event.data.get("text")
+                    if isinstance(content, str) and content:
+                        accumulated_content += content
+                        token_buffer += content
+                        if len(token_buffer) >= token_batch_size:
+                            yield StreamingTokenEvent(
+                                source=class_name,
+                                message=token_buffer,
+                                data=StreamingEventData(token=token_buffer),
+                                run_context=run_context,
+                            )
+                            token_buffer = ""
+
+                        parsed = self._try_parse_json(accumulated_content)
+                        if parsed and parsed != last_partial_dict:
+                            last_partial_dict = parsed
+                            try:
+                                partial = partial_response_model.model_validate(parsed)
+                                buffered_partials.append(
+                                    PartialOutputEvent(
+                                        source=class_name,
+                                        message="Partial output",
+                                        data=PartialEventData(partial_output=partial),
+                                        run_context=run_context,
+                                    ),
+                                )
+                            except Exception:
+                                pass
+                    continue
+
+                if provider_event.kind == ProviderEventType.TOOL_CALL:
+                    idx = int(provider_event.data.get("index", 0))
+                    tc_id = provider_event.data.get("id")
+                    tc_name = provider_event.data.get("name")
+                    tc_args_delta = provider_event.data.get("arguments_delta", "")
+                    if idx not in accumulated_tool_calls:
+                        accumulated_tool_calls[idx] = {
+                            "id": tc_id or "",
+                            "name": tc_name or "",
+                            "arguments": tc_args_delta if isinstance(tc_args_delta, str) else "",
+                        }
+                    else:
+                        if tc_id:
+                            accumulated_tool_calls[idx]["id"] = tc_id
+                        if tc_name:
+                            accumulated_tool_calls[idx]["name"] = tc_name
+                        if isinstance(tc_args_delta, str) and tc_args_delta:
+                            accumulated_tool_calls[idx]["arguments"] += tc_args_delta
+                    continue
+
+                if provider_event.kind == ProviderEventType.FINAL_OUTPUT:
+                    final_content = provider_event.data.get("content")
+                    if isinstance(final_content, str):
+                        accumulated_content = final_content
+                    continue
+
+                if provider_event.kind == ProviderEventType.ERROR:
+                    error = provider_event.data.get("error")
+                    raise UnexpectedModelBehavior(
+                        str(error) if error is not None else "Provider adapter emitted error event",
+                    )
+
+            if thinking_buffer:
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Reasoning...",
+                    data=ThinkingEventData(thinking_content=thinking_buffer, streaming=True),
+                    run_context=run_context,
+                )
+
+            if token_buffer:
+                yield StreamingTokenEvent(
+                    source=class_name,
+                    message=token_buffer,
+                    data=StreamingEventData(token=token_buffer),
+                    run_context=run_context,
+                )
+
+            if not accumulated_tool_calls:
+                for partial_event in buffered_partials:
+                    yield partial_event
+                if not accumulated_content:
+                    raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
+                try:
+                    output = self.output_schema.model_validate_json(accumulated_content)
+                    logger.warning(
+                        "Model gave direct response instead of calling final_answer tool. Parsed as JSON fallback.",
+                    )
+                    yield CompletedEvent(
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data=CompletedEventData[self.output_schema](output=output),
+                        run_context=run_context,
+                    )
+                    return
+                except Exception:
+                    pass
+
+                logger.warning("LLM responded with text instead of calling a tool. Retrying.")
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Internal reasoning...",
+                    data=ThinkingEventData(thinking_content=accumulated_content),
+                    run_context=run_context,
+                )
+                messages.append({"role": "assistant", "content": accumulated_content})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
+                    },
+                )
+                continue
+
+            tool_calls: list[ToolCall] = []
+            tool_calls_for_message: list[dict[str, Any]] = []
+            for idx in sorted(accumulated_tool_calls.keys()):
+                tc_data = accumulated_tool_calls[idx]
+                tool_call = ToolCall(
+                    tool_call_id=tc_data["id"],
+                    tool_name=tc_data["name"],
+                    arguments=json.loads(tc_data["arguments"]),
+                )
+                tool_calls.append(tool_call)
+                tool_calls_for_message.append(
+                    {
+                        "id": tc_data["id"],
+                        "type": "function",
+                        "function": {"name": tc_data["name"], "arguments": tc_data["arguments"]},
+                    },
+                )
+                yield ToolCallingEvent(
+                    source=class_name,
+                    message=f"Calling {tool_call.tool_name}",
+                    data=ToolCallingEventData(tool_call=tool_call),
+                    run_context=run_context,
+                )
+
+            for tool_call in tool_calls:
+                if isinstance(self._find_tool(tool_call.tool_name), HumanTool):
+                    try:
+                        human_input = HumanToolInput(**tool_call.arguments)
+                    except Exception:
+                        human_input = HumanToolInput(
+                            question=str(tool_call.arguments.get("question", "Input needed")),
+                        )
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": accumulated_content or None,
+                            "tool_calls": tool_calls_for_message,
+                        },
+                    )
+                    run_context.messages = list(messages)
+                    yield HumanInputRequiredEvent(
+                        source=class_name,
+                        message=f"Human input required: {human_input.question}",
+                        data=HumanInputRequiredEventData(
+                            human_input=human_input,
+                            tool_call_id=tool_call.tool_call_id,
+                            tool_name=tool_call.tool_name,
+                        ),
+                        run_context=run_context,
+                    )
+                    return
+
+            if self.max_tool_calls is not None and total_tool_calls + len(tool_calls) > self.max_tool_calls:
+                raise MaxToolCallsExceeded(
+                    f"Exceeded {self.max_tool_calls} total tool calls "
+                    f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
+                )
+
+            results = await self._execute_tools_parallel(tool_calls, tools=all_tool_instances)
+            total_tool_calls += len(tool_calls)
+
+            for result in results:
+                if result.tool_name == "final_answer":
+                    if result.error:
+                        logger.warning(
+                            f"final_answer validation failed, feeding error back to LLM for retry: {result.error}",
+                        )
+                        break
+                    output = self.output_schema.model_validate(result.content)
+                    yield CompletedEvent(
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data=CompletedEventData[self.output_schema](output=output),
+                        run_context=run_context,
+                    )
+                    return
+
+            for result in results:
+                yield ToolResultEvent(
+                    source=class_name,
+                    message=f"Result from {result.tool_name}",
+                    data=ToolResultEventData(result=result),
+                    run_context=run_context,
+                )
+
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": accumulated_content or None,
+                    "tool_calls": tool_calls_for_message,
+                },
+            )
+            for result in results:
+                content = json.dumps(result.content) if result.content else (result.error or "")
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": result.tool_call_id,
+                        "content": content,
+                    },
+                )
+
+            if self.reflection_prompt:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": self.reflection_prompt,
+                    },
+                )
+                yield ThinkingEvent(
+                    source=class_name,
+                    message="Reflecting on results...",
+                    data=ThinkingEventData(reflection_prompt=self.reflection_prompt),
+                    run_context=run_context,
+                )
+
+        raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
 
 
 Agent = LiteLLMInstructorBaseAgent
