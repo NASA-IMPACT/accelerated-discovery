@@ -902,6 +902,26 @@ class LiteLLMInstructorBaseAgent[
             base_kwargs["reasoning_summary"] = self.reasoning_summary
         if provider_kwargs:
             base_kwargs.update(provider_kwargs)
+
+        is_stream = base_kwargs.get("stream") is True
+        has_tools = bool(base_kwargs.get("tools"))
+        if is_stream:
+            base_kwargs.setdefault("stream_options", {"include_usage": True})
+            if output_schema is not None and not has_tools:
+                base_kwargs.setdefault(
+                    "response_format",
+                    {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": output_schema.__name__,
+                            "strict": True,
+                            "schema": self._build_response_format_schema(cast(type[OutputSchema], output_schema)),
+                        },
+                    },
+                )
+            if self.reasoning_summary:
+                base_kwargs.setdefault("reasoning", {"summary": self.reasoning_summary})
+
         return super()._build_provider_request(
             token_batch_size=token_batch_size,
             output_schema=output_schema,
@@ -958,40 +978,6 @@ class LiteLLMInstructorBaseAgent[
         except Exception as exc:
             raise UnexpectedModelBehavior(f"Failed to parse provider response content: {exc}") from exc
 
-    @staticmethod
-    def _extract_usage(completion: Any) -> RunUsage:
-        """Extract token usage from a raw LLM completion.
-
-        Args:
-            completion: Raw completion object from create_with_completion.
-
-        Returns:
-            RunUsage with extracted token counts (zeros if unavailable).
-        """
-        run_usage = RunUsage()
-        usage = getattr(completion, "usage", None)
-        if usage:
-            run_usage.input_tokens = getattr(usage, "prompt_tokens", 0) or 0
-            run_usage.output_tokens = getattr(usage, "completion_tokens", 0) or 0
-            run_usage.requests = 1
-
-            # Capture provider-specific details (reasoning tokens, cached tokens, etc.)
-            for details_attr in ("completion_tokens_details", "prompt_tokens_details"):
-                details_obj = getattr(usage, details_attr, None)
-                if details_obj is None:
-                    continue
-                # details_obj can be a dict or a Pydantic model
-                items = (
-                    details_obj.items()
-                    if isinstance(details_obj, dict)
-                    else ((k, v) for k, v in vars(details_obj).items() if isinstance(v, int) and v > 0)
-                )
-                for k, v in items:
-                    if isinstance(v, int) and v > 0:
-                        run_usage.details[f"{details_attr}.{k}"] = v
-
-        return run_usage
-
     async def _arun(
         self,
         params: InSchema,
@@ -1040,51 +1026,58 @@ class LiteLLMInstructorBaseAgent[
         run_context: RunContext,
         token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
-        """LiteLLM-specific engine: provider stream plus AKD-managed ReAct loop for tools."""
-        if not self.tools:
-            async for event in super()._run_engine_stream(
-                run_context=run_context,
-                token_batch_size=token_batch_size,
-            ):
-                yield event
-            return
-
+        """LiteLLM-specific unified stream engine for tools and non-tools."""
         class_name = self.__class__.__name__
         messages = run_context.messages
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _run_engine_stream")
 
+        tools_enabled = bool(self.tools)
+        partial_response_model = PartialModel[self.output_schema]
+        all_tool_instances: list[BaseTool] = []
+        all_tool_definitions: list[dict[str, Any]] = []
+        if tools_enabled:
+            output_tool = OutputTool(self.output_schema)
+            all_tool_instances = self.tools + [output_tool]
+            all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
+
         human_response = run_context.human_response
         if human_response:
-            tool_call_id = human_response.tool_call_id
-            content = human_response.content
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": json.dumps(content),
-                },
-            )
+            if tools_enabled:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": human_response.tool_call_id,
+                        "content": json.dumps(human_response.content),
+                    },
+                )
+            else:
+                content = human_response.content
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": content if isinstance(content, str) else json.dumps(content),
+                    },
+                )
             yield HumanResponseEvent(
                 source=class_name,
                 message="Resumed with human input",
-                data=HumanResponseEventData(tool_call_id=tool_call_id, response=content),
+                data=HumanResponseEventData(
+                    tool_call_id=human_response.tool_call_id,
+                    response=human_response.content,
+                ),
                 run_context=run_context,
             )
 
-        partial_response_model = PartialModel[self.output_schema]
-        output_tool = OutputTool(self.output_schema)
-        all_tool_instances = self.tools + [output_tool]
-        all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
         total_tool_calls = 0
-
-        for _ in range(self.max_tool_iterations):
+        max_turns = self.max_tool_iterations if tools_enabled else 1
+        for _ in range(max_turns):
             request = self._build_provider_request(
                 token_batch_size=token_batch_size,
                 output_schema=self.output_schema,
                 provider_kwargs={
                     "stream": True,
-                    "tools": all_tool_definitions,
+                    "tools": all_tool_definitions if tools_enabled else None,
                     "stream_options": {"include_usage": True},
                     "reasoning": {"summary": self.reasoning_summary} if self.reasoning_summary else None,
                 },
@@ -1154,6 +1147,8 @@ class LiteLLMInstructorBaseAgent[
                     continue
 
                 if provider_event.kind == ProviderEventType.TOOL_CALL:
+                    if not tools_enabled:
+                        continue
                     idx = int(provider_event.data.get("index", 0))
                     tc_id = provider_event.data.get("id")
                     tc_name = provider_event.data.get("name")
@@ -1206,6 +1201,16 @@ class LiteLLMInstructorBaseAgent[
                     yield partial_event
                 if not accumulated_content:
                     raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
+                if not tools_enabled:
+                    output = self.output_schema.model_validate_json(accumulated_content)
+                    yield CompletedEvent(
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data=CompletedEventData[self.output_schema](output=output),
+                        run_context=run_context,
+                    )
+                    return
+
                 try:
                     output = self.output_schema.model_validate_json(accumulated_content)
                     logger.warning(
@@ -1219,23 +1224,21 @@ class LiteLLMInstructorBaseAgent[
                     )
                     return
                 except Exception:
-                    pass
-
-                logger.warning("LLM responded with text instead of calling a tool. Retrying.")
-                yield ThinkingEvent(
-                    source=class_name,
-                    message="Internal reasoning...",
-                    data=ThinkingEventData(thinking_content=accumulated_content),
-                    run_context=run_context,
-                )
-                messages.append({"role": "assistant", "content": accumulated_content})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
-                    },
-                )
-                continue
+                    logger.warning("LLM responded with text instead of calling a tool. Retrying.")
+                    yield ThinkingEvent(
+                        source=class_name,
+                        message="Internal reasoning...",
+                        data=ThinkingEventData(thinking_content=accumulated_content),
+                        run_context=run_context,
+                    )
+                    messages.append({"role": "assistant", "content": accumulated_content})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
+                        },
+                    )
+                    continue
 
             tool_calls: list[ToolCall] = []
             tool_calls_for_message: list[dict[str, Any]] = []
@@ -1353,7 +1356,9 @@ class LiteLLMInstructorBaseAgent[
                     run_context=run_context,
                 )
 
-        raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
+        if tools_enabled:
+            raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
+        raise UnexpectedModelBehavior("Non-tool streaming ended without completion")
 
 
 Agent = LiteLLMInstructorBaseAgent
