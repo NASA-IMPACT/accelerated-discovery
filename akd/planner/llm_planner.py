@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from loguru import logger
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
@@ -58,13 +58,14 @@ class PlannerQuestion(OutputSchema):
     context: str = Field(..., description="Context explaining why this question is important")
     suggested_answer: str | None = Field(default=None, description="Suggested answer if applicable")
 
-    @field_validator("question_type", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def normalize_question_type(cls, v: Any) -> str:
-        """Normalize question_type value to lowercase for case-insensitive validation."""
-        if isinstance(v, str):
-            return v.lower()
-        return v
+    def normalize_question_type(cls, data: Any) -> Any:
+        """Lowercase question_type before validation"""
+        if isinstance(data, dict) and "question_type" in data:
+            if isinstance(data["question_type"], str):
+                data["question_type"] = data["question_type"].lower()
+        return data
 
 
 # AgentSuggestion and WorkflowPlan are now imported from structures.py
@@ -79,13 +80,14 @@ class PlannerResponse(OutputSchema):
     workflow_plan: WorkflowPlan | None = Field(default=None, description="Generated workflow plan")
     ready_to_generate: bool = Field(default=False, description="Whether ready to generate final workflow")
 
-    @field_validator("phase", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def normalize_phase(cls, v: Any) -> str:
-        """Normalize phase value to lowercase for case-insensitive validation."""
-        if isinstance(v, str):
-            return v.lower()
-        return v
+    def normalize_phase_case(cls, data: Any) -> Any:
+        """Lowercase phase before validation"""
+        if isinstance(data, dict) and "phase" in data:
+            if isinstance(data["phase"], str):
+                data["phase"] = data["phase"].lower()
+        return data
 
     @field_validator("ready_to_generate", mode="after")
     @classmethod
