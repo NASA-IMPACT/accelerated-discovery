@@ -14,6 +14,7 @@ from typing import TypedDict
 import jsonpath_ng
 from loguru import logger
 
+from .enrich_schema import enrich_workflow_schema
 from .field_mapping_registry import FieldMappingRegistry
 from .format_builder import (
     WORKFLOW_FORMAT_VERSION,
@@ -273,13 +274,17 @@ class WorkflowBuilder:
                 edges.append(WorkflowEdge(from_node=nodes[i].id, to_node=nodes[i + 1].id))
             edges.append(WorkflowEdge(from_node=nodes[-1].id, to_node="END"))
 
-        return WorkflowFormat(
+        workflow = WorkflowFormat(
             workflow_type=WORKFLOW_TYPE,
             version=WORKFLOW_FORMAT_VERSION,
             nodes=nodes,
             edges=edges,
             output=nodes[-1].output if nodes else None,
         )
+
+        # Enrich node inputs with full schema metadata
+        enriched_dict = enrich_workflow_schema(workflow.model_dump(by_alias=True))
+        return WorkflowFormat(**enriched_dict)
 
     def check_missing_agents(self, plan: WorkflowPlan) -> list[str]:
         """

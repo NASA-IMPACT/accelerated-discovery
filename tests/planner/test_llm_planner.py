@@ -457,7 +457,7 @@ class TestSessionReadiness:
         assert response2.ready_to_generate is False
 
     def test_session_overrides_ready_when_no_plan(self, mock_planner):
-        """LLM says ready=True but plan is None → session overrides to False.
+        """LLM says ready=True but plan is None: session overrides to False.
         This is the exact bug that caused 'No workflow plan available' crashes."""
         session = InteractivePlannerSession(mock_planner, "Test")
         session.workflow_plan = None
@@ -478,7 +478,7 @@ class TestSessionReadiness:
         assert response.ready_to_generate is False
 
     def test_not_ready_when_question_pending(self, mock_planner):
-        """Plan is structurally complete but LLM still asking a question → not ready."""
+        """Plan is structurally complete but LLM still asking a question: not ready."""
         from akd.planner.llm_planner import PlannerQuestion, PlannerQuestionType
 
         mock_planner.registry.get_agent.return_value = MagicMock()
@@ -508,7 +508,7 @@ class TestSessionReadiness:
         assert ready is False
 
     def test_not_ready_with_partial_registry_match(self, mock_planner):
-        """Two agents in plan, only one exists in registry → not ready."""
+        """Two agents in plan, only one exists in registry: not ready."""
         mock_planner.registry.get_agent.side_effect = (
             lambda agent_id: MagicMock() if agent_id == "deep_search" else None
         )

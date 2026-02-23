@@ -7,6 +7,7 @@ workflow planning.
 """
 
 from .config import AgentRegistryConfig
+from .enrich_schema import enrich_workflow_schema
 from .field_mapping_generator import FieldMappingGenerator
 from .field_mapping_registry import FieldMappingRegistry
 from .format_builder import (
@@ -46,4 +47,6 @@ __all__ = [
     "WorkflowPlan",
     "AgentSuggestion",
     "PlannerConfig",
+    # Schema Enrichment
+    "enrich_workflow_schema",
 ]

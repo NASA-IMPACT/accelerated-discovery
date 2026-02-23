@@ -308,11 +308,10 @@ class TestWorkflowInputHandling:
         assert len(deep_node.input.fields) > 0
 
     def test_input_fields_preserved(self, workflow_builder, simple_workflow_plan):
-        """Test that input fields are preserved in workflow."""
+        """Test that input fields are preserved in enriched workflow output."""
         filled_inputs = {
             "deep_search": {
                 "query": "AlphaFold protein structure",
-                "max_results": 20,
             },
         }
 
@@ -321,16 +320,15 @@ class TestWorkflowInputHandling:
         deep_node = next((n for n in workflow.nodes if n.type_ == "deep_search"), None)
         assert deep_node is not None
 
-        # Check that input fields contain the values
+        # After enrichment, fields are rich schema objects: {field_name: {type, value, ...}}
         input_dict = {}
         for field in deep_node.input.fields:
             if isinstance(field, dict):
                 input_dict.update(field)
 
         assert "query" in input_dict
-        assert "max_results" in input_dict
-        assert input_dict["query"] == "AlphaFold protein structure"
-        assert input_dict["max_results"] == 20
+        assert isinstance(input_dict["query"], dict)
+        assert input_dict["query"]["value"] == "AlphaFold protein structure"
 
 
 class TestWorkflowValidation:

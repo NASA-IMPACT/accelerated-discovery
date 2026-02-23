@@ -280,10 +280,7 @@ class InteractivePlannerSession:
 
         for agent in self.workflow_plan.suggested_agents:
             if not self.planner.registry.get_agent(agent.agent_id):
-                logger.warning(
-                    f"Agent '{agent.agent_id}' in workflow plan not found in registry. "
-                    f"Workflow not ready."
-                )
+                logger.warning(f"Agent '{agent.agent_id}' in workflow plan not found in registry. Workflow not ready.")
                 return False
 
         return True
@@ -301,9 +298,7 @@ class InteractivePlannerSession:
         self._update_session_state(self.initial_request, response)
 
         # Session decides readiness deterministically
-        response.ready_to_generate = (
-            self.is_ready_to_generate() and response.question is None
-        )
+        response.ready_to_generate = self.is_ready_to_generate() and response.question is None
 
         return response
 
@@ -320,9 +315,7 @@ class InteractivePlannerSession:
         self._update_session_state(user_message, response)
 
         # Session decides readiness deterministically
-        response.ready_to_generate = (
-            self.is_ready_to_generate() and response.question is None
-        )
+        response.ready_to_generate = self.is_ready_to_generate() and response.question is None
 
         return response
 
@@ -595,7 +588,10 @@ class InteractivePlannerSession:
                         current_input_names = {f.name for f in agent.input_schema.fields}
                         auto_mapped_fields = list(prev_output_names & current_input_names)
 
-            auto_mapped_text = ", ".join(auto_mapped_fields) if auto_mapped_fields else "None"
+            # Also skip optional fields with defaults (user-configurable, not LLM-filled)
+            default_fields = [f.name for f in agent.input_schema.fields if not f.required and f.default is not None]
+            skip_fields = set(auto_mapped_fields + default_fields)
+            skip_fields_text = ", ".join(skip_fields) if skip_fields else "None"
 
             # Combine all context sections
             context_sections = f"""Conversation History:
@@ -604,10 +600,9 @@ class InteractivePlannerSession:
 Research Context:
 {research_context_text if research_context_text else "No workflow plan available"}
 
-Auto-Mapped Fields (DO NOT EXTRACT):
-The following fields will be automatically populated from previous agent outputs at runtime: {auto_mapped_text}
-These fields should be OMITTED from your output entirely."""
-
+Fields to SKIP (DO NOT EXTRACT):
+The following fields will be automatically populated and must be OMITTED from your output entirely: {skip_fields_text}
+This includes fields auto-mapped from previous agents and optional fields with default values (user-configurable via UI)."""
             # Separate required and optional inputs
             required_inputs_text = "\n".join(
                 [
@@ -656,8 +651,7 @@ These fields should be OMITTED from your output entirely."""
 
             # Convert to dict and filter out None values (auto-mapped fields)
             result = response.model_dump()
-            # Remove None values - these are fields LLM correctly omitted (will be auto-mapped)
-            return {k: v for k, v in result.items() if v is not None}
+            return {k: v for k, v in result.items() if v is not None and k not in skip_fields}
 
         except Exception as e:
             logger.warning(f"LLM-based input filling failed for {agent_id}: {e}")

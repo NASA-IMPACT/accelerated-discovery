@@ -78,13 +78,8 @@ class WorkflowNode(BaseModel):
 class WorkflowEdge(BaseModel):
     """Edge connecting two nodes in a workflow."""
 
-    from_node: str = Field(..., alias="from", description="Source node ID")
-    to_node: str = Field(..., alias="to", description="Target node ID")
-
-    model_config = {
-        "populate_by_name": True,
-        "serialize_by_alias": True,
-    }
+    from_node: str = Field(..., description="Source node ID")
+    to_node: str = Field(..., description="Target node ID")
 
 
 class WorkflowFormat(BaseModel):

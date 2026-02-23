@@ -31,6 +31,10 @@ class FieldDefinition(BaseModel):
     required: bool = Field(default=True, description="Whether field is required")
     default: str | int | float | bool | list[Any] | None = Field(default=None, description="Default value if any")
     items_type: str | None = Field(default=None, description="Array item type")
+    allowed_values: list[str] | None = Field(default=None, description="Allowed values for enum/Literal fields")
+    value: str | int | float | bool | list[Any] | None = Field(
+        default=None, description="Current value (defaults to default)"
+    )
 
 
 class AgentSchemaDefinition(BaseModel):
@@ -266,9 +270,56 @@ class AgentRegistry:
 
             fields = []
             for field_name, field_info in properties.items():
+                allowed_values = None
+                field_type = field_info.get("type", "string")
+
+                # Method 1: Direct "enum" key
+                if "enum" in field_info:
+                    allowed_values = [str(v) for v in field_info["enum"]]
+                    field_type = "enum"
+
+                # Method 2: "anyOf" with "const" values
+                elif "anyOf" in field_info:
+                    const_values = []
+                    for option in field_info["anyOf"]:
+                        if "const" in option:
+                            const_values.append(str(option["const"]))
+                        elif "enum" in option:
+                            const_values.extend(str(v) for v in option["enum"])
+                    if const_values:
+                        allowed_values = const_values
+                        field_type = "enum"
+                    else:
+                        for option in field_info["anyOf"]:
+                            if "type" in option:
+                                field_type = option["type"]
+                                break
+
+                # Method 3: "allOf" with "$ref" — resolve from $defs
+                elif "allOf" in field_info:
+                    for option in field_info["allOf"]:
+                        if "$ref" in option:
+                            ref_path = option["$ref"]  # e.g., "#/$defs/SearchMode"
+                            ref_name = ref_path.split("/")[-1]
+                            defs = json_schema.get("$defs", {})
+                            ref_schema = defs.get(ref_name, {})
+                            if "enum" in ref_schema:
+                                allowed_values = [str(v) for v in ref_schema["enum"]]
+                                field_type = "enum"
+
+                # Method 4: Direct "$ref"
+                elif "$ref" in field_info:
+                    ref_path = field_info["$ref"]
+                    ref_name = ref_path.split("/")[-1]
+                    defs = json_schema.get("$defs", {})
+                    ref_schema = defs.get(ref_name, {})
+                    if "enum" in ref_schema:
+                        allowed_values = [str(v) for v in ref_schema["enum"]]
+                        field_type = "enum"
+
                 field_def = FieldDefinition(
                     name=field_name,
-                    type=field_info.get("type", "string"),
+                    type=field_type,
                     description=field_info.get("description", ""),
                     required=field_name in required,
                 )
@@ -282,7 +333,12 @@ class AgentRegistry:
                 # Handle default values
                 if "default" in field_info:
                     field_def.default = field_info["default"]
+                    field_def.value = field_info["default"]
                     field_def.required = False
+
+                # Set allowed values if detected
+                if allowed_values:
+                    field_def.allowed_values = allowed_values
 
                 fields.append(field_def)
 
