@@ -317,38 +317,123 @@ class TestPlannerErrorHandling:
             await session.generate_workflow()
 
 
-class TestPlannerResponseValidator:
-    """Test PlannerResponse ready_to_generate validator."""
+class TestSessionReadiness:
+    """Test InteractivePlannerSession.is_ready_to_generate() deterministic check."""
 
-    def test_safety_correction_ready_but_no_plan(self):
-        """Test that ready_to_generate is corrected to False when plan is None."""
+    @pytest.fixture
+    def mock_planner(self, mock_registry):
+        """Create a mock planner for session testing."""
+        planner = LLMWorkflowPlanner(registry=mock_registry)
+        return planner
+
+    def test_not_ready_without_plan(self, mock_planner):
+        """No workflow plan: not ready."""
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = None
+        assert session.is_ready_to_generate() is False
+
+    def test_not_ready_with_empty_agents(self, mock_planner):
+        """Workflow plan exists but has no agents: not ready."""
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = WorkflowPlan(
+            workflow_description="Empty plan",
+            research_goal="Test",
+            suggested_agents=[],
+        )
+        assert session.is_ready_to_generate() is False
+
+    def test_not_ready_without_research_goal(self, mock_planner):
+        """Workflow plan has agents but no research goal: not ready."""
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Testing",
+                    confidence=1.0,
+                )
+            ],
+        )
+        assert session.is_ready_to_generate() is False
+
+    def test_not_ready_with_missing_registry_agent(self, mock_planner):
+        """Agent in plan not found in registry: not ready."""
+        mock_planner.registry.get_agent.return_value = None
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="Test goal",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="nonexistent_agent",
+                    agent_name="Nonexistent",
+                    reason="Testing",
+                    confidence=1.0,
+                )
+            ],
+        )
+        assert session.is_ready_to_generate() is False
+
+    def test_ready_with_valid_plan(self, mock_planner):
+        """Complete valid plan with all agents in registry: ready."""
+        mock_planner.registry.get_agent.return_value = MagicMock()  # Agent exists
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="Find papers on AlphaFold",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Testing",
+                    confidence=1.0,
+                )
+            ],
+        )
+        assert session.is_ready_to_generate() is True
+
+    def test_ready_with_multiple_agents(self, mock_planner):
+        """Multiple agents, all in registry: ready."""
+        mock_planner.registry.get_agent.return_value = MagicMock()
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="Literature review",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Search",
+                    confidence=0.95,
+                ),
+                AgentSuggestion(
+                    agent_id="gap_analysis",
+                    agent_name="Gap Analysis",
+                    reason="Analyze gaps",
+                    confidence=0.9,
+                    depends_on=["deep_search"],
+                ),
+            ],
+        )
+        assert session.is_ready_to_generate() is True
+
+    def test_planner_response_no_longer_corrects_flags(self):
+        """PlannerResponse no longer auto-corrects ready_to_generate.
+        Whatever value is set stays — session overrides it later."""
+        # ready=True with no plan — PlannerResponse should NOT correct it
         response = PlannerResponse(
             message="Workflow is ready",
             phase=ConversationPhase.FINALIZATION,
             workflow_plan=None,
             ready_to_generate=True,
         )
-        # Safety validator should correct to False
-        assert response.ready_to_generate is False
+        # No validator → stays True (session will override before returning)
+        assert response.ready_to_generate is True
 
-    def test_safety_correction_ready_but_no_agents(self):
-        """Test that ready_to_generate is corrected to False when plan has no agents."""
-        plan = WorkflowPlan(
-            workflow_description="Empty plan",
-            research_goal="Test",
-            suggested_agents=[],
-        )
-        response = PlannerResponse(
-            message="Workflow is ready",
-            phase=ConversationPhase.FINALIZATION,
-            workflow_plan=plan,
-            ready_to_generate=True,
-        )
-        # Safety validator should correct to False
-        assert response.ready_to_generate is False
-
-    def test_convenience_correction_plan_exists_message_says_ready(self):
-        """Test that ready_to_generate is corrected to True when plan exists and message says ready."""
+        # ready=False with valid plan — PlannerResponse should NOT correct it
         plan = WorkflowPlan(
             workflow_description="Test",
             research_goal="Test",
@@ -361,51 +446,46 @@ class TestPlannerResponseValidator:
                 )
             ],
         )
-        response = PlannerResponse(
+        response2 = PlannerResponse(
             message="Workflow is ready and will be generated",
             phase=ConversationPhase.FINALIZATION,
             workflow_plan=plan,
             question=None,
             ready_to_generate=False,
         )
-        # Convenience validator should correct to True
-        assert response.ready_to_generate is True
+        # No validator: stays False (session will override before returning)
+        assert response2.ready_to_generate is False
 
-    def test_no_correction_when_question_asked(self):
-        """Test that ready_to_generate stays False when a question is asked."""
-        from akd.planner.llm_planner import PlannerQuestion, PlannerQuestionType
+    def test_session_overrides_ready_when_no_plan(self, mock_planner):
+        """LLM says ready=True but plan is None → session overrides to False.
+        This is the exact bug that caused 'No workflow plan available' crashes."""
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = None
 
-        plan = WorkflowPlan(
-            workflow_description="Test",
-            research_goal="Test",
-            suggested_agents=[
-                AgentSuggestion(
-                    agent_id="deep_search",
-                    agent_name="Deep Search",
-                    reason="Testing",
-                    confidence=1.0,
-                )
-            ],
-        )
         response = PlannerResponse(
-            message="Workflow is ready but does this look good?",
+            message="Workflow is ready!",
             phase=ConversationPhase.FINALIZATION,
-            workflow_plan=plan,
-            question=PlannerQuestion(
-                question="Does this look good?",
-                question_type=PlannerQuestionType.CONFIRMATION,
-                context="Confirming plan",
-            ),
-            ready_to_generate=False,
+            workflow_plan=None,
+            question=None,
+            ready_to_generate=True,  # LLM incorrectly says ready
         )
-        # Should stay False because a question is being asked
+
+        # Simulate what start()/respond() does after _update_session_state
+        response.ready_to_generate = (
+            session.is_ready_to_generate() and response.question is None
+        )
+
         assert response.ready_to_generate is False
 
-    def test_valid_ready_with_plan_and_agents(self):
-        """Test that ready_to_generate stays True when plan has agents."""
-        plan = WorkflowPlan(
+    def test_not_ready_when_question_pending(self, mock_planner):
+        """Plan is structurally complete but LLM still asking a question → not ready."""
+        from akd.planner.llm_planner import PlannerQuestion, PlannerQuestionType
+
+        mock_planner.registry.get_agent.return_value = MagicMock()
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = WorkflowPlan(
             workflow_description="Test",
-            research_goal="Test",
+            research_goal="Find papers",
             suggested_agents=[
                 AgentSuggestion(
                     agent_id="deep_search",
@@ -415,14 +495,43 @@ class TestPlannerResponseValidator:
                 )
             ],
         )
-        response = PlannerResponse(
-            message="All good",
-            phase=ConversationPhase.FINALIZATION,
-            workflow_plan=plan,
-            ready_to_generate=True,
+        # is_ready_to_generate() is True on its own
+        assert session.is_ready_to_generate() is True
+
+        # But combined with pending question → not ready
+        question = PlannerQuestion(
+            question="What time range?",
+            question_type=PlannerQuestionType.OPEN_ENDED,
+            context="Need clarification",
         )
-        # Should stay True - valid state
-        assert response.ready_to_generate is True
+        ready = session.is_ready_to_generate() and question is None
+        assert ready is False
+
+    def test_not_ready_with_partial_registry_match(self, mock_planner):
+        """Two agents in plan, only one exists in registry → not ready."""
+        mock_planner.registry.get_agent.side_effect = (
+            lambda agent_id: MagicMock() if agent_id == "deep_search" else None
+        )
+        session = InteractivePlannerSession(mock_planner, "Test")
+        session.workflow_plan = WorkflowPlan(
+            workflow_description="Test",
+            research_goal="Literature review",
+            suggested_agents=[
+                AgentSuggestion(
+                    agent_id="deep_search",
+                    agent_name="Deep Search",
+                    reason="Search",
+                    confidence=0.95,
+                ),
+                AgentSuggestion(
+                    agent_id="nonexistent_agent",
+                    agent_name="Nonexistent",
+                    reason="Testing",
+                    confidence=0.9,
+                ),
+            ],
+        )
+        assert session.is_ready_to_generate() is False
 
 
 class TestConversationPhases:

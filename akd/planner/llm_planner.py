@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from loguru import logger
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
@@ -88,58 +88,6 @@ class PlannerResponse(OutputSchema):
             if isinstance(data["phase"], str):
                 data["phase"] = data["phase"].lower()
         return data
-
-    @field_validator("ready_to_generate", mode="after")
-    @classmethod
-    def auto_set_ready_when_plan_exists(cls, v: bool, info) -> bool:
-        """
-        Bidirectional auto-correction for ready_to_generate flag.
-
-        SAFETY CORRECTION (ready=True but plan missing/empty):
-        - If ready_to_generate=True but workflow_plan=None, then correct to False
-        - If ready_to_generate=True but workflow_plan has no agents, then correct to False
-        This prevents "Workflow complete!" followed by "No workflow plan available" error.
-
-        Auto-correction only happens when:
-        - workflow_plan exists (plan is complete)
-        - question is None (not asking for user input)
-        - ready_to_generate is False (contradiction)
-
-        This allows legitimate scenarios like:
-        - "Here's the plan. Does this look good?" [ready_to_generate=False, question set]
-        - "I need clarification: X or Y?" [ready_to_generate=False, question set]
-        """
-        workflow_plan = info.data.get("workflow_plan")
-        question = info.data.get("question")
-        message = info.data.get("message", "")
-
-        # SAFETY: Cannot be ready without a complete plan
-        if v:  # ready_to_generate is True
-            if workflow_plan is None:
-                logger.warning(
-                    "SAFETY: ready_to_generate=True but workflow_plan=None. Auto-correcting to False.",
-                )
-                return False
-
-            if not workflow_plan.suggested_agents:
-                logger.warning(
-                    "SAFETY: ready_to_generate=True but workflow_plan has no agents. Auto-correcting to False.",
-                )
-                return False
-
-        # CONVENIENCE: Auto-set True if plan exists, no question, and message indicates ready
-        if workflow_plan is not None and not v and question is None:
-            ready_keywords = ["ready", "will be generated", "workflow is complete", "finalized"]
-            message_lower = message.lower()
-
-            if any(keyword in message_lower for keyword in ready_keywords):
-                logger.warning(
-                    "LLM says workflow is ready (message contains ready/finalized keywords) "
-                    "but set ready_to_generate=False. Auto-correcting to True.",
-                )
-                return True
-
-        return v
 
 
 class PlannerInput(InputSchema):
@@ -311,6 +259,35 @@ class InteractivePlannerSession:
         self.workflow_plan: WorkflowPlan | None = None
         self.final_workflow: WorkflowFormat | None = None
 
+    def is_ready_to_generate(self) -> bool:
+        """
+        Deterministic readiness check — no LLM involvement.
+
+        A workflow is ready to generate when ALL conditions are met:
+        1. workflow_plan exists and is not None
+        2. workflow_plan has at least one suggested agent
+        3. workflow_plan has a non-empty research goal
+        4. All suggested agents exist in the registry
+        """
+        if not self.workflow_plan:
+            return False
+
+        if not self.workflow_plan.suggested_agents:
+            return False
+
+        if not self.workflow_plan.research_goal:
+            return False
+
+        for agent in self.workflow_plan.suggested_agents:
+            if not self.planner.registry.get_agent(agent.agent_id):
+                logger.warning(
+                    f"Agent '{agent.agent_id}' in workflow plan not found in registry. "
+                    f"Workflow not ready."
+                )
+                return False
+
+        return True
+
     async def start(self) -> PlannerResponse:
         """Start the planning conversation."""
         response = await self.planner._arun(
@@ -322,6 +299,12 @@ class InteractivePlannerSession:
         )
 
         self._update_session_state(self.initial_request, response)
+
+        # Session decides readiness deterministically
+        response.ready_to_generate = (
+            self.is_ready_to_generate() and response.question is None
+        )
+
         return response
 
     async def respond(self, user_message: str) -> PlannerResponse:
@@ -335,6 +318,12 @@ class InteractivePlannerSession:
         )
 
         self._update_session_state(user_message, response)
+
+        # Session decides readiness deterministically
+        response.ready_to_generate = (
+            self.is_ready_to_generate() and response.question is None
+        )
+
         return response
 
     def _update_session_state(self, user_message: str, response: PlannerResponse) -> None:
