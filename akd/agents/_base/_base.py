@@ -1032,18 +1032,17 @@ class LiteLLMInstructorBaseAgent[
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _run_engine_stream")
 
-        tools_enabled = bool(self.tools)
+        tool_defs: list[dict[str, Any]] = []
+        tool_instances: list[BaseTool] = []
         partial_response_model = PartialModel[self.output_schema]
-        all_tool_instances: list[BaseTool] = []
-        all_tool_definitions: list[dict[str, Any]] = []
-        if tools_enabled:
+        if self.tools:
             output_tool = OutputTool(self.output_schema)
-            all_tool_instances = self.tools + [output_tool]
-            all_tool_definitions = self.tool_definitions + [output_tool.as_tool_definition()]
+            tool_instances = self.tools + [output_tool]
+            tool_defs = self.tool_definitions + [output_tool.as_tool_definition()]
 
         human_response = run_context.human_response
         if human_response:
-            if tools_enabled:
+            if tool_defs:
                 messages.append(
                     {
                         "role": "tool",
@@ -1070,14 +1069,14 @@ class LiteLLMInstructorBaseAgent[
             )
 
         total_tool_calls = 0
-        max_turns = self.max_tool_iterations if tools_enabled else 1
+        max_turns = self.max_tool_iterations if tool_defs else 1
         for _ in range(max_turns):
             request = self._build_provider_request(
                 token_batch_size=token_batch_size,
                 output_schema=self.output_schema,
                 provider_kwargs={
                     "stream": True,
-                    "tools": all_tool_definitions if tools_enabled else None,
+                    "tools": tool_defs or None,
                     "stream_options": {"include_usage": True},
                     "reasoning": {"summary": self.reasoning_summary} if self.reasoning_summary else None,
                 },
@@ -1147,8 +1146,10 @@ class LiteLLMInstructorBaseAgent[
                     continue
 
                 if provider_event.kind == ProviderEventType.TOOL_CALL:
-                    if not tools_enabled:
-                        continue
+                    if not tool_defs:
+                        raise UnexpectedModelBehavior(
+                            "Provider emitted TOOL_CALL event but no tools are configured",
+                        )
                     idx = int(provider_event.data.get("index", 0))
                     tc_id = provider_event.data.get("id")
                     tc_name = provider_event.data.get("name")
@@ -1201,21 +1202,9 @@ class LiteLLMInstructorBaseAgent[
                     yield partial_event
                 if not accumulated_content:
                     raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
-                if not tools_enabled:
-                    output = self.output_schema.model_validate_json(accumulated_content)
-                    yield CompletedEvent(
-                        source=class_name,
-                        message=f"Completed {class_name}",
-                        data=CompletedEventData[self.output_schema](output=output),
-                        run_context=run_context,
-                    )
-                    return
 
                 try:
                     output = self.output_schema.model_validate_json(accumulated_content)
-                    logger.warning(
-                        "Model gave direct response instead of calling final_answer tool. Parsed as JSON fallback.",
-                    )
                     yield CompletedEvent(
                         source=class_name,
                         message=f"Completed {class_name}",
@@ -1224,7 +1213,10 @@ class LiteLLMInstructorBaseAgent[
                     )
                     return
                 except Exception:
-                    logger.warning("LLM responded with text instead of calling a tool. Retrying.")
+                    if not tool_defs:
+                        raise UnexpectedModelBehavior(
+                            "Non-tool run produced non-JSON content for structured output",
+                        ) from None
                     yield ThinkingEvent(
                         source=class_name,
                         message="Internal reasoning...",
@@ -1298,15 +1290,12 @@ class LiteLLMInstructorBaseAgent[
                     f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
                 )
 
-            results = await self._execute_tools_parallel(tool_calls, tools=all_tool_instances)
+            results = await self._execute_tools_parallel(tool_calls, tools=tool_instances)
             total_tool_calls += len(tool_calls)
 
             for result in results:
                 if result.tool_name == "final_answer":
                     if result.error:
-                        logger.warning(
-                            f"final_answer validation failed, feeding error back to LLM for retry: {result.error}",
-                        )
                         break
                     output = self.output_schema.model_validate(result.content)
                     yield CompletedEvent(
@@ -1356,7 +1345,7 @@ class LiteLLMInstructorBaseAgent[
                     run_context=run_context,
                 )
 
-        if tools_enabled:
+        if tool_defs:
             raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
         raise UnexpectedModelBehavior("Non-tool streaming ended without completion")
 
