@@ -600,6 +600,55 @@ class BaseAgent[
             run_context=run_context,
         )
 
+    async def _astream(
+        self,
+        params: InSchema,
+        run_context: RunContext,
+        token_batch_size: int = 10,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Default internal streaming template using _run_engine_stream()."""
+        class_name = self.__class__.__name__
+
+        yield StartingEvent(
+            source=class_name,
+            message=f"Starting {class_name}",
+            data=StartingEventData[self.input_schema](params=params),
+            run_context=run_context,
+        )
+
+        try:
+            yield RunningEvent(
+                source=class_name,
+                message=f"Running {class_name}",
+                run_context=run_context,
+            )
+
+            output = PartialModel[self.output_schema]()
+            streamer = self._run_engine_stream(
+                run_context=run_context,
+                token_batch_size=token_batch_size,
+            )
+
+            async for event in streamer:
+                if isinstance(event, CompletedEvent):
+                    output = event.data.output
+                yield event
+                if isinstance(event, HumanInputRequiredEvent):
+                    return
+
+            if output is None:
+                raise UnexpectedModelBehavior("No output received from LLM")
+
+        except Exception as e:
+            yield FailedEvent(
+                source=class_name,
+                message=f"Failed: {e!s}",
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
+                run_context=run_context,
+            )
+            raise
+
 
 class InstructorBaseAgent[
     InSchema: InputSchema,
@@ -985,88 +1034,6 @@ class LiteLLMInstructorBaseAgent[
                 response_model=self.output_schema,
             )
         return output
-
-    async def _astream(
-        self,
-        params: InSchema,
-        run_context: RunContext,
-        token_batch_size: int = 10,
-        **kwargs: Any,
-    ) -> AsyncIterator[StreamEvent]:
-        """Internal streaming with thinking tokens and partial output.
-
-        Emits:
-        - STREAMING events for raw tokens (batched)
-        - THINKING events for reasoning tokens (Claude extended thinking, o1)
-        - PARTIAL events for partial structured output as it streams
-
-        Note: Input/output validation is handled by parent astream() method.
-
-        Args:
-            params: Input parameters (already validated by astream())
-            run_context: RunContext with messages, human_response, run_id, etc.
-            token_batch_size: Batch N characters before emitting STREAMING event (default=10)
-            **kwargs: Additional keyword arguments
-
-        Yields:
-            StreamEvent: STARTING, RUNNING, STREAMING, PARTIAL, then COMPLETED or FAILED
-
-        Example:
-            async for event in agent.astream(input_data, token_batch_size=20):
-                match event.event_type:
-                    case StreamEventType.STREAMING:
-                        print(event.token, end="")  # Raw tokens
-                    case StreamEventType.THINKING:
-                        print(f"Reasoning: {event.thinking_content}")
-                    case StreamEventType.PARTIAL:
-                        print(f"Partial: {event.partial_output}")
-                    case StreamEventType.COMPLETED:
-                        print(f"Final: {event.output}")
-                    case StreamEventType.FAILED:
-                        print(f"Error: {event.error}")
-        """
-        class_name = self.__class__.__name__
-
-        yield StartingEvent(
-            source=class_name,
-            message=f"Starting {class_name}",
-            data=StartingEventData[self.input_schema](params=params),
-            run_context=run_context,
-        )
-
-        try:
-            yield RunningEvent(
-                source=class_name,
-                message=f"Running {class_name}",
-                run_context=run_context,
-            )
-
-            # initialize to partial object for now
-            output = PartialModel[self.output_schema]()
-
-            streamer = self._run_engine_stream(
-                run_context=run_context,
-                token_batch_size=token_batch_size,
-            )
-
-            async for event in streamer:
-                if isinstance(event, CompletedEvent):
-                    output = event.data.output
-                yield event
-                if isinstance(event, HumanInputRequiredEvent):
-                    return
-
-            if output is None:
-                raise UnexpectedModelBehavior("No output received from LLM")
-
-        except Exception as e:
-            yield FailedEvent(
-                source=class_name,
-                message=f"Failed: {e!s}",
-                data=FailedEventData(error=str(e), error_type=type(e).__name__),
-                run_context=run_context,
-            )
-            raise
 
     async def _run_engine_stream(
         self,
