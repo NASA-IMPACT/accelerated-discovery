@@ -39,6 +39,7 @@ class OutputTool(BaseTool[_OutputToolPlaceholder, _OutputToolPlaceholder]):
     def __init__(
         self,
         schema: type[OutputSchema],
+        name: str = "final_answer",
         debug: bool = False,
     ) -> None:
         """Initialize OutputTool with dynamic schema.
@@ -52,8 +53,8 @@ class OutputTool(BaseTool[_OutputToolPlaceholder, _OutputToolPlaceholder]):
         self.input_schema = schema
         self.output_schema = schema
         super().__init__(debug=debug)
-        # Set tool name to "final_answer"
-        self.name = "final_answer"
+        # Keep default name for backwards compatibility.
+        self.name = name
 
     def as_tool_definition(self) -> dict[str, Any]:
         """Convert to OpenAI function calling format.

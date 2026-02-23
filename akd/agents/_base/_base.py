@@ -5,7 +5,7 @@ import json
 import uuid
 from abc import abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_args, get_origin
 
 import instructor
 import openai
@@ -30,6 +30,7 @@ from akd._base import (
     ToolCallingMixin,
 )
 from akd._base.errors import (
+    HumanInputRequired,
     MaxToolCallsExceeded,
     MaxToolIterationsExceeded,
     UnexpectedModelBehavior,
@@ -68,6 +69,7 @@ from akd.utils import PartialModel
 from .providers import LiteLLMAdapter
 from .providers._base import ProviderAdapter
 from .providers.contracts import ProviderEventType, ProviderRequest, ProviderResponse
+from .utils import UnifiedOutput, output_tool_name_for_schema
 
 
 class BaseAgentConfig(BaseConfig):
@@ -145,6 +147,10 @@ class BaseAgentConfig(BaseConfig):
     reflection_prompt: str | None = Field(
         default=None,
         description="Reflection prompt injected after tool results to force reasoning. If None, no reflection step.",
+    )
+    output_mode: Literal["multi_tool", "unified_schema"] = Field(
+        default="multi_tool",
+        description="Output mode. multi_tool uses one final tool per schema branch.",
     )
 
     @model_validator(mode="before")
@@ -305,8 +311,123 @@ class BaseAgent[
             temperature=self.temperature,
             tools=self.tool_definitions,
             token_batch_size=token_batch_size,
-            output_schema=output_schema or self.output_schema,
+            output_schema=output_schema or self._get_effective_output_schema(),
             provider_kwargs=provider_kwargs or {},
+        )
+
+    def _resolved_output_schemas(self) -> list[type[OutputSchema]]:
+        """Return normalized output schema candidates for this agent."""
+        declared = self.output_schema
+        origin = get_origin(declared)
+        if origin is None:
+            schemas = [declared]
+        else:
+            schemas = [arg for arg in get_args(declared) if isinstance(arg, type) and issubclass(arg, OutputSchema)]
+        unique: list[type[OutputSchema]] = []
+        for schema in schemas:
+            if schema not in unique:
+                unique.append(schema)
+        return unique
+
+    def _unwrap_unified_output(self, output: Any) -> OutputSchema | None:
+        """Unwrap single-envelope union output to a concrete schema branch."""
+        if self.output_mode != "unified_schema":
+            return None
+        schemas = self._resolved_output_schemas()
+        if len(schemas) <= 1:
+            return None
+        envelope_model = self._get_effective_output_schema()
+        if not isinstance(output, envelope_model):
+            return None
+        kind = getattr(output, "kind", None)
+        selected_schema: type[OutputSchema] | None = None
+
+        if isinstance(kind, str):
+            selected_schema = next((schema for schema in schemas if schema.__name__ == kind), None)
+        else:
+            populated = [schema for schema in schemas if getattr(output, schema.__name__, None) is not None]
+            if len(populated) == 1:
+                selected_schema = populated[0]
+
+        if selected_schema is None:
+            return None
+
+        branch = getattr(output, selected_schema.__name__, None)
+        if isinstance(branch, OutputSchema):
+            return branch
+        if isinstance(branch, dict):
+            return selected_schema.model_validate(branch)
+        return None
+
+    def _route_output_from_event(self, event: StreamEvent) -> OutputSchema | None:
+        """Extract concrete output from a stream event if it represents final output.
+
+        Handles both modes transparently:
+        - multi_tool: resolves output from ToolResultEvent via output tool match
+        - unified_schema: unwraps envelope from CompletedEvent
+        - single schema: passes through CompletedEvent output directly
+        """
+        if isinstance(event, ToolResultEvent):
+            return self._resolve_output_from_tool_result(event.data.result)
+        if isinstance(event, CompletedEvent):
+            raw = event.data.output
+            unwrapped = self._unwrap_unified_output(raw)
+            return unwrapped if unwrapped is not None else raw
+        return None
+
+    def _get_effective_output_schema(self) -> type[OutputSchema]:
+        """Return schema used for provider structured-output requests."""
+        schemas = self._resolved_output_schemas()
+        if not schemas:
+            raise TypeError("output_schema must declare at least one OutputSchema type")
+        if len(schemas) <= 1:
+            return schemas[0]
+        if self.output_mode == "unified_schema":
+            return UnifiedOutput(*schemas)
+        return schemas[0]
+
+    def _build_output_tools(self) -> list[OutputTool]:
+        """Build output tools according to union output mode."""
+        schemas = self._resolved_output_schemas()
+        if len(schemas) <= 1:
+            return [OutputTool(schemas[0])]
+        if self.output_mode != "multi_tool":
+            return [OutputTool(schemas[0])]
+        return [OutputTool(schema, name=output_tool_name_for_schema(schema)) for schema in schemas]
+
+    def _resolve_output_from_tool_result(self, result: Any) -> OutputSchema | None:
+        """Resolve completed output from a tool-result payload if it is an output tool."""
+        tool_name = getattr(result, "tool_name", None)
+        if not isinstance(tool_name, str) or getattr(result, "error", None):
+            return None
+        schemas = self._resolved_output_schemas()
+        schema: type[OutputSchema] | None = (
+            schemas[0]
+            if len(schemas) == 1 and tool_name == "final_answer"
+            else next((s for s in schemas if output_tool_name_for_schema(s) == tool_name), None)
+        )
+        if schema is None:
+            return None
+        content = getattr(result, "content", None)
+        if isinstance(content, schema):
+            return content
+        if isinstance(content, dict):
+            try:
+                return schema.model_validate(content)
+            except Exception:
+                return None
+        return None
+
+    def _validate_output(self, output: Any) -> OutSchema:
+        """Validate output against single or union output schemas."""
+        unwrapped = self._unwrap_unified_output(output)
+        candidate = unwrapped if unwrapped is not None else output
+        for schema in self._resolved_output_schemas():
+            if isinstance(candidate, schema):
+                return cast(OutSchema, candidate)
+        raise TypeError(
+            "Output must be an instance of one of: "
+            + ", ".join(schema.__name__ for schema in self._resolved_output_schemas()),
         )
 
     def _append_user_turn(
@@ -477,7 +598,7 @@ class BaseAgent[
         messages = run_context.messages
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _run_engine_stream")
-        response_model = self.output_schema
+        response_model = self._get_effective_output_schema()
         partial_response_model = PartialModel[response_model]
 
         request = self._build_provider_request(
@@ -607,7 +728,12 @@ class BaseAgent[
         token_batch_size: int = 10,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
-        """Default internal streaming template using _run_engine_stream()."""
+        """Default internal streaming template using _run_engine_stream().
+
+        Mode-agnostic event observer: streams from the engine and uses
+        _route_output_from_event() to detect final output regardless of
+        whether the engine uses multi_tool or unified_schema mode.
+        """
         class_name = self.__class__.__name__
 
         yield StartingEvent(
@@ -624,18 +750,25 @@ class BaseAgent[
                 run_context=run_context,
             )
 
-            output = PartialModel[self.output_schema]()
-            streamer = self._run_engine_stream(
+            output: OutputSchema | None = None
+            async for event in self._run_engine_stream(
                 run_context=run_context,
                 token_batch_size=token_batch_size,
-            )
-
-            async for event in streamer:
-                if isinstance(event, CompletedEvent):
-                    output = event.data.output
-                yield event
-                if isinstance(event, HumanInputRequiredEvent):
+            ):
+                resolved = self._route_output_from_event(event)
+                if resolved is not None:
+                    output = resolved
+                    yield CompletedEvent(
+                        source=class_name,
+                        message=f"Completed {class_name}",
+                        data=CompletedEventData(output=resolved),
+                        run_context=run_context,
+                    )
                     return
+                if isinstance(event, HumanInputRequiredEvent):
+                    yield event
+                    return
+                yield event
 
             if output is None:
                 raise UnexpectedModelBehavior("No output received from LLM")
@@ -986,8 +1119,8 @@ class LiteLLMInstructorBaseAgent[
     ) -> OutSchema:
         """Run agent with optional tool calling support.
 
-        If tools are configured, uses the tool loop (ReAct pattern).
-        Otherwise, uses direct LLM call with structured output.
+        Direct mode (no tools): one-shot instructor extraction via get_response_async.
+        Tool mode: consumes _run_engine_stream via _route_output_from_event.
 
         Args:
             params: Input parameters matching input_schema.
@@ -996,30 +1129,27 @@ class LiteLLMInstructorBaseAgent[
         Returns:
             Output matching output_schema.
         """
-        output: OutSchema | None = None
-
         token_batch_size = kwargs.pop("token_batch_size", 10)
-        if self.tools:
-            # === TOOL CALLING MODE ===
-            # Consume unified streaming engine until completion.
-            async for event in self._run_engine_stream(
-                run_context=run_context,
-                token_batch_size=token_batch_size,
-            ):
-                if event.event_type == StreamEventType.COMPLETED:
-                    output = event.output
-                    break
+        has_union = len(self._resolved_output_schemas()) > 1
+        use_tool_loop = bool(self.tools) or (has_union and self.output_mode == "multi_tool")
 
-            if output is None:
-                raise UnexpectedModelBehavior("Tool loop completed without producing output")
-
-        else:
-            # === DIRECT MODE (no tools) ===
-            output = await self.get_response_async(
+        if not use_tool_loop:
+            return await self.get_response_async(
                 run_context=run_context,
-                response_model=self.output_schema,
+                response_model=self._get_effective_output_schema(),
             )
-        return output
+
+        async for event in self._run_engine_stream(
+            run_context=run_context,
+            token_batch_size=token_batch_size,
+        ):
+            resolved = self._route_output_from_event(event)
+            if resolved is not None:
+                return cast(OutSchema, resolved)
+            if isinstance(event, HumanInputRequiredEvent):
+                raise HumanInputRequired(str(event.data.human_input))
+
+        raise UnexpectedModelBehavior("Tool loop completed without producing output")
 
     async def _run_engine_stream(
         self,
@@ -1032,13 +1162,18 @@ class LiteLLMInstructorBaseAgent[
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _run_engine_stream")
 
+        response_model = self._get_effective_output_schema()
         tool_defs: list[dict[str, Any]] = []
         tool_instances: list[BaseTool] = []
-        partial_response_model = PartialModel[self.output_schema]
-        if self.tools:
-            output_tool = OutputTool(self.output_schema)
-            tool_instances = self.tools + [output_tool]
-            tool_defs = self.tool_definitions + [output_tool.as_tool_definition()]
+        partial_response_model = PartialModel[response_model]
+        output_tools: list[OutputTool] = []
+        has_union = len(self._resolved_output_schemas()) > 1
+        use_tool_loop = bool(self.tools) or (has_union and self.output_mode == "multi_tool")
+        if use_tool_loop:
+            output_tools = self._build_output_tools()
+            tool_instances = self.tools + output_tools
+            tool_defs = self.tool_definitions + [tool.as_tool_definition() for tool in output_tools]
+        output_tool_names = {tool.name for tool in output_tools}
 
         human_response = run_context.human_response
         if human_response:
@@ -1070,10 +1205,11 @@ class LiteLLMInstructorBaseAgent[
 
         total_tool_calls = 0
         max_turns = self.max_tool_iterations if tool_defs else max(1, self.max_tool_iterations)
+        adapter = self._get_provider_adapter()
         for _ in range(max_turns):
             request = self._build_provider_request(
                 token_batch_size=token_batch_size,
-                output_schema=self.output_schema,
+                output_schema=response_model,
                 provider_kwargs={
                     "stream": True,
                     "tools": tool_defs or None,
@@ -1081,7 +1217,6 @@ class LiteLLMInstructorBaseAgent[
                     "reasoning": {"summary": self.reasoning_summary} if self.reasoning_summary else None,
                 },
             )
-            adapter = self._get_provider_adapter()
 
             accumulated_content = ""
             token_buffer = ""
@@ -1204,15 +1339,23 @@ class LiteLLMInstructorBaseAgent[
                     raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
 
                 try:
-                    output = self.output_schema.model_validate_json(accumulated_content)
+                    output = response_model.model_validate_json(accumulated_content)
                     yield CompletedEvent(
                         source=class_name,
                         message=f"Completed {class_name}",
-                        data=CompletedEventData[self.output_schema](output=output),
+                        data=CompletedEventData[response_model](output=output),
                         run_context=run_context,
                     )
                     return
                 except Exception as exc:
+                    if any(s is TextOutput for s in self._resolved_output_schemas()) and accumulated_content.strip():
+                        yield CompletedEvent(
+                            source=class_name,
+                            message=f"Completed {class_name}",
+                            data=CompletedEventData[TextOutput](output=TextOutput(content=accumulated_content)),
+                            run_context=run_context,
+                        )
+                        return
                     yield ThinkingEvent(
                         source=class_name,
                         message="Internal reasoning...",
@@ -1303,25 +1446,15 @@ class LiteLLMInstructorBaseAgent[
             total_tool_calls += len(tool_calls)
 
             for result in results:
-                if result.tool_name == "final_answer":
-                    if result.error:
-                        break
-                    output = self.output_schema.model_validate(result.content)
-                    yield CompletedEvent(
-                        source=class_name,
-                        message=f"Completed {class_name}",
-                        data=CompletedEventData[self.output_schema](output=output),
-                        run_context=run_context,
-                    )
-                    return
-
-            for result in results:
                 yield ToolResultEvent(
                     source=class_name,
                     message=f"Result from {result.tool_name}",
                     data=ToolResultEventData(result=result),
                     run_context=run_context,
                 )
+
+            if any(result.tool_name in output_tool_names and not result.error for result in results):
+                return
 
             messages.append(
                 {

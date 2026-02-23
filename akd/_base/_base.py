@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import types
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Any, Type, cast
+from typing import Any, Type, Union, cast, get_args, get_origin
 
 from loguru import logger
 from pydantic import (
@@ -284,12 +285,23 @@ class AbstractBaseMeta(ABCMeta):
                     )
 
             if hasattr(cls, "output_schema") and cls.output_schema is not None:
-                if not isinstance(cls.output_schema, type) or not issubclass(
-                    cls.output_schema,
+                output_schema_decl = cls.output_schema
+                origin = get_origin(output_schema_decl)
+                if origin in (types.UnionType, Union):
+                    args = get_args(output_schema_decl)
+                    valid_union = bool(args) and all(
+                        isinstance(arg, type) and issubclass(arg, (OutputSchema, BaseModel)) for arg in args
+                    )
+                    if not valid_union:
+                        raise TypeError(
+                            f"{name}.output_schema union members must be subclasses of OutputSchema",
+                        )
+                elif not isinstance(output_schema_decl, type) or not issubclass(
+                    output_schema_decl,
                     (OutputSchema, BaseModel),
                 ):
                     raise TypeError(
-                        f"{name}.output_schema must be a subclass of OutputSchema",
+                        f"{name}.output_schema must be a subclass of OutputSchema or a union of them",
                     )
 
         return cls
@@ -391,8 +403,10 @@ class AbstractBase[
         # avoid circular dependency
         if not hasattr(self, "output_schema") or not self.output_schema:
             return ""
-
-        fields = get_model_fields(self.output_schema, skip_no_description=False)
+        schema_decl = self.output_schema
+        if not isinstance(schema_decl, type):
+            return ""
+        fields = get_model_fields(schema_decl, skip_no_description=False)
         if not fields:
             return ""
 
@@ -433,9 +447,18 @@ class AbstractBase[
 
     def _validate_output(self, output: Any) -> OutSchema:
         """Validate output against schema."""
-        if not isinstance(output, self.output_schema):
+        schema_decl = self.output_schema
+        origin = get_origin(schema_decl)
+        if origin in (types.UnionType, Union):
+            args = [arg for arg in get_args(schema_decl) if isinstance(arg, type) and issubclass(arg, BaseModel)]
+            if not any(isinstance(output, arg) for arg in args):
+                raise TypeError(
+                    "Output must be an instance of one of: " + ", ".join(arg.__name__ for arg in args),
+                )
+            return output
+        if not isinstance(output, schema_decl):
             raise TypeError(
-                f"Output must be an instance of {self.output_schema.__name__}",
+                f"Output must be an instance of {schema_decl.__name__}",
             )
         return output
 
