@@ -1069,7 +1069,7 @@ class LiteLLMInstructorBaseAgent[
             )
 
         total_tool_calls = 0
-        max_turns = self.max_tool_iterations if tool_defs else 1
+        max_turns = self.max_tool_iterations if tool_defs else max(1, self.max_tool_iterations)
         for _ in range(max_turns):
             request = self._build_provider_request(
                 token_batch_size=token_batch_size,
@@ -1212,11 +1212,7 @@ class LiteLLMInstructorBaseAgent[
                         run_context=run_context,
                     )
                     return
-                except Exception:
-                    if not tool_defs:
-                        raise UnexpectedModelBehavior(
-                            "Non-tool run produced non-JSON content for structured output",
-                        ) from None
+                except Exception as exc:
                     yield ThinkingEvent(
                         source=class_name,
                         message="Internal reasoning...",
@@ -1224,12 +1220,25 @@ class LiteLLMInstructorBaseAgent[
                         run_context=run_context,
                     )
                     messages.append({"role": "assistant", "content": accumulated_content})
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
-                        },
-                    )
+                    if tool_defs:
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": "Validation feedback:\nPlease call one of the provided tool functions instead.",
+                            },
+                        )
+                    else:
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Validation feedback:\n"
+                                    "Your previous JSON did not match the required output schema. "
+                                    "Return ONLY valid JSON that satisfies the schema.\n"
+                                    f"Validation error: {exc}"
+                                ),
+                            },
+                        )
                     continue
 
             tool_calls: list[ToolCall] = []
