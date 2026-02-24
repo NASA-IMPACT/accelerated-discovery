@@ -126,31 +126,18 @@ class LiteLLMAdapter(ProviderAdapter):
 
         if request.output_schema is not None:
             instructor_model = self._create_instructor_compatible_model(request.output_schema)
-            try:
-                response, completion = await self.client.chat.completions.create_with_completion(
-                    **completion_kwargs,
-                    response_model=instructor_model,
-                )
-                usage = self._extract_usage(completion)
-                if hasattr(response, "model_dump"):
-                    content = json.dumps(response.model_dump())
-                elif hasattr(response, "model_dump_json"):
-                    dumped = response.model_dump_json()
-                    content = dumped if isinstance(dumped, str) else str(dumped)
-                else:
-                    content = str(response)
-            except Exception:
-                # Instructor TOOLS mode can fail when the model returns structured
-                # JSON in content instead of via tool calls.  Fall back to raw
-                # completion and let the caller parse/validate the content.
-                completion = await self._completion_callable(**completion_kwargs)
-                usage = self._extract_usage(completion)
-                choices = getattr(completion, "choices", None) or []
-                if choices:
-                    message = getattr(choices[0], "message", None)
-                    if message is not None:
-                        content = getattr(message, "content", None)
-                        tool_calls = self._normalize_tool_calls(message)
+            response, completion = await self.client.chat.completions.create_with_completion(
+                **completion_kwargs,
+                response_model=instructor_model,
+            )
+            usage = self._extract_usage(completion)
+            if hasattr(response, "model_dump"):
+                content = json.dumps(response.model_dump())
+            elif hasattr(response, "model_dump_json"):
+                dumped = response.model_dump_json()
+                content = dumped if isinstance(dumped, str) else str(dumped)
+            else:
+                content = str(response)
         else:
             completion = await self._completion_callable(**completion_kwargs)
             usage = self._extract_usage(completion)

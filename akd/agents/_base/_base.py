@@ -922,20 +922,6 @@ class LiteLLMInstructorBaseAgent[
     def _post_init(self):
         super()._post_init()
 
-        # reformat to response format for openai gpt-5* models
-        # only when reasoning is enabled
-        # only applies to litellm so
-        if (
-            self.config.model_name.startswith("gpt-5")
-            and self.config.reasoning_effort
-            and self.config.reasoning_summary
-            and supports_reasoning(model=self.config.model_name)
-        ):
-            logger.info(
-                f"Reformatting model name to {self.config.model_name} to openai/responses/{self.config.model_name}",
-            )
-            self.config.model_name = f"openai/responses/{self.config.model_name}"
-
     def __deepcopy__(self, memo: dict[int, Any]) -> LiteLLMInstructorBaseAgent:
         """Custom deepcopy that recreates the LiteLLM client instead of copying it.
 
@@ -983,7 +969,19 @@ class LiteLLMInstructorBaseAgent[
 
         is_stream = base_kwargs.get("stream") is True
         has_tools = bool(base_kwargs.get("tools"))
+        model_name = self.model_name
+
         if is_stream:
+            # Use OpenAI responses API route for gpt-5 streaming with reasoning.
+            # Non-streaming (instructor) path uses the original model name since
+            # instructor TOOLS mode is incompatible with the responses API route.
+            if (
+                self.model_name.startswith("gpt-5")
+                and self.reasoning_effort
+                and self.reasoning_summary
+                and supports_reasoning(model=self.model_name)
+            ):
+                model_name = f"openai/responses/{self.model_name}"
             base_kwargs.setdefault("stream_options", {"include_usage": True})
             if output_schema is not None and not has_tools:
                 base_kwargs.setdefault(
@@ -1000,11 +998,13 @@ class LiteLLMInstructorBaseAgent[
             if self.reasoning_summary:
                 base_kwargs.setdefault("reasoning", {"summary": self.reasoning_summary})
 
-        return super()._build_provider_request(
+        request = super()._build_provider_request(
             token_batch_size=token_batch_size,
             output_schema=output_schema,
             provider_kwargs=base_kwargs,
         )
+        request.model_name = model_name
+        return request
 
     def _get_provider_adapter(self) -> ProviderAdapter:
         """Return the LiteLLM provider adapter for this agent."""
