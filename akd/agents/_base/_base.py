@@ -24,7 +24,6 @@ from akd._base import (
     RunContext,
     StreamEvent,
     StreamEventType,
-    TextInput,
     TextOutput,
     ToolCall,
     ToolCallingMixin,
@@ -276,7 +275,7 @@ class BaseAgent[
     def _open_session(
         self,
         run_context: RunContext,
-        mode: Literal["run", "stream", "chat"],
+        mode: Literal["run", "stream"],
     ) -> AgentSession:
         """Create an agent session for this run context."""
         return AgentSession(
@@ -434,15 +433,12 @@ class BaseAgent[
         self,
         run_context: RunContext,
         params: InSchema,
-        mode: Literal["run", "stream", "chat"],
+        mode: Literal["run", "stream"],
     ) -> None:
         """Append user turn unless this is a human-response resume."""
         if run_context.human_response or params is None:
             return
-        if mode == "chat" and isinstance(params, TextInput):
-            payload = params.content
-        else:
-            payload = params.model_dump_json(exclude={"type"})
+        payload = params.model_dump_json(exclude={"type"})
         run_context.messages.append({"role": "user", "content": payload})
 
     def _finalize_success(self, run_context: RunContext, output: OutputSchema) -> None:
@@ -516,57 +512,6 @@ class BaseAgent[
                     )
                     continue
                 yield event
-
-    async def achat(
-        self,
-        params: Any,
-        run_context: RunContext | None = None,
-        **kwargs: Any,
-    ) -> TextOutput:
-        """Convenience method for simple text-based conversations.
-
-        Converts any agent into a chat-style interface by routing through _arun(),
-        preserving tool calling, guardrails, and streaming support. Wraps input
-        in TextInput and converts the agent's response to TextOutput.
-
-        Note: Messages in memory will be JSON-serialized (e.g. {"content": "hello"})
-        rather than plain text, since this goes through the standard _arun() pipeline.
-
-        Args:
-            params: The input content. If already a TextInput, used directly.
-                    Otherwise, stringified and wrapped in TextInput.
-            run_context: Optional context for resumption after human input.
-
-        Returns:
-            TextOutput: The agent's text response.
-
-        Example:
-            # Works with any agent, not just TextInput/TextOutput agents
-            response = await search_agent.achat("Find papers on quantum computing")
-            print(response.content)
-
-            # Multi-turn with stateless=False
-            agent = MyAgent(config=BaseAgentConfig(stateless=False))
-            await agent.achat("My name is Alice")
-            response = await agent.achat("What's my name?")  # response.content == "Alice"
-        """
-        params = params if isinstance(params, TextInput) else TextInput(content=str(params))
-
-        run_context = self._build_run_context(run_context)
-
-        async with self._open_session(run_context, "chat") as session:
-            if not session.messages:
-                session.append(self._default_system_message())
-            self._append_user_turn(run_context, params, "chat")
-            output = await self._arun(params, run_context=run_context, **kwargs)
-            output = self._validate_output(output)
-            self._finalize_success(run_context, output)
-
-        chat_output = (
-            TextOutput(content=output._response or str(output)) if not isinstance(output, TextOutput) else output
-        )
-        chat_output._run_context = run_context
-        return chat_output
 
     @abstractmethod
     async def get_response_async(
