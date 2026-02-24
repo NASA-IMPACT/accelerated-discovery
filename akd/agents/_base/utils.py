@@ -10,11 +10,6 @@ from pydantic import Field, create_model
 from akd._base import OutputSchema
 
 
-def output_tool_name_for_schema(schema: type[OutputSchema]) -> str:
-    """Return deterministic output tool name for a schema branch."""
-    return f"final_{schema.__name__}"
-
-
 @lru_cache(maxsize=64)
 def build_unified_output_model(schemas: tuple[type[OutputSchema], ...]) -> type[OutputSchema]:
     """Build one envelope model that can represent a union of output schemas."""

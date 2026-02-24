@@ -68,7 +68,7 @@ from akd.utils import PartialModel
 from .providers import LiteLLMAdapter
 from .providers._base import ProviderAdapter
 from .providers.contracts import ProviderEventType, ProviderRequest, ProviderResponse
-from .utils import UnifiedOutput, output_tool_name_for_schema
+from .utils import UnifiedOutput
 
 
 class BaseAgentConfig(BaseConfig):
@@ -392,7 +392,7 @@ class BaseAgent[
             return [OutputTool(schemas[0])]
         if self.output_mode != "multi_tool":
             return [OutputTool(schemas[0])]
-        return [OutputTool(schema, name=output_tool_name_for_schema(schema)) for schema in schemas]
+        return [OutputTool(schema, name=f"final_{schema.__name__}") for schema in schemas]
 
     def _resolve_output_from_tool_result(self, result: Any) -> OutputSchema | None:
         """Resolve completed output from a tool-result payload if it is an output tool."""
@@ -403,7 +403,7 @@ class BaseAgent[
         schema: type[OutputSchema] | None = (
             schemas[0]
             if len(schemas) == 1 and tool_name == "final_answer"
-            else next((s for s in schemas if output_tool_name_for_schema(s) == tool_name), None)
+            else next((s for s in schemas if f"final_{s.__name__}" == tool_name), None)
         )
         if schema is None:
             return None
