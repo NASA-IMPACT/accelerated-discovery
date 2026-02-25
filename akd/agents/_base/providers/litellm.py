@@ -183,7 +183,8 @@ class LiteLLMAdapter(ProviderAdapter):
             completion_kwargs.update(request.provider_kwargs)
         completion_kwargs = {k: v for k, v in completion_kwargs.items() if v is not None}
 
-        accumulated = ""
+        accumulated_tool_calls: dict[int, dict[str, str]] = {}
+
         response = await self._completion_callable(**completion_kwargs)
         async for chunk in response:
             usage = self._extract_usage(chunk)
@@ -204,28 +205,30 @@ class LiteLLMAdapter(ProviderAdapter):
                     data={"text": reasoning},
                 )
 
-            streamed_tool_calls = getattr(delta, "tool_calls", None) or []
-            for tc in streamed_tool_calls:
+            # Accumulate tool call deltas (assembled after stream ends)
+            for tc in getattr(delta, "tool_calls", None) or []:
+                idx = getattr(tc, "index", 0)
                 function = getattr(tc, "function", None)
-                yield ProviderEvent(
-                    kind=ProviderEventType.TOOL_CALL,
-                    data={
-                        "index": getattr(tc, "index", 0),
-                        "id": getattr(tc, "id", None),
-                        "name": getattr(function, "name", None) if function is not None else None,
-                        "arguments_delta": (getattr(function, "arguments", "") if function is not None else ""),
-                    },
-                )
+                if idx not in accumulated_tool_calls:
+                    accumulated_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                if tc_id := getattr(tc, "id", None):
+                    accumulated_tool_calls[idx]["id"] = tc_id
+                if tc_name := (getattr(function, "name", None) if function else None):
+                    accumulated_tool_calls[idx]["name"] = tc_name
+                accumulated_tool_calls[idx]["arguments"] += (
+                    getattr(function, "arguments", "") if function else ""
+                ) or ""
 
             content = getattr(delta, "content", None)
             if content:
-                accumulated += content
                 yield ProviderEvent(
                     kind=ProviderEventType.TEXT_DELTA,
                     data={"text": content},
                 )
 
-        yield ProviderEvent(
-            kind=ProviderEventType.FINAL_OUTPUT,
-            data={"content": accumulated},
-        )
+        # Yield assembled tool calls after stream completes
+        for idx in sorted(accumulated_tool_calls):
+            yield ProviderEvent(
+                kind=ProviderEventType.TOOL_CALL,
+                data=accumulated_tool_calls[idx],
+            )

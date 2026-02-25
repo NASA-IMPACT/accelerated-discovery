@@ -3,16 +3,14 @@ from __future__ import annotations
 import copy
 import json
 import uuid
-from abc import abstractmethod
 from collections.abc import AsyncIterator
 from typing import Any, Literal, cast, get_args, get_origin
 
 import instructor
-import openai
 from litellm import acompletion
 from litellm.utils import get_model_info, supports_reasoning
 from loguru import logger
-from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
+from pydantic import AnyUrl, Field, model_validator
 
 from akd._base import (
     AbstractBase,
@@ -43,8 +41,6 @@ from akd._base.streaming import (
     HumanInputRequiredEventData,
     HumanResponseEvent,
     HumanResponseEventData,
-    PartialEventData,
-    PartialOutputEvent,
     RunningEvent,
     StartingEvent,
     StartingEventData,
@@ -63,11 +59,10 @@ from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
 from akd.tools.human import HumanTool, HumanToolInput
 from akd.tools.output import OutputTool
-from akd.utils import PartialModel
 
 from .providers import LiteLLMAdapter
 from .providers._base import ProviderAdapter
-from .providers.contracts import ProviderEventType, ProviderRequest, ProviderResponse
+from .providers.contracts import ProviderEventType, ProviderRequest
 from .utils import UnifiedOutput
 
 
@@ -225,7 +220,6 @@ class BaseAgent[
     Notes:
     - We internally use `_system_prompt` to access actual system prompt that the model sees.
     - The `_system_prompt` has enhanced prompt based on `input_hints` flag.
-    - We also have `_default_system_message` in InstructorBaseAgent that creates a dict
     """
 
     config_schema = BaseAgentConfig
@@ -237,27 +231,17 @@ class BaseAgent[
     ) -> None:
         super().__init__(config=config, **kwargs)
 
+    def _post_init(self):
+        super()._post_init()
+        self.output_tools: list[OutputTool] = self._build_output_tools()
+
     @property
     def _system_prompt(self) -> str:
-        """
-        Enhanced system prompt with agent description.
-
-        The description includes IO field hints if io_hints=True (default).
-
-        Returns:
-            str: System prompt with agent description if available.
-        """
+        """Enhanced system prompt with agent description."""
         content = self.system_prompt
-
-        # Add agent description (includes IO hints if io_hints=True)
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
         return content
-
-    @property
-    def tool_definitions(self) -> list[dict[str, Any]]:
-        """Convert tools to function calling format."""
-        return [tool.as_tool_definition() for tool in self.tools]
 
     def _default_system_message(self) -> dict[str, str]:
         """Return default system message."""
@@ -288,11 +272,7 @@ class BaseAgent[
         )
 
     def _get_provider_adapter(self) -> ProviderAdapter:
-        """Return provider adapter used by the shared run engine.
-
-        Provider-specific subclasses should override this when migrating to
-        adapter-driven orchestration.
-        """
+        """Return provider adapter. Provider subclasses must override."""
         raise NotImplementedError(
             f"{self.__class__.__name__} must implement _get_provider_adapter()",
         )
@@ -300,7 +280,6 @@ class BaseAgent[
     def _build_provider_request(
         self,
         *,
-        token_batch_size: int = 10,
         output_schema: type[Any] | None = None,
         provider_kwargs: dict[str, Any] | None = None,
     ) -> ProviderRequest:
@@ -308,8 +287,7 @@ class BaseAgent[
         return ProviderRequest(
             model_name=self.model_name,
             temperature=self.temperature,
-            tools=self.tool_definitions,
-            token_batch_size=token_batch_size,
+            tools=[t.as_tool_definition() for t in self.tools],
             output_schema=output_schema or self._get_effective_output_schema(),
             provider_kwargs=provider_kwargs or {},
         )
@@ -456,17 +434,7 @@ class BaseAgent[
         run_context: RunContext | None = None,
         **kwargs,
     ) -> OutSchema:
-        """Run the agent with the provided parameters asynchronously.
-
-        Args:
-            params: The structured input parameters for the agent.
-            run_context: Optional RunContext for execution context
-                (messages, human_response, run_id, etc.)
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            Output matching the agent's output_schema.
-        """
+        """Run the agent with the provided parameters asynchronously."""
         params = self._validate_input(params)
         run_context = self._build_run_context(run_context)
 
@@ -487,11 +455,7 @@ class BaseAgent[
         run_context: RunContext | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
-        """Stream agent execution with run_context initialization.
-
-        Centralizes run_context creation and run_id assignment,
-        then delegates to parent astream().
-        """
+        """Stream agent execution with run_context initialization."""
         params = self._validate_input(params)
         run_context = self._build_run_context(run_context)
 
@@ -513,164 +477,19 @@ class BaseAgent[
                     continue
                 yield event
 
-    @abstractmethod
-    async def get_response_async(
-        self,
-        *,
-        run_context: RunContext,
-        response_model: type[OutputSchema] | None = None,
-    ) -> OutputSchema:
-        """
-        Obtains a response from the language model asynchronously.
-
-        Args:
-            response_model (Optional[OutputSchema]):
-                The schema for the response data. If not set,
-                self.output_schema is used.
-
-        Returns:
-            OutputSchema: The response from the language model.
-        """
-        raise NotImplementedError("Subclasses must implement this method.")
-
     async def _run_engine_stream(
         self,
         run_context: RunContext,
-        token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
-        """Unified provider-driven stream engine for tools and non-tools."""
-        class_name = self.__class__.__name__
-        messages = run_context.messages
-        if messages is None:
-            raise ValueError("run_context.messages must be initialized before _run_engine_stream")
-        response_model = self._get_effective_output_schema()
-        partial_response_model = PartialModel[response_model]
-
-        request = self._build_provider_request(
-            token_batch_size=token_batch_size,
-            output_schema=response_model,
-        )
-        adapter = self._get_provider_adapter()
-
-        if run_context.human_response:
-            content = run_context.human_response.content
-            messages.append(
-                {
-                    "role": "user",
-                    "content": content if isinstance(content, str) else json.dumps(content),
-                },
-            )
-            yield HumanResponseEvent(
-                source=class_name,
-                message="Resumed with human input",
-                data=HumanResponseEventData(
-                    tool_call_id=run_context.human_response.tool_call_id,
-                    response=content,
-                ),
-                run_context=run_context,
-            )
-
-        accumulated = ""
-        token_buffer = ""
-        thinking_buffer = ""
-        last_partial_dict: dict[str, Any] | None = None
-
-        async for provider_event in adapter.request_stream(
-            run_context=run_context,
-            request=request,
-        ):
-            if provider_event.kind == ProviderEventType.USAGE:
-                usage = provider_event.data.get("usage")
-                if isinstance(usage, RunUsage):
-                    run_context.usage += usage
-                continue
-
-            if provider_event.kind == ProviderEventType.REASONING_DELTA:
-                reasoning = provider_event.data.get("text")
-                if isinstance(reasoning, str) and reasoning:
-                    thinking_buffer += reasoning
-                    if len(thinking_buffer) >= token_batch_size:
-                        yield ThinkingEvent(
-                            source=class_name,
-                            message="Reasoning...",
-                            data=ThinkingEventData(thinking_content=thinking_buffer),
-                            run_context=run_context,
-                        )
-                        thinking_buffer = ""
-                continue
-
-            if provider_event.kind == ProviderEventType.TEXT_DELTA:
-                content = provider_event.data.get("text")
-                if isinstance(content, str) and content:
-                    token_buffer += content
-                    accumulated += content
-
-                    if len(token_buffer) >= token_batch_size:
-                        yield StreamingTokenEvent(
-                            source=class_name,
-                            data=StreamingEventData(token=token_buffer),
-                            run_context=run_context,
-                        )
-                        token_buffer = ""
-
-                    try:
-                        parsed = json.loads(accumulated)
-                    except json.JSONDecodeError:
-                        parsed = None
-                    if isinstance(parsed, dict) and parsed != last_partial_dict:
-                        last_partial_dict = parsed
-                        try:
-                            partial = partial_response_model.model_validate(parsed)
-                            yield PartialOutputEvent(
-                                source=class_name,
-                                message="Partial...",
-                                data=PartialEventData(partial_output=partial),
-                                run_context=run_context,
-                            )
-                        except Exception:
-                            pass
-                continue
-
-            if provider_event.kind == ProviderEventType.FINAL_OUTPUT:
-                final_content = provider_event.data.get("content")
-                if isinstance(final_content, str):
-                    accumulated = final_content
-                continue
-
-            if provider_event.kind == ProviderEventType.ERROR:
-                error = provider_event.data.get("error")
-                raise UnexpectedModelBehavior(
-                    str(error) if error is not None else "Provider adapter emitted error event",
-                )
-
-        if thinking_buffer:
-            yield ThinkingEvent(
-                source=class_name,
-                message="Reasoning...",
-                data=ThinkingEventData(thinking_content=thinking_buffer),
-                run_context=run_context,
-            )
-
-        if token_buffer:
-            yield StreamingTokenEvent(
-                source=class_name,
-                data=StreamingEventData(token=token_buffer),
-                run_context=run_context,
-            )
-
-        output = response_model.model_validate_json(accumulated)
-        yield CompletedEvent(
-            source=class_name,
-            message=f"Completed {class_name}",
-            data=CompletedEventData(output=output),
-            run_context=run_context,
-        )
+        """Provider-specific stream engine. Must be implemented by provider subclass."""
+        raise NotImplementedError(f"{self.__class__.__name__} must implement _run_engine_stream()")
+        # Make this an async generator
+        yield  # pragma: no cover
 
     async def _astream(
         self,
         params: InSchema,
         run_context: RunContext,
-        token_batch_size: int = 10,
         **kwargs: Any,
     ) -> AsyncIterator[StreamEvent]:
         """Default internal streaming template using _run_engine_stream().
@@ -696,10 +515,7 @@ class BaseAgent[
             )
 
             output: OutputSchema | None = None
-            async for event in self._run_engine_stream(
-                run_context=run_context,
-                token_batch_size=token_batch_size,
-            ):
+            async for event in self._run_engine_stream(run_context=run_context):
                 resolved = self._route_output_from_event(event)
                 if resolved is not None:
                     output = resolved
@@ -728,13 +544,14 @@ class BaseAgent[
             raise
 
 
-class InstructorBaseAgent[
+class LiteLLMInstructorBaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](BaseAgent):
-    """Base class for instructor-based chat agents.
-    Note:
-        The object attributes (like `api_key`, `model_name` etc.) are dynamically set from the config.
+](ToolCallingMixin, BaseAgent):
+    """LiteLLM-based agent with tool calling and automatic message trimming.
+
+    Uses LiteLLM for completion calls and instructor for structured output.
+    Provides ReAct-style tool calling loop, HITL support, and streaming.
     """
 
     def __init__(
@@ -742,79 +559,25 @@ class InstructorBaseAgent[
         config: BaseAgentConfig | None = None,
         debug: bool = False,
     ) -> None:
-        import warnings
-
-        if not isinstance(self, LiteLLMInstructorBaseAgent):
-            warnings.warn(
-                "InstructorBaseAgent is deprecated. Use LiteLLMInstructorBaseAgent instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         super().__init__(config=config, debug=debug)
+        self.client = instructor.from_litellm(acompletion)
 
-        # Create the OpenAI client
-        self.client = instructor.from_openai(
-            openai.AsyncOpenAI(
-                api_key=self.api_key,
-                base_url=str(self.base_url),
-            ),
-        )
+    def _post_init(self):
+        super()._post_init()
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> InstructorBaseAgent:
-        """Custom deepcopy that recreates the client instead of copying it.
-
-        The instructor/openai client contains httpx connections and async state
-        that cannot be properly deepcopied. We copy all other attributes and
-        recreate the client fresh.
-
-        Args:
-            memo: Dictionary of already copied objects (used by copy.deepcopy).
-
-        Returns:
-            A deep copy of this agent with a fresh client.
-        """
+    def __deepcopy__(self, memo: dict[int, Any]) -> LiteLLMInstructorBaseAgent:
+        """Custom deepcopy that recreates the LiteLLM client instead of copying it."""
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
 
-        # Copy all attributes except the client
         for k, v in self.__dict__.items():
             if k == "client":
                 continue
             setattr(result, k, copy.deepcopy(v, memo))
 
-        # Recreate the client fresh (api_key/base_url are dynamic properties from metaclass)
-        api_key = getattr(result, "api_key", None)
-        base_url = getattr(result, "base_url", None)
-        result.client = instructor.from_openai(
-            openai.AsyncOpenAI(
-                api_key=api_key,
-                base_url=str(base_url) if base_url else None,
-            ),
-        )
-
+        result.client = instructor.from_litellm(acompletion)
         return result
-
-    def _create_instructor_compatible_model(self, response_model: type[OutputSchema]):
-        """Create a model that's compatible with instructor but avoids IOSchema validation."""
-
-        # Get the fields from the original model
-        fields = {}
-        for field_name, field_info in response_model.model_fields.items():
-            fields[field_name] = (field_info.annotation, field_info)
-
-        # Create a new model that inherits from BaseModel directly (not IOSchema)
-        # This avoids the docstring validation issue
-        instructor_model = create_model(
-            response_model.__name__,
-            __base__=BaseModel,
-            **cast(dict[str, Any], fields),
-        )
-
-        # Copy over the docstring and other metadata
-        instructor_model.__doc__ = response_model.__doc__
-
-        return instructor_model
 
     def _build_response_format_schema(self, model: type[OutputSchema]) -> dict[str, Any]:
         """Build JSON schema for response_format (OpenAI strict mode)."""
@@ -825,131 +588,9 @@ class InstructorBaseAgent[
             schema["required"] = list(schema["properties"].keys())
         return schema
 
-    def _try_parse_json(self, content: str) -> dict[str, Any] | None:
-        """Try to parse content as JSON."""
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            return None
-
-    async def get_response_async(
-        self,
-        *,
-        run_context: RunContext,
-        response_model: type[OutputSchema] | None = None,
-    ) -> OutSchema:
-        """
-        Obtains a response from the language model asynchronously.
-
-        Args:
-            response_model (Type[BaseModel], optional):
-                The schema for the response data. If not set,
-                self.output_schema is used.
-
-        Returns:
-            Type[BaseModel]: The response from the language model.
-        """
-        response_model = response_model or self.output_schema
-        instructor_model = self._create_instructor_compatible_model(response_model)
-
-        messages = run_context.messages
-        if messages is None:
-            raise ValueError("run_context.messages must be initialized before get_response_async")
-
-        response = await self.client.chat.completions.create(
-            messages=messages,
-            model=self.model_name,
-            temperature=self.temperature,
-            response_model=instructor_model,
-        )
-
-        response_data = response.model_dump()
-        response = response_model(**response_data)
-        return cast(OutSchema, response)
-
-    async def _arun(
-        self,
-        params: InSchema,
-        run_context: RunContext,
-        **kwargs,
-    ) -> OutSchema:
-        """
-        Runs the chat agent with the given user input asynchronously.
-
-        Args:
-            params: The input from the user.
-            run_context: Optional RunContext with messages, human_response, etc.
-
-        Returns:
-            OutputSchema: The response from the chat agent.
-        """
-        # NOTE: Memory session and messages prep handled by BaseAgent.arun
-        # We rely on run_context.messages being set.
-        if run_context.messages is None:
-            raise ValueError("run_context.messages must be set (did you call via BaseAgent.arun?)")
-
-        # NOTE: Not appending response to messages here anymore;
-        # BaseAgent.arun handles that now.
-
-        return await self.get_response_async(
-            run_context=run_context,
-            response_model=self.output_schema,
-        )
-
-
-class LiteLLMInstructorBaseAgent[
-    InSchema: InputSchema,
-    OutSchema: OutputSchema,
-](ToolCallingMixin, InstructorBaseAgent):
-    """InstructorBaseAgent with LiteLLM integration and automatic message trimming.
-
-    This agent extends InstructorBaseAgent to use LiteLLM with automatic message trimming
-    to prevent token limit errors. It maintains full compatibility with the base class
-    while adding intelligent context management.
-    """
-
-    def __init__(
-        self,
-        config: BaseAgentConfig | None = None,
-        debug: bool = False,
-    ) -> None:
-        # Initialize base class but we'll replace the client
-        super().__init__(config=config, debug=debug)
-
-        # Replace instructor client with LiteLLM version
-        self.client = instructor.from_litellm(acompletion)
-
-    def _post_init(self):
-        super()._post_init()
-
-    def __deepcopy__(self, memo: dict[int, Any]) -> LiteLLMInstructorBaseAgent:
-        """Custom deepcopy that recreates the LiteLLM client instead of copying it.
-
-        Args:
-            memo: Dictionary of already copied objects (used by copy.deepcopy).
-
-        Returns:
-            A deep copy of this agent with a fresh LiteLLM client.
-        """
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-
-        # Copy all attributes except the client
-        for k, v in self.__dict__.items():
-            if k == "client":
-                continue
-            setattr(result, k, copy.deepcopy(v, memo))
-
-        # Recreate the LiteLLM client fresh
-        result.client = instructor.from_litellm(acompletion)
-
-        return result
-
     def _build_provider_request(
         self,
         *,
-        token_batch_size: int = 10,
         output_schema: type[Any] | None = None,
         provider_kwargs: dict[str, Any] | None = None,
     ) -> ProviderRequest:
@@ -999,7 +640,6 @@ class LiteLLMInstructorBaseAgent[
                 base_kwargs.setdefault("reasoning", {"summary": self.reasoning_summary})
 
         request = super()._build_provider_request(
-            token_batch_size=token_batch_size,
             output_schema=output_schema,
             provider_kwargs=base_kwargs,
         )
@@ -1016,17 +656,7 @@ class LiteLLMInstructorBaseAgent[
         run_context: RunContext,
         response_model: type[OutputSchema] | None = None,
     ) -> OutSchema:
-        """
-        Obtains a response from the language model asynchronously with automatic message trimming.
-
-        Args:
-            response_model (Type[BaseModel], optional):
-                The schema for the response data. If not set,
-                self.output_schema is used.
-
-        Returns:
-            Type[BaseModel]: The response from the language model.
-        """
+        """Obtain a structured response via instructor (non-streaming)."""
         response_model = response_model or self.output_schema
         request = self._build_provider_request(
             output_schema=response_model,
@@ -1039,22 +669,14 @@ class LiteLLMInstructorBaseAgent[
         )
         run_context.usage += provider_response.usage
 
-        response = self._parse_provider_response(provider_response, response_model)
-        return cast(OutSchema, response)
-
-    def _parse_provider_response(
-        self,
-        provider_response: ProviderResponse,
-        response_model: type[OutputSchema],
-    ) -> OutputSchema:
-        """Parse a normalized provider response into output schema."""
         content = provider_response.content
         if content is None:
             raise UnexpectedModelBehavior("Provider returned no content for structured output")
         try:
-            return response_model.model_validate_json(content)
+            response = response_model.model_validate_json(content)
         except Exception as exc:
             raise UnexpectedModelBehavior(f"Failed to parse provider response content: {exc}") from exc
+        return cast(OutSchema, response)
 
     async def _arun(
         self,
@@ -1066,15 +688,7 @@ class LiteLLMInstructorBaseAgent[
 
         Direct mode (no tools): one-shot instructor extraction via get_response_async.
         Tool mode: consumes _run_engine_stream via _route_output_from_event.
-
-        Args:
-            params: Input parameters matching input_schema.
-            run_context: Optional RunContext with messages, human_response, etc.
-
-        Returns:
-            Output matching output_schema.
         """
-        token_batch_size = kwargs.pop("token_batch_size", 10)
         has_union = len(self._resolved_output_schemas()) > 1
         use_tool_loop = bool(self.tools) or (has_union and self.output_mode == "multi_tool")
 
@@ -1084,10 +698,7 @@ class LiteLLMInstructorBaseAgent[
                 response_model=self._get_effective_output_schema(),
             )
 
-        async for event in self._run_engine_stream(
-            run_context=run_context,
-            token_batch_size=token_batch_size,
-        ):
+        async for event in self._run_engine_stream(run_context=run_context):
             resolved = self._route_output_from_event(event)
             if resolved is not None:
                 return cast(OutSchema, resolved)
@@ -1099,27 +710,21 @@ class LiteLLMInstructorBaseAgent[
     async def _run_engine_stream(
         self,
         run_context: RunContext,
-        token_batch_size: int = 10,
     ) -> AsyncIterator[StreamEvent]:
-        """LiteLLM-specific unified stream engine for tools and non-tools."""
+        """LiteLLM-specific stream engine with ReAct tool calling loop."""
         class_name = self.__class__.__name__
         messages = run_context.messages
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _run_engine_stream")
 
         response_model = self._get_effective_output_schema()
-        tool_defs: list[dict[str, Any]] = []
-        tool_instances: list[BaseTool] = []
-        partial_response_model = PartialModel[response_model]
-        output_tools: list[OutputTool] = []
-        has_union = len(self._resolved_output_schemas()) > 1
-        use_tool_loop = bool(self.tools) or (has_union and self.output_mode == "multi_tool")
-        if use_tool_loop:
-            output_tools = self._build_output_tools()
-            tool_instances = self.tools + output_tools
-            tool_defs = self.tool_definitions + [tool.as_tool_definition() for tool in output_tools]
-        output_tool_names = {tool.name for tool in output_tools}
 
+        # Tool setup using pre-computed output_tools
+        all_tools = self.tools + self.output_tools
+        tool_defs = [t.as_tool_definition() for t in all_tools] if all_tools else []
+        output_tool_names = {t.name for t in self.output_tools}
+
+        # HITL resume
         human_response = run_context.human_response
         if human_response:
             if tool_defs:
@@ -1149,27 +754,22 @@ class LiteLLMInstructorBaseAgent[
             )
 
         total_tool_calls = 0
-        max_turns = self.max_tool_iterations if tool_defs else max(1, self.max_tool_iterations)
+        max_turns = self.max_tool_iterations
         adapter = self._get_provider_adapter()
+
         for _ in range(max_turns):
             request = self._build_provider_request(
-                token_batch_size=token_batch_size,
                 output_schema=response_model,
                 provider_kwargs={
                     "stream": True,
                     "tools": tool_defs or None,
-                    "stream_options": {"include_usage": True},
-                    "reasoning": {"summary": self.reasoning_summary} if self.reasoning_summary else None,
                 },
             )
 
             accumulated_content = ""
-            token_buffer = ""
-            last_partial_dict: dict[str, Any] | None = None
-            accumulated_tool_calls: dict[int, dict[str, Any]] = {}
-            buffered_partials: list[StreamEvent] = []
-            thinking_buffer = ""
+            tool_calls: list[ToolCall] = []
 
+            # Consume adapter events — yield deltas immediately, no buffering
             async for provider_event in adapter.request_stream(
                 run_context=run_context,
                 request=request,
@@ -1178,108 +778,51 @@ class LiteLLMInstructorBaseAgent[
                     usage = provider_event.data.get("usage")
                     if isinstance(usage, RunUsage):
                         run_context.usage += usage
-                    continue
 
-                if provider_event.kind == ProviderEventType.REASONING_DELTA:
-                    reasoning = provider_event.data.get("text")
-                    if isinstance(reasoning, str) and reasoning:
-                        thinking_buffer += reasoning
-                        if len(thinking_buffer) >= token_batch_size:
-                            yield ThinkingEvent(
-                                source=class_name,
-                                message="Reasoning...",
-                                data=ThinkingEventData(thinking_content=thinking_buffer, streaming=True),
-                                run_context=run_context,
-                            )
-                            thinking_buffer = ""
-                    continue
-
-                if provider_event.kind == ProviderEventType.TEXT_DELTA:
-                    content = provider_event.data.get("text")
-                    if isinstance(content, str) and content:
-                        accumulated_content += content
-                        token_buffer += content
-                        if len(token_buffer) >= token_batch_size:
-                            yield StreamingTokenEvent(
-                                source=class_name,
-                                message=token_buffer,
-                                data=StreamingEventData(token=token_buffer),
-                                run_context=run_context,
-                            )
-                            token_buffer = ""
-
-                        parsed = self._try_parse_json(accumulated_content)
-                        if parsed and parsed != last_partial_dict:
-                            last_partial_dict = parsed
-                            try:
-                                partial = partial_response_model.model_validate(parsed)
-                                buffered_partials.append(
-                                    PartialOutputEvent(
-                                        source=class_name,
-                                        message="Partial output",
-                                        data=PartialEventData(partial_output=partial),
-                                        run_context=run_context,
-                                    ),
-                                )
-                            except Exception:
-                                pass
-                    continue
-
-                if provider_event.kind == ProviderEventType.TOOL_CALL:
-                    if not tool_defs:
-                        raise UnexpectedModelBehavior(
-                            "Provider emitted TOOL_CALL event but no tools are configured",
+                elif provider_event.kind == ProviderEventType.REASONING_DELTA:
+                    text = provider_event.data.get("text", "")
+                    if text:
+                        yield ThinkingEvent(
+                            source=class_name,
+                            message="Reasoning...",
+                            data=ThinkingEventData(thinking_content=text, streaming=True),
+                            run_context=run_context,
                         )
-                    idx = int(provider_event.data.get("index", 0))
-                    tc_id = provider_event.data.get("id")
-                    tc_name = provider_event.data.get("name")
-                    tc_args_delta = provider_event.data.get("arguments_delta", "")
-                    if idx not in accumulated_tool_calls:
-                        accumulated_tool_calls[idx] = {
-                            "id": tc_id or "",
-                            "name": tc_name or "",
-                            "arguments": tc_args_delta if isinstance(tc_args_delta, str) else "",
-                        }
-                    else:
-                        if tc_id:
-                            accumulated_tool_calls[idx]["id"] = tc_id
-                        if tc_name:
-                            accumulated_tool_calls[idx]["name"] = tc_name
-                        if isinstance(tc_args_delta, str) and tc_args_delta:
-                            accumulated_tool_calls[idx]["arguments"] += tc_args_delta
-                    continue
 
-                if provider_event.kind == ProviderEventType.FINAL_OUTPUT:
-                    final_content = provider_event.data.get("content")
-                    if isinstance(final_content, str):
-                        accumulated_content = final_content
-                    continue
+                elif provider_event.kind == ProviderEventType.TEXT_DELTA:
+                    text = provider_event.data.get("text", "")
+                    if text:
+                        accumulated_content += text
+                        yield StreamingTokenEvent(
+                            source=class_name,
+                            data=StreamingEventData(token=text),
+                            run_context=run_context,
+                        )
 
-                if provider_event.kind == ProviderEventType.ERROR:
+                elif provider_event.kind == ProviderEventType.TOOL_CALL:
+                    # Tool calls are assembled by the adapter
+                    tc_data = provider_event.data
+                    tc = ToolCall(
+                        tool_call_id=tc_data["id"],
+                        tool_name=tc_data["name"],
+                        arguments=json.loads(tc_data["arguments"]),
+                    )
+                    tool_calls.append(tc)
+                    yield ToolCallingEvent(
+                        source=class_name,
+                        message=f"Calling {tc.tool_name}",
+                        data=ToolCallingEventData(tool_call=tc),
+                        run_context=run_context,
+                    )
+
+                elif provider_event.kind == ProviderEventType.ERROR:
                     error = provider_event.data.get("error")
                     raise UnexpectedModelBehavior(
                         str(error) if error is not None else "Provider adapter emitted error event",
                     )
 
-            if thinking_buffer:
-                yield ThinkingEvent(
-                    source=class_name,
-                    message="Reasoning...",
-                    data=ThinkingEventData(thinking_content=thinking_buffer, streaming=True),
-                    run_context=run_context,
-                )
-
-            if token_buffer:
-                yield StreamingTokenEvent(
-                    source=class_name,
-                    message=token_buffer,
-                    data=StreamingEventData(token=token_buffer),
-                    run_context=run_context,
-                )
-
-            if not accumulated_tool_calls:
-                for partial_event in buffered_partials:
-                    yield partial_event
+            # No tool calls — try to parse output
+            if not tool_calls:
                 if not accumulated_content:
                     raise UnexpectedModelBehavior("LLM returned empty response without tool calls")
 
@@ -1288,19 +831,21 @@ class LiteLLMInstructorBaseAgent[
                     yield CompletedEvent(
                         source=class_name,
                         message=f"Completed {class_name}",
-                        data=CompletedEventData[response_model](output=output),
+                        data=CompletedEventData(output=output),
                         run_context=run_context,
                     )
                     return
                 except Exception as exc:
+                    # TextOutput fallback
                     if any(s is TextOutput for s in self._resolved_output_schemas()) and accumulated_content.strip():
                         yield CompletedEvent(
                             source=class_name,
                             message=f"Completed {class_name}",
-                            data=CompletedEventData[TextOutput](output=TextOutput(content=accumulated_content)),
+                            data=CompletedEventData(output=TextOutput(content=accumulated_content)),
                             run_context=run_context,
                         )
                         return
+                    # Validation retry — append feedback and continue loop
                     yield ThinkingEvent(
                         source=class_name,
                         message="Internal reasoning...",
@@ -1329,37 +874,22 @@ class LiteLLMInstructorBaseAgent[
                         )
                     continue
 
-            tool_calls: list[ToolCall] = []
-            tool_calls_for_message: list[dict[str, Any]] = []
-            for idx in sorted(accumulated_tool_calls.keys()):
-                tc_data = accumulated_tool_calls[idx]
-                tool_call = ToolCall(
-                    tool_call_id=tc_data["id"],
-                    tool_name=tc_data["name"],
-                    arguments=json.loads(tc_data["arguments"]),
-                )
-                tool_calls.append(tool_call)
-                tool_calls_for_message.append(
-                    {
-                        "id": tc_data["id"],
-                        "type": "function",
-                        "function": {"name": tc_data["name"], "arguments": tc_data["arguments"]},
-                    },
-                )
-                yield ToolCallingEvent(
-                    source=class_name,
-                    message=f"Calling {tool_call.tool_name}",
-                    data=ToolCallingEventData(tool_call=tool_call),
-                    run_context=run_context,
-                )
-
-            for tool_call in tool_calls:
-                if isinstance(self._find_tool(tool_call.tool_name), HumanTool):
+            # HITL detection
+            tool_calls_for_message = [
+                {
+                    "id": tc.tool_call_id,
+                    "type": "function",
+                    "function": {"name": tc.tool_name, "arguments": json.dumps(tc.arguments)},
+                }
+                for tc in tool_calls
+            ]
+            for tc in tool_calls:
+                if isinstance(self._find_tool(tc.tool_name, all_tools), HumanTool):
                     try:
-                        human_input = HumanToolInput(**tool_call.arguments)
+                        human_input = HumanToolInput(**tc.arguments)
                     except Exception:
                         human_input = HumanToolInput(
-                            question=str(tool_call.arguments.get("question", "Input needed")),
+                            question=str(tc.arguments.get("question", "Input needed")),
                         )
                     messages.append(
                         {
@@ -1374,20 +904,22 @@ class LiteLLMInstructorBaseAgent[
                         message=f"Human input required: {human_input.question}",
                         data=HumanInputRequiredEventData(
                             human_input=human_input,
-                            tool_call_id=tool_call.tool_call_id,
-                            tool_name=tool_call.tool_name,
+                            tool_call_id=tc.tool_call_id,
+                            tool_name=tc.tool_name,
                         ),
                         run_context=run_context,
                     )
                     return
 
+            # Max tool calls check
             if self.max_tool_calls is not None and total_tool_calls + len(tool_calls) > self.max_tool_calls:
                 raise MaxToolCallsExceeded(
                     f"Exceeded {self.max_tool_calls} total tool calls "
                     f"(current: {total_tool_calls}, requested: {len(tool_calls)})",
                 )
 
-            results = await self._execute_tools_parallel(tool_calls, tools=tool_instances)
+            # Execute tools
+            results = await self._execute_tools_parallel(tool_calls, tools=all_tools)
             total_tool_calls += len(tool_calls)
 
             for result in results:
@@ -1398,9 +930,11 @@ class LiteLLMInstructorBaseAgent[
                     run_context=run_context,
                 )
 
+            # Check if an output tool completed
             if any(result.tool_name in output_tool_names and not result.error for result in results):
                 return
 
+            # Append tool turn to messages
             messages.append(
                 {
                     "role": "assistant",
@@ -1437,4 +971,6 @@ class LiteLLMInstructorBaseAgent[
         raise UnexpectedModelBehavior("Non-tool streaming ended without completion")
 
 
+# Backward compatibility aliases
+InstructorBaseAgent = LiteLLMInstructorBaseAgent
 Agent = LiteLLMInstructorBaseAgent

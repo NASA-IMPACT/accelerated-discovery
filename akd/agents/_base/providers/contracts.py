@@ -19,7 +19,6 @@ class ProviderEventType(StrEnum):
     TOOL_RESULT = "tool_result"
     HUMAN_INPUT_REQUIRED = "human_input_required"
     USAGE = "usage"
-    FINAL_OUTPUT = "final_output"
     ERROR = "error"
 
 
@@ -36,7 +35,6 @@ class ProviderRequest(BaseModel):
     model_name: str | None = None
     temperature: float | None = None
     tools: list[dict[str, Any]] = Field(default_factory=list)
-    token_batch_size: int = 10
     output_schema: type[Any] | None = None
     provider_kwargs: dict[str, Any] = Field(default_factory=dict)
 
