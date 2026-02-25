@@ -291,6 +291,17 @@ class BaseAgent[
             + ", ".join(schema.__name__ for schema in self.output_schema_resolved),
         )
 
+    def _try_text_output_fallback(self, content: str) -> TextOutput | None:
+        """Return TextOutput if appropriate — blocks fallback when output tools exist."""
+        if not content.strip():
+            return None
+        if not any(s is TextOutput for s in self.output_schema_resolved):
+            return None
+        # If mixin provides output tools, model must call final_TextOutput explicitly
+        if getattr(self, "output_tools", []):
+            return None
+        return TextOutput(content=content)
+
     def _append_user_turn(
         self,
         run_context: RunContext,
@@ -305,12 +316,8 @@ class BaseAgent[
 
     def _finalize_success(self, run_context: RunContext, output: OutputSchema) -> None:
         """Append final assistant turn and persist run state."""
-        run_context.messages.append(
-            {
-                "role": "assistant",
-                "content": output.model_dump_json(exclude={"type"}),
-            },
-        )
+        content = output.content if isinstance(output, TextOutput) else output.model_dump_json(exclude={"type"})
+        run_context.messages.append({"role": "assistant", "content": content})
 
     async def arun(
         self,
@@ -771,12 +778,12 @@ class AKDAgent[
                     )
                     return
                 except Exception as exc:
-                    # TextOutput fallback
-                    if any(s is TextOutput for s in self.output_schema_resolved) and accumulated_content.strip():
+                    # TextOutput fallback — only when no output tools force structured calling
+                    if fallback := self._try_text_output_fallback(accumulated_content):
                         yield CompletedEvent(
                             source=class_name,
                             message=f"Completed {class_name}",
-                            data=CompletedEventData(output=TextOutput(content=accumulated_content)),
+                            data=CompletedEventData(output=fallback),
                             run_context=run_context,
                         )
                         return
