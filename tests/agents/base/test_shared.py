@@ -170,18 +170,19 @@ class TestEdgeCasesAndErrorHandling:
     def test_agent_inheritance_hierarchy(self):
         """Test that inheritance hierarchy is correct."""
         from akd.agents._base import (
+            AKDAgent,
             BaseAgent,
             InstructorBaseAgent,
             LiteLLMInstructorBaseAgent,
         )
 
         assert issubclass(TestInstructorBaseAgent, BaseAgent)
-        assert issubclass(TestInstructorBaseAgent, InstructorBaseAgent)
-        assert issubclass(TestLiteLLMAgent, InstructorBaseAgent)
-        assert issubclass(TestLiteLLMAgent, LiteLLMInstructorBaseAgent)
+        assert issubclass(TestInstructorBaseAgent, AKDAgent)
+        assert issubclass(TestLiteLLMAgent, AKDAgent)
 
-        # InstructorBaseAgent is now an alias for LiteLLMInstructorBaseAgent
-        assert InstructorBaseAgent is LiteLLMInstructorBaseAgent
+        # All aliases point to AKDAgent
+        assert InstructorBaseAgent is AKDAgent
+        assert LiteLLMInstructorBaseAgent is AKDAgent
 
     @pytest.mark.asyncio
     async def test_agent_error_recovery(self, mock_instructor_client):

@@ -258,6 +258,7 @@ class AbstractBaseMeta(ABCMeta):
             "AbstractBase",
             "UnrestrictedAbstractBase",
             "BaseAgent",
+            "AKDAgent",
             "InstructorBaseAgent",
             "LiteLLMInstructorBaseAgent",
             "BaseTool",

@@ -1,10 +1,10 @@
-"""Test cases for LiteLLMInstructorBaseAgent."""
+"""Test cases for AKDAgent (formerly LiteLLMInstructorBaseAgent)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from akd.agents._base import InstructorBaseAgent
+from akd.agents._base import AKDAgent, InstructorBaseAgent, LiteLLMInstructorBaseAgent
 
 from .conftest import (
     LiteLLMTestInputSchema,
@@ -91,10 +91,13 @@ class TestLiteLLMInstructorBaseAgent:
         assert result.response == "Processed query: test query"
         assert result.confidence == 0.95
 
-    def test_backward_compatibility_with_instructor_base_agent(self, litellm_config):
-        """Test that LiteLLMInstructorBaseAgent maintains compatibility with InstructorBaseAgent."""
+    def test_backward_compatibility_aliases(self, litellm_config):
+        """Test that AKDAgent backward compatibility aliases work."""
+        # All aliases point to the same class
+        assert InstructorBaseAgent is AKDAgent
+        assert LiteLLMInstructorBaseAgent is AKDAgent
 
-        # Create both agents
+        # Create agents via alias
         class TestInstructorAgent(
             InstructorBaseAgent[LiteLLMTestInputSchema, LiteLLMTestOutputSchema],
         ):

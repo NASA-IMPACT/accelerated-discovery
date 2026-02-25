@@ -7,7 +7,7 @@ import pytest
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
+from akd.agents._base import AKDAgent, BaseAgentConfig
 
 
 # Shared test schemas
@@ -48,9 +48,9 @@ class AgentTestCustomConfig(BaseAgentConfig):
 
 # Test agent implementations
 class TestInstructorBaseAgent(
-    LiteLLMInstructorBaseAgent[AgentTestInputSchema, AgentTestOutputSchema],
+    AKDAgent[AgentTestInputSchema, AgentTestOutputSchema],
 ):
-    """Test implementation of LiteLLMInstructorBaseAgent (InstructorBaseAgent is now an alias)."""
+    """Test implementation of AKDAgent (InstructorBaseAgent is now an alias for AKDAgent)."""
 
     input_schema = AgentTestInputSchema
     output_schema = AgentTestOutputSchema
@@ -66,9 +66,9 @@ class TestInstructorBaseAgent(
 
 
 class TestLiteLLMAgent(
-    LiteLLMInstructorBaseAgent[LiteLLMTestInputSchema, LiteLLMTestOutputSchema],
+    AKDAgent[LiteLLMTestInputSchema, LiteLLMTestOutputSchema],
 ):
-    """Test implementation of LiteLLMInstructorBaseAgent."""
+    """Test implementation of AKDAgent."""
 
     input_schema = LiteLLMTestInputSchema
     output_schema = LiteLLMTestOutputSchema
@@ -157,7 +157,7 @@ def mock_instructor_client():
     """Create a mock instructor client for testing.
 
     Patches instructor.from_litellm in the agent module so that
-    LiteLLMInstructorBaseAgent.__init__ gets a mock client.
+    AKDAgent.__init__ gets a mock client.
     """
     with patch("akd.agents._base._base.instructor.from_litellm") as mock_from_litellm:
         mock_client = MagicMock()
@@ -209,7 +209,7 @@ async def setup_async_mock_response(
 ) -> Any:
     """Setup async mock response for different client types.
 
-    The adapter's request_once calls create_with_completion when output_schema is set.
+    The instructor client's create_with_completion is called when output_schema is set.
     Returns the AsyncMock so callers can assert on it.
     """
     mock_response = MagicMock()

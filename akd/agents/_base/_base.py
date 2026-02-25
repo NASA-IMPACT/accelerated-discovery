@@ -4,13 +4,14 @@ import copy
 import json
 import uuid
 from collections.abc import AsyncIterator
+from functools import cached_property
 from typing import Any, Literal, cast, get_args, get_origin
 
 import instructor
 from litellm import acompletion
 from litellm.utils import get_model_info, supports_reasoning
 from loguru import logger
-from pydantic import AnyUrl, Field, model_validator
+from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
 from akd._base import (
     AbstractBase,
@@ -58,12 +59,8 @@ from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
 from akd.tools.human import HumanTool, HumanToolInput
-from akd.tools.output import OutputTool
 
-from .providers import LiteLLMAdapter
-from .providers._base import ProviderAdapter
-from .providers.contracts import ProviderEventType, ProviderRequest
-from .utils import UnifiedOutput
+from .output_routing import OutputRoutingMixin
 
 
 class BaseAgentConfig(BaseConfig):
@@ -210,12 +207,10 @@ class BaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
 ](AbstractBase, ParamExposureMixin):
-    """
-    Base class for chat agents that interact with a language model.
+    """Framework-agnostic base class for chat agents.
 
-    This class provides the basic structure for an agent that can handle
-    asynchronous operations, manage memory, and utilize a language model
-    for generating responses based on user input.
+    Provides session management, validation, lifecycle, and streaming template.
+    Provider-specific logic (LLM calls, tool format) belongs in subclasses.
 
     Notes:
     - We internally use `_system_prompt` to access actual system prompt that the model sees.
@@ -231,9 +226,19 @@ class BaseAgent[
     ) -> None:
         super().__init__(config=config, **kwargs)
 
-    def _post_init(self):
-        super()._post_init()
-        self.output_tools: list[OutputTool] = self._build_output_tools()
+    @cached_property
+    def output_schema_resolved(self) -> list[type[OutputSchema]]:
+        """Return normalized output schema candidates for this agent."""
+        declared = self.output_schema
+        origin = get_origin(declared)
+        if origin is None:
+            return [declared]
+        schemas = [arg for arg in get_args(declared) if isinstance(arg, type) and issubclass(arg, OutputSchema)]
+        unique: list[type[OutputSchema]] = []
+        for schema in schemas:
+            if schema not in unique:
+                unique.append(schema)
+        return unique
 
     @property
     def _system_prompt(self) -> str:
@@ -271,140 +276,19 @@ class BaseAgent[
             trim_ratio=self.trim_ratio,
         )
 
-    def _get_provider_adapter(self) -> ProviderAdapter:
-        """Return provider adapter. Provider subclasses must override."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement _get_provider_adapter()",
-        )
-
-    def _build_provider_request(
-        self,
-        *,
-        output_schema: type[Any] | None = None,
-        provider_kwargs: dict[str, Any] | None = None,
-    ) -> ProviderRequest:
-        """Build provider request payload for adapter calls."""
-        return ProviderRequest(
-            model_name=self.model_name,
-            temperature=self.temperature,
-            tools=[t.as_tool_definition() for t in self.tools],
-            output_schema=output_schema or self._get_effective_output_schema(),
-            provider_kwargs=provider_kwargs or {},
-        )
-
-    def _resolved_output_schemas(self) -> list[type[OutputSchema]]:
-        """Return normalized output schema candidates for this agent."""
-        declared = self.output_schema
-        origin = get_origin(declared)
-        if origin is None:
-            schemas = [declared]
-        else:
-            schemas = [arg for arg in get_args(declared) if isinstance(arg, type) and issubclass(arg, OutputSchema)]
-        unique: list[type[OutputSchema]] = []
-        for schema in schemas:
-            if schema not in unique:
-                unique.append(schema)
-        return unique
-
-    def _unwrap_unified_output(self, output: Any) -> OutputSchema | None:
-        """Unwrap single-envelope union output to a concrete schema branch."""
-        if self.output_mode != "unified_schema":
-            return None
-        schemas = self._resolved_output_schemas()
-        if len(schemas) <= 1:
-            return None
-        envelope_model = self._get_effective_output_schema()
-        if not isinstance(output, envelope_model):
-            return None
-        kind = getattr(output, "kind", None)
-        selected_schema: type[OutputSchema] | None = None
-
-        if isinstance(kind, str):
-            selected_schema = next((schema for schema in schemas if schema.__name__ == kind), None)
-        else:
-            populated = [schema for schema in schemas if getattr(output, schema.__name__, None) is not None]
-            if len(populated) == 1:
-                selected_schema = populated[0]
-
-        if selected_schema is None:
-            return None
-
-        branch = getattr(output, selected_schema.__name__, None)
-        if isinstance(branch, OutputSchema):
-            return branch
-        if isinstance(branch, dict):
-            return selected_schema.model_validate(branch)
-        return None
-
-    def _route_output_from_event(self, event: StreamEvent) -> OutputSchema | None:
-        """Extract concrete output from a stream event if it represents final output.
-
-        Handles both modes transparently:
-        - multi_tool: resolves output from ToolResultEvent via output tool match
-        - unified_schema: unwraps envelope from CompletedEvent
-        - single schema: passes through CompletedEvent output directly
-        """
-        if isinstance(event, ToolResultEvent):
-            return self._resolve_output_from_tool_result(event.data.result)
-        if isinstance(event, CompletedEvent):
-            raw = event.data.output
-            unwrapped = self._unwrap_unified_output(raw)
-            return unwrapped if unwrapped is not None else raw
-        return None
-
-    def _get_effective_output_schema(self) -> type[OutputSchema]:
-        """Return schema used for provider structured-output requests."""
-        schemas = self._resolved_output_schemas()
-        if not schemas:
-            raise TypeError("output_schema must declare at least one OutputSchema type")
-        if len(schemas) <= 1:
-            return schemas[0]
-        if self.output_mode == "unified_schema":
-            return UnifiedOutput(*schemas)
-        return schemas[0]
-
-    def _build_output_tools(self) -> list[OutputTool]:
-        """Build output tools according to union output mode."""
-        schemas = self._resolved_output_schemas()
-        if len(schemas) <= 1:
-            return [OutputTool(schemas[0])]
-        if self.output_mode != "multi_tool":
-            return [OutputTool(schemas[0])]
-        return [OutputTool(schema, name=f"final_{schema.__name__}") for schema in schemas]
-
-    def _resolve_output_from_tool_result(self, result: Any) -> OutputSchema | None:
-        """Resolve completed output from a tool-result payload if it is an output tool."""
-        tool_name = getattr(result, "tool_name", None)
-        if not isinstance(tool_name, str) or getattr(result, "error", None):
-            return None
-        schemas = self._resolved_output_schemas()
-        schema: type[OutputSchema] | None = (
-            schemas[0]
-            if len(schemas) == 1 and tool_name == "final_answer"
-            else next((s for s in schemas if f"final_{s.__name__}" == tool_name), None)
-        )
-        if schema is None:
-            return None
-        content = getattr(result, "content", None)
-        if isinstance(content, schema):
-            return content
-        if isinstance(content, dict):
-            try:
-                return schema.model_validate(content)
-            except Exception:
-                return None
-        return None
-
     def _validate_output(self, output: Any) -> OutSchema:
         """Validate output against single or union output schemas."""
-        unwrapped = self._unwrap_unified_output(output)
-        candidate = unwrapped if unwrapped is not None else output
-        for schema in self._resolved_output_schemas():
-            if isinstance(candidate, schema):
-                return cast(OutSchema, candidate)
+        # Allow OutputRoutingMixin to unwrap unified envelope if present
+        if hasattr(self, "_unwrap_unified_output"):
+            unwrapped = self._unwrap_unified_output(output)
+            if unwrapped is not None:
+                output = unwrapped
+        for schema in self.output_schema_resolved:
+            if isinstance(output, schema):
+                return cast(OutSchema, output)
         raise TypeError(
             "Output must be an instance of one of: "
-            + ", ".join(schema.__name__ for schema in self._resolved_output_schemas()),
+            + ", ".join(schema.__name__ for schema in self.output_schema_resolved),
         )
 
     def _append_user_turn(
@@ -494,9 +378,8 @@ class BaseAgent[
     ) -> AsyncIterator[StreamEvent]:
         """Default internal streaming template using _run_engine_stream().
 
-        Mode-agnostic event observer: streams from the engine and uses
-        _route_output_from_event() to detect final output regardless of
-        whether the engine uses multi_tool or unified_schema mode.
+        Watches for CompletedEvent from the engine to detect final output.
+        The engine is responsible for yielding CompletedEvent when done.
         """
         class_name = self.__class__.__name__
 
@@ -514,24 +397,23 @@ class BaseAgent[
                 run_context=run_context,
             )
 
-            output: OutputSchema | None = None
+            got_output = False
             async for event in self._run_engine_stream(run_context=run_context):
-                resolved = self._route_output_from_event(event)
-                if resolved is not None:
-                    output = resolved
+                if isinstance(event, CompletedEvent):
                     yield CompletedEvent(
                         source=class_name,
                         message=f"Completed {class_name}",
-                        data=CompletedEventData(output=resolved),
+                        data=CompletedEventData(output=event.data.output),
                         run_context=run_context,
                     )
+                    got_output = True
                     return
                 if isinstance(event, HumanInputRequiredEvent):
                     yield event
                     return
                 yield event
 
-            if output is None:
+            if not got_output:
                 raise UnexpectedModelBehavior("No output received from LLM")
 
         except Exception as e:
@@ -544,14 +426,15 @@ class BaseAgent[
             raise
 
 
-class LiteLLMInstructorBaseAgent[
+class AKDAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](ToolCallingMixin, BaseAgent):
-    """LiteLLM-based agent with tool calling and automatic message trimming.
+](ToolCallingMixin, OutputRoutingMixin, BaseAgent):
+    """Built-in agent using LiteLLM + instructor.
 
     Uses LiteLLM for completion calls and instructor for structured output.
     Provides ReAct-style tool calling loop, HITL support, and streaming.
+    Includes OutputRoutingMixin for union output type handling.
     """
 
     def __init__(
@@ -565,7 +448,7 @@ class LiteLLMInstructorBaseAgent[
     def _post_init(self):
         super()._post_init()
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> LiteLLMInstructorBaseAgent:
+    def __deepcopy__(self, memo: dict[int, Any]) -> AKDAgent:
         """Custom deepcopy that recreates the LiteLLM client instead of copying it."""
         cls = self.__class__
         result = cls.__new__(cls)
@@ -579,6 +462,46 @@ class LiteLLMInstructorBaseAgent[
         result.client = instructor.from_litellm(acompletion)
         return result
 
+    # ── LiteLLM helpers ──────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_usage(chunk: Any) -> RunUsage:
+        """Extract token usage from LiteLLM stream chunk."""
+        run_usage = RunUsage()
+        usage = getattr(chunk, "usage", None)
+        if usage:
+            run_usage.input_tokens = getattr(usage, "prompt_tokens", 0) or 0
+            run_usage.output_tokens = getattr(usage, "completion_tokens", 0) or 0
+            run_usage.requests = 1
+
+            for details_attr in ("completion_tokens_details", "prompt_tokens_details"):
+                details_obj = getattr(usage, details_attr, None)
+                if details_obj is None:
+                    continue
+                items = (
+                    details_obj.items()
+                    if isinstance(details_obj, dict)
+                    else ((k, v) for k, v in vars(details_obj).items() if isinstance(v, int) and v > 0)
+                )
+                for k, v in items:
+                    if isinstance(v, int) and v > 0:
+                        run_usage.details[f"{details_attr}.{k}"] = v
+        return run_usage
+
+    @staticmethod
+    def _create_instructor_compatible_model(response_model: type[Any]) -> type[BaseModel]:
+        """Create a BaseModel-only schema for instructor response_model."""
+        fields: dict[str, tuple[Any, Any]] = {}
+        for field_name, field_info in response_model.model_fields.items():
+            fields[field_name] = (field_info.annotation, field_info)
+        instructor_model = create_model(
+            response_model.__name__,
+            __base__=BaseModel,
+            **cast(dict[str, Any], fields),
+        )
+        instructor_model.__doc__ = response_model.__doc__
+        return instructor_model
+
     def _build_response_format_schema(self, model: type[OutputSchema]) -> dict[str, Any]:
         """Build JSON schema for response_format (OpenAI strict mode)."""
         schema = model.model_json_schema()
@@ -588,67 +511,59 @@ class LiteLLMInstructorBaseAgent[
             schema["required"] = list(schema["properties"].keys())
         return schema
 
-    def _build_provider_request(
+    def _build_completion_kwargs(
         self,
         *,
-        output_schema: type[Any] | None = None,
-        provider_kwargs: dict[str, Any] | None = None,
-    ) -> ProviderRequest:
-        """Build provider request with LiteLLM-specific kwargs."""
-        base_kwargs: dict[str, Any] = {
+        stream: bool,
+        tools: list[dict[str, Any]] | None = None,
+        output_schema: type[OutputSchema] | None = None,
+    ) -> dict[str, Any]:
+        """Build kwargs for acompletion calls."""
+        model_name = self.model_name
+        kwargs: dict[str, Any] = {
+            "model": model_name,
+            "temperature": self.temperature,
             "api_base": str(self.base_url).rstrip("/") if self.base_url else None,
             "api_key": self.api_key,
             "num_retries": self.num_retries,
             "drop_params": True,
+            "stream": stream,
         }
         if self.reasoning_effort:
-            base_kwargs["reasoning_effort"] = self.reasoning_effort
+            kwargs["reasoning_effort"] = self.reasoning_effort
         if self.reasoning_summary:
-            base_kwargs["reasoning_summary"] = self.reasoning_summary
-        if provider_kwargs:
-            base_kwargs.update(provider_kwargs)
+            kwargs["reasoning_summary"] = self.reasoning_summary
+        if tools:
+            kwargs["tools"] = tools
 
-        is_stream = base_kwargs.get("stream") is True
-        has_tools = bool(base_kwargs.get("tools"))
-        model_name = self.model_name
-
-        if is_stream:
+        if stream:
             # Use OpenAI responses API route for gpt-5 streaming with reasoning.
-            # Non-streaming (instructor) path uses the original model name since
-            # instructor TOOLS mode is incompatible with the responses API route.
             if (
                 self.model_name.startswith("gpt-5")
                 and self.reasoning_effort
                 and self.reasoning_summary
                 and supports_reasoning(model=self.model_name)
             ):
-                model_name = f"openai/responses/{self.model_name}"
-            base_kwargs.setdefault("stream_options", {"include_usage": True})
-            if output_schema is not None and not has_tools:
-                base_kwargs.setdefault(
+                kwargs["model"] = f"openai/responses/{self.model_name}"
+            kwargs.setdefault("stream_options", {"include_usage": True})
+            if output_schema is not None and not tools:
+                kwargs.setdefault(
                     "response_format",
                     {
                         "type": "json_schema",
                         "json_schema": {
                             "name": output_schema.__name__,
                             "strict": True,
-                            "schema": self._build_response_format_schema(cast(type[OutputSchema], output_schema)),
+                            "schema": self._build_response_format_schema(output_schema),
                         },
                     },
                 )
             if self.reasoning_summary:
-                base_kwargs.setdefault("reasoning", {"summary": self.reasoning_summary})
+                kwargs.setdefault("reasoning", {"summary": self.reasoning_summary})
 
-        request = super()._build_provider_request(
-            output_schema=output_schema,
-            provider_kwargs=base_kwargs,
-        )
-        request.model_name = model_name
-        return request
+        return {k: v for k, v in kwargs.items() if v is not None}
 
-    def _get_provider_adapter(self) -> ProviderAdapter:
-        """Return the LiteLLM provider adapter for this agent."""
-        return LiteLLMAdapter(client=self.client, completion_callable=acompletion)
+    # ── Non-streaming instructor path ────────────────────────────────
 
     async def get_response_async(
         self,
@@ -658,25 +573,36 @@ class LiteLLMInstructorBaseAgent[
     ) -> OutSchema:
         """Obtain a structured response via instructor (non-streaming)."""
         response_model = response_model or self.output_schema
-        request = self._build_provider_request(
-            output_schema=response_model,
-            provider_kwargs={"stream": False},
-        )
-        adapter = self._get_provider_adapter()
-        provider_response = await adapter.request_once(
-            run_context=run_context,
-            request=request,
-        )
-        run_context.usage += provider_response.usage
+        instructor_model = self._create_instructor_compatible_model(response_model)
 
-        content = provider_response.content
-        if content is None:
-            raise UnexpectedModelBehavior("Provider returned no content for structured output")
+        kwargs = self._build_completion_kwargs(stream=False)
+        # Remove stream-related keys not needed for instructor
+        kwargs.pop("stream", None)
+        kwargs.pop("stream_options", None)
+
+        response, completion = await self.client.chat.completions.create_with_completion(
+            messages=run_context.messages,
+            response_model=instructor_model,
+            **kwargs,
+        )
+
+        usage = self._extract_usage(completion)
+        run_context.usage += usage
+
+        if hasattr(response, "model_dump"):
+            content = json.dumps(response.model_dump())
+        elif hasattr(response, "model_dump_json"):
+            content = response.model_dump_json()
+        else:
+            content = str(response)
+
         try:
-            response = response_model.model_validate_json(content)
+            result = response_model.model_validate_json(content)
         except Exception as exc:
-            raise UnexpectedModelBehavior(f"Failed to parse provider response content: {exc}") from exc
-        return cast(OutSchema, response)
+            raise UnexpectedModelBehavior(f"Failed to parse instructor response: {exc}") from exc
+        return cast(OutSchema, result)
+
+    # ── _arun: routes between direct extraction and tool loop ────────
 
     async def _arun(
         self,
@@ -687,9 +613,9 @@ class LiteLLMInstructorBaseAgent[
         """Run agent with optional tool calling support.
 
         Direct mode (no tools): one-shot instructor extraction via get_response_async.
-        Tool mode: consumes _run_engine_stream via _route_output_from_event.
+        Tool mode: consumes _run_engine_stream, watches for CompletedEvent.
         """
-        has_union = len(self._resolved_output_schemas()) > 1
+        has_union = len(self.output_schema_resolved) > 1
         use_tool_loop = bool(self.tools) or (has_union and self.output_mode == "multi_tool")
 
         if not use_tool_loop:
@@ -699,13 +625,14 @@ class LiteLLMInstructorBaseAgent[
             )
 
         async for event in self._run_engine_stream(run_context=run_context):
-            resolved = self._route_output_from_event(event)
-            if resolved is not None:
-                return cast(OutSchema, resolved)
+            if isinstance(event, CompletedEvent):
+                return cast(OutSchema, event.data.output)
             if isinstance(event, HumanInputRequiredEvent):
                 raise HumanInputRequired(str(event.data.human_input))
 
         raise UnexpectedModelBehavior("Tool loop completed without producing output")
+
+    # ── _run_engine_stream: inline LiteLLM ReAct loop ────────────────
 
     async def _run_engine_stream(
         self,
@@ -719,10 +646,9 @@ class LiteLLMInstructorBaseAgent[
 
         response_model = self._get_effective_output_schema()
 
-        # Tool setup using pre-computed output_tools
+        # Tool setup using pre-computed output_tools from OutputRoutingMixin
         all_tools = self.tools + self.output_tools
         tool_defs = [t.as_tool_definition() for t in all_tools] if all_tools else []
-        output_tool_names = {t.name for t in self.output_tools}
 
         # HITL resume
         human_response = run_context.human_response
@@ -755,71 +681,80 @@ class LiteLLMInstructorBaseAgent[
 
         total_tool_calls = 0
         max_turns = self.max_tool_iterations
-        adapter = self._get_provider_adapter()
 
         for _ in range(max_turns):
-            request = self._build_provider_request(
+            completion_kwargs = self._build_completion_kwargs(
+                stream=True,
+                tools=tool_defs or None,
                 output_schema=response_model,
-                provider_kwargs={
-                    "stream": True,
-                    "tools": tool_defs or None,
-                },
             )
 
             accumulated_content = ""
             tool_calls: list[ToolCall] = []
+            accumulated_tool_calls: dict[int, dict[str, str]] = {}
 
-            # Consume adapter events — yield deltas immediately, no buffering
-            async for provider_event in adapter.request_stream(
-                run_context=run_context,
-                request=request,
-            ):
-                if provider_event.kind == ProviderEventType.USAGE:
-                    usage = provider_event.data.get("usage")
-                    if isinstance(usage, RunUsage):
-                        run_context.usage += usage
+            # Stream chunks directly from acompletion — no adapter intermediary
+            response = await acompletion(messages=messages, **completion_kwargs)
+            async for chunk in response:
+                # Usage extraction
+                usage = self._extract_usage(chunk)
+                if usage.requests or usage.input_tokens or usage.output_tokens or usage.details:
+                    run_context.usage += usage
 
-                elif provider_event.kind == ProviderEventType.REASONING_DELTA:
-                    text = provider_event.data.get("text", "")
-                    if text:
-                        yield ThinkingEvent(
-                            source=class_name,
-                            message="Reasoning...",
-                            data=ThinkingEventData(thinking_content=text, streaming=True),
-                            run_context=run_context,
-                        )
+                if not getattr(chunk, "choices", None):
+                    continue
 
-                elif provider_event.kind == ProviderEventType.TEXT_DELTA:
-                    text = provider_event.data.get("text", "")
-                    if text:
-                        accumulated_content += text
-                        yield StreamingTokenEvent(
-                            source=class_name,
-                            data=StreamingEventData(token=text),
-                            run_context=run_context,
-                        )
+                delta = chunk.choices[0].delta
 
-                elif provider_event.kind == ProviderEventType.TOOL_CALL:
-                    # Tool calls are assembled by the adapter
-                    tc_data = provider_event.data
-                    tc = ToolCall(
-                        tool_call_id=tc_data["id"],
-                        tool_name=tc_data["name"],
-                        arguments=json.loads(tc_data["arguments"]),
-                    )
-                    tool_calls.append(tc)
-                    yield ToolCallingEvent(
+                # Reasoning deltas
+                reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "thinking", None)
+                if reasoning:
+                    yield ThinkingEvent(
                         source=class_name,
-                        message=f"Calling {tc.tool_name}",
-                        data=ToolCallingEventData(tool_call=tc),
+                        message="Reasoning...",
+                        data=ThinkingEventData(thinking_content=reasoning, streaming=True),
                         run_context=run_context,
                     )
 
-                elif provider_event.kind == ProviderEventType.ERROR:
-                    error = provider_event.data.get("error")
-                    raise UnexpectedModelBehavior(
-                        str(error) if error is not None else "Provider adapter emitted error event",
+                # Accumulate tool call deltas
+                for tc in getattr(delta, "tool_calls", None) or []:
+                    idx = getattr(tc, "index", 0)
+                    function = getattr(tc, "function", None)
+                    if idx not in accumulated_tool_calls:
+                        accumulated_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                    if tc_id := getattr(tc, "id", None):
+                        accumulated_tool_calls[idx]["id"] = tc_id
+                    if tc_name := (getattr(function, "name", None) if function else None):
+                        accumulated_tool_calls[idx]["name"] = tc_name
+                    accumulated_tool_calls[idx]["arguments"] += (
+                        getattr(function, "arguments", "") if function else ""
+                    ) or ""
+
+                # Text content deltas
+                text_content = getattr(delta, "content", None)
+                if text_content:
+                    accumulated_content += text_content
+                    yield StreamingTokenEvent(
+                        source=class_name,
+                        data=StreamingEventData(token=text_content),
+                        run_context=run_context,
                     )
+
+            # Assemble tool calls from accumulated deltas
+            for idx in sorted(accumulated_tool_calls):
+                tc_data = accumulated_tool_calls[idx]
+                tc = ToolCall(
+                    tool_call_id=tc_data["id"],
+                    tool_name=tc_data["name"],
+                    arguments=json.loads(tc_data["arguments"]),
+                )
+                tool_calls.append(tc)
+                yield ToolCallingEvent(
+                    source=class_name,
+                    message=f"Calling {tc.tool_name}",
+                    data=ToolCallingEventData(tool_call=tc),
+                    run_context=run_context,
+                )
 
             # No tool calls — try to parse output
             if not tool_calls:
@@ -837,7 +772,7 @@ class LiteLLMInstructorBaseAgent[
                     return
                 except Exception as exc:
                     # TextOutput fallback
-                    if any(s is TextOutput for s in self._resolved_output_schemas()) and accumulated_content.strip():
+                    if any(s is TextOutput for s in self.output_schema_resolved) and accumulated_content.strip():
                         yield CompletedEvent(
                             source=class_name,
                             message=f"Completed {class_name}",
@@ -923,16 +858,16 @@ class LiteLLMInstructorBaseAgent[
             total_tool_calls += len(tool_calls)
 
             for result in results:
-                yield ToolResultEvent(
+                tool_event = ToolResultEvent(
                     source=class_name,
                     message=f"Result from {result.tool_name}",
                     data=ToolResultEventData(result=result),
                     run_context=run_context,
                 )
-
-            # Check if an output tool completed
-            if any(result.tool_name in output_tool_names and not result.error for result in results):
-                return
+                yield tool_event
+                if completed := self._tool_result_to_completed_event(tool_event):
+                    yield completed
+                    return
 
             # Append tool turn to messages
             messages.append(
@@ -972,5 +907,6 @@ class LiteLLMInstructorBaseAgent[
 
 
 # Backward compatibility aliases
-InstructorBaseAgent = LiteLLMInstructorBaseAgent
-Agent = LiteLLMInstructorBaseAgent
+LiteLLMInstructorBaseAgent = AKDAgent
+InstructorBaseAgent = AKDAgent
+Agent = AKDAgent

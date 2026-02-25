@@ -5,7 +5,7 @@ import re
 import pytest
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
+from akd.agents._base import AKDAgent, BaseAgentConfig
 from akd.tools._base import BaseTool
 
 # === Tools ===
@@ -72,7 +72,7 @@ class MathOutput(OutputSchema):
     result: str
 
 
-class MathAgent(LiteLLMInstructorBaseAgent):
+class MathAgent(AKDAgent):
     """Math agent."""
 
     input_schema = MathInput
