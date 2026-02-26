@@ -324,6 +324,30 @@ class AbstractBase[
 
     config_schema: Type[BaseModel] | None = None
 
+    @classmethod
+    def __class_getitem__(cls, params):
+        """Create a concrete subclass with schemas set as class attributes.
+
+        Enables runtime generic specialization:
+            agent = AKDAgent[MyInput, MyOutput](config=...)
+            agent = AKDAgent[MyInput, MyOutput | TextOutput, MyConfig](config=...)
+
+        Config is optional (inherits from parent if omitted).
+        """
+        if not isinstance(params, tuple):
+            params = (params,)
+        if len(params) < 2:
+            return super().__class_getitem__(params)
+
+        in_schema, out_schema = params[0], params[1]
+        attrs = {"input_schema": in_schema, "output_schema": out_schema}
+        if len(params) == 3:
+            attrs["config_schema"] = params[2]
+
+        attrs["__module__"] = cls.__module__
+        attrs["__qualname__"] = f"{cls.__qualname__}[{in_schema.__name__}, {out_schema.__name__}]"
+        return type(cls.__name__, (cls,), attrs)
+
     def __init__(
         self,
         config: BaseConfig | BaseModel | None = None,
