@@ -345,7 +345,8 @@ class AbstractBase[
             attrs["config_schema"] = params[2]
 
         attrs["__module__"] = cls.__module__
-        attrs["__qualname__"] = f"{cls.__qualname__}[{in_schema.__name__}, {out_schema.__name__}]"
+        out_label = getattr(out_schema, "__name__", str(out_schema))
+        attrs["__qualname__"] = f"{cls.__qualname__}[{in_schema.__name__}, {out_label}]"
         return type(cls.__name__, (cls,), attrs)
 
     def __init__(
