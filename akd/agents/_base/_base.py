@@ -657,10 +657,10 @@ class AKDAgent[
         all_tools = self.tools + self.output_tools
         tool_defs = [t.as_tool_definition() for t in all_tools] if all_tools else []
 
-        # HITL resume
+        # HITL resume — use self.tools (user-defined) not tool_defs (includes output tools)
         human_response = run_context.human_response
         if human_response:
-            if tool_defs:
+            if self.tools:
                 messages.append(
                     {
                         "role": "tool",
