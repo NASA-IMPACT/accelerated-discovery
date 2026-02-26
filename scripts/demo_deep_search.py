@@ -19,6 +19,7 @@ from akd.configs.project import get_project_settings
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+from akd.observability import init_observability
 from akd.agents.search import (
     DeepLitSearchAgent,
     DeepLitSearchAgentConfig,
@@ -266,6 +267,7 @@ async def main():
     print("=" * 80)
 
 if __name__ == "__main__":
+    init_observability()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

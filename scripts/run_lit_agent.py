@@ -5,7 +5,7 @@ import json
 
 from loguru import logger
 
-# Removed unused imports
+from akd.observability import init_observability
 from akd.agents.search import ControlledSearchAgent, LitSearchAgentInputSchema
 
 # Removed unused import
@@ -13,7 +13,7 @@ from akd.agents.search import ControlledSearchAgent, LitSearchAgentInputSchema
 
 
 async def main(args):
-    # Removed unused variable assignments
+    init_observability()
 
     # Use the new ControlledAgenticLitSearchAgent with proper configuration
     from akd.agents.search import ControlledSearchAgentConfig

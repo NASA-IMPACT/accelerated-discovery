@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from akd.observability import span_tool_execution
+
 if TYPE_CHECKING:
     from akd.tools._base import BaseTool
 
@@ -101,24 +103,28 @@ class ToolCallingMixin:
                 error=f"Unknown tool: {tool_call.tool_name}",
             )
 
-        try:
-            input_obj = tool.input_schema(**tool_call.arguments)
-            result = await tool.arun(input_obj)
-            # Use mode='json' to ensure JSON-serializable types (HttpUrl → str, datetime → ISO string)
-            content = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
-            return ToolResult(
-                tool_call_id=tool_call.tool_call_id,
-                tool_name=tool_call.tool_name,
-                content=content,
-            )
-        except Exception as e:
-            logger.exception(f"Tool '{tool_call.tool_name}' failed with args {tool_call.arguments}")
-            return ToolResult(
-                tool_call_id=tool_call.tool_call_id,
-                tool_name=tool_call.tool_name,
-                content=None,
-                error=str(e),
-            )
+        with span_tool_execution(
+            tool_call.tool_name,
+            tool_call.tool_call_id,
+        ):
+            try:
+                input_obj = tool.input_schema(**tool_call.arguments)
+                result = await tool.arun(input_obj)
+                # Use mode='json' to ensure JSON-serializable types (HttpUrl → str, datetime → ISO string)
+                content = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+                return ToolResult(
+                    tool_call_id=tool_call.tool_call_id,
+                    tool_name=tool_call.tool_name,
+                    content=content,
+                )
+            except Exception as e:
+                logger.exception(f"Tool '{tool_call.tool_name}' failed with args {tool_call.arguments}")
+                return ToolResult(
+                    tool_call_id=tool_call.tool_call_id,
+                    tool_name=tool_call.tool_name,
+                    content=None,
+                    error=str(e),
+                )
 
     async def _execute_tools_parallel(
         self,

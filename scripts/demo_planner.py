@@ -22,6 +22,7 @@ from rich.table import Table
 # Add the project root to the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from akd.observability import init_observability
 from akd.planner.llm_planner import create_planner, quick_plan
 from akd.planner.registry import get_agent_registry
 
@@ -523,6 +524,7 @@ def quick(
 
 
 if __name__ == "__main__":
+    init_observability()
     # Set up logging
     logger.remove()
     logger.add(sys.stderr, level="INFO")

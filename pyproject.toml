@@ -50,6 +50,8 @@ dependencies = [
     "litellm>=1.81.0",
     "dateparser>=1.2.2",
     "pyzmq>=27.0.0",
+    "logfire>=4.25.0",
+    "docling>=2.70.0",
 ]
 
 [project.urls]
@@ -103,7 +105,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.5.0",
     "pre-commit>=4.2.0",
-    "memray>=1.18.0",
+    "memray>=1.18.0; sys_platform != 'win32'",
     "scalene>=1.5.55",
 ]
 local = [
@@ -117,6 +119,9 @@ ml = [
     "sentence-transformers>=5.0.0",
     "docling>=2.37.0",
     "deepeval>=3.4.0",
+]
+telemetry = [
+    "logfire>=0.54.0",
 ]
 
 [tool.ruff.lint.per-file-ignores]

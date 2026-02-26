@@ -148,6 +148,12 @@ class SearxNGSearchTool(SearchTool):
             raw_results = data.get("results", [])
 
             # Convert to SearchResultItem objects
+            def url_or_none(v: str | None) -> str | None:
+                """Return None for empty or whitespace-only strings so AnyUrl accepts it."""
+                if v is None or (isinstance(v, str) and not v.strip()):
+                    return None
+                return v
+
             search_results = []
             for result in raw_results:
                 # Handle DOI normalization
@@ -159,13 +165,16 @@ class SearxNGSearchTool(SearchTool):
                         doi = str(doi)
                     result["doi"] = doi
 
+                raw_url = url_or_none(result.pop("url", None))
+                if raw_url is None:
+                    continue  # skip results with no valid URL (required field)
                 search_results.append(
                     SearchResultItem(
-                        url=result.pop("url", None),
+                        url=raw_url,
                         title=result.pop("title", "Untitled") or "",
                         content=result.pop("content", "") or "",
                         query=query,
-                        pdf_url=result.pop("pdf_url", None),
+                        pdf_url=url_or_none(result.pop("pdf_url", None)),
                         category=result.pop("category", None),
                         doi=result.pop("doi", None),
                         published_date=result.pop("publishedDate", None),

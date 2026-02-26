@@ -46,6 +46,43 @@ class ModelConfigSettings(BaseSettings):
     default_no_answer: str = "Answer not found"
 
 
+class TelemetrySettings(BaseSettings):
+    """Telemetry/observability settings (Logfire). Disabled by default for local and tests.
+
+    Env vars: TELEMETRY_ENABLED, TELEMETRY_SERVICE_NAME, TELEMETRY_ENVIRONMENT,
+    TELEMETRY_SAMPLE_RATE, TELEMETRY_REDACT_PARAMS, TELEMETRY_SEND_TO_CLOUD.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable Logfire telemetry (spans, logs). Off by default for local/tests.",
+    )
+    service_name: str = Field(
+        default="akd",
+        description="Service name sent to Logfire.",
+    )
+    environment: str = Field(
+        default="local",
+        description="Environment label (local, dev, staging, production).",
+    )
+    sample_rate: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of traces to sample (0.0–1.0). Use <1.0 in high-volume.",
+    )
+    redact_params: bool = Field(
+        default=True,
+        description="Redact input/params and large payloads in telemetry to avoid PII.",
+    )
+    send_to_cloud: bool = Field(
+        default=False,
+        description="Send data to Logfire cloud. If False, console/file only.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="TELEMETRY_", extra="forbid")
+
+
 class GuardrailSettings(BaseModel):
     """Project-level guardrail defaults for the @guardrail decorator.
 
@@ -81,6 +118,7 @@ class ProjectSettings(BaseSettings):
     env: Environment = Environment.LOCAL
     model_config_settings: ModelConfigSettings = ModelConfigSettings()
     guardrails: GuardrailSettings = GuardrailSettings()
+    telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.prod"),
