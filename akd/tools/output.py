@@ -18,20 +18,7 @@ class _OutputToolPlaceholder(InputSchema, OutputSchema):
 
 
 class OutputTool(BaseTool[_OutputToolPlaceholder, _OutputToolPlaceholder]):
-    """Tool for structured final output in agent tool calling (Pydantic AI pattern).
-
-    This special tool is registered alongside regular tools. When the model
-    is ready to give its final answer, it calls this tool with structured
-    output matching the agent's output schema.
-
-    Unlike regular tools, OutputTool's schemas are dynamic - they're set at
-    construction time based on the agent's output_schema.
-
-    Example:
-        output_tool = OutputTool(MyAgentOutputSchema)
-        tool_def = output_tool.as_tool_definition()
-        # {"type": "function", "function": {"name": "final_answer", ...}}
-    """
+    """Submit your FINAL answer. Only call this AFTER you have gathered enough information using other tools. Do NOT call multiple final answer tools at the same time — pick exactly one."""
 
     input_schema = _OutputToolPlaceholder
     output_schema = _OutputToolPlaceholder
@@ -55,6 +42,14 @@ class OutputTool(BaseTool[_OutputToolPlaceholder, _OutputToolPlaceholder]):
         super().__init__(debug=debug)
         # Keep default name for backwards compatibility.
         self.name = name
+        # Schema-specific description for LLM tool routing
+        schema_desc = (schema.__doc__ or schema.__name__).strip().split("\n")[0]
+        self.description = (
+            f"Submit your FINAL answer as {schema.__name__}. "
+            f"Only call this AFTER you have gathered enough information using other tools. "
+            f"Do NOT call multiple final answer tools at the same time — pick exactly one. "
+            f"{schema_desc}"
+        )
 
     def as_tool_definition(self) -> dict[str, Any]:
         """Convert to OpenAI function calling format.
