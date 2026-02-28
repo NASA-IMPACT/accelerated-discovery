@@ -132,24 +132,7 @@ class TextInput(InputSchema):
 
 
 class TextOutput(OutputSchema):
-    """Simple text-based output schema for unstructured content.
-
-    Use this schema when your agent produces free-form text output without
-    structured fields, such as for conversational responses, summaries,
-    or any scenario where the output is just text content.
-
-    This is the text-specific implementation of OutputSchema. For other modalities,
-    use corresponding schemas like ImageOutput, DocumentOutput, etc. (when available).
-
-    Example:
-        class ChatAgent(LiteLLMInstructorBaseAgent[TextInput, TextOutput]):
-            '''Simple conversational agent.'''
-            input_schema = TextInput
-            output_schema = TextOutput
-
-        result = await agent.arun(TextInput(content="Tell me a joke"))
-        print(result.content)  # The agent's text response
-    """
+    """Free-form text output. Used for conversational responses, clarifying questions, summaries, or any unstructured content."""
 
     __response_field__: str | None = "content"
 
