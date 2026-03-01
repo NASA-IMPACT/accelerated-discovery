@@ -1,6 +1,6 @@
 from collections.abc import Awaitable, Callable
 from inspect import Parameter, Signature
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_core import PydanticUndefined
 
@@ -23,13 +23,19 @@ class BaseTool[
 ](AbstractBase):
     config_schema = BaseToolConfig
 
-    def as_function(self) -> Callable[..., Awaitable[OutputSchema]]:
+    def as_function(
+        self,
+        mode: Literal["python", "json"] | None = None,
+    ) -> Callable[..., Awaitable[Any]]:
         """Return an async callable with a typed Python signature.
 
         Input parameters come from ``input_schema`` fields.
-        Returns the raw Pydantic ``OutputSchema`` from ``arun()`` —
-        consumer decides serialization (e.g. ``.model_dump()`` for FastMCP,
-        ``.model_dump_json()`` for OpenAI SDK, or direct attribute access).
+
+        Args:
+            mode: Serialization mode for the return value.
+                ``None`` (default) — raw Pydantic ``OutputSchema``.
+                ``"python"`` — dict via ``model_dump()``.
+                ``"json"`` — JSON string via ``model_dump_json()``.
         """
         InputModel = self.input_schema
         parameters: list[Parameter] = []
@@ -52,10 +58,15 @@ class BaseTool[
         annotations["return"] = self.output_schema
         tool = self
 
-        async def wrapper(*args: Any, **kwargs: Any) -> OutputSchema:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             bound = sig.bind(*args, **kwargs)
             bound.apply_defaults()
-            return await tool.arun(InputModel(**bound.arguments))
+            result = await tool.arun(InputModel(**bound.arguments))
+            if mode == "python":
+                return result.model_dump()
+            if mode == "json":
+                return result.model_dump_json()
+            return result
 
         wrapper.__name__ = self.name
         wrapper.__doc__ = self.description or self.__class__.__doc__ or ""
