@@ -4,13 +4,16 @@ import time
 from datetime import datetime
 from functools import lru_cache, wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import dateparser
 import gdown
 import requests
 from loguru import logger
-from pydantic import BaseModel, HttpUrl, create_model
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
+from pydantic import HttpUrl, create_model
+from pydantic.fields import FieldInfo
 
 if TYPE_CHECKING:
     pass
@@ -208,6 +211,41 @@ def get_model_fields(
         fields_info.append(field_data)
 
     return fields_info
+
+
+# FieldInfo constraint attributes that map to JSON Schema keywords
+_CONSTRAINT_ATTRS = ("ge", "gt", "le", "lt", "multiple_of", "min_length", "max_length", "pattern", "strict")
+
+
+def build_annotated_type(field: FieldInfo) -> Any:
+    """Build an ``Annotated`` type from a Pydantic ``FieldInfo``, restoring constraints.
+
+    Pydantic v2 strips ``Annotated`` wrappers for non-union types, storing
+    constraints (``ge``, ``min_length``, etc.) in ``field.metadata`` rather
+    than ``field.annotation``. This reconstructs the ``Annotated`` type so
+    downstream schema generators (e.g. FastMCP ``TypeAdapter``,
+    ``inspect.signature``) emit proper JSON Schema keywords.
+
+    Returns the bare annotation unchanged when no constraints are present.
+    """
+    field_type = field.annotation
+    field_kwargs: dict[str, Any] = {}
+
+    for attr in _CONSTRAINT_ATTRS:
+        val = getattr(field, attr, None)
+        if val is not None:
+            field_kwargs[attr] = val
+
+    for m in field.metadata:
+        for attr in _CONSTRAINT_ATTRS:
+            val = getattr(m, attr, None)
+            if val is not None:
+                field_kwargs.setdefault(attr, val)
+
+    if not field_kwargs:
+        return field_type
+
+    return Annotated[field_type, PydanticField(**field_kwargs)]
 
 
 def parse_date(date_input: str | int | None) -> datetime | None:
