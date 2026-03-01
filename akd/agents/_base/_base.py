@@ -648,7 +648,7 @@ class AKDAgent[
         if not use_tool_loop:
             return await self.get_response_async(
                 run_context=run_context,
-                response_model=self._get_effective_output_schema(),
+                response_model=self.effective_output_schema,
             )
 
         async for event in self._run_engine_stream(run_context=run_context):
@@ -671,7 +671,7 @@ class AKDAgent[
         if messages is None:
             raise ValueError("run_context.messages must be initialized before _run_engine_stream")
 
-        response_model = self._get_effective_output_schema()
+        response_model = self.effective_output_schema
 
         # Tool setup using pre-computed output_tools from OutputRoutingMixin
         all_tools = self.tools + self.output_tools
