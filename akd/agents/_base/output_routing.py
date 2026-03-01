@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import cached_property
 from typing import Any
 
-from akd._base import OutputSchema
+from akd._base import OutputSchema, TextOutput
 from akd._base.streaming import CompletedEvent, CompletedEventData, ToolResultEvent
 from akd.tools.output import OutputTool
 
@@ -73,6 +73,10 @@ class OutputRoutingMixin:
             None — output is valid, accept it
             str  — rejection reason, sent back to model as retry feedback
         """
+        if isinstance(output, TextOutput) and not output.content.strip():
+            return "Empty response. Provide a substantive answer."
+        if isinstance(output, str) and not output.strip():
+            return "Empty response. Provide a substantive answer."
         return None
 
     # ── Private: plumbing ───────────────────────────────────────────
