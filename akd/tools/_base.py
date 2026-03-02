@@ -1,6 +1,11 @@
-from typing import Any
+from collections.abc import Awaitable, Callable
+from inspect import Parameter, Signature
+from typing import Any, Literal
+
+from pydantic_core import PydanticUndefined
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
+from akd.utils import build_annotated_type
 
 
 class BaseToolConfig(BaseConfig):
@@ -17,6 +22,57 @@ class BaseTool[
     OutSchema: OutputSchema,
 ](AbstractBase):
     config_schema = BaseToolConfig
+
+    def as_function(
+        self,
+        mode: Literal["python", "json"] | None = None,
+    ) -> Callable[..., Awaitable[Any]]:
+        """Return an async callable with a typed Python signature.
+
+        Input parameters come from ``input_schema`` fields.
+
+        Args:
+            mode: Serialization mode for the return value.
+                ``None`` (default) — raw Pydantic ``OutputSchema``.
+                ``"python"`` — dict via ``model_dump()``.
+                ``"json"`` — JSON string via ``model_dump_json()``.
+        """
+        InputModel = self.input_schema
+        parameters: list[Parameter] = []
+        annotations: dict[str, Any] = {}
+
+        for field_name, field in InputModel.model_fields.items():
+            field_type = build_annotated_type(field)
+            annotations[field_name] = field_type
+            default = field.default if field.default is not PydanticUndefined else Parameter.empty
+            parameters.append(
+                Parameter(
+                    field_name,
+                    Parameter.POSITIONAL_OR_KEYWORD,
+                    default=default,
+                    annotation=field_type,
+                ),
+            )
+
+        sig = Signature(parameters, return_annotation=self.output_schema)
+        annotations["return"] = self.output_schema
+        tool = self
+
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            result = await tool.arun(InputModel(**bound.arguments))
+            if mode == "python":
+                return result.model_dump()
+            if mode == "json":
+                return result.model_dump_json()
+            return result
+
+        wrapper.__name__ = self.name
+        wrapper.__doc__ = self.description or self.__class__.__doc__ or ""
+        wrapper.__signature__ = sig
+        wrapper.__annotations__ = annotations
+        return wrapper
 
     def as_tool_definition(self) -> dict[str, Any]:
         """Convert tool to function calling format for LLM tool use.

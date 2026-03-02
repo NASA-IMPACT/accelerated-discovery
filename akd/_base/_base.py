@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import inspect
+import types
 from abc import ABC, ABCMeta, abstractmethod
-from typing import Any, Type, cast
+from typing import Any, Type, Union, cast, get_args, get_origin
 
 from loguru import logger
 from pydantic import (
@@ -131,24 +132,7 @@ class TextInput(InputSchema):
 
 
 class TextOutput(OutputSchema):
-    """Simple text-based output schema for unstructured content.
-
-    Use this schema when your agent produces free-form text output without
-    structured fields, such as for conversational responses, summaries,
-    or any scenario where the output is just text content.
-
-    This is the text-specific implementation of OutputSchema. For other modalities,
-    use corresponding schemas like ImageOutput, DocumentOutput, etc. (when available).
-
-    Example:
-        class ChatAgent(LiteLLMInstructorBaseAgent[TextInput, TextOutput]):
-            '''Simple conversational agent.'''
-            input_schema = TextInput
-            output_schema = TextOutput
-
-        result = await agent.arun(TextInput(content="Tell me a joke"))
-        print(result.content)  # The agent's text response
-    """
+    """Free-form text output. Used for conversational responses, clarifying questions, summaries, or any unstructured content."""
 
     __response_field__: str | None = "content"
 
@@ -257,6 +241,7 @@ class AbstractBaseMeta(ABCMeta):
             "AbstractBase",
             "UnrestrictedAbstractBase",
             "BaseAgent",
+            "AKDAgent",
             "InstructorBaseAgent",
             "LiteLLMInstructorBaseAgent",
             "BaseTool",
@@ -284,12 +269,23 @@ class AbstractBaseMeta(ABCMeta):
                     )
 
             if hasattr(cls, "output_schema") and cls.output_schema is not None:
-                if not isinstance(cls.output_schema, type) or not issubclass(
-                    cls.output_schema,
+                output_schema_decl = cls.output_schema
+                origin = get_origin(output_schema_decl)
+                if origin in (types.UnionType, Union):
+                    args = get_args(output_schema_decl)
+                    valid_union = bool(args) and all(
+                        isinstance(arg, type) and issubclass(arg, (OutputSchema, BaseModel)) for arg in args
+                    )
+                    if not valid_union:
+                        raise TypeError(
+                            f"{name}.output_schema union members must be subclasses of OutputSchema",
+                        )
+                elif not isinstance(output_schema_decl, type) or not issubclass(
+                    output_schema_decl,
                     (OutputSchema, BaseModel),
                 ):
                     raise TypeError(
-                        f"{name}.output_schema must be a subclass of OutputSchema",
+                        f"{name}.output_schema must be a subclass of OutputSchema or a union of them",
                     )
 
         return cls
@@ -310,6 +306,31 @@ class AbstractBase[
     output_schema: Type[OutSchema]
 
     config_schema: Type[BaseModel] | None = None
+
+    @classmethod
+    def __class_getitem__(cls, params):
+        """Create a concrete subclass with schemas set as class attributes.
+
+        Enables runtime generic specialization:
+            agent = AKDAgent[MyInput, MyOutput](config=...)
+            agent = AKDAgent[MyInput, MyOutput | TextOutput, MyConfig](config=...)
+
+        Config is optional (inherits from parent if omitted).
+        """
+        if not isinstance(params, tuple):
+            params = (params,)
+        if len(params) < 2:
+            return super().__class_getitem__(params)
+
+        in_schema, out_schema = params[0], params[1]
+        attrs = {"input_schema": in_schema, "output_schema": out_schema}
+        if len(params) == 3:
+            attrs["config_schema"] = params[2]
+
+        attrs["__module__"] = cls.__module__
+        out_label = getattr(out_schema, "__name__", str(out_schema))
+        attrs["__qualname__"] = f"{cls.__qualname__}[{in_schema.__name__}, {out_label}]"
+        return type(cls.__name__, (cls,), attrs)
 
     def __init__(
         self,
@@ -391,8 +412,10 @@ class AbstractBase[
         # avoid circular dependency
         if not hasattr(self, "output_schema") or not self.output_schema:
             return ""
-
-        fields = get_model_fields(self.output_schema, skip_no_description=False)
+        schema_decl = self.output_schema
+        if not isinstance(schema_decl, type):
+            return ""
+        fields = get_model_fields(schema_decl, skip_no_description=False)
         if not fields:
             return ""
 
@@ -433,9 +456,18 @@ class AbstractBase[
 
     def _validate_output(self, output: Any) -> OutSchema:
         """Validate output against schema."""
-        if not isinstance(output, self.output_schema):
+        schema_decl = self.output_schema
+        origin = get_origin(schema_decl)
+        if origin in (types.UnionType, Union):
+            args = [arg for arg in get_args(schema_decl) if isinstance(arg, type) and issubclass(arg, BaseModel)]
+            if not any(isinstance(output, arg) for arg in args):
+                raise TypeError(
+                    "Output must be an instance of one of: " + ", ".join(arg.__name__ for arg in args),
+                )
+            return output
+        if not isinstance(output, schema_decl):
             raise TypeError(
-                f"Output must be an instance of {self.output_schema.__name__}",
+                f"Output must be an instance of {schema_decl.__name__}",
             )
         return output
 

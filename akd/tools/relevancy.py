@@ -103,7 +103,6 @@ class RelevancyChecker(
             if self.debug:
                 logger.debug(f"Relevancy check {i + 1}: {output}")
             outputs.append(output)
-            self.agent.reset_memory()
         return outputs
 
     async def _ensemble(
@@ -373,7 +372,6 @@ class EnhancedRelevancyChecker(
             if self.debug:
                 logger.debug(f"Multi-rubric relevancy check {i + 1}: {output}")
             outputs.append(output)
-            self.agent.reset_memory()
         return outputs
 
     def _calculate_rubric_score(
@@ -418,8 +416,7 @@ class EnhancedRelevancyChecker(
             rubric_scores["topic_alignment"] * weights.topic_alignment
             + rubric_scores["content_depth"] * weights.content_depth
             + rubric_scores["recency_relevance"] * weights.recency_relevance
-            + rubric_scores["methodological_relevance"]
-            * weights.methodological_relevance
+            + rubric_scores["methodological_relevance"] * weights.methodological_relevance
             + rubric_scores["evidence_quality"] * weights.evidence_quality
             + rubric_scores["scope_relevance"] * weights.scope_relevance
         )
@@ -429,8 +426,7 @@ class EnhancedRelevancyChecker(
         for output in outputs:
             output_score = sum(
                 [
-                    self._calculate_rubric_score(getattr(output, field), field)
-                    * getattr(weights, field)
+                    self._calculate_rubric_score(getattr(output, field), field) * getattr(weights, field)
                     for field in rubric_fields
                 ],
             )

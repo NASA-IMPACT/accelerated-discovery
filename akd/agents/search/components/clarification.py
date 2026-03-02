@@ -66,8 +66,6 @@ class ClarificationComponent:
             ClarifyingAgentInputSchema,
             ClarifyingAgentOutputSchema,
         ](config=self.config, debug=debug)
-        self._agent.input_schema = ClarifyingAgentInputSchema
-        self._agent.output_schema = ClarifyingAgentOutputSchema
 
     async def process(
         self,
