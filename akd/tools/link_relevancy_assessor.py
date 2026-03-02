@@ -195,14 +195,8 @@ class LinkRelevancyAssessor(BaseTool):
         # Map enum values to scores
         topic_score = 1.0 if assessment.topic_alignment.value == "aligned" else 0.0
         depth_score = 1.0 if assessment.content_depth.value == "comprehensive" else 0.0
-        evidence_score = (
-            1.0 if assessment.evidence_quality.value == "high_quality_evidence" else 0.0
-        )
-        method_score = (
-            1.0
-            if assessment.methodological_relevance.value == "methodologically_sound"
-            else 0.0
-        )
+        evidence_score = 1.0 if assessment.evidence_quality.value == "high_quality_evidence" else 0.0
+        method_score = 1.0 if assessment.methodological_relevance.value == "methodologically_sound" else 0.0
         recency_score = 1.0 if assessment.recency_relevance.value == "current" else 0.0
         scope_score = 1.0 if assessment.scope_relevance.value == "in_scope" else 0.0
 
@@ -277,8 +271,6 @@ class LinkRelevancyAssessor(BaseTool):
                     domain_context=domain_context,
                 )
 
-                # make sure it's stateless
-                self.relevancy_agent.reset_memory()
                 assessment = await self.relevancy_agent.arun(assessment_input)
 
                 # Cache the assessment
@@ -298,9 +290,7 @@ class LinkRelevancyAssessor(BaseTool):
         # Update result with relevancy metadata
         result.score = relevancy_score
         result.extra["relevancy_assessment"] = assessment.model_dump()
-        result.extra["should_fetch_full_content"] = (
-            relevancy_score >= self.full_content_threshold
-        )
+        result.extra["should_fetch_full_content"] = relevancy_score >= self.full_content_threshold
 
         if self.debug:
             logger.debug(
@@ -326,10 +316,7 @@ class LinkRelevancyAssessor(BaseTool):
             batch = results[i : i + self.assessment_batch_size]
 
             # Assess against original query
-            original_tasks = [
-                self._assess_single_result(result, original_query, domain_context)
-                for result in batch
-            ]
+            original_tasks = [self._assess_single_result(result, original_query, domain_context) for result in batch]
 
             batch_results = await asyncio.gather(*original_tasks)
 
@@ -360,18 +347,15 @@ class LinkRelevancyAssessor(BaseTool):
                     # Apply reformulated assessment if it's better
                     if use_reformulated:
                         orig_result.score = reform_result.score
-                        orig_result.extra["relevancy_assessment"] = (
-                            reform_result.extra.get("relevancy_assessment")
-                        )
-                        orig_result.extra["should_fetch_full_content"] = (
-                            reform_result.extra.get("should_fetch_full_content", False)
+                        orig_result.extra["relevancy_assessment"] = reform_result.extra.get("relevancy_assessment")
+                        orig_result.extra["should_fetch_full_content"] = reform_result.extra.get(
+                            "should_fetch_full_content",
+                            False,
                         )
 
                     # Always add alignment details (eliminates duplication)
                     orig_result.extra["query_alignment_details"] = {
-                        "best_query": "reformulated"
-                        if use_reformulated
-                        else "original",
+                        "best_query": "reformulated" if use_reformulated else "original",
                         "original_score": original_score,  # Preserved original value
                         "reformulated_score": reform_result.score,
                     }
@@ -443,9 +427,7 @@ class LinkRelevancyAssessor(BaseTool):
 
         # Identify high-relevancy results for full content fetching
         high_relevancy_results = [
-            result
-            for result in assessed_results
-            if result.extra.get("should_fetch_full_content", False)
+            result for result in assessed_results if result.extra.get("should_fetch_full_content", False)
         ]
 
         # Create assessment summary

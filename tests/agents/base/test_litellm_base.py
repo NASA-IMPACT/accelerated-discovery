@@ -1,11 +1,10 @@
-"""Test cases for LiteLLMInstructorBaseAgent."""
+"""Test cases for AKDAgent (formerly LiteLLMInstructorBaseAgent)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from akd._base.memory import Memory
-from akd.agents._base import InstructorBaseAgent
+from akd.agents._base import AKDAgent, InstructorBaseAgent, LiteLLMInstructorBaseAgent
 
 from .conftest import (
     LiteLLMTestInputSchema,
@@ -32,10 +31,6 @@ class TestLiteLLMInstructorBaseAgent:
         # Check that the client is properly initialized
         assert agent.client is not None
 
-        # Check memory initialization
-        assert isinstance(agent.memory, Memory)
-        assert len(agent.memory) == 0
-
     def test_config_access(self, litellm_config):
         """Test that config fields are accessible via self.attribute."""
         agent = TestLiteLLMAgent(config=litellm_config)
@@ -50,7 +45,7 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.enable_trimming is True
 
     @pytest.mark.asyncio
-    @patch("akd._base.memory.trim_messages")
+    @patch("akd._base.session.trim_messages")
     @patch("instructor.from_litellm")
     async def test_full_arun_workflow(
         self,
@@ -96,10 +91,13 @@ class TestLiteLLMInstructorBaseAgent:
         assert result.response == "Processed query: test query"
         assert result.confidence == 0.95
 
-    def test_backward_compatibility_with_instructor_base_agent(self, litellm_config):
-        """Test that LiteLLMInstructorBaseAgent maintains compatibility with InstructorBaseAgent."""
+    def test_backward_compatibility_aliases(self, litellm_config):
+        """Test that AKDAgent backward compatibility aliases work."""
+        # All aliases point to the same class
+        assert InstructorBaseAgent is AKDAgent
+        assert LiteLLMInstructorBaseAgent is AKDAgent
 
-        # Create both agents
+        # Create agents via alias
         class TestInstructorAgent(
             InstructorBaseAgent[LiteLLMTestInputSchema, LiteLLMTestOutputSchema],
         ):
@@ -112,9 +110,6 @@ class TestLiteLLMInstructorBaseAgent:
         # Verify they have the same interface
         assert hasattr(litellm_agent, "arun")
         assert hasattr(litellm_agent, "get_response_async")
-        assert hasattr(litellm_agent, "memory")
-        assert hasattr(litellm_agent, "reset_memory")
-
         # Verify same attributes exist
         for attr in ["model_name", "temperature", "stateless", "api_key"]:
             assert hasattr(litellm_agent, attr)
@@ -136,31 +131,10 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.trim_ratio == 0.6
         assert agent.enable_trimming is False
 
-    def test_memory_management_stateful(self, litellm_config):
-        """Test memory management in stateful mode."""
-        config = create_config_with_overrides(litellm_config, stateless=False)
-        agent = TestLiteLLMAgent(config=config)
-
-        # Initially empty
-        assert len(agent.memory) == 0
-
-        # Should maintain memory when stateless=False
-        assert agent.stateless is False
-
-    def test_memory_management_stateless(self, litellm_config):
-        """Test memory management in stateless mode."""
-        agent = TestLiteLLMAgent(config=litellm_config)
-
-        # Should be stateless by default
-        assert agent.stateless is True
-
-        # Memory should be empty
-        assert len(agent.memory) == 0
-
     def test_litellm_client_initialization(self, litellm_config):
         """Test that LiteLLM client is properly initialized."""
         with patch("instructor.from_litellm") as mock_from_litellm:
-            with patch("akd.agents._base.acompletion") as mock_acompletion:
+            with patch("akd.agents._base._base.acompletion") as mock_acompletion:
                 mock_client = MagicMock()
                 mock_from_litellm.return_value = mock_client
 

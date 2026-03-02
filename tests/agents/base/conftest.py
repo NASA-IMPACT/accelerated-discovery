@@ -1,17 +1,13 @@
 """Shared fixtures and utilities for base agent tests."""
 
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import (
-    BaseAgentConfig,
-    InstructorBaseAgent,
-    LiteLLMInstructorBaseAgent,
-)
+from akd.agents._base import AKDAgent, BaseAgentConfig
 
 
 # Shared test schemas
@@ -52,9 +48,9 @@ class AgentTestCustomConfig(BaseAgentConfig):
 
 # Test agent implementations
 class TestInstructorBaseAgent(
-    InstructorBaseAgent[AgentTestInputSchema, AgentTestOutputSchema],
+    AKDAgent[AgentTestInputSchema, AgentTestOutputSchema],
 ):
-    """Test implementation of InstructorBaseAgent."""
+    """Test implementation of AKDAgent (InstructorBaseAgent is now an alias for AKDAgent)."""
 
     input_schema = AgentTestInputSchema
     output_schema = AgentTestOutputSchema
@@ -65,15 +61,14 @@ class TestInstructorBaseAgent(
         **kwargs,
     ) -> AgentTestOutputSchema:
         """Test implementation that calls parent to handle memory."""
-        # Call the parent _arun which handles memory management
         result = await super()._arun(params, **kwargs)
         return result
 
 
 class TestLiteLLMAgent(
-    LiteLLMInstructorBaseAgent[LiteLLMTestInputSchema, LiteLLMTestOutputSchema],
+    AKDAgent[LiteLLMTestInputSchema, LiteLLMTestOutputSchema],
 ):
-    """Test implementation of LiteLLMInstructorBaseAgent."""
+    """Test implementation of AKDAgent."""
 
     input_schema = LiteLLMTestInputSchema
     output_schema = LiteLLMTestOutputSchema
@@ -158,29 +153,24 @@ def litellm_expected_output() -> LiteLLMTestOutputSchema:
 
 # Mock fixtures
 @pytest.fixture
-def mock_openai_client():
-    """Create a mock OpenAI client for testing."""
-    with patch("akd.agents._base.openai.AsyncOpenAI") as mock_openai:
-        mock_openai_client = MagicMock()
-        mock_openai.return_value = mock_openai_client
-        yield mock_openai_client
-
-
-@pytest.fixture
 def mock_instructor_client():
-    """Create a mock instructor client for testing."""
-    with patch("akd.agents._base.instructor.from_openai") as mock_instructor:
+    """Create a mock instructor client for testing.
+
+    Patches instructor.from_litellm in the agent module so that
+    AKDAgent.__init__ gets a mock client.
+    """
+    with patch("akd.agents._base._base.instructor.from_litellm") as mock_from_litellm:
         mock_client = MagicMock()
-        mock_instructor.return_value = mock_client
+        mock_from_litellm.return_value = mock_client
         yield mock_client
 
 
 @pytest.fixture
 def mock_litellm_client():
     """Create a mock LiteLLM instructor client for testing."""
-    with patch("instructor.from_litellm") as mock_instructor:
+    with patch("akd.agents._base._base.instructor.from_litellm") as mock_from_litellm:
         mock_client = AsyncMock()
-        mock_instructor.return_value = mock_client
+        mock_from_litellm.return_value = mock_client
         yield mock_client
 
 
@@ -197,35 +187,37 @@ def create_config_with_overrides(
 
 def setup_mock_response(
     mock_client: Any,
-    response_data: Dict[str, Any],
+    response_data: dict[str, Any],
     client_type: str = "instructor",
 ) -> None:
     """Setup mock response for different client types."""
-    if client_type == "instructor":
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = response_data
-        mock_client.chat.completions.create.return_value = mock_response
-    elif client_type == "litellm":
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = response_data
-        mock_client.chat.completions.create.return_value = mock_response
+    mock_response = MagicMock()
+    mock_response.model_dump.return_value = response_data
+    # Instructor create_with_completion returns (response, completion) tuple
+    mock_completion = MagicMock()
+    mock_completion.usage = None
+    mock_client.chat.completions.create_with_completion.return_value = (
+        mock_response,
+        mock_completion,
+    )
 
 
 async def setup_async_mock_response(
     mock_client: Any,
-    response_data: Dict[str, Any],
+    response_data: dict[str, Any],
     client_type: str = "instructor",
 ) -> Any:
-    """Setup async mock response for different client types."""
-    if client_type == "instructor":
-        mock_chat_completions = AsyncMock()
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = response_data
-        mock_client.chat.completions.create = mock_chat_completions
-        mock_chat_completions.return_value = mock_response
-        return mock_chat_completions
-    elif client_type == "litellm":
-        mock_response = MagicMock()
-        mock_response.model_dump.return_value = response_data
-        mock_client.chat.completions.create.return_value = mock_response
-        return mock_response
+    """Setup async mock response for different client types.
+
+    The instructor client's create_with_completion is called when output_schema is set.
+    Returns the AsyncMock so callers can assert on it.
+    """
+    mock_response = MagicMock()
+    mock_response.model_dump.return_value = response_data
+
+    mock_completion = MagicMock()
+    mock_completion.usage = None
+
+    mock_create = AsyncMock(return_value=(mock_response, mock_completion))
+    mock_client.chat.completions.create_with_completion = mock_create
+    return mock_create

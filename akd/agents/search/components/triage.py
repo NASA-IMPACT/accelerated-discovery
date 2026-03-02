@@ -23,7 +23,8 @@ class TriageAgentOutputSchema(OutputSchema):
 
     routing_decision: str = Field(..., description="Routing decision for the query")
     needs_clarification: bool = Field(
-        default=False, description="Whether query needs clarification"
+        default=False,
+        description="Whether query needs clarification",
     )
     reasoning: str = Field(..., description="Reasoning for the routing decision")
 
@@ -54,10 +55,9 @@ class TriageComponent:
 
         # Create internal instructor agent for triage processing
         self._agent = InstructorBaseAgent[
-            TriageAgentInputSchema, TriageAgentOutputSchema
+            TriageAgentInputSchema,
+            TriageAgentOutputSchema,
         ](config=self.config, debug=debug)
-        self._agent.input_schema = TriageAgentInputSchema
-        self._agent.output_schema = TriageAgentOutputSchema
 
     async def process(self, query: str) -> TriageAgentOutputSchema:
         """
@@ -84,7 +84,7 @@ class TriageComponent:
             logger.debug(f"Triage decision: {triage_output.routing_decision}")
             logger.debug(f"Needs clarification: {triage_output.needs_clarification}")
             logger.debug(
-                f"Triage output preview | reasoning: {triage_output.reasoning[:200]}"
+                f"Triage output preview | reasoning: {triage_output.reasoning[:200]}",
             )
 
         return triage_output

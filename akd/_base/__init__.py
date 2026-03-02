@@ -14,7 +14,7 @@ from ._base import (
 )
 from .errors import HumanInputRequired
 from .exposure import ParamExposureMixin, exposed_param
-from .memory import Memory
+from .session import AgentSession, BaseSession, ToolSession
 from .streaming import (
     CompletedEvent,
     CompletedEventData,
@@ -102,6 +102,8 @@ __all__ = [
     # Human interaction
     "HumanResponse",
     "HumanInputRequired",
-    # Memory
-    "Memory",
+    # Sessions
+    "BaseSession",
+    "AgentSession",
+    "ToolSession",
 ]

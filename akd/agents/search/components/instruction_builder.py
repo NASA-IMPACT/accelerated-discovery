@@ -69,8 +69,6 @@ class InstructionBuilderComponent:
             InstructionBuilderInputSchema,
             InstructionBuilderOutputSchema,
         ](config=self.config, debug=debug)
-        self._agent.input_schema = InstructionBuilderInputSchema
-        self._agent.output_schema = InstructionBuilderOutputSchema
 
     async def process(
         self,
