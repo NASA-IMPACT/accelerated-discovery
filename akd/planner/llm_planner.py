@@ -39,6 +39,22 @@ class ConversationPhase(str, Enum):
     VALIDATION = "validation"
     FINALIZATION = "finalization"
 
+    @classmethod
+    def _missing_(cls, value):
+        """Case-insensitive lookup by value.
+
+        _create_instructor_compatible_model() builds a proxy with __base__=BaseModel,
+        which strips @field_validator.
+        _missing_ lives on the enum itself, so it normalises
+        uppercase values the LLM may return.
+        """
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
+
 
 class PlannerQuestionType(str, Enum):
     """Types of questions the planner can ask."""
@@ -47,6 +63,22 @@ class PlannerQuestionType(str, Enum):
     MULTIPLE_CHOICE = "multiple_choice"
     CONFIRMATION = "confirmation"
     SPECIFICATION = "specification"
+
+    @classmethod
+    def _missing_(cls, value):
+        """Case-insensitive lookup by value.
+
+        _create_instructor_compatible_model() builds a proxy with __base__=BaseModel,
+        which strips @field_validator.
+        _missing_ lives on the enum itself, so it normalises
+        uppercase values the LLM may return.
+        """
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
 
 
 class PlannerQuestion(OutputSchema):
@@ -85,58 +117,6 @@ class PlannerResponse(OutputSchema):
         """Normalize phase value to lowercase for case-insensitive validation."""
         if isinstance(v, str):
             return v.lower()
-        return v
-
-    @field_validator("ready_to_generate", mode="after")
-    @classmethod
-    def auto_set_ready_when_plan_exists(cls, v: bool, info) -> bool:
-        """
-        Bidirectional auto-correction for ready_to_generate flag.
-
-        SAFETY CORRECTION (ready=True but plan missing/empty):
-        - If ready_to_generate=True but workflow_plan=None, then correct to False
-        - If ready_to_generate=True but workflow_plan has no agents, then correct to False
-        This prevents "Workflow complete!" followed by "No workflow plan available" error.
-
-        Auto-correction only happens when:
-        - workflow_plan exists (plan is complete)
-        - question is None (not asking for user input)
-        - ready_to_generate is False (contradiction)
-
-        This allows legitimate scenarios like:
-        - "Here's the plan. Does this look good?" [ready_to_generate=False, question set]
-        - "I need clarification: X or Y?" [ready_to_generate=False, question set]
-        """
-        workflow_plan = info.data.get("workflow_plan")
-        question = info.data.get("question")
-        message = info.data.get("message", "")
-
-        # SAFETY: Cannot be ready without a complete plan
-        if v:  # ready_to_generate is True
-            if workflow_plan is None:
-                logger.warning(
-                    "SAFETY: ready_to_generate=True but workflow_plan=None. Auto-correcting to False.",
-                )
-                return False
-
-            if not workflow_plan.suggested_agents:
-                logger.warning(
-                    "SAFETY: ready_to_generate=True but workflow_plan has no agents. Auto-correcting to False.",
-                )
-                return False
-
-        # CONVENIENCE: Auto-set True if plan exists, no question, and message indicates ready
-        if workflow_plan is not None and not v and question is None:
-            ready_keywords = ["ready", "will be generated", "workflow is complete", "finalized"]
-            message_lower = message.lower()
-
-            if any(keyword in message_lower for keyword in ready_keywords):
-                logger.warning(
-                    "LLM says workflow is ready (message contains ready/finalized keywords) "
-                    "but set ready_to_generate=False. Auto-correcting to True.",
-                )
-                return True
-
         return v
 
 
@@ -310,6 +290,32 @@ class InteractivePlannerSession:
         self.workflow_plan: WorkflowPlan | None = None
         self.final_workflow: WorkflowFormat | None = None
 
+    def is_ready_to_generate(self) -> bool:
+        """
+        Deterministic readiness check — no LLM involvement.
+
+        A workflow is ready to generate when ALL conditions are met:
+        1. workflow_plan exists and is not None
+        2. workflow_plan has at least one suggested agent
+        3. workflow_plan has a non-empty research goal
+        4. All suggested agents exist in the registry
+        """
+        if not self.workflow_plan:
+            return False
+
+        if not self.workflow_plan.suggested_agents:
+            return False
+
+        if not self.workflow_plan.research_goal:
+            return False
+
+        for agent in self.workflow_plan.suggested_agents:
+            if not self.planner.registry.get_agent(agent.agent_id):
+                logger.warning(f"Agent '{agent.agent_id}' in workflow plan not found in registry. Workflow not ready.")
+                return False
+
+        return True
+
     async def start(self) -> PlannerResponse:
         """Start the planning conversation."""
         response = await self.planner._arun(
@@ -321,6 +327,10 @@ class InteractivePlannerSession:
         )
 
         self._update_session_state(self.initial_request, response)
+
+        # Session decides readiness deterministically
+        response.ready_to_generate = self.is_ready_to_generate() and response.question is None
+
         return response
 
     async def respond(self, user_message: str) -> PlannerResponse:
@@ -334,6 +344,10 @@ class InteractivePlannerSession:
         )
 
         self._update_session_state(user_message, response)
+
+        # Session decides readiness deterministically
+        response.ready_to_generate = self.is_ready_to_generate() and response.question is None
+
         return response
 
     def _update_session_state(self, user_message: str, response: PlannerResponse) -> None:
@@ -605,7 +619,10 @@ class InteractivePlannerSession:
                         current_input_names = {f.name for f in agent.input_schema.fields}
                         auto_mapped_fields = list(prev_output_names & current_input_names)
 
-            auto_mapped_text = ", ".join(auto_mapped_fields) if auto_mapped_fields else "None"
+            # Also skip optional fields with defaults (user-configurable, not LLM-filled)
+            default_fields = [f.name for f in agent.input_schema.fields if not f.required and f.default is not None]
+            skip_fields = set(auto_mapped_fields + default_fields)
+            skip_fields_text = ", ".join(skip_fields) if skip_fields else "None"
 
             # Combine all context sections
             context_sections = f"""Conversation History:
@@ -614,10 +631,9 @@ class InteractivePlannerSession:
 Research Context:
 {research_context_text if research_context_text else "No workflow plan available"}
 
-Auto-Mapped Fields (DO NOT EXTRACT):
-The following fields will be automatically populated from previous agent outputs at runtime: {auto_mapped_text}
-These fields should be OMITTED from your output entirely."""
-
+Fields to SKIP (DO NOT EXTRACT):
+The following fields will be automatically populated and must be OMITTED from your output entirely: {skip_fields_text}
+This includes fields auto-mapped from previous agents and optional fields with default values (user-configurable via UI)."""
             # Separate required and optional inputs
             required_inputs_text = "\n".join(
                 [
@@ -666,8 +682,7 @@ These fields should be OMITTED from your output entirely."""
 
             # Convert to dict and filter out None values (auto-mapped fields)
             result = response.model_dump()
-            # Remove None values - these are fields LLM correctly omitted (will be auto-mapped)
-            return {k: v for k, v in result.items() if v is not None}
+            return {k: v for k, v in result.items() if v is not None and k not in skip_fields}
 
         except Exception as e:
             logger.warning(f"LLM-based input filling failed for {agent_id}: {e}")

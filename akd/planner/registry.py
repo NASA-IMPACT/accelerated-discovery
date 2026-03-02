@@ -6,11 +6,12 @@ This module provides agent registration and discovery capabilities for the AKD f
 
 from __future__ import annotations
 
+import enum
 import importlib
 import json
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal, Union, get_args, get_origin
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -31,6 +32,10 @@ class FieldDefinition(BaseModel):
     required: bool = Field(default=True, description="Whether field is required")
     default: str | int | float | bool | list[Any] | None = Field(default=None, description="Default value if any")
     items_type: str | None = Field(default=None, description="Array item type")
+    allowed_values: list[str] | None = Field(default=None, description="Allowed values for enum/Literal fields")
+    value: str | int | float | bool | list[Any] | None = Field(
+        default=None, description="Current value (defaults to default)"
+    )
 
 
 class AgentSchemaDefinition(BaseModel):
@@ -253,22 +258,65 @@ class AgentRegistry:
         self.registry_data = AgentRegistryData(agents=discovered)
         logger.info(f"Auto-discovered {len(discovered)} agents")
 
+    @staticmethod
+    def _resolve_enum_or_literal(annotation: type | None) -> list[str] | None:
+        """Extract allowed values from enum or Literal type annotations.
+
+        Handles: plain Enum, plain Literal, Optional[Enum], Optional[Literal],
+        and Union wrappers containing a single constrained type.
+        """
+        if annotation is None:
+            return None
+
+        origin = get_origin(annotation)
+
+        # Unwrap Optional / Union[X, None] to the inner type
+        if origin is Union:
+            args = [a for a in get_args(annotation) if a is not type(None)]
+            if len(args) == 1:
+                annotation = args[0]
+                origin = get_origin(annotation)
+
+        if origin is Literal:
+            return [str(v) for v in get_args(annotation)]
+
+        if isinstance(annotation, type) and issubclass(annotation, enum.Enum):
+            return [str(member.value) for member in annotation]
+
+        return None
+
     def _extract_schema(self, schema_class: type[IOSchema] | None) -> AgentSchemaDefinition:
         """Extract schema from an agent IOSchema class (InputSchema/OutputSchema)."""
         if not schema_class:
             return AgentSchemaDefinition()
 
         try:
-            # Get the JSON schema from the Pydantic model
             json_schema = schema_class.model_json_schema()
             properties: dict[str, Any] = json_schema.get("properties", {})
             required: list[str] = json_schema.get("required", [])
 
             fields = []
             for field_name, field_info in properties.items():
+                field_type = field_info.get("type", "string")
+
+                # Enum/Literal detection via model_fields (avoids fragile JSON schema parsing)
+                allowed_values = None
+                model_field = getattr(schema_class, "model_fields", {}).get(field_name)
+                if model_field is not None:
+                    allowed_values = self._resolve_enum_or_literal(model_field.annotation)
+                    if allowed_values:
+                        field_type = "enum"
+
+                # Resolve type from anyOf when JSON schema doesn't expose a direct "type"
+                if field_type == "string" and "anyOf" in field_info and not allowed_values:
+                    for option in field_info["anyOf"]:
+                        if "type" in option:
+                            field_type = option["type"]
+                            break
+
                 field_def = FieldDefinition(
                     name=field_name,
-                    type=field_info.get("type", "string"),
+                    type=field_type,
                     description=field_info.get("description", ""),
                     required=field_name in required,
                 )
@@ -282,7 +330,12 @@ class AgentRegistry:
                 # Handle default values
                 if "default" in field_info:
                     field_def.default = field_info["default"]
+                    field_def.value = field_info["default"]
                     field_def.required = False
+
+                # Set allowed values if detected
+                if allowed_values:
+                    field_def.allowed_values = allowed_values
 
                 fields.append(field_def)
 
