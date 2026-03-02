@@ -131,7 +131,7 @@ class CompositeGuardrail(GuardrailOperatorMixin, GuardrailProtocol):
                         "mode": self.mode.value,
                         "short_circuited": True,
                         "failed_at_index": len(executed_results) - 1,
-                        "result": result.model_dump(),
+                        "result": result.model_dump(mode="json"),
                     },
                 )
 
@@ -176,7 +176,7 @@ class CompositeGuardrail(GuardrailOperatorMixin, GuardrailProtocol):
             detected_risks=all_detected,
             risk_results=all_risk_results,
             provider=provider_str,
-            extra={"mode": self.mode.value, "sub_results": [r.model_dump() for r in results]},
+            extra={"mode": self.mode.value, "sub_results": [r.model_dump(mode="json") for r in results]},
         )
 
     def _merge_results_any(self, results: list[GuardrailOutput]) -> GuardrailOutput:
@@ -197,7 +197,7 @@ class CompositeGuardrail(GuardrailOperatorMixin, GuardrailProtocol):
             return GuardrailOutput(
                 detected_risks=[],
                 provider=provider_str,
-                extra={"mode": self.mode.value, "sub_results": [r.model_dump() for r in results]},
+                extra={"mode": self.mode.value, "sub_results": [r.model_dump(mode="json") for r in results]},
             )
 
         # All failed - merge all detected risks
@@ -211,5 +211,5 @@ class CompositeGuardrail(GuardrailOperatorMixin, GuardrailProtocol):
             detected_risks=all_detected,
             risk_results=all_risk_results,
             provider=provider_str,
-            extra={"mode": self.mode.value, "sub_results": [r.model_dump() for r in results]},
+            extra={"mode": self.mode.value, "sub_results": [r.model_dump(mode="json") for r in results]},
         )
