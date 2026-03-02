@@ -4,6 +4,7 @@ This module provides custom serializers that extend LangGraph's JsonPlusSerializ
 to handle Pydantic models and other complex objects properly.
 """
 
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -30,9 +31,11 @@ class AKDSerializer(JsonPlusSerializer):
             # Convert NumPy arrays to lists for JSON serialization
             return obj.tolist()
         elif isinstance(obj, dict):
-            return {k: self._convert_pydantic_to_dict(v) for k, v in obj.items()}
+            return {(k.value if isinstance(k, Enum) else k): self._convert_pydantic_to_dict(v) for k, v in obj.items()}
         elif isinstance(obj, (list, tuple)):
             return [self._convert_pydantic_to_dict(item) for item in obj]
+        elif isinstance(obj, Enum):
+            return obj.value
         # elif isinstance(obj, NodeState):
         #     # Convert NodeState to a dictionary
         #     return {

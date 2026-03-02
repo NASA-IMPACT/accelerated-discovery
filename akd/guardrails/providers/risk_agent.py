@@ -8,7 +8,7 @@ GuardrailInput/GuardrailOutput for unified interface with other guardrail provid
 import asyncio
 import re
 from collections.abc import Sequence
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from deepeval.metrics import DAGMetric
@@ -38,7 +38,7 @@ from akd.guardrails.categories._base import RiskCategory
 from akd.guardrails.categories.atlas import ScienceRiskCategory
 
 
-class CriterionImportance(Enum):
+class CriterionImportance(StrEnum):
     """Importance level for evaluation criteria."""
 
     LOW = "low"
