@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from loguru import logger
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator
 
 from akd._base import InputSchema, OutputSchema
 from akd.agents._base import BaseAgentConfig, LiteLLMInstructorBaseAgent
@@ -39,6 +39,22 @@ class ConversationPhase(str, Enum):
     VALIDATION = "validation"
     FINALIZATION = "finalization"
 
+    @classmethod
+    def _missing_(cls, value):
+        """Case-insensitive lookup by value.
+
+        _create_instructor_compatible_model() builds a proxy with __base__=BaseModel,
+        which strips @field_validator.
+        _missing_ lives on the enum itself, so it normalises
+        uppercase values the LLM may return.
+        """
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
+
 
 class PlannerQuestionType(str, Enum):
     """Types of questions the planner can ask."""
@@ -47,6 +63,22 @@ class PlannerQuestionType(str, Enum):
     MULTIPLE_CHOICE = "multiple_choice"
     CONFIRMATION = "confirmation"
     SPECIFICATION = "specification"
+
+    @classmethod
+    def _missing_(cls, value):
+        """Case-insensitive lookup by value.
+
+        _create_instructor_compatible_model() builds a proxy with __base__=BaseModel,
+        which strips @field_validator.
+        _missing_ lives on the enum itself, so it normalises
+        uppercase values the LLM may return.
+        """
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
 
 
 class PlannerQuestion(OutputSchema):
@@ -58,14 +90,13 @@ class PlannerQuestion(OutputSchema):
     context: str = Field(..., description="Context explaining why this question is important")
     suggested_answer: str | None = Field(default=None, description="Suggested answer if applicable")
 
-    @model_validator(mode="before")
+    @field_validator("question_type", mode="before")
     @classmethod
-    def normalize_question_type(cls, data: Any) -> Any:
-        """Lowercase question_type before validation"""
-        if isinstance(data, dict) and "question_type" in data:
-            if isinstance(data["question_type"], str):
-                data["question_type"] = data["question_type"].lower()
-        return data
+    def normalize_question_type(cls, v: Any) -> str:
+        """Normalize question_type value to lowercase for case-insensitive validation."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 
 # AgentSuggestion and WorkflowPlan are now imported from structures.py
@@ -80,14 +111,13 @@ class PlannerResponse(OutputSchema):
     workflow_plan: WorkflowPlan | None = Field(default=None, description="Generated workflow plan")
     ready_to_generate: bool = Field(default=False, description="Whether ready to generate final workflow")
 
-    @model_validator(mode="before")
+    @field_validator("phase", mode="before")
     @classmethod
-    def normalize_phase_case(cls, data: Any) -> Any:
-        """Lowercase phase before validation"""
-        if isinstance(data, dict) and "phase" in data:
-            if isinstance(data["phase"], str):
-                data["phase"] = data["phase"].lower()
-        return data
+    def normalize_phase(cls, v: Any) -> str:
+        """Normalize phase value to lowercase for case-insensitive validation."""
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 
 class PlannerInput(InputSchema):
