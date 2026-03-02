@@ -43,7 +43,7 @@ class OutputTool(BaseTool[_OutputToolPlaceholder, _OutputToolPlaceholder]):
         # Keep default name for backwards compatibility.
         self.name = name
         # Schema-specific description for LLM tool routing
-        schema_desc = (schema.__doc__ or schema.__name__).strip().split("\n")[0]
+        schema_desc = (schema.__doc__ or schema.__name__).strip()
         self.description = (
             f"Submit your FINAL answer as {schema.__name__}. "
             f"Only call this AFTER you have gathered enough information using other tools. "
