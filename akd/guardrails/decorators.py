@@ -25,11 +25,13 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 from pydantic import BaseModel, computed_field, create_model
 
+from akd._base import RunContext, StreamEventType
 from akd._base.errors import (
     GuardrailError,
     InputGuardrailTriggered,
     OutputGuardrailTriggered,
 )
+from akd._base.streaming import CompletedEvent, CompletedEventData
 from akd.configs.project import CONFIG
 from akd.guardrails._base import GuardrailInput, GuardrailOutput, GuardrailProtocol
 from akd.guardrails.utils import extract_text_content
@@ -251,6 +253,32 @@ def guardrail(
                 output = await super()._arun(params, **kwargs)
                 output_result = await self._check_output_guardrail(output, params)
                 return self._wrap_response_with_guardrails(output, input_result, output_result)
+
+            async def astream(self, params: Any, run_context: RunContext | None = None, **kwargs: Any):
+                # input guardrail BEFORE streaming starts
+                input_result = await self._check_input_guardrail(params)
+
+                # forward events from the real stream
+                async for event in super().astream(params=params, run_context=run_context, **kwargs):
+                    # intercept completion, apply output guardrail, wrap output
+                    if (
+                        isinstance(event, CompletedEvent)
+                        or getattr(event, "event_type", None) == StreamEventType.COMPLETED
+                    ):
+                        output = event.data.output
+                        output_result = await self._check_output_guardrail(output, params)
+                        wrapped = self._wrap_response_with_guardrails(output, input_result, output_result)
+
+                        yield CompletedEvent(
+                            source=event.source,
+                            message=event.message,
+                            data=CompletedEventData(output=wrapped),
+                            run_context=event.run_context,
+                        )
+                        continue
+
+                    # all other events passthrough
+                    yield event
 
         # Preserve class identity
         GuardedClass.__name__ = cls.__name__
