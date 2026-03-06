@@ -283,7 +283,7 @@ class WorkflowBuilder:
         )
 
         # Enrich node inputs with full schema metadata
-        enriched_dict = enrich_workflow_schema(workflow.model_dump(by_alias=True))
+        enriched_dict = enrich_workflow_schema(workflow.model_dump(by_alias=True), registry=self.registry)
         return WorkflowFormat(**enriched_dict)
 
     def check_missing_agents(self, plan: WorkflowPlan) -> list[str]:
