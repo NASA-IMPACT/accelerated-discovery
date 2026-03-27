@@ -141,9 +141,11 @@ class WorkflowBuilder:
         for field in agent.input_schema.fields:
             if field.required and field.name not in inputs:
                 # Get field mapping from registry (uses agent types, not node IDs)
+                # Only use mappings with confidence >= 0.8 to avoid bad auto-approved mappings
                 mapping = self.mapping_registry.get_mapping(
                     prev_agent_id,
                     agent_id,
+                    min_confidence=0.8,
                 )
 
                 if mapping and field.name in mapping:
@@ -234,8 +236,8 @@ class WorkflowBuilder:
             agent_counts[agent_id] = count + 1
             node_ids.append(node_id)
 
-            # Get filled inputs for this agent
-            inputs = filled_inputs.get(agent_id, {})
+            # Get filled inputs for this agent (try node_id first, then agent_id for backward compat)
+            inputs = filled_inputs.get(node_id, filled_inputs.get(agent_id, {}))
 
             # Build io_map for runtime data flow from previous agent
             io_map = {}

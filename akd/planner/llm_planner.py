@@ -171,25 +171,29 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
 
     def _get_planner_system_prompt(self) -> str:
         """Get the system prompt for the planner using optimized template from config."""
-        # Build available agents section dynamically from registry
+        # Build available agents section dynamically from registry with full field info
         agents_info = []
         for agent in self.registry.get_enabled_agents():
-            agent_desc = f"- {agent.agent_id}: {agent.description}"
+            lines = [f"### {agent.agent_id}: {agent.description}"]
 
-            # Add input/output info
-            inputs = [f.name for f in agent.input_schema.fields if f.required]
-            outputs = [f.name for f in agent.output_schema.fields]
+            # Input fields with descriptions, types, and allowed values
+            lines.append("  Inputs:")
+            for f in agent.input_schema.fields:
+                req = "REQUIRED" if f.required else f"optional, default={f.default}"
+                field_line = f"    - {f.name} ({f.type}, {req}): {f.description}"
+                if f.allowed_values:
+                    field_line += f" [values: {', '.join(f.allowed_values)}]"
+                lines.append(field_line)
 
-            if inputs:
-                agent_desc += f"\n  Required inputs: {', '.join(inputs)}"
-            if outputs:
-                agent_desc += f"\n  Outputs: {', '.join(outputs)}"
+            # Output fields with descriptions and types
+            lines.append("  Outputs:")
+            for f in agent.output_schema.fields:
+                lines.append(f"    - {f.name} ({f.type}): {f.description}")
 
-            agents_info.append(agent_desc)
+            agents_info.append("\n".join(lines))
 
-        available_agents_text = "\n".join(agents_info) if agents_info else "No agents available"
+        available_agents_text = "\n\n".join(agents_info) if agents_info else "No agents available"
 
-        # Use optimized template from config
         return WORKFLOW_PLANNER_SYSTEM_PROMPT_TEMPLATE.format(available_agents=available_agents_text)
 
     def reset_conversation(self) -> None:
@@ -496,8 +500,13 @@ class InteractivePlannerSession:
 
         Uses conversation history, workflow plan, and agent selection reasoning
         to extract context-aware input values.
+
+        Keys the result by node_id (e.g., "cmr_care_agent_1") to support
+        multiple nodes of the same agent type with different inputs.
         """
         filled_inputs = {}
+        # Track counts to generate node IDs matching WorkflowBuilder.build()
+        agent_counts: dict[str, int] = {}
 
         for agent_suggestion in plan.suggested_agents:
             agent_id = agent_suggestion.agent_id
@@ -507,6 +516,11 @@ class InteractivePlannerSession:
                 logger.warning(f"Agent {agent_id} not in registry, skipping")
                 continue
 
+            # Generate node_id matching WorkflowBuilder.build() logic
+            count = agent_counts.get(agent_id, 1)
+            node_id = f"{agent_id}_{count}"
+            agent_counts[agent_id] = count + 1
+
             try:
                 inputs = await self._fill_inputs_with_llm(
                     agent,
@@ -514,12 +528,12 @@ class InteractivePlannerSession:
                     agent_suggestion,  # Pass agent suggestion for context
                     plan,  # Pass full workflow plan for research goal
                 )
-                filled_inputs[agent_id] = inputs
+                filled_inputs[node_id] = inputs
             except Exception as e:
-                logger.warning(f"Failed to fill inputs for {agent_id}: {e}")
+                logger.warning(f"Failed to fill inputs for {node_id}: {e}")
                 # Fallback to rule-based
                 inputs = self._fallback_input_extraction(agent, agent_id)
-                filled_inputs[agent_id] = inputs
+                filled_inputs[node_id] = inputs
 
         return filled_inputs
 
@@ -607,8 +621,11 @@ class InteractivePlannerSession:
             auto_mapped_fields = []
             if current_idx > 0 and workflow_plan:
                 prev_agent_id = agent_names[current_idx - 1]
-                # Get mapping from registry (via planner object)
-                mapping = self.planner.mapping_registry.get_mapping(prev_agent_id, agent_id)
+                # Get mapping from registry — only trust high-confidence mappings
+                confidence_threshold = self.planner.planner_config.field_mapping_confidence_threshold
+                mapping = self.planner.mapping_registry.get_mapping(
+                    prev_agent_id, agent_id, min_confidence=confidence_threshold
+                )
                 if mapping:
                     auto_mapped_fields = list(mapping.keys())
                 else:
