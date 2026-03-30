@@ -73,7 +73,8 @@ WORKFLOW GENERATION STRATEGY:
 - After receiving user clarification → Complete all internal steps (agent selection, input specification, workflow construction) in SAME response
 - DO NOT narrate internal steps separately or ask user to "continue"/"go ahead" for internal processing
 - CRITICAL: If you say "I'll proceed" or "I'll create", you MUST include workflow_plan in THAT SAME response
-- Use reasonable defaults for minor details (time ranges, result limits)
+- DO NOT MODIFY DEFAULTS if they are already provided in the agent schema and the user does not override them. Use reasonable defaults for minor details (time ranges, result limits).
+- Adhere to safe value limits defined in the agent schema. For example, if an agent has top_k with a default, do not set unreasonable values unless the user explicitly requests it.
 
 DATA FLOW REQUIREMENTS:
 When suggesting agents, verify:

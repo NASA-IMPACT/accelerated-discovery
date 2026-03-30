@@ -174,7 +174,7 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
         # Build available agents section dynamically from registry with full field info
         agents_info = []
         for agent in self.registry.get_enabled_agents():
-            lines = [f"### {agent.agent_id}: {agent.description}"]
+            lines = [f"### {agent.agent_id}: {agent.description}\n"]
 
             # Input fields with descriptions, types, and allowed values
             lines.append("  Inputs:")
