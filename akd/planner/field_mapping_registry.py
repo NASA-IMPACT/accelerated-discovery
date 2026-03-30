@@ -122,40 +122,48 @@ class FieldMappingRegistry:
         self,
         source_agent_id: str,
         target_agent_id: str,
+        min_confidence: float = 0.0,
     ) -> dict[str, str] | None:
         """
         Get field mapping for source->target agent pair.
 
         Priority:
-        1. Explicit mappings (highest trust)
-        2. LLM-generated mappings (if user approved)
+        1. Explicit mappings (highest trust, always returned regardless of min_confidence)
+        2. LLM-generated mappings (if user approved AND confidence >= min_confidence)
 
         Args:
             source_agent_id: Source agent identifier
             target_agent_id: Target agent identifier
+            min_confidence: Minimum confidence threshold for LLM-generated mappings.
+                Explicit mappings are always returned regardless of this value.
 
         Returns:
             Dict mapping target_field_name -> source_field_name, or None
         """
         key = f"{source_agent_id}->{target_agent_id}"
 
-        # Priority 1: Explicit mappings
+        # Priority 1: Explicit mappings (always trusted)
         if key in self.explicit_mappings:
             logger.debug(f"Using explicit mapping for {key}")
             return self.explicit_mappings[key]
 
-        # Priority 2: LLM-generated (if approved)
+        # Priority 2: LLM-generated (if approved AND above confidence threshold)
         if key in self.llm_mappings:
             entry = self.llm_mappings[key]
-            if entry.user_approved:
+            if not entry.user_approved:
+                logger.debug(
+                    f"LLM mapping exists for {key} but not user-approved, skipping",
+                )
+            elif entry.confidence < min_confidence:
+                logger.debug(
+                    f"LLM mapping exists for {key} but confidence {entry.confidence:.2f} "
+                    f"< threshold {min_confidence:.2f}, skipping",
+                )
+            else:
                 logger.debug(
                     f"Using LLM-generated mapping for {key} (confidence: {entry.confidence:.2f})",
                 )
                 return entry.mapping
-            else:
-                logger.debug(
-                    f"LLM mapping exists for {key} but not user-approved, skipping",
-                )
 
         return None
 

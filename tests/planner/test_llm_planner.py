@@ -53,7 +53,7 @@ class TestLLMWorkflowPlanner:
         planner = LLMWorkflowPlanner(registry=mock_registry)
         system_prompt = planner._get_planner_system_prompt()
 
-        assert "workflow planner" in system_prompt.lower()
+        assert "research assistant" in system_prompt.lower()
         assert "available agents" in system_prompt.lower()
 
     @pytest.mark.asyncio

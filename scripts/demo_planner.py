@@ -24,12 +24,66 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from akd.planner.llm_planner import create_planner, quick_plan
 from akd.planner.registry import get_agent_registry
+from akd.utils import to_snake_case
 
 app = typer.Typer(help="Demo CLI for the AKD LLM Workflow Planner")
 console = Console()
 
 # Global flag for non-interactive mode
 NON_INTERACTIVE = False
+
+
+def _register_ext_agents():
+    """Register akd-ext agents and disable base registry agents.
+
+    Only akd-ext agents (CMRCareAgent, CodeSearchCareAgent) should be used
+    by the planner. Base agents (deep_search, gap_analysis, code_search) are
+    disabled so the planner doesn't see them.
+
+    Disabling happens only after akd-ext imports succeed to avoid leaving
+    the registry empty if akd-ext is not installed.
+    """
+    registry = get_agent_registry()
+
+    # Register akd-ext agents first — only disable base agents if this succeeds
+    try:
+        from akd_ext.agents.cmr_care import CMRCareAgent
+        from akd_ext.agents.code_search_care import CodeSearchCareAgent
+        from akd_ext.agents.gap import GapAgent as ExtGapAgent
+        from akd_ext.agents.closed_loop_cm1 import (
+            CapabilityFeasibilityMapperAgent,
+            WorkflowSpecBuilderAgent,
+            ExperimentImplementationAgent,
+            InterpretationPaperAssemblyAgent,
+        )
+
+        ext_agents = [
+            CMRCareAgent,
+            CodeSearchCareAgent,
+            ExtGapAgent,
+            CapabilityFeasibilityMapperAgent,
+            WorkflowSpecBuilderAgent,
+            ExperimentImplementationAgent,
+            InterpretationPaperAssemblyAgent,
+        ]
+
+        for agent_cls in ext_agents:
+            agent_id = to_snake_case(agent_cls.__name__)
+            if not registry.get_agent(agent_id):
+                registry.register_agent(agent_cls)
+                logger.info(f"Registered {agent_cls.__name__} from akd-ext")
+
+        # Disable base registry agents now that akd-ext agents are available
+        for agent_id in ["deep_search", "gap_analysis", "code_search"]:
+            agent = registry.get_agent(agent_id)
+            if agent and agent.enabled:
+                registry.update_agent(agent_id, enabled=False)
+                logger.info(f"Disabled base agent: {agent_id}")
+
+    except ImportError:
+        logger.debug("akd-ext not installed, keeping base agents enabled")
+    except Exception as e:
+        logger.warning(f"Failed to register akd-ext agents: {e}")
 
 
 def print_header():
@@ -79,6 +133,7 @@ def print_agent_registry():
 async def interactive_planning_session():
     """Run an interactive planning session."""
     print_header()
+    _register_ext_agents()
 
     # Show available agents
     console.print("\n[bold]Available Agents:[/bold]")
@@ -210,6 +265,8 @@ async def automated_planning_session(
         console.print(f"Initial Request: [green]{initial_request}[/green]")
         console.print(f"Hardcoded Responses: [dim]{hardcoded_responses}[/dim]")
         console.print(f"Max Turns: {max_turns}\n")
+
+    _register_ext_agents()
 
     try:
         # Create planner and start session
@@ -456,6 +513,7 @@ def quick(
     """Quick workflow generation for a research goal."""
 
     async def _quick_plan():
+        _register_ext_agents()
         try:
             if not non_interactive:
                 console.print(f"[blue]Planning workflow for: {goal}[/blue]")
