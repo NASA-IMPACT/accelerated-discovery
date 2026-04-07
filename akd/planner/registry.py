@@ -230,11 +230,18 @@ class AgentRegistry:
                         logger.warning(f"Agent {agent_id} has empty schemas, skipping")
                         continue
 
-                # Get description from docstring
-                description = agent_class.__doc__
-                if description:
-                    description = description.strip().split("\n")[0]
-                else:
+                # Get description from config_schema.description field, fall back to docstring
+                description = None
+                config_schema = getattr(agent_class, "config_schema", None)
+                if config_schema:
+                    config_defaults = config_schema.model_fields.get("description")
+                    if config_defaults and config_defaults.default:
+                        description = config_defaults.default.strip()
+                if not description:
+                    description = agent_class.__doc__
+                    if description:
+                        description = description.strip().split("\n")[0]
+                if not description:
                     description = f"Agent for {agent_id.replace('_', ' ')}"
 
                 discovered[agent_id] = AgentEntry(
@@ -438,11 +445,18 @@ class AgentRegistry:
         input_schema = self._extract_schema(getattr(agent_class, "input_schema", None))
         output_schema = self._extract_schema(getattr(agent_class, "output_schema", None))
 
-        # Get description from docstring
-        description = agent_class.__doc__
-        if description:
-            description = description.strip().split("\n")[0]
-        else:
+        # Get description from config_schema.description field, fall back to docstring
+        description = None
+        config_schema = getattr(agent_class, "config_schema", None)
+        if config_schema:
+            config_defaults = config_schema.model_fields.get("description")
+            if config_defaults and config_defaults.default:
+                description = config_defaults.default.strip()
+        if not description:
+            description = agent_class.__doc__
+            if description:
+                description = description.strip().split("\n")[0]
+        if not description:
             description = f"Agent for {agent_id.replace('_', ' ')}"
 
         # Create entry
