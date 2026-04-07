@@ -230,12 +230,9 @@ class AgentRegistry:
                         logger.warning(f"Agent {agent_id} has empty schemas, skipping")
                         continue
 
-                # Get description from docstring
-                description = agent_class.__doc__
-                if description:
-                    description = description.strip().split("\n")[0]
-                else:
-                    description = f"Agent for {agent_id.replace('_', ' ')}"
+                # Get description: config default → docstring → auto-generated
+                config_desc = getattr(getattr(agent_class, "config_schema", None), "model_fields", {}).get("description")
+                description = " ".join(((config_desc.default if config_desc and config_desc.default else None) or agent_class.__doc__ or f"Agent for {agent_id.replace('_', ' ')}").split())
 
                 discovered[agent_id] = AgentEntry(
                     agent_id=agent_id,
@@ -438,12 +435,9 @@ class AgentRegistry:
         input_schema = self._extract_schema(getattr(agent_class, "input_schema", None))
         output_schema = self._extract_schema(getattr(agent_class, "output_schema", None))
 
-        # Get description from docstring
-        description = agent_class.__doc__
-        if description:
-            description = description.strip().split("\n")[0]
-        else:
-            description = f"Agent for {agent_id.replace('_', ' ')}"
+        # Get description: config default → docstring → auto-generated
+        config_desc = getattr(getattr(agent_class, "config_schema", None), "model_fields", {}).get("description")
+        description = ((config_desc.default if config_desc and config_desc.default else None) or agent_class.__doc__ or f"Agent for {agent_id.replace('_', ' ')}").strip()
 
         # Create entry
         entry = AgentEntry(
