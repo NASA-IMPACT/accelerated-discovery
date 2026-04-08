@@ -337,9 +337,9 @@ class MultiRiskGraniteGuardianToolConfig(GraniteGuardianBaseConfig):
         """Auto-disable think as multi-risk models don't support it."""
         if self.think:
             logger.warning(
-                f"[MultiRiskGraniteGuardianToolConfig] Multi-risk models do not support think=True. "
-                f"Chain-of-thought reasoning is not available in multi-harm detection mode. "
-                f"Automatically disabling think parameter.",
+                "[MultiRiskGraniteGuardianToolConfig] Multi-risk models do not support think=True. "
+                "Chain-of-thought reasoning is not available in multi-harm detection mode. "
+                "Automatically disabling think parameter.",
             )
             self.think = False
         return self
@@ -475,10 +475,10 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
                     f"--- RESPONSE START ---\n{content}\n--- RESPONSE END ---",
                 )
 
-            # Parse: "Yes\n<confidence> High " or "No\n<confidence> Low "
+            # Parse: "Yes\n<confidence> High " or "No\n<confidence> Not Harmful "
             label = "yes" if content.strip().lower().startswith("yes") else "no"
-            confidence_match = re.search(r"<confidence>\s*(\w+)", content)
-            confidence = confidence_match.group(1) if confidence_match else ""
+            confidence_match = re.search(r"<confidence>\s*(.+?)(?:</confidence>|\s*$)", content)
+            confidence = confidence_match.group(1).strip() if confidence_match else ""
 
             if self.debug:
                 logger.debug(
