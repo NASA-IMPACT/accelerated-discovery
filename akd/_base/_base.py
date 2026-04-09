@@ -15,6 +15,7 @@ from pydantic import (
     create_model,
 )
 
+from akd.observability import span_agent_run
 from akd.utils import get_model_fields, to_snake_case
 
 from .errors import HumanInputRequired, SchemaValidationError
@@ -490,16 +491,19 @@ class AbstractBase[
             logger.debug(
                 f"Running {self.__class__.__name__} with params: {params}",
             )
-        output = None
-        try:
-            output = await self._arun(params, **kwargs)
-            output = self._validate_output(output)
-        except HumanInputRequired:
-            logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
-            raise
-        except Exception as e:
-            logger.error(f"Error running {self.__class__.__name__}: {e}")
-            raise
+        run_context = kwargs.get("run_context")
+        run_id = getattr(run_context, "run_id", None) if run_context is not None else None
+        with span_agent_run(self.__class__.__name__, run_id=run_id):
+            output = None
+            try:
+                output = await self._arun(params, **kwargs)
+                output = self._validate_output(output)
+            except HumanInputRequired:
+                logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
+                raise
+            except Exception as e:
+                logger.error(f"Error running {self.__class__.__name__}: {e}")
+                raise
         return output
 
     @abstractmethod
@@ -622,16 +626,19 @@ class UnrestrictedAbstractBase[
             logger.debug(
                 f"Running {self.__class__.__name__} with params: {params}",
             )
-        output = None
-        try:
-            output = await self._arun(params, **kwargs)
-            output = self._validate_output(output)
-        except HumanInputRequired:
-            logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
-            raise
-        except Exception as e:
-            logger.error(f"Error running {self.__class__.__name__}: {e}")
-            raise
+        run_context = kwargs.get("run_context")
+        run_id = getattr(run_context, "run_id", None) if run_context is not None else None
+        with span_agent_run(self.__class__.__name__, run_id=run_id):
+            output = None
+            try:
+                output = await self._arun(params, **kwargs)
+                output = self._validate_output(output)
+            except HumanInputRequired:
+                logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
+                raise
+            except Exception as e:
+                logger.error(f"Error running {self.__class__.__name__}: {e}")
+                raise
         return output
 
     @abstractmethod

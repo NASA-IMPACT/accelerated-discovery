@@ -12,6 +12,7 @@ import asyncio
 from datetime import datetime
 import sys
 
+from akd.observability import init_observability
 from akd.planner.llm_planner import create_planner
 
 
@@ -57,6 +58,7 @@ async def run_planner_chat(initial_request: str):
 
 
 if __name__ == "__main__":
+    init_observability()
     # Get initial research goal from user
     # get as argument
     initial_request = sys.argv[1]

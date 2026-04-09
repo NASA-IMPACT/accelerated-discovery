@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from akd.observability import log_stream_event
+
 from .structures import RunContext
 from .tool_calling import ToolCall, ToolResult
 
@@ -390,6 +392,11 @@ class StreamingMixin:
         """
         # Input validation (before any events are yielded)
         params = self._validate_input(params)
+        # Ensure run_context has run_id for trace correlation
+        if run_context is None:
+            run_context = RunContext()
+        if run_context.run_id is None:
+            run_context.run_id = uuid.uuid4().hex[:8]
 
         # Stream from internal implementation
         async for event in self._astream(params, run_context, **kwargs):
@@ -406,6 +413,14 @@ class StreamingMixin:
                     )
                     continue
             yield event
+            # Log lifecycle events only (skip STREAMING to avoid token volume)
+            if event.event_type != StreamEventType.STREAMING:
+                log_stream_event(
+                    str(event.event_type),
+                    run_id=run_context.run_id if run_context else None,
+                    source=getattr(event, "source", None),
+                    is_lifecycle=True,
+                )
 
     async def _astream(
         self,

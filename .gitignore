@@ -12,6 +12,7 @@
 .envrc.ci
 .env
 .worktrees/
+.logfire/
 .deepeval/
 searxng-docker/
 data/cmr_collections_umm.json
