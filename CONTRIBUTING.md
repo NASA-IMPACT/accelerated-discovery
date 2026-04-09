@@ -42,12 +42,24 @@ Examples: `feature/conflict-agent`, `bugfix/granite-conf-level`, `enhance/baseag
 
 ## Commit Messages
 
-Use lowercase `type: description` format. Keep the first line under 72 characters.
+Use imperative style — describe what the commit does, not what you did. Keep the first line under 72 characters. Add a body after a blank line to explain the **why** when the change isn't obvious.
 
 ```
-fix: updated config description code
-refactor: cleaner public/private apis for output routing mixin
-feature: add as_function to akd BaseTool
+Fix confidence parsing bug in MultiRiskGraniteGuardianTool
+
+The guardian was treating low-confidence results as high-risk due to
+inverted comparison logic. This caused false positives on benign inputs.
+```
+
+```
+Add as_function to akd BaseTool
+```
+
+```
+Refactor base agent to incorporate 2 output modes
+
+Supports both structured (Pydantic) and unstructured (text) output
+routing, allowing agents to dynamically switch based on runtime schema.
 ```
 
 ## Python Style
@@ -139,13 +151,19 @@ This distinction is important:
 
 ### Creating an Agent
 
+The default agent class is **`AKDAgent`** — it comes with LiteLLM + Instructor integration, ReAct-style tool calling, HITL support, streaming, and output routing out of the box. This is what you should use for most agents.
+
+> `LiteLLMInstructorBaseAgent`, `InstructorBaseAgent`, and `Agent` are all aliases for `AKDAgent`.
+>
+> For other agentic base extensions (e.g., LangChain-based, custom providers), see [akd-ext](https://github.com/NASA-IMPACT/akd-ext).
+
 Every agent needs four parts: InputSchema, OutputSchema, Config (optional), and the Agent class.
 
 ```python
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgent, BaseAgentConfig
+from akd.agents._base import AKDAgent, BaseAgentConfig
 
 
 class SummaryInput(InputSchema):
@@ -169,7 +187,7 @@ class SummaryConfig(BaseAgentConfig):
     temperature: float = 0.3
 
 
-class SummaryAgent(BaseAgent[SummaryInput, SummaryOutput]):
+class SummaryAgent(AKDAgent[SummaryInput, SummaryOutput]):
     """Summarizes text to a target length."""
 
     config_schema = SummaryConfig
@@ -199,9 +217,9 @@ async for event in agent.astream(SummaryInput(text="...")):
 
 **Key points:**
 - `InputSchema` and `OutputSchema` require docstrings — schema validation will fail without them
-- Use Python 3.12+ generic syntax: `BaseAgent[SummaryInput, SummaryOutput]`
-- Streaming, HITL, tool calling, and message trimming come for free from `BaseAgent`
-- For structured LLM output, use `LiteLLMInstructorBaseAgent` instead of `BaseAgent`
+- Use Python 3.12+ generic syntax: `AKDAgent[SummaryInput, SummaryOutput]`
+- Streaming, HITL, tool calling, and message trimming come for free
+- `AKDAgent` uses LiteLLM under the hood — any model provider works
 
 ### Creating a Tool
 

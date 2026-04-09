@@ -169,7 +169,7 @@ akd-core is designed to be extended. Every agent and tool follows a consistent 4
 
 ```python
 from akd._base import InputSchema, OutputSchema
-from akd.agents._base import BaseAgent, BaseAgentConfig
+from akd.agents._base import AKDAgent, BaseAgentConfig
 
 class MyInput(InputSchema):
     """What goes in."""
@@ -179,7 +179,7 @@ class MyOutput(OutputSchema):
     """What comes out."""
     answer: str
 
-class MyAgent(BaseAgent[MyInput, MyOutput]):
+class MyAgent(AKDAgent[MyInput, MyOutput]):
     input_schema = MyInput
     output_schema = MyOutput
 
@@ -187,7 +187,7 @@ class MyAgent(BaseAgent[MyInput, MyOutput]):
         ...  # your logic here
 ```
 
-Your agent automatically gets streaming, tool calling, HITL, message trimming, and guardrail support. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide with tool examples, guardrail integration, and planner registration.
+`AKDAgent` is the default batteries-included agent — it comes with LiteLLM + Instructor, ReAct tool calling, HITL, streaming, and output routing. Your agent inherits all of it. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide with tool examples, guardrail integration, and planner registration.
 
 This is exactly how [akd-ext](https://github.com/NASA-IMPACT/akd-ext) builds on akd-core — importing base classes and creating domain-specific agents and tools.
 
