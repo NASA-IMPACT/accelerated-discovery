@@ -1,0 +1,283 @@
+import json
+import os
+import shutil
+import sys
+import tempfile
+
+import numpy as np
+import pandas as pd
+import pytest
+import requests
+
+# Add the parent directory (the project root) to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from akd.agents.search import (
+    CodeSearchAgent,
+    CodeSearchAgentConfig,
+    LitSearchAgentInputSchema,
+    SearchMode,
+)
+from akd.tools.misc import Embedder
+from akd.tools.search import SearxNGSearchToolConfig
+from akd.tools.search.code_search import (
+    CodeSearchToolInputSchema,
+    GitHubCodeSearchTool,
+    LocalRepoCodeSearchTool,
+    LocalRepoCodeSearchToolConfig,
+    SDECodeSearchTool,
+    SDECodeSearchToolConfig,
+)
+from akd.utils import google_drive_downloader
+
+# --- Service availability fixtures (check only when needed, cached per module) ---
+
+
+@pytest.fixture(scope="module")
+def requires_searxng():
+    """Skip test if SearxNG is unavailable. Only checks when a test uses this fixture."""
+    url = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
+    try:
+        response = requests.head(url, timeout=5)
+        if response.status_code >= 400:
+            pytest.skip(f"SearxNG returned {response.status_code}")
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        pytest.skip(f"SearxNG unreachable at {url}")
+
+
+@pytest.fixture(scope="module")
+def requires_sde_api():
+    """Skip test if SDE API is unavailable. Only checks when a test uses this fixture."""
+    url = "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
+    try:
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json"},
+            data=json.dumps({"page": 0, "pageSize": 1, "search_term": "test", "search_type": "keyword"}),
+            timeout=5,
+        )
+        if response.status_code >= 400:
+            pytest.skip(f"SDE API returned {response.status_code}")
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        pytest.skip(f"SDE API unreachable at {url}")
+
+
+"""Validate the output structure"""
+
+
+def validate_output_structure(output):
+    assert hasattr(output, "results")
+    assert isinstance(output.results, list)
+    assert len(output.results) > 0
+
+    for result in output.results:
+        assert hasattr(result, "url")
+        assert hasattr(result, "content")
+        assert result.content and result.content.strip()
+
+
+"""Initialize the tools"""
+
+
+@pytest.fixture
+def local_tool():
+    config = LocalRepoCodeSearchToolConfig(debug=True)
+    return LocalRepoCodeSearchTool(config=config)
+
+
+@pytest.fixture
+def github_tool():
+    config = SearxNGSearchToolConfig(score_cutoff=0.1)
+    return GitHubCodeSearchTool(config=config)
+
+
+@pytest.fixture
+def sde_tool():
+    config = SDECodeSearchToolConfig(debug=True)
+    return SDECodeSearchTool(config=config)
+
+
+@pytest.fixture
+def embedder():
+    model = os.getenv("CODE_SEARCH_MODEL", "thenlper/gte-large")
+    return Embedder(model_name=model)
+
+
+@pytest.fixture
+def code_search_agent():
+    config = CodeSearchAgentConfig(debug=True)
+    return CodeSearchAgent(config=config)
+
+
+"""Test1: Google Drive Link"""
+
+
+def test_google_drive_link():
+    config = LocalRepoCodeSearchToolConfig()
+    file_id = config.google_drive_file_id
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    response = requests.head(url, allow_redirects=True)
+    assert response.status_code == 200
+
+
+"""Test2: Data file validation"""
+
+
+@pytest.fixture
+def temp_data_file():
+    # Setup
+    temp_dir = tempfile.mkdtemp()
+    temp_file = os.path.join(temp_dir, "test_data.csv")
+    config = LocalRepoCodeSearchToolConfig()
+    google_drive_downloader(config.google_drive_file_id, temp_file, quiet=True)
+
+    yield temp_file
+
+    # Teardown
+    shutil.rmtree(temp_dir)
+
+
+def test_data_file_validation(temp_data_file):
+    df = pd.read_csv(temp_data_file)
+    assert df is not None
+    assert not df.empty
+    assert "embeddings" in df.columns
+
+
+"""Test3: Vector Embedding"""
+
+
+def test_vector_embedding(embedder):
+    texts = ["flood prediction", "earthquake classification"]
+    embeddings = embedder.embed_texts(texts)
+
+    assert isinstance(embeddings, np.ndarray)
+    assert embeddings.shape[0] == 2
+    assert embeddings.shape[1] == embedder.get_embedding_dimensions()
+    assert not np.isnan(embeddings).any()
+
+
+"""Test4: Local Repo Search"""
+
+
+@pytest.mark.asyncio
+async def test_local_repo_search(local_tool):
+    input_params = CodeSearchToolInputSchema(
+        queries=["landslide nepal"],
+        max_results=3,
+    )
+    # Input structure validation
+    assert input_params.queries == ["landslide nepal"]
+    assert input_params.max_results == 3
+
+    # Output structure validation
+    output = await local_tool._arun(input_params)
+    validate_output_structure(output)
+
+
+"""Test5: SearxNG server"""
+
+
+@pytest.mark.asyncio
+async def test_searxng_server(requires_searxng):
+    url = os.getenv("SEARXNG_BASE_URL", "http://localhost:8080")
+    response = requests.head(url, timeout=5)
+    assert response.status_code == 200
+    assert response.headers.get("Content-Type") == "text/html; charset=utf-8"
+
+
+"""Test6: GitHub Search"""
+
+
+@pytest.mark.asyncio
+async def test_github_code_search(github_tool, requires_searxng):
+    input_params = CodeSearchToolInputSchema(
+        queries=["flood detection"],
+        max_results=10,
+    )
+    # Input structure validation
+    assert input_params.queries == ["flood detection"]
+    assert input_params.max_results == 10
+
+    # Output structure validation
+    output = await github_tool.arun(input_params)
+    validate_output_structure(output)
+
+
+"""Test7: SDE API"""
+
+
+@pytest.mark.asyncio
+async def test_sde_api(requires_sde_api):
+    url = "https://d2kqty7z3q8ugg.cloudfront.net/api/code/search"
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    payload = {
+        "page": 0,
+        "pageSize": 1,
+        "search_term": "test",
+        "search_type": "keyword",
+    }
+
+    response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=5)
+    assert response.status_code == 200
+    data = response.json()
+    assert "documents" in data
+
+
+"""Test8: SDE Search"""
+
+
+@pytest.mark.asyncio
+async def test_sde_code_search(sde_tool, requires_sde_api):
+    input_params = CodeSearchToolInputSchema(
+        queries=["weather prediction"],
+        max_results=5,
+        search_mode="keyword",
+    )
+    # Input structure validation
+    assert input_params.queries == ["weather prediction"]
+    assert input_params.max_results == 5
+
+    # Output structure validation
+    output = await sde_tool._arun(input_params)
+    validate_output_structure(output)
+
+
+"""Test9: Code Search Agent"""
+
+
+@pytest.mark.asyncio
+async def test_code_search_agent(code_search_agent):
+    input_params = LitSearchAgentInputSchema(query="weather prediction", search_mode=SearchMode.FAST)
+    output = await code_search_agent.arun(input_params)
+    validate_output_structure(output)
+
+
+"""Test10: Code Search Agent Response Field"""
+
+
+@pytest.mark.asyncio
+async def test_code_search_agent_response_field():
+    """Test that _response field returns the same value as report field."""
+    from akd.agents.search._base import SearchAgentOutputSchema
+    from akd.structures import SearchResultItem
+
+    # Create a simple output schema instance
+    output = SearchAgentOutputSchema(
+        answer="Brief answer about weather prediction code",
+        report="This is a detailed report on weather prediction code repositories.",
+        results=[
+            SearchResultItem(
+                query="weather prediction",
+                url="http://github.com/example/weather",
+                title="Weather Prediction Code",
+                content="Code for weather forecasting",
+            ),
+        ],
+    )
+
+    # Test that _response field matches report field
+    assert hasattr(output, "_response")
+    assert output._response == output.report
+    assert output._response == "This is a detailed report on weather prediction code repositories."

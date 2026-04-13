@@ -1,201 +1,275 @@
-**Usage Guide for the UAH IMPACT Repository Template**
+# Accelerated Knowledge Discovery Core (akd-core)
+
+A human-centric multi-agent system (MAS) framework for scientific discovery — providing base classes, streaming, human-in-the-loop (HITL), guardrails, and out-of-box agents and tools.
+
+## Ecosystem
+
+akd-core is the foundation layer that drives the entire AKD ecosystem:
+
+- **akd-core** (this repo) — base classes, streaming infrastructure, HITL, guardrails, and out-of-box agents/tools for scientific discovery
+- **[akd-framework](https://github.com/NASA-IMPACT/akd-framework/)** — the AKD backend application, built on akd-core
+- **[akd-ext](https://github.com/NASA-IMPACT/akd-ext)** — community extensions that use akd-core's base agents and tools to build domain-specific capabilities
+
+akd-core is standalone and pip-installable. Everything downstream inherits its streaming, HITL, and guardrail infrastructure.
+
+## Core Philosophy
+
+- **Human-in-the-loop control** — researchers direct the discovery process; AI augments, never replaces
+- **Scientific integrity** — deep attribution, evidence validation, and rigorous guardrails
+- **Transparent and reproducible** — every workflow is a shareable, inspectable artifact
+- **Open collaboration** — community-driven framework for shared scientific advancement
+
+See [Design Philosophy](docs/design_philosophy.md) for the full set of principles and golden rules.
+
+## What You Get
+
+- **Async-first** — all agents and tools implement `async def _arun()` with full `astream()` support
+- **Streaming-native** — 11 typed event types covering tokens, reasoning, tool calls, and HITL
+- **Type-safe** — Pydantic v2 schemas with required docstrings for all inputs and outputs
+- **Composable** — tools combine via Composite patterns (search, resolvers, guardrails)
+- **HITL built-in** — pause, save state, get human input, resume seamlessly
+- **Guardrails** — pluggable safety layer with decorator API
+- **LLM-agnostic** — works with any provider via LiteLLM (OpenAI, Anthropic, Ollama, etc.)
+
+```python
+from akd.agents import BaseAgent
+
+agent = BaseAgent(config={"model_name": "gpt-4o-mini"})
+async for event in agent.astream(input_params):
+    match event.event_type:
+        case "streaming": print(event.token, end="")
+        case "tool_calling": print(f"Calling {event.tool_name}...")
+        case "human_input_required": response = input(event.human_prompt)
+        case "completed": result = event.output
+```
+
+## Streaming
+
+Everything in akd-core is a stream of typed events. Agents emit `StreamEvent` objects as they execute:
+
+| Event | Description |
+|-------|-------------|
+| `STARTING` | Agent/tool begins execution |
+| `RUNNING` | Progress update |
+| `STREAMING` | Raw LLM tokens as they arrive |
+| `THINKING` | Reasoning tokens (Claude extended thinking, o1/o3) |
+| `PARTIAL` | Partial structured output as it streams |
+| `TOOL_CALLING` | Agent invokes a tool |
+| `TOOL_RESULT` | Tool returns its result |
+| `HUMAN_INPUT_REQUIRED` | Agent needs human input — execution pauses |
+| `HUMAN_RESPONSE` | Resumed with human input |
+| `COMPLETED` | Execution finished successfully |
+| `FAILED` | Execution failed with error details |
+
+Each event carries typed data (e.g., `CompletedEventData[T]` includes the output, `FailedEventData` includes the error) and a `run_context` for execution state.
+
+## Human-in-the-Loop
+
+HITL is a first-class concept, not an afterthought. The `HumanTool` enables any agent to pause execution, request human input, and resume:
+
+1. Agent calls `HumanTool` during its tool loop
+2. Framework emits `HUMAN_INPUT_REQUIRED` event with the question and full message history
+3. Caller saves state and collects human response
+4. Resume with `RunContext(messages=saved_history, human_response=HumanResponse(...))`
+5. Agent continues exactly where it left off
+
+This works across any transport — REST APIs, WebSockets, CLI — because the pause/resume is state-based, not connection-based.
+
+## Out-of-Box Agents
+
+| Category | Agent | Description |
+|----------|-------|-------------|
+| **Research** | `DeepLitSearchAgent` | Multi-agent deep literature search with triage, clarification, and synthesis |
+| | `ControlledSearchAgent` | Controlled search with configurable parameters |
+| | `AspectSearchAgent` | Interview-pattern multi-aspect search |
+| | `CodeSearchAgent` | Code repository search |
+| | `QuestionAnsweringAgent` | QA over retrieved content |
+| **Analysis** | `GapAgent` | Research gap identification via knowledge graphs |
+| | `EstimationExtractionAgent` | Intent-based data extraction |
+| | `StormAgent` | Structured narrative generation |
+| **Utility** | `IntentAgent` | User intent classification |
+| | `QueryAgent` | Query reformulation and refinement |
+| | `FollowUpQueryAgent` | Follow-up query generation |
+| | `RelevancyAgent` | Binary relevance classification |
+| | `MultiRubricRelevancyAgent` | Multi-dimensional relevance scoring |
+| **Base** | `BaseAgent` | Core agent with streaming, tool calling, HITL, message trimming |
+| | `LiteLLMInstructorBaseAgent` | Structured Pydantic output via Instructor |
 
-The repository-template repository serves as a baseline for establishing a new repository for projects at IMPACT. It employs Gitflow principles, infrastructure as code via AWS CDK, short lived credentials using AWS IAM Identity Center and OIDC, rule enforcement through CloudFormation Guard, and a CI/CD pipeline with GitHub Actions. The goal with this repository is to standardize deployments across IMPACT making it easier to onboard new members to a project, review project documentation, and trace AWS resources. 
+## Out-of-Box Tools
 
-AWS restrictions and policies are as follows: All resources must be tagged with a “project” tag with the name of the project and “contact” with the email of someone who can be reached with questions about the resource. Beyond this there are no additional restrictions aside from those added by the separate permission sets outlined in the ‘UAH IMPACT Roles’
+| Category | Tool | Description |
+|----------|------|-------------|
+| **Search** | `SearxNGSearchTool` | Web search via SearxNG |
+| | `SerperSearchTool` | Web search via Serper API |
+| | `SemanticScholarSearchTool` | Academic paper search |
+| | `CompositeSearchTool` | Multi-source search (combines backends) |
+| | `SearchPipeline` | Full pipeline: search + resolve + scrape |
+| **Scraping** | `WebScraper` | Web content extraction |
+| | `PDFScraper` | PDF content extraction |
+| | `DoclingScraper` | Advanced document parsing (tables, structure) |
+| **Resolvers** | `CrossRefDoiResolver` | DOI resolution via CrossRef |
+| | `ArxivResolver` | arXiv paper lookup |
+| | `ADSResolver` | NASA ADS paper lookup |
+| | `UnpaywallResolver` | Open access paper lookup |
+| | `CompositeResolver` | Chain multiple resolvers |
+| **Evaluation** | `RelevancyTool` | Content relevance scoring |
+| | `RerankerTool` | Result reranking |
+| | `SourceValidator` | Source credibility assessment |
+| **Special** | `HumanTool` | Human-in-the-loop interaction |
+| | `OutputTool` | Structured output capture |
 
-**The CICD (Continuous Integration / Continuous Deployment) Pipeline**
+## Guardrails
 
-This template includes a cicd.yml file in the .github/workflows folder that servers as the means for deploying infrastructure required for NASA-IMPACT projects. It is designed to take advantage of AWS's CDK and CloudFormation. As part of this workflow several steps take place. See below for an explanation of each.
+akd-core includes a pluggable guardrail system with a unified `GuardrailProtocol` interface:
 
-**Gitflow enforcer:**
+**Providers:**
+- `GraniteGuardianTool` — IBM Granite Guardian model (local or cloud)
+- `RiskAgent` — LLM-based risk assessment with configurable criteria
+- `CompositeGuardrail` — chain multiple providers (AND, OR, CONSENSUS modes)
 
-This enforces Gitflow principles which is a branching model that involves the use of feature branches and multiple primary branches. For more information on Gitflow see this.
+**Risk categories:** Granite built-in categories, Atlas dynamic taxonomy, and science-specific risks (misinformation, bias, attribution).
 
-**Set environment:**
+```python
+from akd.guardrails import guardrail
+from akd.guardrails.providers import GraniteGuardianTool
 
-This sets the environment based on the current branch and is used throughout the action. Make sure that you have your environment variables and secrets populated properly.
+@guardrail(input_guardrail=GraniteGuardianTool(), fail_on_input_risk=True)
+class SafeAgent(BaseAgent):
+    ...
+```
 
-**CFN validation:**
+## Workflow Planner
 
-This step checks your CloudFormation template to make sure that the resources created by your CDK stack are in compliance with IMPACT rules. This is accomplished using CloudFormation Guard and a centrally managed rules file. If you would like to independently test your CloudFormation template please view “Checking CloudFormation templates locally” below.. This step is designed to catch any incompliant resources before they are deployed in the UAH AWS environment. Skipping this step with non-compliant resources will still trigger the service control and tagging policies in the UAH environment.
+The planner converts natural language research goals into executable multi-agent workflows:
 
-Currently the requirements are very simple: Tag all resources with a “project” tag with the name of the project and “contact” with the email of someone who can be reached with questions about the resource. This can be managed by tagging the resources individually in CDK or more easily by using Tags.of in the app.py file as shown below. This will tag all resources created by the stack with the tags you define. 
+```python
+from akd.planner.llm_planner import create_planner
 
-![alt_text](images/image1.png "image_tooltip")
+planner = await create_planner()
+session = await planner.plan_workflow("Find papers on AlphaFold and identify research gaps")
+response = await session.start()
 
+while not response.ready_to_generate:
+    user_input = input(f"{response.message}\nYour response: ")
+    response = await session.respond(user_input)
 
-**Deploy:**
+workflow = await session.generate_workflow()
+```
 
-This step takes the validated CDK stack/CloudFormation template, assumes the appropriate role based on the current branch/environment, and deploys the stack to AWS.
+The planner uses an `AgentRegistry` with auto-discovery, field mapping between agent inputs/outputs, and generates executable `WorkflowFormat` definitions.
 
-**File Structure**
+## Extending akd-core
 
-This repository template contains the following files:
+akd-core is designed to be extended. Every agent and tool follows a consistent 4-part pattern:
 
+1. **InputSchema** — Pydantic model defining what goes in (requires docstring)
+2. **OutputSchema** — Pydantic model defining what comes out (requires docstring)
+3. **Config** — `BaseAgentConfig` or `BaseToolConfig` with settings
+4. **Implementation** — subclass `BaseAgent[In, Out]` or `BaseTool[In, Out]`, implement `_arun()`
 
+```python
+from akd._base import InputSchema, OutputSchema
+from akd.agents._base import AKDAgent, BaseAgentConfig
 
-* A .github/workflows folder
-    * This contains the CICD workflow file that is outline below in “The CICD (Continuous Integration / Continuous Deployment) Pipeline”
-* A README with a summarized version of this guide
-* A requirements.txt file with the minimum required packages for the CICD pipeline to work properly.
+class MyInput(InputSchema):
+    """What goes in."""
+    query: str
 
-In using this template you are free to add as many files and folders as are necessary for your project. As this template is built around the use of CDK you will need to create a folder for your CDK application and its files which is explained below under “Preparing your CDK Stack.”
+class MyOutput(OutputSchema):
+    """What comes out."""
+    answer: str
 
-**Creating a repository from this template**
+class MyAgent(AKDAgent[MyInput, MyOutput]):
+    input_schema = MyInput
+    output_schema = MyOutput
 
+    async def _arun(self, params: MyInput, run_context=None, **kwargs) -> MyOutput:
+        ...  # your logic here
+```
 
+`AKDAgent` is the default batteries-included agent — it comes with LiteLLM + Instructor, ReAct tool calling, HITL, streaming, and output routing. Your agent inherits all of it. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide with tool examples, guardrail integration, and planner registration.
 
-* Above the file list, click Use this template and select Create a new repository.
+This is exactly how [akd-ext](https://github.com/NASA-IMPACT/akd-ext) builds on akd-core — importing base classes and creating domain-specific agents and tools.
 
-![alt_text](images/image2.png "image_tooltip")
+## Quick Start
 
+### Prerequisites
 
-* From the Owner drop-down menu select NASA-IMPACT and give you repo a name
+- Python 3.12+
+- `uv` package manager
 
+### Installation
 
-![alt_text](images/image3.png "image_tooltip")
+**As a dependency** (for akd-ext, akd-framework, or your own project):
 
+```bash
+uv pip install "akd @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop"
+```
 
-* (Note: Name the repo using the format project_team-application in lower case (eg. admg-backend))
-* Ensure that Include all branches is selected to ensure all branches and directories are copied
+Or add to your `pyproject.toml`:
 
+```toml
+dependencies = [
+    "akd @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop",
+]
+```
 
-![alt_text](images/image4.png "image_tooltip")
+**For local development:**
 
+```bash
+# Create and activate virtual environment
+uv venv --python 3.12
+source .venv/bin/activate
 
-* Click Create repository from template
+# Install dependencies
+uv sync
 
-**Setting the branch protection rules**
+# For development (includes testing tools)
+uv sync --extra dev
 
-Branch protections will not automatically be copied from the template. Ensure that you enable the following settings for the staging and production branches by going to** Settings** at the top of the newly created repository, clicking **Branches **under** **“code and automation,” and then **Add branch protection rule.**
+# For local development (includes marimo and other local tools)
+uv sync --extra dev --extra local
 
+# For ML features (includes sentence-transformers, docling, deepeval)
+uv sync --extra ml
 
+# Setup environment variables
+cp .env.example .env
+# Edit .env with your API keys
+```
 
-![alt_text](images/image5.png "image_tooltip")
+### Usage
 
+See the [notebooks](notebooks) directory for examples.
 
-Make sure the following options are selected
+## Project Structure
 
+```
+akd/
+  _base/         # AbstractBase, schemas, streaming, HITL, tool calling, sessions
+  agents/        # Out-of-box agents (search, analysis, utility)
+  tools/         # Out-of-box tools (search, scraping, resolvers, evaluation)
+  guardrails/    # GuardrailProtocol, providers, risk categories, decorators
+  planner/       # LLM planner, agent registry, workflow builder
+  configs/       # Project configuration and prompts
 
+docs/            # Design philosophy and specs
+notebooks/       # Usage examples (Jupyter, Marimo)
+scripts/         # Utility scripts and demos
+tests/           # Test suite (mirrors akd/ structure)
+```
 
-* Add "*" to apply the protection rule to all branches in the repository.
-* Require a pull request before merging
-* Require approvals
+## Roadmap
 
-![alt_text](images/image6.png "image_tooltip")
+These features are part of the design vision but not yet fully implemented:
 
+- **Conflict Agent** — a dedicated agent that specifically searches for contradictory evidence and conflicting findings across sources. Currently, conflict detection is a design principle (see [Design Philosophy](docs/design_philosophy.md)) but lacks a standalone agent implementation.
+- **Full Attribution Chain** — end-to-end traceability from final claims back to specific source sentences. Partial support exists today: `GapAgent` provides `attributed_source_answers` and the guardrail system includes an `ATTRIBUTION` risk category.
 
-* Do not allow bypassing the above settings
+## Contributing
 
-![alt_text](images/image7.png "image_tooltip")
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, style guide, branch conventions, and how to create agents and tools.
 
+## License
 
-* Your branch protection rules screen should now look like this:
-
-![alt_text](images/image8.png "image_tooltip")
-
-
-
-**Preparing your CDK Stack**
-
-This repository is built around using AWS’s IAC solution, CDK (for those unfamiliar with CDK see AWS CDK Workshop: [https://cdkworkshop.com/](https://cdkworkshop.com/)). **Note that the UAH AWS Organization accounts are already bootstrapped and ready to work with CDK v2 so you will not need to perform that step.**
-
-Once your branch protections are set up you can begin setting up the necessary directories for CDK. It is recommended that you make a separate directory for this and run “cdk init sample-app --language=&lt;cdk compatible language of choice>” 
-
-**Populating the github environments**
-
-All secrets and variables will be handled using github environment secrets and variables which are not copied from the template. These must be set up in the repository Settings by clicking **Environments** under "Code and automation". From here create a "production", "staging", and "development" environment to correspond with the three primary branches. Your environments page should look like the following:
-
-![alt_text](images/image9.png "image_tooltip")
-
-
-At minimum the following secrets and variables are required:
-
-
-
-* Secret 1: (In each environment)
-    * DEPLOYMENT_ROLE_ARN
-        * The arn of the role for the environment in the form arn:aws:iam::&lt;AWS_ACCOUNT_ID>:role/&lt;role_name>
-        * Note: These roles have been standardized across the UAH IMPACT environments. See the “UAH IMPACT Roles” section for information about each
-* Variable 1:
-    * AWS_REGION
-        * The region you wish to deploy your stack to in a form like “us-west-2”
-* Variable 2:
-    * CDK_WORKING_DIRECTORY
-        * The path to your CDK directory containing the app.py file
-* Variable 3:
-    * PATH_TO_CFN_TEMPLATE
-        * The path to your CDK template .json file
-
-Outside of these required secrets and variables you are free to store any additional secrets or variables required by your application.
-
-Below are some examples of what items should be stored in secrets vs variables.
-
-**Examples of items to store as github environment secrets:**
-
-
-
-* AWS Account IDs
-* AWS Role ARNs
-* VPC IDs
-* Cognito Secrets
-* Security Group IDs
-* Any Sensitive Data (If you aren't sure, store it as a secret)
-
-**Examples of items to store as github environment variables:**
-
-
-
-* File Paths
-* Configuration Parameters
-* Version Information
-* URLs and Endpoints
-* Feature Flags
-* Any Non-Sensitive Data
-
-**UAH IMPACT Roles**
-
-The UAH IMPACT AWS Organizations have been pre-configured with the following roles:
-
-
-
-* admin-oidc
-    * This role has administrative rights and is intended to be used with the development branch and environment for testing purposes.
-    * This is a very open role and should be used cautiously.
-    * [https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) 
-* mcp-tenantDeveloper-oidc
-    * This role mirrors the permissions boundaries of the MCP LOC 30 environment and is intended to be used with the staging branch and environment to test that the application can be deployed in the MCP LOC 30 environment.
-    * See here for the current restrictions: [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp-tenantDeveloper.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp-tenantDeveloper.json) 
-* mcp-tenantOperator-oidc
-    * This role mirrors the permissions boundaries of the MCP LOC 40 environment which includes additional permissions from the LOC 30 environment and is intended to be used with the staging branch and environment to test that the application can be deployed in the MCP LOC 40 environment.
-    * See here for the current restrictions: [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp_tenantOperator-APIG.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/mcp_tenantOperator-APIG.json) 
-* smce-ProjectAdmins-oidc
-    * This role has Admin permissions that are only restricted by the permission sets in the SMCE environment and is intended to be used with the staging branch and environment to test that your application can be deployed in the SMCE environment.
-    * The following 4 permission sets limit the permissions of the Admin role:
-        * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Disable_Non-US_Regions.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Disable_Non-US_Regions.json)
-        * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_MFA_ForceEnable.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_MFA_ForceEnable.json)
-        * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_PreserveRestrictions.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_PreserveRestrictions.json)
-        * [https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Training_S3ReadAccess.json](https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/organization_policies_oidc_roles/organization_policies_oidc_roles/policies/SMCE_Training_S3ReadAccess.json) 
-* smce-ProjectPowerUsers-oidc
-    * This role is similar to the pervious SMCE role but instead is granted PowerUser permissions that are then restricted by the same 4 permission sets as the smce Admin role above
-
-**Checking CloudFormation templates locally**
-
-It is recommended that while you develop your CDK stack/CloudFormation template that you run it against the UAH IMPACT environment rules to ensure that it is still in compliance. This can be done locally by doing the following:
-
-
-
-* Download and install CloudFormation Guard following these instructions.
-* Download the central rules file from here: https://github.com/NASA-IMPACT/Lessons_Learned/blob/main/cfn-guard/enforce-tags.guard.
-* Synthesize your CDK stack using aws cdk synth
-* Run the following command:
-* cfn-guard validate \
-
---data &lt;path/to/your/template> \
-
---rules &lt;path/to/UAH/rules/file> \
-
---show-summary pass,fail \
-
---type CFNtemplate
+Apache License 2.0 — see [LICENSE](LICENSE).

@@ -1,0 +1,133 @@
+[project]
+name = "akd"
+version = "0.1.0"
+description = "Human-centric Multi-Agent System (MAS) framework for scientific discovery"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [
+    {name = "Nish", email = "np0069@uah.edu"},
+    {name = "Kumar", email = "mr0051@uah.edu"}
+]
+keywords = ["scientific-discovery", "multi-agent", "research", "literature-search", "ai", "accelerated-knowledge-discovery"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "crawl4ai>=0.7.6",
+    "duckduckgo-search>=8.0.1",
+    "gdown>=5.2.0",
+    "instructor==1.13.0",
+    "langchain-community>=0.3.24",
+    "langchain-core>=0.3.48",
+    "langchain-google-community>=2.0.7",
+    "langchain-huggingface>=0.2.0",
+    "langgraph==1.0.3",
+    "loguru>=0.7.3",
+    "lxml-html-clean>=0.4.1",
+    "markdownify>=1.1.0",
+    "openai>=1.75.0",
+    "pydantic>=2.10.3",
+    "pydantic-settings>=2.9.1",
+    "pymupdf>=1.25.4",
+    "readability-lxml>=0.8.1",
+    "requests>=2.32.3",
+    "wikipedia>=1.4.0",
+    "langchain-openai>=0.3.27",
+    "tenacity>=9.1.2",
+    "httpx>=0.28.1",
+    "ollama>=0.5.1",
+    "tiktoken>=0.9.0",
+    "rapidfuzz>=3.13.0",
+    "undetected-chromedriver>=3.5.5",
+    "jsonpath-ng>=1.6.1",
+    "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
+    "litellm>=1.81.0",
+    "dateparser>=1.2.2",
+    "pyzmq>=27.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/NASA-IMPACT/accelerated-discovery"
+Repository = "https://github.com/NASA-IMPACT/accelerated-discovery"
+Documentation = "https://github.com/NASA-IMPACT/accelerated-discovery/blob/main/README.md"
+Issues = "https://github.com/NASA-IMPACT/accelerated-discovery/issues"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["akd*"]
+exclude = ["tests*", "examples*", "scripts*", "notebooks*"]
+
+[tool.setuptools.package-data]
+"akd.guardrails.categories" = ["*.yaml"]
+
+# Pytest configuration
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "-n",
+    "auto",
+    "--dist=loadfile",
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+    "--cov=akd",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow tests",
+    "requires_ml: Tests requiring ML dependencies (sentence-transformers, etc.)",
+]
+
+# Optional dependencies (extras)
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.0.0",
+    "pytest-xdist>=3.5.0",
+    "pre-commit>=4.2.0",
+    "memray>=1.18.0",
+    "scalene>=1.5.55",
+]
+local = [
+    "marimo==0.15.0",
+    "jupyter",
+    "ipykernel>=6.30.0",
+    "ipywidgets>=8.1.7",
+]
+ml = [
+    "pandas>=2.3.1",
+    "sentence-transformers>=5.0.0",
+    "docling>=2.37.0",
+    "deepeval>=3.4.0",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["F841"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.format]
+# Ensure LF line endings across platforms; used by Ruff formatter on save.
+line-ending = "lf"
+docstring-code-line-length = 120
+quote-style = "double"

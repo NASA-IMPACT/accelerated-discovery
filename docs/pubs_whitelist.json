@@ -1,0 +1,3214 @@
+{
+  "metadata": {
+    "source_file": "docs/Pubs-Whitelist.xlsx",
+    "total_sheets": 6,
+    "sheet_names": [
+      "ES",
+      "Helio",
+      "Astro",
+      "planet",
+      "Bio",
+      "non-Peer-Rev"
+    ],
+    "expected_columns": [
+      "Journal Name",
+      "Publisher / Society",
+      "Primary Focus Area",
+      "Open Access Status",
+      "Link to Journal Homepage"
+    ]
+  },
+  "data": {
+    "ES": {
+      "sheet_info": {
+        "name": "ES",
+        "total_journals": 236,
+        "columns": [
+          "Journal Name",
+          "Publisher / Society",
+          "Primary Focus Area",
+          "Open Access Status",
+          "Link to Journal Homepage"
+        ]
+      },
+      "journals": [
+        {
+          "Journal Name": "AGU Advances",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Cross-disciplinary, high-impact research articles across all Earth and space sciences 24",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/2576604x"
+        },
+        {
+          "Journal Name": "Community Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Equitable collaboration of science aimed at outcomes for the benefit of communities 30",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/26929430"
+        },
+        {
+          "Journal Name": "Earth and Space Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "All Earth, planetary, space sciences; focus on data sets, methods, instruments, sensors, algorithms, applications 25",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/23335084"
+        },
+        {
+          "Journal Name": "Earth's Future",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Transdisciplinary research on the state of the planet, sustainability, Anthropocene science, future predictions 30",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/23284277"
+        },
+        {
+          "Journal Name": "Geochemistry, Geophysics, Geosystems (G-Cubed)",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Earth and planetary processes, understanding the Earth as a system 22",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15252027"
+        },
+        {
+          "Journal Name": "GeoHealth",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Intersections of Earth/environmental sciences and health sciences 30",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/24711403"
+        },
+        {
+          "Journal Name": "Geophysical Research Letters (GRL)",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "High-impact, timely communications on major advances across all major geoscience disciplines 26",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19448007"
+        },
+        {
+          "Journal Name": "JGR: Machine Learning and Computation",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Machine learning and computational methods applied to Journal of Geophysical Research domains 1",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/27691904"
+        },
+        {
+          "Journal Name": "Journal of Advances in Modeling Earth Systems (JAMES)",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Modeling of the Earth system and its components 1",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19422466"
+        },
+        {
+          "Journal Name": "Perspectives of Earth and Space Scientists",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Unique perspectives, personal stories, historical accounts from Earth and space scientists 1",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/2637701X"
+        },
+        {
+          "Journal Name": "Space Weather",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Science and applications related to space weather phenomena and impacts 1",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15427390"
+        },
+        {
+          "Journal Name": "Water Resources Research",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Hydrology and water resources across disciplines 1",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19447973"
+        },
+        {
+          "Journal Name": "Global Biogeochemical Cycles",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Biogeochemical cycles and interactions at regional or global scales 23",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449224"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Atmospheres",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Physics, chemistry, and dynamics of Earth's and other planets' atmospheres 32",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21698996"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Biogeosciences",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Interactions between biological, geological, and chemical processes in the Earth system 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21698961"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Earth Surface",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Physical, chemical, and biological processes shaping Earth's surface and landscapes 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699011"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Oceans",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Physical, chemical, biological oceanography; ocean-atmosphere and ocean-bottom interactions 32",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699275"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Planets",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Geology, geophysics, geochemistry, atmospheres, and dynamics of planets, satellites, and small bodies 32",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699097"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Solid Earth",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Physics and chemistry of the solid Earth, including seismology, geodynamics, rock physics, geomagnetism 27",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699313"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Space Physics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Aeronomy, magnetospheric physics, planetary magnetospheres, space plasmas, solar and heliospheric physics 26",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699402"
+        },
+        {
+          "Journal Name": "Paleoceanography and Paleoclimatology",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Study of past oceans and climates using geological records, proxies, and modeling 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/25724517"
+        },
+        {
+          "Journal Name": "Radio Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Electromagnetic theory, wave propagation, radio astronomy, remote sensing using radio waves 31",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/1944799X"
+        },
+        {
+          "Journal Name": "Reviews of Geophysics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Authoritative, comprehensive reviews covering recent progress in all areas of Earth and space sciences 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449208"
+        },
+        {
+          "Journal Name": "Tectonics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Structure, origin, and evolution of the lithosphere, emphasizing deformation processes 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449194"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Atmospheres",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Atmospheric properties, processes, interactions with Earth system components, climate variability/change 11",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21698996"
+        },
+        {
+          "Journal Name": "Geophysical Research Letters (GRL)",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "High-impact, innovative, timely communications-length articles on major advances across geoscience disciplines 15",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19448007"
+        },
+        {
+          "Journal Name": "Reviews of Geophysics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Comprehensive review articles across Earth and space sciences; invitation-only but suggestions welcome 48",
+          "Open Access Status": "Subscription/Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449208"
+        },
+        {
+          "Journal Name": "Journal of Advances in Modeling Earth Systems (JAMES)",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Advancing development/application of models (atmosphere, ocean, land, cryosphere), coupling, technical advances 52",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19422466"
+        },
+        {
+          "Journal Name": "Earth's Future",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "State of the planet, sustainable/resilient societies, Anthropocene science, future predictions (transdisciplinary) 15",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/23284277"
+        },
+        {
+          "Journal Name": "Earth and Space Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Key data sets, observations, methods, instruments, sensors, algorithms across Earth, planetary, space sciences 15",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/23335084"
+        },
+        {
+          "Journal Name": "Water Resources Research (WRR)",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Movement, storage, quality of water; water resources management and policy 15",
+          "Open Access Status": "Yes (since 2024)",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19447973"
+        },
+        {
+          "Journal Name": "Space Weather",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Understanding and forecasting space weather origins, propagation, interactions, impacts on technical systems 55",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15427390"
+        },
+        {
+          "Journal Name": "AGU Advances",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Cross-disciplinary, high-impact research articles across all Earth and space sciences 15",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/2576604X"
+        },
+        {
+          "Journal Name": "GeoHealth",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Intersections of Earth/environmental sciences and health sciences (transdisciplinary) 15",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/24711403"
+        },
+        {
+          "Journal Name": "Global Biogeochemical Cycles (GBC)",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Biogeochemical interactions with fundamental implications for regional or global scale processes 15",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449224"
+        },
+        {
+          "Journal Name": "Advances in Statistical Climatology, Meteorology and Oceanography (ASCMO)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Interface of statistics and atmospheric/oceanic sciences 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://advances-statistical-climatology-meteorology-oceanography.net/"
+        },
+        {
+          "Journal Name": "Annales Geophysicae (ANGEO)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Solar-terrestrial sciences, planetary sciences, space weather, ionosphere, magnetosphere 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.annales-geophysicae.net/"
+        },
+        {
+          "Journal Name": "Atmospheric Chemistry and Physics (ACP)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Earth's atmosphere, underlying chemical and physical processes, climate implications 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.atmospheric-chemistry-and-physics.net/"
+        },
+        {
+          "Journal Name": "Atmospheric Measurement Techniques (AMT)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Remote sensing, in situ, laboratory measurement techniques for atmospheric constituents/properties 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.atmospheric-measurement-techniques.net/"
+        },
+        {
+          "Journal Name": "Biogeosciences (BG)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Interactions between biological, chemical, physical processes and geosphere, hydrosphere, atmosphere 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.biogeosciences.net/"
+        },
+        {
+          "Journal Name": "Climate of the Past (CP)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Climate history of Earth, paleoclimatology across all timescales 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.climate-of-the-past.net/"
+        },
+        {
+          "Journal Name": "Earth Surface Dynamics (ESurf)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Physical, chemical, biological processes shaping Earth's surface 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.earth-surface-dynamics.net/"
+        },
+        {
+          "Journal Name": "Earth System Dynamics (ESD)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Earth system functioning, interactions between spheres, global change 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.earth-system-dynamics.net/"
+        },
+        {
+          "Journal Name": "Earth System Science Data (ESSD)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Publication of original research data(sets), furthering data reuse in Earth system sciences 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.earth-system-science-data.net/"
+        },
+        {
+          "Journal Name": "Geochronology (GChron)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Methods and applications of dating geological and environmental materials/processes 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.geochronology.net/"
+        },
+        {
+          "Journal Name": "Geoscience Communication (GC)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Outreach, public engagement, knowledge exchange, communication of geoscience 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.geoscience-communication.net/"
+        },
+        {
+          "Journal Name": "Geoscientific Instrumentation, Methods and Data Systems (GI)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Geoscientific instruments, methods, data systems, synergy between science and technology 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.geoscientific-instrumentation-methods-and-data-systems.net/"
+        },
+        {
+          "Journal Name": "Geoscientific Model Development (GMD)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Description, development, evaluation of numerical models of the Earth system and components 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.geoscientific-model-development.net/"
+        },
+        {
+          "Journal Name": "History of Geo- and Space Sciences (HGSS)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "History of geosciences and space sciences 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.history-of-geo-and-space-sciences.net/"
+        },
+        {
+          "Journal Name": "Hydrology and Earth System Sciences (HESS)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Hydrology within an Earth system science context, interactions of water with earth, ecosystems, humans 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.hydrology-and-earth-system-sciences.net/"
+        },
+        {
+          "Journal Name": "Natural Hazards and Earth System Sciences (NHESS)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Research on natural hazards, their consequences, and mitigation 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.natural-hazards-and-earth-system-sciences.net/"
+        },
+        {
+          "Journal Name": "Nonlinear Processes in Geophysics (NPG)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Nonlinearity in Earth, atmospheric, planetary sciences; analysis methods for models and data 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nonlinear-processes-in-geophysics.net/"
+        },
+        {
+          "Journal Name": "Ocean Science (OS)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "All aspects of oceanography: physical, chemical, biological processes, climate interactions 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.ocean-science.net/"
+        },
+        {
+          "Journal Name": "SOIL",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Soil system sciences, interface between atmosphere, lithosphere, hydrosphere, biosphere 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.soil-journal.net/"
+        },
+        {
+          "Journal Name": "Solid Earth (SE)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Composition, structure, dynamics of the solid Earth from surface to core 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.solid-earth.net/"
+        },
+        {
+          "Journal Name": "The Cryosphere (TC)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "All aspects of frozen water and ground on Earth and other planetary bodies 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.the-cryosphere.net/"
+        },
+        {
+          "Journal Name": "Weather and Climate Dynamics (WCD)",
+          "Publisher / Society": "EGU / Copernicus",
+          "Primary Focus Area": "Dynamical processes in the atmosphere from weather to climate scales 40",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.weather-climate-dynamics.net/"
+        },
+        {
+          "Journal Name": "Atmospheric Chemistry and Physics (ACP)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Earth's atmosphere and underlying chemical/physical processes (troposphere, stratosphere, mesosphere), climate implications 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.atmospheric-chemistry-and-physics.net/"
+        },
+        {
+          "Journal Name": "Atmospheric Measurement Techniques (AMT)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Advances in remote sensing, in situ, laboratory measurement techniques for atmospheric constituents/properties 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.atmospheric-measurement-techniques.net/"
+        },
+        {
+          "Journal Name": "Climate of the Past (CP)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Climate history of Earth, all temporal scales (geologic to multidecadal), climate change/variability 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.climate-of-the-past.net/"
+        },
+        {
+          "Journal Name": "Earth System Dynamics (ESD)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Functioning of the Earth system, global change, interdisciplinary views, interactions between multiple spheres 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.earth-system-dynamics.net/"
+        },
+        {
+          "Journal Name": "Geoscientific Model Development (GMD)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Description, development, evaluation of numerical models of the Earth System and its components 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.geoscientific-model-development.net/"
+        },
+        {
+          "Journal Name": "Natural Hazards and Earth System Sciences (NHESS)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Interdisciplinary research on natural hazards and their consequences 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.natural-hazards-and-earth-system-sciences.net/"
+        },
+        {
+          "Journal Name": "Nonlinear Processes in Geophysics (NPG)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Nonlinearity research in all branches of Earth, atmospheric, planetary sciences; application of nonlinear methods 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nonlinear-processes-in-geophysics.net/"
+        },
+        {
+          "Journal Name": "Weather and Climate Dynamics (WCD)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Dynamical processes in the atmosphere, seamless perspective from weather to climate scales 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.weather-climate-dynamics.net/"
+        },
+        {
+          "Journal Name": "Annales Geophysicae (ANGEO)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Solar–terrestrial & planetary sciences, space weather, ionosphere, atmosphere, magnetosphere 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.annales-geophysicae.net/"
+        },
+        {
+          "Journal Name": "Ocean Science (OS)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "All aspects of ocean science (physical, biogeochemical, biological, ecosystem), ocean-climate interactions 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.ocean-science.net/"
+        },
+        {
+          "Journal Name": "The Cryosphere (TC)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "All aspects of frozen water and ground on Earth and other planetary bodies (ice sheets, glaciers, permafrost, snow, sea ice) 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.the-cryosphere.net/"
+        },
+        {
+          "Journal Name": "Biogeosciences (BG)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Interactions between biological, chemical, physical processes in terrestrial/extraterrestrial life with geosphere, hydrosphere, atmosphere 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.biogeosciences.net/"
+        },
+        {
+          "Journal Name": "Hydrology and Earth System Sciences (HESS)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Original research in hydrology within a holistic Earth system science context, water-earth-ecosystem-human interactions 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.hydrology-and-earth-system-sciences.net/"
+        },
+        {
+          "Journal Name": "Advances in Statistical Climatology, Meteorology and Oceanography (ASCMO)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Interface of statistics and atmospheric/oceanic sciences 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://advances-statistical-climatology-meteorology-oceanography.net/"
+        },
+        {
+          "Journal Name": "Earth System Science Data (ESSD)",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Publication of articles on original research data(sets), furthering reuse of high-quality Earth system science data 18",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.earth-system-science-data.net/"
+        },
+        {
+          "Journal Name": "Applied Geochemistry",
+          "Publisher / Society": "Elsevier (Official journal of IAGC)",
+          "Primary Focus Area": "Applications of geochemistry (inorganic, organic, isotope) to environmental, hydrogeological, exploration problems 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/applied-geochemistry"
+        },
+        {
+          "Journal Name": "Chemical Geology",
+          "Publisher / Society": "Elsevier (Affiliated with EAG)",
+          "Primary Focus Area": "Isotopic/elemental geochemistry, geochronology, chemical processes in petrology, fluid-rock interaction, biogeochemistry 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/chemical-geology"
+        },
+        {
+          "Journal Name": "Computers & Geosciences",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Computer methods, algorithms, data analysis, modeling in geosciences 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/computers-and-geosciences"
+        },
+        {
+          "Journal Name": "Earth and Planetary Science Letters (EPSL)",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Physical/chemical processes, evolution, properties of Earth and planets (interior to atmosphere) 10",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/earth-and-planetary-science-letters"
+        },
+        {
+          "Journal Name": "Earth-Science Reviews",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Comprehensive review articles covering all fields of Earth Science 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/earth-science-reviews"
+        },
+        {
+          "Journal Name": "Geochimica et Cosmochimica Acta (GCA)",
+          "Publisher / Society": "Elsevier (Sponsored by The Geochemical Society & The Meteoritical Society)",
+          "Primary Focus Area": "Geochemistry, cosmochemistry, meteoritics, petrology, chemical processes on Earth and planets 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/geochimica-et-cosmochimica-acta"
+        },
+        {
+          "Journal Name": "Geomorphology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Fundamental and applied research across the full spectrum of geomorphology 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/geomorphology"
+        },
+        {
+          "Journal Name": "Global and Planetary Change",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Past, present, future changes in Earth systems on global/planetary scales 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/global-and-planetary-change"
+        },
+        {
+          "Journal Name": "Journal of Hydrology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "All subfields of hydrological sciences, including physical, chemical, biogeochemical, stochastic, systems aspects 43",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-hydrology"
+        },
+        {
+          "Journal Name": "Journal of Hydrology X",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Gold OA letters on timely research in all facets of hydrology with broad societal implications 50",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-hydrology-x"
+        },
+        {
+          "Journal Name": "Journal of Structural Geology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Deformation of rocks at all scales, regional tectonics, structural analysis techniques 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-structural-geology"
+        },
+        {
+          "Journal Name": "Journal of Volcanology and Geothermal Research",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Geophysical, geochemical, petrological, economic, environmental aspects of volcanology and related geothermal research 13",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-volcanology-and-geothermal-research"
+        },
+        {
+          "Journal Name": "Marine Geology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Marine geology, sedimentology, geophysics, geochemistry, paleoceanography 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/marine-geology"
+        },
+        {
+          "Journal Name": "Precambrian Research",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Geology, geochemistry, geophysics, paleobiology of the Precambrian Earth 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/precambrian-research"
+        },
+        {
+          "Journal Name": "Quaternary Science Reviews",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "All aspects of Quaternary science, paleoclimatology, paleoecology, geochronology 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/quaternary-science-reviews"
+        },
+        {
+          "Journal Name": "Remote Sensing of Environment",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Theory, science, applications, technology of remote sensing (terrestrial, oceanic, atmospheric) 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/remote-sensing-of-environment"
+        },
+        {
+          "Journal Name": "Science of Remote Sensing",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Open access companion to RSE; high impact science/applications using state-of-the-art remote sensing 51",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/science-of-remote-sensing"
+        },
+        {
+          "Journal Name": "Tectonophysics",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Kinematics, structure, composition, dynamics of the solid Earth at all scales 17",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/tectonophysics"
+        },
+        {
+          "Journal Name": "Applied Geochemistry",
+          "Publisher / Society": "Elsevier (Official journal of IAGC)",
+          "Primary Focus Area": "Applications of geochemistry (inorganic, organic, isotope) to environmental, hydrogeological, exploration problems 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/applied-geochemistry"
+        },
+        {
+          "Journal Name": "Chemical Geology",
+          "Publisher / Society": "Elsevier (Affiliated with EAG)",
+          "Primary Focus Area": "Isotopic/elemental geochemistry, geochronology, chemical processes in petrology, fluid-rock interaction, biogeochemistry 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/chemical-geology"
+        },
+        {
+          "Journal Name": "Computers & Geosciences",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Computer methods, algorithms, data analysis, modeling in geosciences 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/computers-and-geosciences"
+        },
+        {
+          "Journal Name": "Earth and Planetary Science Letters (EPSL)",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Physical/chemical processes, evolution, properties of Earth and planets (interior to atmosphere) 10",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/earth-and-planetary-science-letters"
+        },
+        {
+          "Journal Name": "Earth-Science Reviews",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Comprehensive review articles covering all fields of Earth Science 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/earth-science-reviews"
+        },
+        {
+          "Journal Name": "Geochimica et Cosmochimica Acta (GCA)",
+          "Publisher / Society": "Elsevier (Sponsored by The Geochemical Society & The Meteoritical Society)",
+          "Primary Focus Area": "Geochemistry, cosmochemistry, meteoritics, petrology, chemical processes on Earth and planets 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/geochimica-et-cosmochimica-acta"
+        },
+        {
+          "Journal Name": "Geomorphology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Fundamental and applied research across the full spectrum of geomorphology 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/geomorphology"
+        },
+        {
+          "Journal Name": "Global and Planetary Change",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Past, present, future changes in Earth systems on global/planetary scales 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/global-and-planetary-change"
+        },
+        {
+          "Journal Name": "Journal of Hydrology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "All subfields of hydrological sciences, including physical, chemical, biogeochemical, stochastic, systems aspects 43",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-hydrology"
+        },
+        {
+          "Journal Name": "Journal of Hydrology X",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Gold OA letters on timely research in all facets of hydrology with broad societal implications 50",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-hydrology-x"
+        },
+        {
+          "Journal Name": "Journal of Structural Geology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Deformation of rocks at all scales, regional tectonics, structural analysis techniques 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-structural-geology"
+        },
+        {
+          "Journal Name": "Journal of Volcanology and Geothermal Research",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Geophysical, geochemical, petrological, economic, environmental aspects of volcanology and related geothermal research 13",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-volcanology-and-geothermal-research"
+        },
+        {
+          "Journal Name": "Marine Geology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Marine geology, sedimentology, geophysics, geochemistry, paleoceanography 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/marine-geology"
+        },
+        {
+          "Journal Name": "Precambrian Research",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Geology, geochemistry, geophysics, paleobiology of the Precambrian Earth 22",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/precambrian-research"
+        },
+        {
+          "Journal Name": "Quaternary Science Reviews",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "All aspects of Quaternary science, paleoclimatology, paleoecology, geochronology 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/quaternary-science-reviews"
+        },
+        {
+          "Journal Name": "Remote Sensing of Environment",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Theory, science, applications, technology of remote sensing (terrestrial, oceanic, atmospheric) 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/remote-sensing-of-environment"
+        },
+        {
+          "Journal Name": "Science of Remote Sensing",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Open access companion to RSE; high impact science/applications using state-of-the-art remote sensing 51",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/science-of-remote-sensing"
+        },
+        {
+          "Journal Name": "Tectonophysics",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Kinematics, structure, composition, dynamics of the solid Earth at all scales 17",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/tectonophysics"
+        },
+        {
+          "Journal Name": "Atmospheric Research",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Clouds, precipitation, aerosols, radiation, climatology, weather modification, mesoscale meteorology, air pollution physics 63",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/atmospheric-research"
+        },
+        {
+          "Journal Name": "Atmospheric Environment",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Atmospheric composition, emissions, deposition, chemical processes, physical effects, impacts on health/air quality/climate/ecosystems 27",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/atmospheric-environment"
+        },
+        {
+          "Journal Name": "Agricultural and Forest Meteorology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Meteorology interactions with agriculture, forestry, natural ecosystems; plant/soil science, ecology, biogeochemistry 64",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/agricultural-and-forest-meteorology"
+        },
+        {
+          "Journal Name": "Dynamics of Atmospheres and Oceans",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Dynamical/physical processes governing atmospheres, oceans, climate; interactions, predictability 64",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/dynamics-of-atmospheres-and-oceans"
+        },
+        {
+          "Journal Name": "Forest Ecology and Management",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Links forest ecology with forest management with potential applications to the conservations of plantations and natural forests",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/forest-ecology-and-management"
+        },
+        {
+          "Journal Name": "Journal of Atmospheric and Solar-Terrestrial Physics (JASTP)",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Sun-Earth connection, upper atmosphere physics (mesosphere to magnetosphere), space weather, coupling between regions 67",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-atmospheric-and-solar-terrestrial-physics"
+        },
+        {
+          "Journal Name": "Urban Climate",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Urban weather/climate conditions/change, physics, dynamics, chemistry, impacts, adaptation, mitigation 69",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/urban-climate"
+        },
+        {
+          "Journal Name": "Weather and Climate Extremes",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Research on weather/climate extremes, monitoring, early warning, vulnerability, impacts, risk management, adaptation 70",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/weather-and-climate-extremes"
+        },
+        {
+          "Journal Name": "Remote Sensing of Environment",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Theory, science, applications, technology of remote sensing (terrestrial, oceanic, atmospheric); biophysical/quantitative approaches 28",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/remote-sensing-of-environment"
+        },
+        {
+          "Journal Name": "Journal of Hydrology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "All subfields of hydrological sciences, water management/policy, surface/groundwater, hydrometeorology, hydrogeology 73",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-hydrology"
+        },
+        {
+          "Journal Name": "Advances in Space Research",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "All areas of space research, including Earth observation, meteorology, climate, upper atmospheres, space weather 64",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/advances-in-space-research"
+        },
+        {
+          "Journal Name": "Journal of Aerosol Science",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Aerosol science research 7",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-aerosol-science"
+        },
+        {
+          "Journal Name": "Global and Planetary Change",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Past, present, future changes in planetary environments (lithosphere, hydrosphere, cryosphere, atmosphere, biosphere) 7",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/global-and-planetary-change"
+        },
+        {
+          "Journal Name": "Cold Regions Science and Technology",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Science and technical problems of cold environments (polar/temperate), cryospheric sciences, engineering 64",
+          "Open Access Status": "Hybrid/Subscription*",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/cold-regions-science-and-technology"
+        },
+        {
+          "Journal Name": "Atmospheric Environment: X",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Emissions science and reduction strategies (OA companion to Atmospheric Environment) 27",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/atmospheric-environment-x"
+        },
+        {
+          "Journal Name": "Science of Remote Sensing",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "High impact science/applications using state-of-the-art remote sensing (OA companion to RSE) 28",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/science-of-remote-sensing"
+        },
+        {
+          "Journal Name": "Journal of Hydrology X",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Letters on high quality, original, timely research in all facets of hydrology (OA companion to J. Hydrology) 29",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-hydrology-x"
+        },
+        {
+          "Journal Name": "Nature Geoscience",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "Top-quality research across the entire spectrum of Earth Sciences 5",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/ngeo/"
+        },
+        {
+          "Journal Name": "Nature Climate Change",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "All aspects of climate change, its impacts, and policy implications 66",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/nclimate/"
+        },
+        {
+          "Journal Name": "Nature Reviews Earth & Environment",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "High-quality reviews, perspectives, and commentaries across Earth and environmental sciences 59",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/natrevearthenviron/"
+        },
+        {
+          "Journal Name": null,
+          "Publisher / Society": null,
+          "Primary Focus Area": null,
+          "Open Access Status": null,
+          "Link to Journal Homepage": null
+        },
+        {
+          "Journal Name": "Communications Earth & Environment",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "High-quality OA research, reviews, commentary across Earth, environmental, planetary sciences 6",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/commsenv/"
+        },
+        {
+          "Journal Name": "npj Climate and Atmospheric Science",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "OA research in climate and atmospheric science 2",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/npjclimatsci/"
+        },
+        {
+          "Journal Name": "Scientific Reports",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "OA journal publishing original research across all natural and clinical sciences (includes Earth Science) 59",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/srep/"
+        },
+        {
+          "Journal Name": "Scientific Data",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "Descriptions of datasets related to natural sciences, medicine, engineering, and social sciences",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/sdata/"
+        },
+        {
+          "Journal Name": "Bulletin of Engineering Geology and the Environment",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Engineering geology, environmental geology, hydrogeology 61",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10064"
+        },
+        {
+          "Journal Name": "Bulletin of Volcanology",
+          "Publisher / Society": "Springer (IAVCEI)",
+          "Primary Focus Area": "Volcanoes, eruptive behavior, products, hazards, magmatic systems 20",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/445"
+        },
+        {
+          "Journal Name": "Climate Dynamics",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Study of the climate system on all scales 61",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/382"
+        },
+        {
+          "Journal Name": "Environmental Earth Sciences",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Interactions between humans, ecosystems, and the Earth; environmental geology, contamination, remediation 18",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/12665"
+        },
+        {
+          "Journal Name": "Hydrogeology Journal",
+          "Publisher / Society": "Springer (IAH)",
+          "Primary Focus Area": "Hydrogeology, groundwater science, theoretical and applied aspects 61",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10040"
+        },
+        {
+          "Journal Name": "Journal of Geodesy",
+          "Publisher / Society": "Springer (IAG)",
+          "Primary Focus Area": "Theoretical and applied geodesy, Earth observation, positioning, gravity field 61",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/190"
+        },
+        {
+          "Journal Name": "Landslides",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Landslide research, risk assessment, mitigation, monitoring 59",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10346"
+        },
+        {
+          "Journal Name": "Mineralium Deposita",
+          "Publisher / Society": "Springer (SGA)",
+          "Primary Focus Area": "Economic geology, mineral deposits, ore genesis 61",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/126"
+        },
+        {
+          "Journal Name": "Earth, Planets and Space",
+          "Publisher / Society": "SpringerOpen",
+          "Primary Focus Area": "OA journal covering solid earth geophysics, space and planetary sciences, atmospheric sciences, oceanography 2",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://earth-planets-space.springeropen.com/"
+        },
+        {
+          "Journal Name": "Geoscience Letters",
+          "Publisher / Society": "SpringerOpen",
+          "Primary Focus Area": "OA letters journal covering all fields of geoscience 2",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://geoscienceletters.springeropen.com/"
+        },
+        {
+          "Journal Name": "Journal of Applied Volcanology",
+          "Publisher / Society": "BMC",
+          "Primary Focus Area": "OA journal focused on applied aspects of volcanology, hazard assessment, risk mitigation 2",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://appliedvolc.biomedcentral.com/"
+        },
+        {
+          "Journal Name": "Boundary-Layer Meteorology",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Fundamental research on physical, chemical, biological processes in the atmospheric boundary layer 82",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10546"
+        },
+        {
+          "Journal Name": "Climate Dynamics",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Dynamics of the global climate system (atmosphere, oceans, cryosphere, biomass, land surface), modeling, climate change 84",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/382"
+        },
+        {
+          "Journal Name": "Theoretical and Applied Climatology",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Global studies in climate, atmosphere, meteorology 85",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/704"
+        },
+        {
+          "Journal Name": "Advances in Atmospheric Sciences",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Dynamics, physics, chemistry of Earth's atmosphere/ocean; weather systems, NWP, climate dynamics, satellite met. 87",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/376"
+        },
+        {
+          "Journal Name": "npj Climate and Atmospheric Science",
+          "Publisher / Society": "Springer Nature (Nature Portfolio)",
+          "Primary Focus Area": "Climate dynamics/variability, weather/climate prediction, climate change, extremes, air pollution, hydrological cycle 78",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/npjclimatsci/"
+        },
+        {
+          "Journal Name": "Communications Earth & Environment",
+          "Publisher / Society": "Springer Nature (Nature Portfolio)",
+          "Primary Focus Area": "All areas of Earth, environmental, planetary sciences; significant advances, new insights 81",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/commsenv/"
+        },
+        {
+          "Journal Name": "Nature Climate Change",
+          "Publisher / Society": "Springer Nature (Nature Portfolio)",
+          "Primary Focus Area": "Climate change research 80",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/nclimate/"
+        },
+        {
+          "Journal Name": "Nature Geoscience",
+          "Publisher / Society": "Springer Nature (Nature Portfolio)",
+          "Primary Focus Area": "Top-quality research across the entire spectrum of Earth Sciences and related areas 76",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/ngeo/"
+        },
+        {
+          "Journal Name": "Environmental Earth Sciences",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Interactions between humans, ecosystems, and the Earth; contamination, hazards, remediation 91",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/12665"
+        },
+        {
+          "Journal Name": "Meteorology and Atmospheric Physics",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Meteorology and atmospheric physics 80",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/703"
+        },
+        {
+          "Journal Name": "Modeling Earth Systems and Environment",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Earth System Sciences modeling 8",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/40808"
+        },
+        {
+          "Journal Name": "Scientific Reports",
+          "Publisher / Society": "Springer Nature (Nature Portfolio)",
+          "Primary Focus Area": "Multidisciplinary research across natural and clinical sciences 79",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/srep/"
+        },
+        {
+          "Journal Name": "Bulletin of Volcanology",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Volcanoes, products, eruptive behavior, hazards; geochemistry, petrology, geophysics of volcanic systems 93",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/445"
+        },
+        {
+          "Journal Name": "Hydrogeology Journal",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Hydrogeology science, subsurface hydrology/geology, geochemistry, geophysics, modeling, water resources 8",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10040"
+        },
+        {
+          "Journal Name": "Terrestrial, Atmospheric and Oceanic Sciences",
+          "Publisher / Society": "Springer Nature (Springer)",
+          "Primary Focus Area": "Terrestrial, atmospheric, and oceanic sciences 78",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.springer.com/journal/44195"
+        },
+        {
+          "Journal Name": "Atmospheric Science Letters",
+          "Publisher / Society": "Wiley (Royal Meteorological Society)",
+          "Primary Focus Area": "Short, rapid communications in atmospheric and related sciences 23",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/1530261x"
+        },
+        {
+          "Journal Name": "Earth Surface Processes and Landforms",
+          "Publisher / Society": "Wiley (British Society for Geomorphology)",
+          "Primary Focus Area": "Geomorphology, processes shaping Earth's surface, landform evolution 25",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://onlinelibrary.wiley.com/journal/10969837"
+        },
+        {
+          "Journal Name": "Geo: Geography and Environment",
+          "Publisher / Society": "Wiley (Royal Geographical Society with IBG)",
+          "Primary Focus Area": "Open access journal covering geography and environmental research",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://rgs-ibg.onlinelibrary.wiley.com/journal/20544049"
+        },
+        {
+          "Journal Name": "Geological Journal",
+          "Publisher / Society": "Wiley",
+          "Primary Focus Area": "General geology, regional geology, paleontology, stratigraphy 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://onlinelibrary.wiley.com/journal/10991034"
+        },
+        {
+          "Journal Name": "International Journal of Climatology",
+          "Publisher / Society": "Wiley (Royal Meteorological Society)",
+          "Primary Focus Area": "Climatology, climate variability and change, climate modeling, impacts 67",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/10970088"
+        },
+        {
+          "Journal Name": "Meteorological Applications",
+          "Publisher / Society": "Wiley (Royal Meteorological Society)",
+          "Primary Focus Area": "Applied meteorology, operational forecasting, service development 23",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/14698080"
+        },
+        {
+          "Journal Name": "WIREs Water (Wiley Interdisciplinary Reviews: Water)",
+          "Publisher / Society": "Wiley",
+          "Primary Focus Area": "Interdisciplinary reviews on water science, technology, management, policy 66",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://onlinelibrary.wiley.com/journal/20491948"
+        },
+        {
+          "Journal Name": null,
+          "Publisher / Society": null,
+          "Primary Focus Area": null,
+          "Open Access Status": null,
+          "Link to Journal Homepage": null
+        },
+        {
+          "Journal Name": null,
+          "Publisher / Society": null,
+          "Primary Focus Area": null,
+          "Open Access Status": null,
+          "Link to Journal Homepage": null
+        },
+        {
+          "Journal Name": "Journal Name",
+          "Publisher / Society": "Publisher / Society",
+          "Primary Focus Area": "Primary Focus Area",
+          "Open Access Status": "Open Access Status",
+          "Link to Journal Homepage": "Link to Journal Homepage"
+        },
+        {
+          "Journal Name": "Quarterly Journal of the Royal Meteorological Society (QJRMS)",
+          "Publisher / Society": "Wiley / RMetS",
+          "Primary Focus Area": "Leading research in atmospheric sciences and associated fields 14",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/1477870X"
+        },
+        {
+          "Journal Name": "International Journal of Climatology",
+          "Publisher / Society": "Wiley / RMetS",
+          "Primary Focus Area": "Climate system research across timescales (subseasonal to interdecadal), multidisciplinary implications 13",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/10970088"
+        },
+        {
+          "Journal Name": "Weather",
+          "Publisher / Society": "Wiley / RMetS",
+          "Primary Focus Area": "Articles for professionals and general interest readers on weather, climate, oceanography, hydrometeorology 6",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/14778696"
+        },
+        {
+          "Journal Name": "Meteorological Applications",
+          "Publisher / Society": "Wiley / RMetS",
+          "Primary Focus Area": "Applied meteorology, forecasting, users of meteorological services 13",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/14698080"
+        },
+        {
+          "Journal Name": "Atmospheric Science Letters",
+          "Publisher / Society": "Wiley / RMetS",
+          "Primary Focus Area": "Shorter contributions advancing understanding of atmospheric/climate science, observations, modeling, novel methodologies 13",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/1530261x"
+        },
+        {
+          "Journal Name": "Geoscience Data Journal",
+          "Publisher / Society": "Wiley / RMetS",
+          "Primary Focus Area": "Publication of geoscience datasets 13",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/20496060"
+        },
+        {
+          "Journal Name": "Climate Resilience and Sustainability",
+          "Publisher / Society": "Wiley / RMetS",
+          "Primary Focus Area": "Interdisciplinary research on climate resilience and sustainability 13",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://rmets.onlinelibrary.wiley.com/journal/26918024"
+        },
+        {
+          "Journal Name": "WIREs Climate Change",
+          "Publisher / Society": "Wiley",
+          "Primary Focus Area": "Interdisciplinary reviews on climate change 13",
+          "Open Access Status": "Hybrid/Subscription",
+          "Link to Journal Homepage": "https://wires.onlinelibrary.wiley.com/journal/17577799"
+        },
+        {
+          "Journal Name": "Remote Sensing in Ecology and Conservation",
+          "Publisher / Society": "Wiley",
+          "Primary Focus Area": "Remote sensing applications to ecology and conservation",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://zslpublications.onlinelibrary.wiley.com/journal/20563485"
+        },
+        {
+          "Journal Name": "Advances in Meteorology",
+          "Publisher / Society": "Wiley / Hindawi",
+          "Primary Focus Area": "All areas of meteorology and climatology, forecasting, modeling, data analysis, atm. chemistry/physics, climate change 106",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.hindawi.com/journals/amete/"
+        },
+        {
+          "Journal Name": "Geology",
+          "Publisher / Society": "GSA",
+          "Primary Focus Area": "Innovative, timely, provocative research of broad interest across geology 69",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/geology"
+        },
+        {
+          "Journal Name": "GSA Bulletin",
+          "Publisher / Society": "GSA",
+          "Primary Focus Area": "Definitive, mature, data-rich studies of broad interest across all earth-science disciplines 69",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/gsa-bulletin"
+        },
+        {
+          "Journal Name": "Geosphere",
+          "Publisher / Society": "GSA",
+          "Primary Focus Area": "High-quality research results from all geoscience fields; encourages animations/interactivity 69",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/geosphere"
+        },
+        {
+          "Journal Name": "Environmental & Engineering Geoscience",
+          "Publisher / Society": "GSA / AEG",
+          "Primary Focus Area": "Interaction of people with hydrologic and geologic systems; engineering geology 69",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/eeg"
+        },
+        {
+          "Journal Name": "GSA Today",
+          "Publisher / Society": "GSA",
+          "Primary Focus Area": "Science and news magazine for GSA members; includes peer-reviewed science articles 71",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.geosociety.org/gsatoday"
+        },
+        {
+          "Journal Name": "Acta Agriculturae Scandinavica, Section B — Soil & Plant Science",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Soil/plant science in agricultural/horticultural systems, sustainability, nutrient efficiency 80",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/tsps20"
+        },
+        {
+          "Journal Name": "Alcheringa: An Australasian Journal of Palaeontology",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Palaeontology, particularly with Australasian focus 79",
+          "Open Access Status": "Hybrid (Open Select)",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/talc20"
+        },
+        {
+          "Journal Name": "All Earth",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Broad Earth Science, multidisciplinary studies (formerly Geodinamica Acta) 80",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/tgda21"
+        },
+        {
+          "Journal Name": "Annals of GIS",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Geo-information science, remote sensing, data acquisition, GIS, geo-visualization applications 80",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/tagi20"
+        },
+        {
+          "Journal Name": "Arctic, Antarctic, and Alpine Research",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Cold region environments: ecology, climatology, glaciology, biogeochemistry 80",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/uaar20"
+        },
+        {
+          "Journal Name": "Australian Journal of Earth Sciences",
+          "Publisher / Society": "Taylor & Francis (Geological Society of Australia)",
+          "Primary Focus Area": "All aspects of Earth/planetary sciences, focus on Australian plate, Asia-Pacific, Antarctica 15",
+          "Open Access Status": "Hybrid (Open Select)",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/taje20"
+        },
+        {
+          "Journal Name": "GIScience & Remote Sensing",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "GIS, remote sensing, digital image processing, geocomputation, spatial data mining, geographic environmental modelling 86",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/tgrs20"
+        },
+        {
+          "Journal Name": "International Geology Review",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Petrotectonic framework, mineral/energy resources, petroleum geology, economic geology, tectonics, geochemistry, petrology (global scope) 14",
+          "Open Access Status": "Hybrid (Open Select)",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/tigr20"
+        },
+        {
+          "Journal Name": "International Journal of Digital Earth",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Theories, technologies, applications of Digital Earth; virtual globes, GIS, remote sensing, spatial data infrastructure 87",
+          "Open Access Status": "Hybrid (Open Select)",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/tjde20"
+        },
+        {
+          "Journal Name": "International Journal of Remote Sensing",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Remote sensing of the earth and human modifications to the earth",
+          "Open Access Status": "Hybrid (Open Select)",
+          "Link to Journal Homepage": "https://www.tandfonline.com/journals/tres20"
+        },
+        {
+          "Journal Name": "Physical Geography",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Physical geography, geomorphology, climatology, hydrology, biogeography, soil science",
+          "Open Access Status": "Hybrid (Open Select)",
+          "Link to Journal Homepage": "https://www.tandfonline.com/loi/tphy20"
+        },
+        {
+          "Journal Name": "Tellus Series A: Dynamic Meteorology and Oceanography",
+          "Publisher / Society": "Stockholm University Press (formerly T&F/Wiley)",
+          "Primary Focus Area": "Dynamic meteorology, climatology, oceanography, numerical modelling, weather forecasting, climate analysis 108",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tellusa.net/"
+        },
+        {
+          "Journal Name": "Tellus Series B: Chemical and Physical Meteorology",
+          "Publisher / Society": "Stockholm University Press (formerly T&F/Wiley)",
+          "Primary Focus Area": "Atmospheric chemistry, surface exchange, transport, aerosol science, cloud physics, radiation transfer 109",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tellusb.net/"
+        },
+        {
+          "Journal Name": "Atmospheric and Oceanic Science Letters (AOSL)",
+          "Publisher / Society": "KeAi / Elsevier (formerly T&F)",
+          "Primary Focus Area": "Short communications in atmospheric sciences, oceanography, and related sciences 110",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/atmospheric-and-oceanic-science-letters"
+        },
+        {
+          "Journal Name": "International Geology Review",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Petrotectonic framework, mineral/energy resources, petroleum geology, economic geology, tectonics, geochemistry, petrology 115",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.tandfonline.com/journals/tigr20"
+        },
+        {
+          "Journal Name": "Australian Journal of Earth Sciences",
+          "Publisher / Society": "Taylor & Francis / GSAu",
+          "Primary Focus Area": "All aspects of Earth/planetary sciences, focus on Australian plate, Asia-Pacific, Antarctica 2",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.tandfonline.com/journals/taje20"
+        },
+        {
+          "Journal Name": "Applied Earth Science",
+          "Publisher / Society": "Taylor & Francis / IOM3",
+          "Primary Focus Area": "Applied earth science, economic geology, mineral exploration/extraction 120",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.tandfonline.com/journals/yasa20"
+        },
+        {
+          "Journal Name": "All Earth (formerly Geodinamica Acta)",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Broad Earth Science fields, multi-disciplinary studies, sound reproducible research 10",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/journals/tgae21"
+        },
+        {
+          "Journal Name": "Annals of GIS",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Geo-information science (remote sensing, data acquisition, GIS, geo-visualization) and applications 10",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/journals/tagi20"
+        },
+        {
+          "Journal Name": "Journal of the Geological Society",
+          "Publisher / Society": "GSL",
+          "Primary Focus Area": "Topical, innovative, interdisciplinary research across Earth and planetary sciences 7",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.lyellcollection.org/journal/jgs"
+        },
+        {
+          "Journal Name": "Quarterly Journal of Engineering Geology and Hydrogeology",
+          "Publisher / Society": "GSL",
+          "Primary Focus Area": "Engineering geology, hydrogeology, geology applied to civil/environmental engineering, groundwater 7",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.lyellcollection.org/journal/qjegh"
+        },
+        {
+          "Journal Name": "Earth Science, Systems and Society (ES3)",
+          "Publisher / Society": "GSL",
+          "Primary Focus Area": "Cross-disciplinary geoscience, relevance to sustainability, societal challenges 7",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://www.lyellcollection.org/journal/es3"
+        },
+        {
+          "Journal Name": "Petroleum Geoscience",
+          "Publisher / Society": "GSL / EAGE",
+          "Primary Focus Area": "Petroleum systems, geoscience for sustainable hydrocarbon development 7",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.lyellcollection.org/journal/pg"
+        },
+        {
+          "Journal Name": "Geoenergy",
+          "Publisher / Society": "GSL / EAGE",
+          "Primary Focus Area": "Subsurface geoscience for sustainable energy transition (e.g., geothermal, CCS, hydrogen storage) 7",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.lyellcollection.org/journal/geoenergy"
+        },
+        {
+          "Journal Name": "Geology",
+          "Publisher / Society": "GSA / GeoScienceWorld",
+          "Primary Focus Area": "Innovative, timely, provocative geology research of broad interest 132",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/geology"
+        },
+        {
+          "Journal Name": "GSA Bulletin",
+          "Publisher / Society": "GSA / GeoScienceWorld",
+          "Primary Focus Area": "Premier GSA journal; definitive, data-rich, mature studies across all earth-science disciplines 132",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/gsa-bulletin"
+        },
+        {
+          "Journal Name": "Geosphere",
+          "Publisher / Society": "GSA / GeoScienceWorld",
+          "Primary Focus Area": "Online-only; research results from all geoscience fields; encourages animations/interactivity 134",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/geosphere"
+        },
+        {
+          "Journal Name": "Environmental & Engineering Geoscience",
+          "Publisher / Society": "GSA / AEG / GeoScienceWorld",
+          "Primary Focus Area": "Interaction of people with hydrologic and geologic systems 134",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/eeg"
+        },
+        {
+          "Journal Name": "Journal of the Geological Society",
+          "Publisher / Society": "GSL / Lyell Collection",
+          "Primary Focus Area": "Topical, innovative, interdisciplinary research across Earth/planetary sciences with global reach 133",
+          "Open Access Status": "Hybrid (Read&Publish)",
+          "Link to Journal Homepage": "https://www.lyellcollection.org/journal/jgs"
+        },
+        {
+          "Journal Name": "Quarterly Journal of Engineering Geology and Hydrogeology",
+          "Publisher / Society": "GSL / Lyell Collection",
+          "Primary Focus Area": "Engineering geology research/practice, geology applied to civil/environmental engineering, groundwater management 133",
+          "Open Access Status": "Hybrid (Read&Publish)",
+          "Link to Journal Homepage": "https://www.lyellcollection.org/journal/qjegh"
+        },
+        {
+          "Journal Name": "Canadian Journal of Earth Sciences",
+          "Publisher / Society": "CSP / GeoScienceWorld",
+          "Primary Focus Area": "All aspects of earth science including geomatics, geophysics, geology 140",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/cjes"
+        },
+        {
+          "Journal Name": "PALAIOS",
+          "Publisher / Society": "SEPM / GeoScienceWorld / BioOne",
+          "Primary Focus Area": "Life of the past; emphasis on paleobiology, paleoecology, paleoclimatology, sedimentology integration 131",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/palaios"
+        },
+        {
+          "Journal Name": "Journal of Sedimentary Research",
+          "Publisher / Society": "SEPM / GeoScienceWorld",
+          "Primary Focus Area": "Sedimentology, stratigraphy, geochemistry, diagenesis, paleopedology 131",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/jsedres"
+        },
+        {
+          "Journal Name": "Journal of Sedimentary Research (JSR)",
+          "Publisher / Society": "SEPM",
+          "Primary Focus Area": "All aspects of sedimentology and stratigraphy 105",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/jsedres"
+        },
+        {
+          "Journal Name": "PALAIOS",
+          "Publisher / Society": "SEPM",
+          "Primary Focus Area": "Paleontological aspects of sedimentary geology (paleoecology, taphonomy, ichnology, paleobiology) 105",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/palaios"
+        },
+        {
+          "Journal Name": "Lithosphere",
+          "Publisher / Society": "SEPM (Co-published, e.g., with GSA)",
+          "Primary Focus Area": "Broad geology, tectonics, Earth surface processes (scope may vary by publisher agreement) 106",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://pubs.geoscienceworld.org/lithosphere (GSW link; specific SEPM portal may exist)"
+        },
+        {
+          "Journal Name": "Canadian Journal of Earth Sciences",
+          "Publisher / Society": "CSP",
+          "Primary Focus Area": "All aspects of Earth science, including geomatics, geophysics, geology 113",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://cdnsciencepub.com/journal/cjes"
+        },
+        {
+          "Journal Name": "Arctic Science",
+          "Publisher / Society": "CSP",
+          "Primary Focus Area": "Physical, biological, social sciences research related to Arctic regions 114",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://cdnsciencepub.com/journal/as"
+        },
+        {
+          "Journal Name": "Journal of Selected Topics in Applied Earth Observation and Remote Sensing",
+          "Publisher / Society": "IEEE",
+          "Primary Focus Area": "Earth observations and remote sensing",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=4609443"
+        },
+        {
+          "Journal Name": "Transactions on Geoscience and Remote Sensing",
+          "Publisher / Society": "IEEE",
+          "Primary Focus Area": "Science and engineering topics in remote sensing",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=36"
+        },
+        {
+          "Journal Name": "Bulletin of the American Meteorological Society (BAMS)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Flagship magazine; articles of broad interest, news, reviews for the weather, water, and climate community 35",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://journals.ametsoc.org/view/journals/bams/bams-overview.xml"
+        },
+        {
+          "Journal Name": "Journal of the Atmospheric Sciences (JAS)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Basic research on the physics, dynamics, and chemistry of the atmosphere of Earth and other planets 36",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/journal-of-the-atmospheric-sciences/"
+        },
+        {
+          "Journal Name": "Journal of Climate (JCLI)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Dynamics and physics of the climate system on large spatial scales, variability, change, prediction 37",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/journal-of-climate/"
+        },
+        {
+          "Journal Name": "Journal of Hydrometeorology (JHM)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Modeling, observing, forecasting processes related to water/energy fluxes and storage, precipitation 38",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/journal-of-hydrometeorology/"
+        },
+        {
+          "Journal Name": "Journal of Physical Oceanography (JPO)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Research on the physics of the ocean and boundary layer processes 32",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/journal-of-physical-oceanography/"
+        },
+        {
+          "Journal Name": "Monthly Weather Review (MWR)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Analysis/prediction of observed atmospheric circulations/physics, data assimilation, model validation 39",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/monthly-weather-review/"
+        },
+        {
+          "Journal Name": "Weather and Forecasting (WAF)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Operational forecasting techniques, applications, verification, societal use, nowcasting to seasonal scales 40",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/weather-and-forecasting/"
+        },
+        {
+          "Journal Name": "Weather, Climate, and Society (WCAS)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Interactions of weather/climate with society (economics, policy, social, health, behavioral aspects) 33",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/weather-climate-and-society/"
+        },
+        {
+          "Journal Name": "Journal of Applied Meteorology and Climatology (JAMC)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Applied research in meteorology (e.g., weather modification, radar/satellite met.) & climatology (e.g., impacts, downscaling) 41",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/journal-of-applied-meteorology-and-climatology/"
+        },
+        {
+          "Journal Name": "Journal of Atmospheric and Oceanic Technology (JTECH)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Instrumentation and methods used in atmospheric and oceanic research, remote sensing, validation 42",
+          "Open Access Status": "Hybrid",
+          "Link to Journal Homepage": "https://www.ametsoc.org/ams/publications/journals/journal-of-atmospheric-and-oceanic-technology/"
+        },
+        {
+          "Journal Name": "Artificial Intelligence for the Earth Systems (AIES)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Development and application of AI/ML, data science, statistics in meteorology, climate, ocean sciences 34",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://journals.ametsoc.org/view/journals/aies/aies-overview.xml"
+        },
+        {
+          "Journal Name": "Earth Interactions (EI)",
+          "Publisher / Society": "AMS",
+          "Primary Focus Area": "Interactions between atmosphere, oceans, land, life, and human activities 22",
+          "Open Access Status": "Yes",
+          "Link to Journal Homepage": "https://journals.ametsoc.org/view/journals/eint/eint-overview.xml"
+        }
+      ]
+    },
+    "Helio": {
+      "sheet_info": {
+        "name": "Helio",
+        "total_journals": 26,
+        "columns": [
+          "Journal Name",
+          "Publisher / Society",
+          "Primary Focus Area",
+          "Open Access? (Yes / Hybrid / No)",
+          "Journal Homepage"
+        ]
+      },
+      "journals": [
+        {
+          "Journal Name": "Advances in Space Research",
+          "Publisher / Society": "Elsevier / COSPAR",
+          "Primary Focus Area": "General space research, incl. heliophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/advances-in-space-research"
+        },
+        {
+          "Journal Name": "Annales Geophysicae",
+          "Publisher / Society": "Copernicus Publications / EGU",
+          "Primary Focus Area": "Solar-terrestrial & planetary sciences",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.annales-geophysicae.net/"
+        },
+        {
+          "Journal Name": "Astronomy & Astrophysics",
+          "Publisher / Society": "EDP Sciences",
+          "Primary Focus Area": "General astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.aanda.org/"
+        },
+        {
+          "Journal Name": "Journal of Space Weather and Space Climate",
+          "Publisher / Society": "EDP Sciences",
+          "Primary Focus Area": "Space weather and climate",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.swsc-journal.org/"
+        },
+        {
+          "Journal Name": "The Astronomical Journal",
+          "Publisher / Society": "IOP Publishing / AAS",
+          "Primary Focus Area": "Observational astronomy, solar system",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1538-3881"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal",
+          "Publisher / Society": "IOP Publishing / AAS",
+          "Primary Focus Area": "General astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/0004-637X"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Letters",
+          "Publisher / Society": "IOP Publishing / AAS",
+          "Primary Focus Area": "High-impact astrophysical research",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/2041-8205"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Supplement Series",
+          "Publisher / Society": "IOP Publishing / AAS",
+          "Primary Focus Area": "Extensive astrophysical data & papers",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/0067-0049"
+        },
+        {
+          "Journal Name": "New Journal of Physics",
+          "Publisher / Society": "IOP Publishing / AAS",
+          "Primary Focus Area": "New research across multiple topics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1367-2630"
+        },
+        {
+          "Journal Name": "Earth and Space Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Earth & space data, methods, applications",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/23335084"
+        },
+        {
+          "Journal Name": "Earth, Planets and Space",
+          "Publisher / Society": "SpringerOpen / Multiple Japanese Societies¹",
+          "Primary Focus Area": "General Earth & planetary sciences",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://earth-planets-space.springeropen.com/"
+        },
+        {
+          "Journal Name": "Geophysical Research Letters",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "High-impact geoscience advances",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19448007"
+        },
+        {
+          "Journal Name": "Journal of Atmospheric and Solar-Terrestrial Physics",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Atmospheric & solar-terrestrial physics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-atmospheric-and-solar-terrestrial-physics"
+        },
+        {
+          "Journal Name": "Journal of Astronomical Instrumentation",
+          "Publisher / Society": "World Scientific",
+          "Primary Focus Area": "Astronomical instrumentation & techniques",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.worldscientific.com/worldscinet/jai"
+        },
+        {
+          "Journal Name": "Journal of Cosmology and Astroparticle Physics",
+          "Publisher / Society": "IOP Publishing / SISSA",
+          "Primary Focus Area": "Cosmology & astroparticle physics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1475-7516"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Space Physics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Space physics (magnetosphere, ionosphere)",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699402"
+        },
+        {
+          "Journal Name": "Living Reviews in Solar Physics",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Solar & heliospheric physics reviews",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.springer.com/journal/41116"
+        },
+        {
+          "Journal Name": "Monthly Notices of the Royal Astronomical Society",
+          "Publisher / Society": "Oxford University Press / RAS",
+          "Primary Focus Area": "General astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://academic.oup.com/mnras"
+        },
+        {
+          "Journal Name": "Nature Astronomy",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "High-impact astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.nature.com/natastron/"
+        },
+        {
+          "Journal Name": "Physics of Plasmas",
+          "Publisher / Society": "AIP Publishing",
+          "Primary Focus Area": "General plasma physics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://pubs.aip.org/aip/pop"
+        },
+        {
+          "Journal Name": "Planetary and Space Science",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Planetary science & solar system research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/planetary-and-space-science"
+        },
+        {
+          "Journal Name": "Radio Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Electromagnetic waves & propagation",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/1944799x"
+        },
+        {
+          "Journal Name": "Reviews of Geophysics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Comprehensive Earth & space science reviews",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449208"
+        },
+        {
+          "Journal Name": "Solar Physics",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Solar physics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/11207"
+        },
+        {
+          "Journal Name": "Space Science Reviews",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Space science reviews & results",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/11214"
+        },
+        {
+          "Journal Name": "Space Weather",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Space weather science & forecasting",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15427390"
+        }
+      ]
+    },
+    "Astro": {
+      "sheet_info": {
+        "name": "Astro",
+        "total_journals": 40,
+        "columns": [
+          "Journal Name",
+          "Publisher / Society",
+          "Primary Focus Area",
+          "Open Access? (Yes / Hybrid / No)",
+          "Journal Homepage"
+        ]
+      },
+      "journals": [
+        {
+          "Journal Name": "The Astrophysical Journal",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Broad astrophysics & astronomy research",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://journals.aas.org/astrophysical-journal/"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Letters",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "High-impact, rapid astrophysics discoveries",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://journals.aas.org/astrophysical-journal-letters/"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Supplement Series",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Long articles, catalogs, extensive data sets",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://journals.aas.org/astrophysical-journal-supplement-series/"
+        },
+        {
+          "Journal Name": "The Astronomical Journal",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Observational astronomy, data, methods, instrumentation",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://journals.aas.org/astronomical-journal/"
+        },
+        {
+          "Journal Name": "The Planetary Science Journal",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Solar system & exoplanetary systems research",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://journals.aas.org/planetary-science-journal/"
+        },
+        {
+          "Journal Name": "Monthly Notices of the Royal Astronomical Society",
+          "Publisher / Society": "RAS / Oxford University Press",
+          "Primary Focus Area": "Broad astronomy & astrophysics research",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://academic.oup.com/mnras"
+        },
+        {
+          "Journal Name": "Monthly Notices of the Royal Astronomical Society: Letters",
+          "Publisher / Society": "RAS / Oxford University Press",
+          "Primary Focus Area": "High-impact, rapid astronomy letters",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://academic.oup.com/mnrasl"
+        },
+        {
+          "Journal Name": "Astronomy & Astrophysics",
+          "Publisher / Society": "EDP Sciences (on behalf of ESO)",
+          "Primary Focus Area": "Broad astronomy & astrophysics research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.aanda.org/"
+        },
+        {
+          "Journal Name": "Nature Astronomy*",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "High-impact astronomy, astrophysics, planetary science",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.nature.com/natastron/"
+        },
+        {
+          "Journal Name": "Annual Review of Astronomy and Astrophysics",
+          "Publisher / Society": "Annual Reviews",
+          "Primary Focus Area": "Comprehensive reviews across astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.annualreviews.org/journal/astro"
+        },
+        {
+          "Journal Name": "The Astronomy and Astrophysics Review*",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "In-depth reviews across astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/159"
+        },
+        {
+          "Journal Name": "Publications of the Astronomical Society of the Pacific",
+          "Publisher / Society": "ASP / IOP Publishing",
+          "Primary Focus Area": "Research, instrumentation, reviews, tutorials",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1538-3873"
+        },
+        {
+          "Journal Name": "RAS Techniques and Instruments",
+          "Publisher / Society": "RAS / Oxford University Press",
+          "Primary Focus Area": "Astronomical/geophysical instruments, data, software",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://academic.oup.com/rasti"
+        },
+        {
+          "Journal Name": "Nature Physics*",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "Fundamental physics including astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.nature.com/nphys/"
+        },
+        {
+          "Journal Name": "Nature Communications",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "Multidisciplinary including astronomy & physics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.nature.com/ncomms/"
+        },
+        {
+          "Journal Name": "New Astronomy*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Broad astronomy & astrophysics research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/new-astronomy"
+        },
+        {
+          "Journal Name": "New Astronomy Reviews*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Reviews across astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/new-astronomy-reviews"
+        },
+        {
+          "Journal Name": "Astroparticle Physics*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Cosmic rays, particle cosmology, high-energy astro",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/astroparticle-physics"
+        },
+        {
+          "Journal Name": "Journal of Cosmology and Astroparticle Physics (JCAP)",
+          "Publisher / Society": "SISSA / IOP Publishing",
+          "Primary Focus Area": "Cosmology & astroparticle physics research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1475-7516"
+        },
+        {
+          "Journal Name": "Journal of High Energy Astrophysics (JHEAP)",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "High-energy phenomena, multi-messenger astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-high-energy-astrophysics"
+        },
+        {
+          "Journal Name": "Physics of the Dark Universe*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Dark matter, dark energy, early universe, gravity",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/physics-of-the-dark-universe"
+        },
+        {
+          "Journal Name": "Advances in Space Research*",
+          "Publisher / Society": "COSPAR / Elsevier",
+          "Primary Focus Area": "Broad space research including astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/advances-in-space-research"
+        },
+        {
+          "Journal Name": "Astrophysics and Space Science*",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Broad astronomy, astrophysics, space science",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/10509"
+        },
+        {
+          "Journal Name": "Celestial Mechanics and Dynamical Astronomy*",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Celestial mechanics, dynamics, astrometry",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/10569"
+        },
+        {
+          "Journal Name": "Experimental Astronomy*",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Astrophysical instrumentation & methods",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/10686"
+        },
+        {
+          "Journal Name": "General Relativity and Gravitation*",
+          "Publisher / Society": "Springer Nature / Int. Soc. on GRG",
+          "Primary Focus Area": "Gravitational physics, relativity, cosmology",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/10714"
+        },
+        {
+          "Journal Name": "Journal of Astrophysics and Astronomy",
+          "Publisher / Society": "Indian Acad. Sciences / Astron. Soc. India / Springer",
+          "Primary Focus Area": "Broad astrophysics & astronomy research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/12036"
+        },
+        {
+          "Journal Name": "Living Reviews in Relativity",
+          "Publisher / Society": "Springer Nature / Max Planck Inst. Grav. Physics",
+          "Primary Focus Area": "Regularly updated reviews in relativity physics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.springer.com/journal/41114"
+        },
+        {
+          "Journal Name": "Living Reviews in Solar Physics",
+          "Publisher / Society": "Springer Nature / Max Planck Inst. Solar Sys. Research",
+          "Primary Focus Area": "Regularly updated reviews in solar/heliospheric physics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.springer.com/journal/41116"
+        },
+        {
+          "Journal Name": "Space Science Reviews*",
+          "Publisher / Society": "Springer Nature / ISSI",
+          "Primary Focus Area": "Synthesizing reviews across space science fields",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/11214"
+        },
+        {
+          "Journal Name": "Solar Physics*",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Solar physics & solar-stellar connections",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/11207"
+        },
+        {
+          "Journal Name": "Astronomische Nachrichten*",
+          "Publisher / Society": "Wiley-VCH",
+          "Primary Focus Area": "Broad astrophysics, solar system, solar physics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://onlinelibrary.wiley.com/journal/15213994"
+        },
+        {
+          "Journal Name": "Advances in Physics: Astronomy, Astrophysics and Particle Physics",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Emerging research in astro, cosmology, particle phys",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.tandfonline.com/journals/taaa20"
+        },
+        {
+          "Journal Name": "Journal of Astronomical Instrumentation*",
+          "Publisher / Society": "World Scientific",
+          "Primary Focus Area": "Astronomical instruments, components, techniques",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.worldscientific.com/worldscinet/jai"
+        },
+        {
+          "Journal Name": "Astronomy and Computing*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Astronomical computing, software, data analysis",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/astronomy-and-computing"
+        },
+        {
+          "Journal Name": "The Open Journal of Astrophysics",
+          "Publisher / Society": "Maynooth Academic Publishing",
+          "Primary Focus Area": "Broad astrophysics & cosmology (arXiv overlay)",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://astro.theoj.org/"
+        },
+        {
+          "Journal Name": "Research in Astronomy and Astrophysics (RAA)",
+          "Publisher / Society": "NAOC / CAS / IOP Publishing",
+          "Primary Focus Area": "Broad astronomy & astrophysics research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1674-4527"
+        },
+        {
+          "Journal Name": "Annales Geophysicae",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Solar-terrestrial, planetary, space weather science",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.annales-geophysicae.net/"
+        },
+        {
+          "Journal Name": "Physics of Plasmas*",
+          "Publisher / Society": "AIP Publishing / APS DPP",
+          "Primary Focus Area": "Broad plasma physics including space/astro applications",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://pubs.aip.org/aip/pop"
+        },
+        {
+          "Journal Name": "Physical Review Letters",
+          "Publisher / Society": "APS",
+          "Primary Focus Area": "Fundamental research for all fields of physics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://journals.aps.org/prl/"
+        }
+      ]
+    },
+    "planet": {
+      "sheet_info": {
+        "name": "planet",
+        "total_journals": 57,
+        "columns": [
+          "Journal Name",
+          "Publisher / Society",
+          "Primary Focus Area",
+          "Open Access? (Yes / Hybrid / No)",
+          "Journal Homepage"
+        ]
+      },
+      "journals": [
+        {
+          "Journal Name": "Planetary Science Journal (PSJ)",
+          "Publisher / Society": "American Astronomical Society (AAS) / DPS",
+          "Primary Focus Area": "Broad planetary science, solar system & exoplanets",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/2632-3338"
+        },
+        {
+          "Journal Name": "The Astronomical Journal (AJ)*",
+          "Publisher / Society": "American Astronomical Society (AAS) / IOP Publishing",
+          "Primary Focus Area": "Observational astronomy, solar system, exoplanets",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1538-3881"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal (ApJ)*",
+          "Publisher / Society": "American Astronomical Society (AAS) / IOP Publishing",
+          "Primary Focus Area": "Broad astrophysics, incl. planetary/exoplanets",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/0004-637X"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Letters (ApJL)*",
+          "Publisher / Society": "American Astronomical Society (AAS) / IOP Publishing",
+          "Primary Focus Area": "High-impact, rapid astronomy/astrophysics letters",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/2041-8205"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Supplement Series (ApJS)",
+          "Publisher / Society": "American Astronomical Society (AAS) / IOP Publishing",
+          "Primary Focus Area": "Long papers, catalogs, data compilations",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://iopscience.iop.org/journal/0067-0049"
+        },
+        {
+          "Journal Name": "Earth and Space Science*",
+          "Publisher / Society": "American Geophysical Union (AGU) / Wiley",
+          "Primary Focus Area": "Earth & space science data, methods, instruments",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/23335084"
+        },
+        {
+          "Journal Name": "Geochemistry, Geophysics, Geosystems (G3)*",
+          "Publisher / Society": "American Geophysical Union (AGU) / Wiley",
+          "Primary Focus Area": "Earth & planetary processes, systems science",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15252027"
+        },
+        {
+          "Journal Name": "Geophysical Research Letters (GRL)*",
+          "Publisher / Society": "American Geophysical Union (AGU) / Wiley",
+          "Primary Focus Area": "High-impact geoscience letters, incl. planetary",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19448007"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Planets*",
+          "Publisher / Society": "American Geophysical Union (AGU) / Wiley",
+          "Primary Focus Area": "Planetary geology, geophysics, atmospheres, exoplanets",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699100"
+        },
+        {
+          "Journal Name": "Reviews of Geophysics*",
+          "Publisher / Society": "American Geophysical Union (AGU) / Wiley",
+          "Primary Focus Area": "Reviews across Earth & space sciences",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449208"
+        },
+        {
+          "Journal Name": "Space Weather*",
+          "Publisher / Society": "American Geophysical Union (AGU) / Wiley",
+          "Primary Focus Area": "Space weather science, forecasting & impacts",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15427390"
+        },
+        {
+          "Journal Name": "Annual Review of Astronomy and Astrophysics*",
+          "Publisher / Society": "Annual Reviews",
+          "Primary Focus Area": "Reviews in astronomy & astrophysics, incl. planets",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.annualreviews.org/journal/astro"
+        },
+        {
+          "Journal Name": "Annual Review of Earth and Planetary Sciences*",
+          "Publisher / Society": "Annual Reviews",
+          "Primary Focus Area": "Reviews in Earth & planetary sciences",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.annualreviews.org/journal/earth"
+        },
+        {
+          "Journal Name": "Advances in Space Research (ASR)*",
+          "Publisher / Society": "COSPAR / Elsevier",
+          "Primary Focus Area": "Broad space research, incl. planets/small bodies",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/advances-in-space-research"
+        },
+        {
+          "Journal Name": "Astronomy and Computing*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Astronomical computing, software & data analysis",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/astronomy-and-computing"
+        },
+        {
+          "Journal Name": "Earth and Planetary Science Letters (EPSL)*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Planetary geology, geophysics, geochemistry",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/earth-and-planetary-science-letters"
+        },
+        {
+          "Journal Name": "Geochimica et Cosmochimica Acta (GCA)*",
+          "Publisher / Society": "The Geochemical Society & The Meteoritical Society / Elsevier",
+          "Primary Focus Area": "Geochemistry & cosmochemistry, meteoritics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/geochimica-et-cosmochimica-acta"
+        },
+        {
+          "Journal Name": "Icarus*",
+          "Publisher / Society": "American Astronomical Society (DPS Endorsed) / Elsevier",
+          "Primary Focus Area": "Solar System studies, planetary science",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/icarus"
+        },
+        {
+          "Journal Name": "New Astronomy*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Broad astronomy & astrophysics research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/new-astronomy"
+        },
+        {
+          "Journal Name": "New Astronomy Reviews*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Reviews in astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/new-astronomy-reviews"
+        },
+        {
+          "Journal Name": "Planetary and Space Science*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Solar system research, atmospheres, small bodies",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.sciencedirect.com/journal/planetary-and-space-science"
+        },
+        {
+          "Journal Name": "Annales Geophysicae (ANGEO)*",
+          "Publisher / Society": "European Geosciences Union (EGU) / Copernicus Publications",
+          "Primary Focus Area": "Solar-terrestrial & planetary sciences",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.annales-geophysicae.net/"
+        },
+        {
+          "Journal Name": "Solid Earth (SE)*",
+          "Publisher / Society": "European Geosciences Union (EGU) / Copernicus Publications",
+          "Primary Focus Area": "Solid Earth sciences, including planetary interiors",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.solid-earth.net/"
+        },
+        {
+          "Journal Name": "Geology*",
+          "Publisher / Society": "Geological Society of America (GSA)",
+          "Primary Focus Area": "Broad Earth sciences, occasional planetary geology",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://pubs.geoscienceworld.org/gsa/geology"
+        },
+        {
+          "Journal Name": "GSA Bulletin*",
+          "Publisher / Society": "Geological Society of America (GSA)",
+          "Primary Focus Area": "Broad Earth sciences, occasional planetary geology",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://pubs.geoscienceworld.org/gsa/gsabulletin"
+        },
+        {
+          "Journal Name": null,
+          "Publisher / Society": null,
+          "Primary Focus Area": null,
+          "Open Access? (Yes / Hybrid / No)": null,
+          "Journal Homepage": null
+        },
+        {
+          "Journal Name": "IOP Publishing",
+          "Publisher / Society": null,
+          "Primary Focus Area": null,
+          "Open Access? (Yes / Hybrid / No)": null,
+          "Journal Homepage": null
+        },
+        {
+          "Journal Name": "Journal of Cosmology and Astroparticle Physics (JCAP)*",
+          "Publisher / Society": "SISSA Medialab / IOP Publishing",
+          "Primary Focus Area": "Cosmology & astroparticle physics, some overlap",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1475-7516"
+        },
+        {
+          "Journal Name": "Publications of the Astronomical Society of the Pacific (PASP)*",
+          "Publisher / Society": "Astronomical Society of the Pacific (ASP) / IOP Publishing",
+          "Primary Focus Area": "Astronomical instrumentation, techniques & software",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1538-3873"
+        },
+        {
+          "Journal Name": "Research in Astronomy and Astrophysics (RAA)*",
+          "Publisher / Society": "National Astronomical Observatories of China (NAOC) / Chinese Astronomical Society / IOP Publishing",
+          "Primary Focus Area": "Broad astronomy & astrophysics research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://iopscience.iop.org/journal/1674-4527"
+        },
+        {
+          "Journal Name": "Maynooth Academic Publishing",
+          "Publisher / Society": null,
+          "Primary Focus Area": null,
+          "Open Access? (Yes / Hybrid / No)": null,
+          "Journal Homepage": null
+        },
+        {
+          "Journal Name": "The Open Journal of Astrophysics",
+          "Publisher / Society": "Maynooth Academic Publishing",
+          "Primary Focus Area": "Broad astrophysics & cosmology",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://astro.theoj.org/"
+        },
+        {
+          "Journal Name": "Communications Earth & Environment*",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "Earth, environmental & planetary sciences",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.nature.com/commsenv/"
+        },
+        {
+          "Journal Name": "Nature Astronomy*",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "High-impact astronomy, astrophysics & planetary sci",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.nature.com/natastron/"
+        },
+        {
+          "Journal Name": "Nature Communications*",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "Multidisciplinary science, incl. planetary",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.nature.com/ncomms/"
+        },
+        {
+          "Journal Name": "Nature Geoscience*",
+          "Publisher / Society": "Nature Portfolio",
+          "Primary Focus Area": "High-impact Earth & planetary sciences",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.nature.com/ngeo/"
+        },
+        {
+          "Journal Name": "Astronomy & Astrophysics (A&A)*",
+          "Publisher / Society": "EDP Sciences on behalf of ESO & A&A Board",
+          "Primary Focus Area": "Broad astronomy & astrophysics, incl. exoplanets",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.aanda.org/"
+        },
+        {
+          "Journal Name": "Geophysical Journal International (GJI)*",
+          "Publisher / Society": "Royal Astronomical Society (RAS) / Oxford University Press",
+          "Primary Focus Area": "Geophysics, including planetary interiors",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://academic.oup.com/gji"
+        },
+        {
+          "Journal Name": "Monthly Notices of the Royal Astronomical Society (MNRAS)*",
+          "Publisher / Society": "Royal Astronomical Society (RAS) / Oxford University Press",
+          "Primary Focus Area": "Broad astronomy & astrophysics, incl. planetary",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://academic.oup.com/mnras"
+        },
+        {
+          "Journal Name": "RAS Techniques and Instruments (RASTI)*",
+          "Publisher / Society": "Royal Astronomical Society (RAS) / Oxford University Press",
+          "Primary Focus Area": "Astronomical/geophysical techniques & instruments",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://academic.oup.com/rasti"
+        },
+        {
+          "Journal Name": "Astrophysics and Space Science*",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Broad astronomy, astrophysics & space science",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/10509"
+        },
+        {
+          "Journal Name": "Celestial Mechanics and Dynamical Astronomy*",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Celestial mechanics & dynamical astronomy",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/10569"
+        },
+        {
+          "Journal Name": "Earth, Moon, and Planets (Now Discover Space)",
+          "Publisher / Society": "Springer (Now Discover Space)",
+          "Primary Focus Area": "Solar system science, planetary science",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.springer.com/journal/10669"
+        },
+        {
+          "Journal Name": "Earth, Planets and Space (EPS)*",
+          "Publisher / Society": "SGEPSS, SSJ, VSJ, GSJ, JSPS / SpringerOpen",
+          "Primary Focus Area": "Earth & planetary sciences, space science",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://earth-planets-space.springeropen.com/"
+        },
+        {
+          "Journal Name": "Experimental Astronomy*",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Astrophysical instrumentation & methods",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/10686"
+        },
+        {
+          "Journal Name": "Journal of Astrophysics and Astronomy*",
+          "Publisher / Society": "Indian Academy of Sciences & Astronomical Society of India / Springer",
+          "Primary Focus Area": "Broad astrophysics & astronomy",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/12036"
+        },
+        {
+          "Journal Name": "Living Reviews in Solar Physics",
+          "Publisher / Society": "Max Planck Institute for Solar System Research / Springer",
+          "Primary Focus Area": "Reviews in solar & heliospheric physics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.springer.com/journal/41116"
+        },
+        {
+          "Journal Name": "Astrophysics",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Theoretical and observational physics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://link.springer.com/journal/10511"
+        },
+        {
+          "Journal Name": "Solar Physics*",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Solar physics research",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/11207"
+        },
+        {
+          "Journal Name": "Space Science Reviews*",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Reviews in space science, incl. planetary",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/11214"
+        },
+        {
+          "Journal Name": "The Astronomy and Astrophysics Review*",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Reviews in astronomy & astrophysics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.springer.com/journal/159"
+        },
+        {
+          "Journal Name": "Advances in Physics: Astronomy, Astrophysics and Particle Physics",
+          "Publisher / Society": "Taylor & Francis",
+          "Primary Focus Area": "Emerging astronomy, astrophysics, particle physics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.tandfonline.com/journals/taaa20"
+        },
+        {
+          "Journal Name": "NRIAG Journal of Astronomy and Geophysics*",
+          "Publisher / Society": "National Research Institute of Astronomy and Geophysics (NRIAG) / Taylor & Francis",
+          "Primary Focus Area": "Astronomy & geophysics, incl. planetary",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://www.tandfonline.com/journals/tjag20"
+        },
+        {
+          "Journal Name": "Astronomische Nachrichten (AN)*",
+          "Publisher / Society": "Wiley-VCH",
+          "Primary Focus Area": "Astrophysics, solar system, solar physics",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://onlinelibrary.wiley.com/journal/15213994"
+        },
+        {
+          "Journal Name": "Meteoritics & Planetary Science*",
+          "Publisher / Society": "The Meteoritical Society / Wiley",
+          "Primary Focus Area": "Meteoritics, small bodies, solar system origin",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://onlinelibrary.wiley.com/journal/19455100"
+        },
+        {
+          "Journal Name": "Journal of Astronomical Instrumentation (JAI)*",
+          "Publisher / Society": "World Scientific",
+          "Primary Focus Area": "Astronomical instrumentation & techniques",
+          "Open Access? (Yes / Hybrid / No)": "Hybrid",
+          "Journal Homepage": "https://www.worldscientific.com/worldscinet/jai"
+        },
+        {
+          "Journal Name": "Journal of Geophysics",
+          "Publisher / Society": "Journal of Geophysics",
+          "Primary Focus Area": "Promotes understanding of our solar system, especially through theoretical physics",
+          "Open Access? (Yes / Hybrid / No)": "Yes",
+          "Journal Homepage": "https://geophysicsjournal.com/"
+        }
+      ]
+    },
+    "Bio": {
+      "sheet_info": {
+        "name": "Bio",
+        "total_journals": 69,
+        "columns": [
+          "Journal Name",
+          "Publisher / Society",
+          "Primary Focus Area",
+          "Open Access Status (Yes / Hybrid / No)",
+          "Link to Journal Homepage"
+        ]
+      },
+      "journals": [
+        {
+          "Journal Name": "Acta Astronautica*",
+          "Publisher / Society": "Elsevier (Sponsored by IAA)",
+          "Primary Focus Area": "Engineering, life, social sciences related to space",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/acta-astronautica"
+        },
+        {
+          "Journal Name": "Advances in Space Research",
+          "Publisher / Society": "Elsevier / COSPAR",
+          "Primary Focus Area": "Broad space research, including BPS areas",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/advances-in-space-research"
+        },
+        {
+          "Journal Name": "Aerospace Medicine and Human Performance",
+          "Publisher / Society": "Aerospace Medical Association",
+          "Primary Focus Area": "Aerospace medicine, human factors, space physiology",
+          "Open Access Status (Yes / Hybrid / No)": "No",
+          "Link to Journal Homepage": "https://www.asma.org/publications/aerospace-medicine-and-human-performance-journal"
+        },
+        {
+          "Journal Name": "Astrobiology",
+          "Publisher / Society": "Mary Ann Liebert, Inc.",
+          "Primary Focus Area": "Origin, evolution, distribution, future of life in universe",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://home.liebertpub.com/publications/astrobiology/99/"
+        },
+        {
+          "Journal Name": "Astroparticle Physics*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Cosmic ray physics, particle cosmology, high-energy astrophysics",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/astroparticle-physics"
+        },
+        {
+          "Journal Name": "Astronomy & Astrophysics",
+          "Publisher / Society": "EDP Sciences (on behalf of ESO)",
+          "Primary Focus Area": "Broad astronomy and astrophysics research",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.aanda.org/"
+        },
+        {
+          "Journal Name": "Astronomy and Computing*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Astronomical computing, software, data handling, simulations",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/astronomy-and-computing"
+        },
+        {
+          "Journal Name": "Astrophysics and Space Science",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Broad astronomy, astrophysics, space science, instrumentation",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10509"
+        },
+        {
+          "Journal Name": "Biophysical Journal: Cell Press",
+          "Publisher / Society": "Cell Press / Biophysical Society",
+          "Primary Focus Area": "Broad biophysics research",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.cell.com/biophysj/home"
+        },
+        {
+          "Journal Name": "Communications Earth & Environment",
+          "Publisher / Society": "Nature Portfolio (Springer Nature)",
+          "Primary Focus Area": "Earth, environmental, planetary sciences",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/commsenv/"
+        },
+        {
+          "Journal Name": "Communications Physics",
+          "Publisher / Society": "Nature Portfolio (Springer Nature)",
+          "Primary Focus Area": "Broad physics research, including applied & interdisciplinary",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/commsphys/"
+        },
+        {
+          "Journal Name": "Cellular and Molecular Life Sciences",
+          "Publisher / Society": "Springer",
+          "Primary Focus Area": "Biological and Biomedical Research",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://link.springer.com/journal/18"
+        },
+        {
+          "Journal Name": "Earth and Planetary Science Letters",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Earth & planetary physical/chemical processes, interiors to atmospheres",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/earth-and-planetary-science-letters"
+        },
+        {
+          "Journal Name": "Earth, Moon, and Planets*",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Solar system science, formation, evolution, small bodies",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/11038"
+        },
+        {
+          "Journal Name": "Earth and Planetary Science",
+          "Publisher / Society": "Nass Publishing",
+          "Primary Focus Area": "Earth and planetary systems, systemic approach",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://journals.nasspublishing.com/index.php/eps"
+        },
+        {
+          "Journal Name": "Earth and Space Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Earth, planetary, space sciences; data, methods, instruments",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/23335084"
+        },
+        {
+          "Journal Name": "Experimental Astronomy*",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Astrophysical instrumentation and methods, data analysis",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10686"
+        },
+        {
+          "Journal Name": "The FASEB Journal",
+          "Publisher / Society": "Wiley",
+          "Primary Focus Area": "Biology and Biomedical Sciences",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://faseb.onlinelibrary.wiley.com/journal/15306860"
+        },
+        {
+          "Journal Name": "Frontiers in Plant Science",
+          "Publisher / Society": "Frontiers",
+          "Primary Focus Area": "Plant biology for sustainable food security, functional ecosystems and human health",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.frontiersin.org/journals/plant-science"
+        },
+        {
+          "Journal Name": "Frontiers in Genetics",
+          "Publisher / Society": "Frontiers",
+          "Primary Focus Area": "Advances understanding of genes from multiple organisms",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.frontiersin.org/journals/genetics"
+        },
+        {
+          "Journal Name": "General Relativity and Gravitation",
+          "Publisher / Society": "Springer Nature (in partnership with ISGRG)",
+          "Primary Focus Area": "Theoretical and experimental gravitational physics",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/10714"
+        },
+        {
+          "Journal Name": "Geochemistry, Geophysics, Geosystems",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Earth and planetary processes, system understanding",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15252027"
+        },
+        {
+          "Journal Name": "Geochimica et Cosmochimica Acta*",
+          "Publisher / Society": "Elsevier / The Geochemical Society & The Meteoritical Society",
+          "Primary Focus Area": "Geochemistry, meteoritics, planetary geochemistry, cosmochemistry",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/geochimica-et-cosmochimica-acta"
+        },
+        {
+          "Journal Name": "Geology",
+          "Publisher / Society": "Geological Society of America (GSA)",
+          "Primary Focus Area": "Broad earth sciences, including planetary geology",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.geosociety.org/GSA/Publications/Journals/Geology/GSA/Pubs/geology/home.aspx"
+        },
+        {
+          "Journal Name": "Geophysical Journal International",
+          "Publisher / Society": "RAS / DGG / Oxford University Press",
+          "Primary Focus Area": "Solid-Earth geophysics, Earth structure, processes",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://academic.oup.com/gji"
+        },
+        {
+          "Journal Name": "Geophysical Research Letters",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "High-impact, rapid advances across all geosciences",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19448007"
+        },
+        {
+          "Journal Name": "GSA Bulletin",
+          "Publisher / Society": "Geological Society of America (GSA)",
+          "Primary Focus Area": "Definitive research across all earth-science disciplines",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.geosociety.org/GSA/Publications/Journals/Bulletin/GSA/Pubs/bulletin/home.aspx"
+        },
+        {
+          "Journal Name": "Gravitational and Space Research",
+          "Publisher / Society": "Paradigm Publishing",
+          "Primary Focus Area": "Life and material sciences",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://sciendo.com/journal/GSR"
+        },
+        {
+          "Journal Name": "Icarus*",
+          "Publisher / Society": "Elsevier (Endorsed by AAS/DPS)",
+          "Primary Focus Area": "Solar System & exoplanet studies; observation, theory, experiment",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/icarus"
+        },
+        {
+          "Journal Name": "Journal of Astronomical Instrumentation",
+          "Publisher / Society": "World Scientific",
+          "Primary Focus Area": "Astronomical instruments, components, techniques, algorithms",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.worldscientific.com/worldscinet/jai"
+        },
+        {
+          "Journal Name": "Journal of Atmospheric and Solar-Terrestrial Physics",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Sun-Earth connection, upper atmosphere, space weather physics",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-atmospheric-and-solar-terrestrial-physics"
+        },
+        {
+          "Journal Name": "Journal of Cosmology and Astroparticle Physics",
+          "Publisher / Society": "IOP Publishing / SISSA",
+          "Primary Focus Area": "Cosmology, astroparticle physics, fundamental interactions",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://iopscience.iop.org/journal/1475-7516"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Planets",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Planetary science: geology, geophysics, atmospheres, dynamics, exoplanets",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699100"
+        },
+        {
+          "Journal Name": "Journal of Geophysical Research: Space Physics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Aeronomy, magnetospheric, solar, heliospheric, space plasma physics",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/21699402"
+        },
+        {
+          "Journal Name": "Journal of High Energy Astrophysics*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "High-energy phenomena: black holes, neutron stars, transients",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/journal-of-high-energy-astrophysics"
+        },
+        {
+          "Journal Name": "Life Sciences in Space Research",
+          "Publisher / Society": "Elsevier / COSPAR",
+          "Primary Focus Area": "Astrobiology, life in extreme environments, space radiation biology",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/life-sciences-in-space-research"
+        },
+        {
+          "Journal Name": "Living Reviews in Relativity",
+          "Publisher / Society": "Springer Nature (Founded by Max Planck Institute)",
+          "Primary Focus Area": "Invited reviews in all areas of relativity",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.springer.com/journal/41114"
+        },
+        {
+          "Journal Name": "Living Reviews in Solar Physics",
+          "Publisher / Society": "Springer Nature (Founded by Max Planck Institute)",
+          "Primary Focus Area": "Invited reviews in solar and heliospheric physics",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.springer.com/journal/41116"
+        },
+        {
+          "Journal Name": "Meteoritics and Planetary Science",
+          "Publisher / Society": "Wiley / The Meteoritical Society",
+          "Primary Focus Area": "Meteorites, planetary science, solar system origin/history",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://onlinelibrary.wiley.com/journal/19455100"
+        },
+        {
+          "Journal Name": "Monthly Notices of the Royal Astronomical Society",
+          "Publisher / Society": "RAS / Oxford University Press",
+          "Primary Focus Area": "Broad astronomy and astrophysics research",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://academic.oup.com/mnras"
+        },
+        {
+          "Journal Name": "Nature*",
+          "Publisher / Society": "Nature Portfolio (Springer Nature)",
+          "Primary Focus Area": "Premier multidisciplinary science, including relevant BPS breakthroughs",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/nature/"
+        },
+        {
+          "Journal Name": "Nature Astronomy*",
+          "Publisher / Society": "Nature Portfolio (Springer Nature)",
+          "Primary Focus Area": "High-impact astronomy, astrophysics, planetary science",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/natastron/"
+        },
+        {
+          "Journal Name": "Nature Communications",
+          "Publisher / Society": "Nature Portfolio (Springer Nature)",
+          "Primary Focus Area": "High-quality multidisciplinary research, including BPS areas",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/ncomms/"
+        },
+        {
+          "Journal Name": "Nature Geoscience*",
+          "Publisher / Society": "Nature Portfolio (Springer Nature)",
+          "Primary Focus Area": "Top-quality Earth & planetary science research",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/ngeo/"
+        },
+        {
+          "Journal Name": "Nature Physics*",
+          "Publisher / Society": "Nature Portfolio (Springer Nature)",
+          "Primary Focus Area": "High-impact research across all areas of physics",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.nature.com/nphys/"
+        },
+        {
+          "Journal Name": "New Astronomy*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Broad astronomy, solar system to cosmology",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/new-astronomy"
+        },
+        {
+          "Journal Name": "npj Microgravity",
+          "Publisher / Society": "Nature Portfolio (Springer Nature) / ASGSR",
+          "Primary Focus Area": "Microgravity effects on physical/biological systems",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.nature.com/npjmgrav/"
+        },
+        {
+          "Journal Name": "NRIAG Journal of Astronomy and Geophysics",
+          "Publisher / Society": "Taylor & Francis / NRIAG",
+          "Primary Focus Area": "Astronomy, astrophysics, geophysics, planetary science",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.tandfonline.com/journals/tjag20"
+        },
+        {
+          "Journal Name": "Physics of Fluids",
+          "Publisher / Society": "AIP Publishing",
+          "Primary Focus Area": "Fluid dynamics research, theory, computation, experiments",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://pubs.aip.org/aip/pof"
+        },
+        {
+          "Journal Name": "Physics of Plasmas",
+          "Publisher / Society": "AIP Publishing",
+          "Primary Focus Area": "Experimental, computational, theoretical plasma physics",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://pubs.aip.org/aip/pop"
+        },
+        {
+          "Journal Name": "Physics of the Dark Universe*",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Dark matter, dark energy, early universe, gravitational waves",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/physics-of-the-dark-universe"
+        },
+        {
+          "Journal Name": "Planetary and Space Science",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Solar system science, atmospheres, magnetospheres, small bodies",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.sciencedirect.com/journal/planetary-and-space-science"
+        },
+        {
+          "Journal Name": "PNAS",
+          "Publisher / Society": "National Academy of Sciences",
+          "Primary Focus Area": "High-impact multidisciplinary research, including relevant BPS",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.pnas.org/"
+        },
+        {
+          "Journal Name": "Radio Science",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Electromagnetic phenomena, wave propagation, ionosphere, radio astronomy",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/1944799X"
+        },
+        {
+          "Journal Name": "RAS Techniques and Instruments",
+          "Publisher / Society": "RAS / Oxford University Press",
+          "Primary Focus Area": "Astronomical/geophysical instrumentation, data science, software, methods",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://academic.oup.com/rasti"
+        },
+        {
+          "Journal Name": "Research in Astronomy and Astrophysics",
+          "Publisher / Society": "IOP Publishing / NAOC & CAS",
+          "Primary Focus Area": "Broad astronomy and astrophysics research",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://iopscience.iop.org/journal/1674-4527"
+        },
+        {
+          "Journal Name": "Review of Geophysics",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Comprehensive reviews across Earth and space sciences",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/19449208"
+        },
+        {
+          "Journal Name": "Science",
+          "Publisher / Society": "AAAS",
+          "Primary Focus Area": "Premier multidisciplinary science, including relevant BPS breakthroughs",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.science.org/"
+        },
+        {
+          "Journal Name": "Science Advances",
+          "Publisher / Society": "AAAS",
+          "Primary Focus Area": "Promotes significant advancements in science and engineering",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.science.org/journal/sciadv"
+        },
+        {
+          "Journal Name": "Solar Physics",
+          "Publisher / Society": "Springer Nature",
+          "Primary Focus Area": "Solar physics, internal structure to interplanetary space",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/11207"
+        },
+        {
+          "Journal Name": "Solid Earth",
+          "Publisher / Society": "EGU / Copernicus Publications",
+          "Primary Focus Area": "Solid Earth composition, structure, dynamics",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://www.solid-earth.net/"
+        },
+        {
+          "Journal Name": "Space Science Reviews",
+          "Publisher / Society": "Springer Nature (in partnership with ISSI)",
+          "Primary Focus Area": "Synthesis reviews: astrophysics, planetary, solar, space physics",
+          "Open Access Status (Yes / Hybrid / No)": "Hybrid",
+          "Link to Journal Homepage": "https://www.springer.com/journal/11214"
+        },
+        {
+          "Journal Name": "Space Weather",
+          "Publisher / Society": "AGU / Wiley",
+          "Primary Focus Area": "Space weather science, forecasting, and impacts",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://agupubs.onlinelibrary.wiley.com/journal/15427390"
+        },
+        {
+          "Journal Name": "The Astronomical Journal",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Observational astronomy, instrumentation, data analysis, solar system",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://iopscience.iop.org/journal/1538-3881"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Broad astrophysics, theoretical & observational research",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://iopscience.iop.org/journal/0004-637X"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Letters",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Rapid publication of high-impact astronomy/astrophysics research",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://iopscience.iop.org/journal/2041-8205"
+        },
+        {
+          "Journal Name": "The Astrophysical Journal Supplement Series",
+          "Publisher / Society": "AAS / IOP Publishing",
+          "Primary Focus Area": "Extensive papers, catalogs, large data compilations",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://iopscience.iop.org/journal/0067-0049"
+        },
+        {
+          "Journal Name": "The Open Journal of Astrophysics",
+          "Publisher / Society": "Maynooth Academic Publishing",
+          "Primary Focus Area": "arXiv overlay journal covering all astro-ph categories",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://astro.theoj.org/"
+        },
+        {
+          "Journal Name": "The Planetary Science Journal",
+          "Publisher / Society": "AAS / IOP Publishing (endorsed by DPS)",
+          "Primary Focus Area": "Solar system & exoplanet research, observations, theory, modeling",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Journal Homepage": "https://iopscience.iop.org/journal/2632-3338"
+        }
+      ]
+    },
+    "non-Peer-Rev": {
+      "sheet_info": {
+        "name": "non-Peer-Rev",
+        "total_journals": 15,
+        "columns": [
+          "Name",
+          "Publisher / Society",
+          "Primary Focus Area",
+          "Open Access Status (Yes / Hybrid / No)",
+          "Link to Homepage"
+        ]
+      },
+      "journals": [
+        {
+          "Name": "arXiv",
+          "Publisher / Society": "Cornell University",
+          "Primary Focus Area": "Multidisciplinary (set sub-subjects)",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://arxiv.org/"
+        },
+        {
+          "Name": "ESS Open Archive",
+          "Publisher / Society": "AGU/Wiley (provides funding)",
+          "Primary Focus Area": "Earth, environmental, and space science preprints, presentations, and other docs",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://essopenarchive.org/"
+        },
+        {
+          "Name": "bioRxiv",
+          "Publisher / Society": null,
+          "Primary Focus Area": "Unpublished preprints in the life sciences",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://www.biorxiv.org/"
+        },
+        {
+          "Name": "authorea",
+          "Publisher / Society": null,
+          "Primary Focus Area": "Multidisciplinary preprints (manuscripts, essays, whitepapers, blogs)",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://www.authorea.com/"
+        },
+        {
+          "Name": "Zenodo (publications)",
+          "Publisher / Society": "CERN/OpenAIRE (funding)",
+          "Primary Focus Area": "Multidisciplinary preprints, peer-reviewed articles, conference papers, etc",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://zenodo.org/"
+        },
+        {
+          "Name": "Figshare (articles)",
+          "Publisher / Society": "Digital Science",
+          "Primary Focus Area": "Multidisciplinary preprints and peer-reviewed articles (some for predatory journals)",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://figshare.com/"
+        },
+        {
+          "Name": "medRxiv",
+          "Publisher / Society": null,
+          "Primary Focus Area": "Unpublished preprints in the health sciences (too broad for BPS??)",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://www.medrxiv.org/"
+        },
+        {
+          "Name": "EarthArXiv",
+          "Publisher / Society": "California Digital Library/ESIP",
+          "Primary Focus Area": "Preprints for earth and planetary science",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://eartharxiv.org/"
+        },
+        {
+          "Name": "Earth-Prints",
+          "Publisher / Society": "4Science",
+          "Primary Focus Area": "Open archive for earth science",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://www.earth-prints.org/home"
+        },
+        {
+          "Name": "agriRxiv",
+          "Publisher / Society": "CABI Digital Library",
+          "Primary Focus Area": "Preprints for agricultural sciences",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://www.cabidigitallibrary.org/journal/agrirxiv"
+        },
+        {
+          "Name": "HAL",
+          "Publisher / Society": "CNRS",
+          "Primary Focus Area": "Multidisciplinary open archive (French site so multi-language)",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://hal.science/"
+        },
+        {
+          "Name": "EcoEvoRxiv",
+          "Publisher / Society": "SORTEE",
+          "Primary Focus Area": "Preprints for ecology, evolution, and conservation",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://ecoevorxiv.org/"
+        },
+        {
+          "Name": "OSF",
+          "Publisher / Society": "Center for Open Science",
+          "Primary Focus Area": "Multidisciplinary preprints",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://osf.io/"
+        },
+        {
+          "Name": "SSRN",
+          "Publisher / Society": "Elsevier",
+          "Primary Focus Area": "Preprints and research papers from life and physical sciences",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://www.ssrn.com/"
+        },
+        {
+          "Name": "viXra",
+          "Publisher / Society": "Scientific God Inc.",
+          "Primary Focus Area": "Multidisciplinary alternative to arXiv",
+          "Open Access Status (Yes / Hybrid / No)": "Yes",
+          "Link to Homepage": "https://vixra.org/"
+        }
+      ]
+    }
+  }
+}
