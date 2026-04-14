@@ -11,9 +11,13 @@ research through:
 - Framework agnostic core logic decoupled from orchestration engines
 """
 
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _version
 
-__version__ = _version("akd")
+try:
+    __version__ = _version("akd")
+except PackageNotFoundError:
+    __version__ = "0.1.1"
 __author__ = "NASA IMPACT"
 __email__ = "np0069@uah.edu,mr0051@uah.edu"
 
