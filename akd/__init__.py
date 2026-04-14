@@ -11,7 +11,9 @@ research through:
 - Framework agnostic core logic decoupled from orchestration engines
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import version as _version
+
+__version__ = _version("akd")
 __author__ = "NASA IMPACT"
 __email__ = "np0069@uah.edu,mr0051@uah.edu"
 
