@@ -423,7 +423,7 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
         step2_prompt = step1_prompt + step1_result["raw_response"] + _END_OF_TEXT + "\n<categories>"
         step2_result = await self._call_category_detection(step2_prompt)
 
-        per_category_scores: dict[GraniteHarmCategory, float | None] = step2_result.get("scores", {})
+        category_scores: dict[GraniteHarmCategory, float | None] = step2_result.get("categories", {})
         threshold = self.config.score_threshold
         _non_harmful = (GraniteHarmCategory.NOT_HARMFUL_PROMPT, GraniteHarmCategory.NOT_HARMFUL_RESPONSE)
 
@@ -432,22 +432,20 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
         # (e.g., when Ollama doesn't return logprobs) pass through unfiltered.
         detected = [
             cat
-            for cat in step2_result.get("categories", [])
-            if cat in categories_to_check
-            and cat not in _non_harmful
-            and (per_category_scores.get(cat) is None or per_category_scores[cat] >= threshold)
+            for cat, score in category_scores.items()
+            if cat in categories_to_check and cat not in _non_harmful and (score is None or score >= threshold)
         ]
 
         if self.debug:
             logger.debug(
                 f"[{self.__class__.__name__}] Step 2 - Detected {len(detected)} risks "
-                f"(filtered from {len(step2_result.get('categories', []))}, threshold={threshold}): "
-                f"{[(r.value, per_category_scores.get(r)) for r in detected]}",
+                f"(filtered from {len(category_scores)}, threshold={threshold}): "
+                f"{[(r.value, category_scores.get(r)) for r in detected]}",
             )
 
         # Build per-risk results with per-category score.
         risk_results: dict[RiskCategory, dict[str, Any]] = {
-            cat: {"is_risky": True, "score": per_category_scores.get(cat)} for cat in detected
+            cat: {"is_risky": True, "score": category_scores.get(cat)} for cat in detected
         }
 
         return GuardrailOutput(
@@ -459,7 +457,7 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
                 "confidence": confidence,
                 "step1_raw": step1_result.get("raw_response"),
                 "step2_raw": step2_result.get("raw_response"),
-                "unfiltered_categories": step2_result.get("categories", []),
+                "unfiltered_categories": category_scores,
             },
         )
 
@@ -558,51 +556,44 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
                     f"--- RESPONSE START ---\n{content}\n--- RESPONSE END ---",
                 )
 
-            categories_with_scores = self._parse_categories_with_scores(content, token_logprobs)
-            categories = [cat for cat, _ in categories_with_scores]
-            scores = {cat: s for cat, s in categories_with_scores}
+            categories = self._parse_categories(content, token_logprobs)
 
             if self.debug:
                 logger.debug(
                     f"[{self.__class__.__name__}] Step 2 - Parsed categories with scores: "
-                    f"{[(c.value, s) for c, s in categories_with_scores]}",
+                    f"{[(c.value, s) for c, s in categories.items()]}",
                 )
 
             return {
                 "categories": categories,
-                "scores": scores,
                 "raw_response": content,
             }
         except Exception as e:
             logger.error(f"[{self.__class__.__name__}] Step 2 error: {e}")
-            return {"error": str(e), "categories": [], "scores": {}}
+            return {"error": str(e), "categories": {}}
 
-    def _parse_categories(self, content: str) -> list[GraniteHarmCategory]:
-        """Parse comma-separated categories from model output (no scores)."""
-        return [cat for cat, _ in self._parse_categories_with_scores(content, [])]
-
-    def _parse_categories_with_scores(
+    def _parse_categories(
         self,
         content: str,
-        token_logprobs: list[dict[str, Any]],
-    ) -> list[tuple[GraniteHarmCategory, float | None]]:
-        """Parse categories from model output and compute per-category scores from logprobs.
+        token_logprobs: list[dict[str, Any]] | None = None,
+    ) -> dict[GraniteHarmCategory, float | None]:
+        """Parse categories from model output into a ``{category: score}`` mapping.
 
-        For each emitted category, the score is the probability of its first token
-        (``exp(logprob)`` of the token that starts the category name). None if logprobs
-        are unavailable. Categories are returned in the order they appear in ``content``.
+        The score is ``exp(first_token_logprob)`` (model confidence in emitting that
+        category's first token), or ``None`` when ``token_logprobs`` is not provided.
+        Python dicts preserve insertion order, so the model's emission order is kept.
         """
         cleaned = content.replace("</categories>", "").strip()
         if not cleaned:
-            return []
+            return {}
 
         raw_categories = [c.strip() for c in cleaned.split(",") if c.strip()]
 
         # Walk the token stream and find, for each emitted category, the logprob of
         # the first non-whitespace, non-comma token that starts it.
-        first_token_logprobs = self._first_token_logprob_per_category(token_logprobs)
+        first_token_logprobs = self._first_token_logprob_per_category(token_logprobs or [])
 
-        results: list[tuple[GraniteHarmCategory, float | None]] = []
+        results: dict[GraniteHarmCategory, float | None] = {}
         for i, raw_cat in enumerate(raw_categories):
             try:
                 cat = GraniteHarmCategory(raw_cat)
@@ -610,8 +601,7 @@ class MultiRiskGraniteGuardianTool(GraniteGuardianTool):
                 logger.warning(f"[{self.__class__.__name__}] Unknown category: {raw_cat}")
                 continue
             lp = first_token_logprobs[i] if i < len(first_token_logprobs) else None
-            score = math.exp(lp) if lp is not None else None
-            results.append((cat, score))
+            results[cat] = math.exp(lp) if lp is not None else None
 
         return results
 
