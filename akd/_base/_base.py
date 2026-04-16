@@ -8,18 +8,11 @@ from collections.abc import AsyncIterator
 from typing import Any, Type, Union, cast, get_args, get_origin
 
 from loguru import logger
-from pydantic import (
-    BaseModel,
-    Field,
-    PrivateAttr,
-    ValidationError,
-    computed_field,
-    create_model,
-)
+from pydantic import BaseModel, Field, PrivateAttr, computed_field, create_model
 
 from akd.utils import get_model_fields, to_snake_case
 
-from .errors import HumanInputRequired, SchemaValidationError
+from .errors import HumanInputRequired
 from .streaming import (
     CompletedEvent,
     CompletedEventData,
@@ -31,6 +24,7 @@ from .streaming import (
     StreamEventType,
 )
 from .structures import RunContext
+from .validation import validate_input, validate_output
 
 
 class BaseConfig(BaseModel):
@@ -537,34 +531,11 @@ class AbstractBase[
 
     def _validate_input(self, params: Any) -> InSchema:
         """Validate and convert input parameters."""
-        if not isinstance(params, self.input_schema):
-            if isinstance(params, dict):
-                try:
-                    params = self.input_schema(**params)
-                except ValidationError as e:
-                    raise SchemaValidationError(f"Invalid input parameters: {e}") from e
-            else:
-                raise TypeError(
-                    f"params must be an instance of {self.input_schema.__name__}",
-                )
-        return params
+        return validate_input(self.input_schema, params)
 
     def _validate_output(self, output: Any) -> OutSchema:
         """Validate output against schema."""
-        schema_decl = self.output_schema
-        origin = get_origin(schema_decl)
-        if origin in (types.UnionType, Union):
-            args = [arg for arg in get_args(schema_decl) if isinstance(arg, type) and issubclass(arg, BaseModel)]
-            if not any(isinstance(output, arg) for arg in args):
-                raise TypeError(
-                    "Output must be an instance of one of: " + ", ".join(arg.__name__ for arg in args),
-                )
-            return output
-        if not isinstance(output, schema_decl):
-            raise TypeError(
-                f"Output must be an instance of {schema_decl.__name__}",
-            )
-        return output
+        return validate_output(self.output_schema, output)
 
     async def arun(
         self,
