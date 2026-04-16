@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, PrivateAttr, computed_field, create_model
 
 from akd.utils import get_model_fields, to_snake_case
 
+from .config_binding import ConfigBindingMixin
 from .errors import HumanInputRequired
 from .streaming import (
     CompletedEvent,
@@ -143,102 +144,14 @@ class TextOutput(OutputSchema):
     content: str = Field(description="The text content response")
 
 
-def _make_config_property(field_name: str):
-    """Create a property that references a config field.
-
-    This factory function creates properties at class definition time that delegate
-    to self.config.field_name, maintaining reference semantics between agent.x and
-    agent.config.x. Includes fallback to instance __dict__ for pre-init access.
-
-    Args:
-        field_name: Name of the config field to create a property for
-
-    Returns:
-        property: A property descriptor with getter/setter
-    """
-
-    def getter(self):
-        # If config doesn't exist yet, fall back to instance attribute
-        if not hasattr(self, "config") or self.config is None:
-            return self.__dict__.get(field_name)
-        return getattr(self.config, field_name)
-
-    def setter(self, value):
-        # If config doesn't exist yet, set as instance attribute
-        if not hasattr(self, "config") or self.config is None:
-            self.__dict__[field_name] = value
-        else:
-            setattr(self.config, field_name, value)
-
-    return property(getter, setter)
-
-
-def _make_computed_property(field_name: str):
-    """Create a read-only property for a computed config field.
-
-    Computed fields (decorated with @computed_field) are read-only and
-    dynamically calculated from other config values.
-
-    Args:
-        field_name: Name of the computed field
-
-    Returns:
-        property: A read-only property descriptor
-    """
-
-    def getter(self):
-        # If config doesn't exist yet, fall back to instance attribute
-        if not hasattr(self, "config") or self.config is None:
-            return self.__dict__.get(field_name)
-        return getattr(self.config, field_name)
-
-    return property(getter)
-
-
 class AbstractBaseMeta(ABCMeta):
-    """Metaclass that validates required schema attributes and creates config properties."""
+    """Metaclass that validates required schema attributes.
 
-    @staticmethod
-    def _create_config_properties(target_class, dct):
-        """Create properties for config fields at class definition time.
-
-        This creates properties that reference self.config.field_name, maintaining
-        reference semantics between agent.x and agent.config.x.
-
-        Args:
-            target_class: The class being created
-            dct: The class dictionary from __new__
-        """
-        if not hasattr(target_class, "config_schema") or target_class.config_schema is None:
-            return
-
-        # Create properties for regular model fields
-        if hasattr(target_class.config_schema, "model_fields"):
-            for field_name in target_class.config_schema.model_fields.keys():
-                # Skip if explicitly defined in this class's dict
-                if field_name in dct:
-                    continue
-                # Skip if already a property (from parent or exposed params)
-                if isinstance(getattr(target_class, field_name, None), property):
-                    continue
-                # Create property that references self.config.field_name
-                setattr(target_class, field_name, _make_config_property(field_name))
-
-        # Create read-only properties for computed fields
-        if hasattr(target_class.config_schema, "model_computed_fields"):
-            for field_name in target_class.config_schema.model_computed_fields.keys():
-                if field_name in dct:
-                    continue
-                if isinstance(getattr(target_class, field_name, None), property):
-                    continue
-                setattr(target_class, field_name, _make_computed_property(field_name))
+    Config property creation is handled by ConfigBindingMixin.__init_subclass__.
+    """
 
     def __new__(mcs, name, bases, dct):
         cls = super().__new__(mcs, name, bases, dct)
-
-        # Create config properties at class definition time for ALL classes
-        # This must happen before early return to ensure base classes get properties too
-        AbstractBaseMeta._create_config_properties(cls, dct)
 
         # Skip schema validation for base classes
         if name in [
@@ -298,7 +211,7 @@ class AbstractBaseMeta(ABCMeta):
 class AbstractBase[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](ABC, metaclass=AbstractBaseMeta):
+](ConfigBindingMixin, ABC, metaclass=AbstractBaseMeta):
     """Abstract base class for agents and tools.
 
     Includes streaming (astream/_astream) and sync run() directly.
@@ -443,31 +356,15 @@ class AbstractBase[
         self.debug = debug or getattr(config, "debug", False)
 
     def _post_init(self) -> None:
-        """
-        Post-initialization hook to perform any additional setup after
-        the instance has been initialized.
-        This can be overridden by subclasses for custom behavior.
+        """Post-initialization hook. Subclasses override for custom behavior.
 
-        Note: Config properties are created by AbstractBaseMeta at class definition time,
-        not during instance initialization.
+        Config properties are created by ConfigBindingMixin at class definition time.
+        Name/description/IO hints are bound via ConfigBindingMixin._bind_metadata().
         """
         for key, value in self._kwargs.items():
             setattr(self, key, value)
 
-        # Set default name from class name if not provided
-        if getattr(self, "name", None) is None:
-            self.name = to_snake_case(self.__class__.__name__)
-
-        self.description = (getattr(self, "description", None) or self.__class__.__doc__ or "").strip()
-
-        # Add input/output schema info to description if io_hints is True
-        if getattr(self, "io_hints", True):
-            _in_schema = self._input_schema_info
-            if _in_schema:
-                self.description += f"\n\nINPUT FIELD DESCRIPTIONS:\n{_in_schema}"
-            _out_schema = self._output_schema_info
-            if _out_schema:
-                self.description += f"\n\nOUTPUT FIELD DESCRIPTIONS:\n{_out_schema}"
+        self._bind_metadata()
 
     @property
     def _input_schema_info(self) -> str:
