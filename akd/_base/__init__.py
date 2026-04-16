@@ -2,14 +2,12 @@
 
 from ._base import (
     AbstractBase,
-    AbstractBaseMeta,
     BaseConfig,
     InputSchema,
     IOSchema,
     OutputSchema,
     TextInput,
     TextOutput,
-    UnrestrictedAbstractBase,
 )
 from .config_binding import ConfigBindingMixin
 from .errors import HumanInputRequired
@@ -51,7 +49,6 @@ from .validation import validate_input, validate_output, validate_schema
 __all__ = [
     # Base classes
     "AbstractBase",
-    "UnrestrictedAbstractBase",
     # Schema classes
     "IOSchema",
     "InputSchema",
@@ -63,8 +60,6 @@ __all__ = [
     # Metadata and decorators
     "exposed_param",
     "ParamExposureMixin",
-    # Metaclass
-    "AbstractBaseMeta",
     # Streaming
     "StreamEvent",
     "StreamEventType",

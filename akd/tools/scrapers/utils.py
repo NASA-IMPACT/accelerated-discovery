@@ -1,15 +1,10 @@
 from docling_core.types import DoclingDocument
 from docling_core.types.doc.document import SectionHeaderItem, TitleItem
-from pydantic import Field
-
-from akd._base import OutputSchema, UnrestrictedAbstractBase
+from pydantic import BaseModel, Field
 
 
-class _DoclingMetadataExtractorOutputSchema(OutputSchema):
-    """
-    Output schema for the DoclingMetadataExtractor tool.
-    Represents the extracted metadata as a dictionary.
-    """
+class _DoclingMetadataExtractorOutputSchema(BaseModel):
+    """Output schema for the DoclingMetadataExtractor utility."""
 
     title: str = Field(
         default="Untitled",
@@ -18,10 +13,10 @@ class _DoclingMetadataExtractorOutputSchema(OutputSchema):
     published_date: str | None = None
 
 
-class _DoclingMetadataExtractor(UnrestrictedAbstractBase):
-    """
-    A utility class for extracting metadata from DoclingDocument objects.
-    (Hidden from public API)
+class _DoclingMetadataExtractor:
+    """A utility class for extracting metadata from DoclingDocument objects.
+
+    Hidden from public API. Used internally by the web scraper tool.
 
     For title:
         Uses a prioritized search strategy:
@@ -29,16 +24,8 @@ class _DoclingMetadataExtractor(UnrestrictedAbstractBase):
         2. Any TitleItem in the document
         3. Any main section header (level=1) anywhere in document
         4. Document name attribute
-    5. "Untitled" as final fallback
-
-    Note:
-    - This class is not intended for direct use outside of the web scraper tool.
-    - It is designed to be used internally by the web scraper tool to extract titles
-    - For convenience, we just bypass config-based validation here.
+        5. "Untitled" as final fallback
     """
-
-    input_schema = DoclingDocument
-    output_schema = _DoclingMetadataExtractorOutputSchema
 
     def __init__(
         self,
@@ -46,32 +33,12 @@ class _DoclingMetadataExtractor(UnrestrictedAbstractBase):
         fallback_title: str = "Untitled",
         debug: bool = False,
     ) -> None:
-        """
-        Initialize the title extractor.
-
-        Args:
-            early_search_limit: Number of text items to search for early section headers
-            fallback_title: Title to use when no other title is found
-        """
         self.early_search_limit = early_search_limit
         self.fallback_title = fallback_title
         self.debug = bool(debug)
 
-    async def _arun(
-        self,
-        doc: DoclingDocument,
-        **kwargs,
-    ) -> _DoclingMetadataExtractorOutputSchema:
-        """
-        Extracts the title from a DoclingDocument using prioritized search strategies.
-
-        Args:
-            doc: The DoclingDocument to extract title from
-
-        Returns:
-            The extracted title string, or fallback_title if no suitable title found
-        """
-
+    async def arun(self, doc: DoclingDocument) -> _DoclingMetadataExtractorOutputSchema:
+        """Extract title metadata from a DoclingDocument."""
         title = self.extract_title(doc)
         return _DoclingMetadataExtractorOutputSchema(title=title)
 
@@ -140,8 +107,4 @@ class _DoclingMetadataExtractor(UnrestrictedAbstractBase):
         """
         Checks if a text item is a TitleItem with valid text.
         """
-        return (
-            isinstance(text_item, TitleItem)
-            and getattr(text_item, "text", None)
-            and text_item.text.strip()
-        )
+        return isinstance(text_item, TitleItem) and getattr(text_item, "text", None) and text_item.text.strip()

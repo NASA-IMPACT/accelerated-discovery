@@ -3,14 +3,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import types
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any, Type, Union, cast, get_args, get_origin
+from typing import Any, Type, Union, get_args, get_origin
 
 from loguru import logger
 from pydantic import BaseModel, Field, PrivateAttr, computed_field, create_model
 
-from akd.utils import get_model_fields, to_snake_case
+from akd.utils import get_model_fields
 
 from .config_binding import ConfigBindingMixin
 from .errors import HumanInputRequired
@@ -144,74 +144,10 @@ class TextOutput(OutputSchema):
     content: str = Field(description="The text content response")
 
 
-class AbstractBaseMeta(ABCMeta):
-    """Metaclass that validates required schema attributes.
-
-    Config property creation is handled by ConfigBindingMixin.__init_subclass__.
-    """
-
-    def __new__(mcs, name, bases, dct):
-        cls = super().__new__(mcs, name, bases, dct)
-
-        # Skip schema validation for base classes
-        if name in [
-            "AbstractBase",
-            "UnrestrictedAbstractBase",
-            "BaseAgent",
-            "AKDAgent",
-            "InstructorBaseAgent",
-            "LiteLLMInstructorBaseAgent",
-            "BaseTool",
-        ]:
-            return cls
-
-        # Check if this class inherits from AbstractBase
-        if any(isinstance(base, AbstractBaseMeta) for base in bases):
-            # Validate input_schema
-            if "input_schema" not in dct and not any(hasattr(base, "input_schema") for base in bases):
-                raise TypeError(f"{name} must define 'input_schema' class attribute")
-
-            # Validate output_schema
-            if "output_schema" not in dct and not any(hasattr(base, "output_schema") for base in bases):
-                raise TypeError(f"{name} must define 'output_schema' class attribute")
-
-            # Validate schema types if they exist
-            if hasattr(cls, "input_schema") and cls.input_schema is not None:
-                if not isinstance(cls.input_schema, type) or not issubclass(
-                    cls.input_schema,
-                    (InputSchema, BaseModel),
-                ):
-                    raise TypeError(
-                        f"{name}.input_schema must be a subclass of InputSchema",
-                    )
-
-            if hasattr(cls, "output_schema") and cls.output_schema is not None:
-                output_schema_decl = cls.output_schema
-                origin = get_origin(output_schema_decl)
-                if origin in (types.UnionType, Union):
-                    args = get_args(output_schema_decl)
-                    valid_union = bool(args) and all(
-                        isinstance(arg, type) and issubclass(arg, (OutputSchema, BaseModel)) for arg in args
-                    )
-                    if not valid_union:
-                        raise TypeError(
-                            f"{name}.output_schema union members must be subclasses of OutputSchema",
-                        )
-                elif not isinstance(output_schema_decl, type) or not issubclass(
-                    output_schema_decl,
-                    (OutputSchema, BaseModel),
-                ):
-                    raise TypeError(
-                        f"{name}.output_schema must be a subclass of OutputSchema or a union of them",
-                    )
-
-        return cls
-
-
 class AbstractBase[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](ConfigBindingMixin, ABC, metaclass=AbstractBaseMeta):
+](ConfigBindingMixin, ABC):
     """Abstract base class for agents and tools.
 
     Includes streaming (astream/_astream) and sync run() directly.
@@ -340,20 +276,49 @@ class AbstractBase[
         debug: bool = False,
         **kwargs,
     ) -> None:
-        """
-        Initializes the BaseAgent with a language model client and memory.
+        """Initialize the agent/tool.
 
-        Args:
-            debug (bool): If True, enables debug mode for additional logging.
-            config (BaseModel, optional): Configuration object containing all parameters
-            debug (bool): If True, enables debug mode for additional logging.
-            **kwargs: Additional keyword arguments (merged with config)
+        Validates required schemas at instantiation time. Abstract and
+        intermediate base classes (e.g. BaseAgent, AKDAgent) can be defined
+        without concrete schemas, but can only be instantiated through
+        concrete subclasses that do define them.
         """
+        self._validate_schemas()
         config = config or (self.config_schema() if self.config_schema else None) or BaseConfig()
         self.config = config
         self._kwargs = kwargs
         self._post_init()
         self.debug = debug or getattr(config, "debug", False)
+
+    def _validate_schemas(self) -> None:
+        """Validate input_schema / output_schema are defined and of proper types.
+
+        Called at __init__ time. Raises TypeError if schemas are missing or
+        invalid — which naturally prevents instantiation of abstract/intermediate
+        classes without requiring hardcoded class name checks.
+        """
+        cls_name = type(self).__name__
+
+        # input_schema
+        input_schema = getattr(self, "input_schema", None)
+        if input_schema is None:
+            raise TypeError(f"{cls_name} must define 'input_schema' class attribute")
+        if not isinstance(input_schema, type) or not issubclass(input_schema, (InputSchema, BaseModel)):
+            raise TypeError(f"{cls_name}.input_schema must be a subclass of InputSchema")
+
+        # output_schema (supports unions)
+        output_schema = getattr(self, "output_schema", None)
+        if output_schema is None:
+            raise TypeError(f"{cls_name} must define 'output_schema' class attribute")
+        origin = get_origin(output_schema)
+        if origin in (types.UnionType, Union):
+            args = get_args(output_schema)
+            if not args or not all(
+                isinstance(arg, type) and issubclass(arg, (OutputSchema, BaseModel)) for arg in args
+            ):
+                raise TypeError(f"{cls_name}.output_schema union members must be subclasses of OutputSchema")
+        elif not isinstance(output_schema, type) or not issubclass(output_schema, (OutputSchema, BaseModel)):
+            raise TypeError(f"{cls_name}.output_schema must be a subclass of OutputSchema or a union of them")
 
     def _post_init(self) -> None:
         """Post-initialization hook. Subclasses override for custom behavior.
@@ -481,143 +446,10 @@ class AbstractBase[
         raise NotImplementedError()
 
 
-class UnrestrictedAbstractBase[
-    InSchema: BaseModel,
-    OutSchema: BaseModel,
-](ABC, metaclass=AbstractBaseMeta):
-    """
-    Abstract base class for agents and tools that interact with a language model.
-    This class provides the basic structure for an agent or tool that can handle
-    asynchronous operations, manage memory, and utilize a language model
-    for generating responses based on user input.
-
-    This class does not enforce input and output schema types, allowing for more flexibility
-    in the types of parameters and outputs used.
-    It is intended for use cases where strict type checking is not required.
-    It is recommended to use this class only when necessary, as it bypasses the type safety
-    provided by the schema validation in the AbstractBase class.
-    """
-
-    config_schema: Type[BaseModel] | None = None
-
-    def __init__(
-        self,
-        config: BaseConfig | BaseModel | None = None,
-        debug: bool = False,
-        **kwargs,
-    ) -> None:
-        """
-        Initializes the BaseAgent with a language model client and memory.
-
-        Args:
-            debug (bool): If True, enables debug mode for additional logging.
-            config (BaseModel, optional): Configuration object containing all parameters
-            debug (bool): If True, enables debug mode for additional logging.
-            **kwargs: Additional keyword arguments (merged with config)
-        """
-        debug = getattr(config, "debug", False) or debug
-        self.debug = debug
-        self.config = config
-        self._kwargs = kwargs
-        self._post_init()
-
-    def _post_init(self) -> None:
-        """
-        Post-initialization hook to perform any additional setup after
-        the instance has been initialized.
-        This can be overridden by subclasses for custom behavior.
-
-        Note: Config properties are created by AbstractBaseMeta at class definition time,
-        not during instance initialization.
-        """
-        for key, value in self._kwargs.items():
-            setattr(self, key, value)
-
-        # Set default name from class name if not provided
-        if getattr(self, "name", None) is None:
-            self.name = to_snake_case(self.__class__.__name__)
-
-    @classmethod
-    def from_dict(cls, config_dict: dict[str, Any]) -> UnrestrictedAbstractBase:
-        """Create instance from dict, with dynamic config model if needed."""
-        debug = config_dict.pop("debug", False)
-
-        # Use existing config_schema or create dynamic one
-        if cls.config_schema is None and config_dict:
-            fields = {k: (type(v), v) for k, v in config_dict.items() if v is not None}
-            cls.config_schema = create_model(
-                f"{cls.__name__}Config",
-                __base__=BaseConfig,
-                **fields,
-            )
-
-        config = cls.config_schema(**config_dict) if cls.config_schema and config_dict else None
-        return cls(config=config, debug=debug)
-
-    def _validate_input(self, params: Any) -> InSchema:
-        """Validate and convert input parameters."""
-        if not isinstance(params, BaseModel):
-            raise TypeError("params must be an instance of pydantic BaseModel")
-        return cast(InSchema, params)
-
-    def _validate_output(self, output: Any) -> OutSchema:
-        """Validate and convert input parameters."""
-        if not isinstance(output, BaseModel):
-            raise TypeError("output must be an instance of pydantic BaseModel")
-        return cast(OutSchema, output)
-
-    async def arun(
-        self,
-        params: InSchema,
-        **kwargs,
-    ) -> OutSchema:
-        """
-        Runs the agent with the provided parameters asynchronously.
-        Args:
-            params (InSchema): The structured input parameters for the agent.
-            **kwargs: Additional keyword arguments.
-        Returns:
-            OutSchema: The output from the agent after processing the input.
-        """
-
-        params = self._validate_input(params)
-        if self.debug:
-            logger.debug(
-                f"Running {self.__class__.__name__} with params: {params}",
-            )
-        output = None
-        try:
-            output = await self._arun(params, **kwargs)
-            output = self._validate_output(output)
-        except HumanInputRequired:
-            logger.warning(f"{self.__class__.__name__}: HumanInputRequired (flow control)")
-            raise
-        except Exception as e:
-            logger.error(f"Error running {self.__class__.__name__}: {e}")
-            raise
-        return output
-
-    @abstractmethod
-    async def _arun(
-        self,
-        params: InSchema,
-        **kwargs,
-    ) -> OutSchema:
-        """Internal method to run the agent with the provided parameters asynchronously.
-        Args:
-            params (InSchema): The structured input parameters for the agent.
-            **kwargs: Additional keyword arguments.
-        Returns:
-            OutSchema: The output from the agent after processing the input.
-        """
-        raise NotImplementedError()
-
-
 __all__ = [
     "AbstractBase",
     "BaseConfig",
     "IOSchema",
     "InputSchema",
     "OutputSchema",
-    "UnrestrictedAbstractBase",
 ]
