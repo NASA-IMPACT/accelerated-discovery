@@ -12,6 +12,7 @@ from ._base import (
     TextOutput,
     UnrestrictedAbstractBase,
 )
+from .config_binding import ConfigBindingMixin
 from .errors import HumanInputRequired
 from .exposure import ParamExposureMixin, exposed_param
 from .protocols import AKDExecutable, AKDRunContext, AKDTool, RunContextProtocol
@@ -105,6 +106,8 @@ __all__ = [
     "AKDExecutable",
     "AKDTool",
     "RunContextProtocol",
+    # Config binding
+    "ConfigBindingMixin",
     # Human interaction
     "HumanResponse",
     "HumanInputRequired",
