@@ -46,6 +46,7 @@ from .streaming import (
 )
 from .structures import HumanResponse, RunContext
 from .tool_calling import ToolCall, ToolCallingMixin, ToolResult
+from .validation import validate_input, validate_output, validate_schema
 
 __all__ = [
     # Base classes
@@ -106,6 +107,10 @@ __all__ = [
     "RunContextProtocol",
     # Config binding
     "ConfigBindingMixin",
+    # Validation
+    "validate_input",
+    "validate_output",
+    "validate_schema",
     # Human interaction
     "HumanResponse",
     "HumanInputRequired",
