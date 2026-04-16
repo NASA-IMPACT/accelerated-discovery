@@ -3,7 +3,6 @@
 from ._base import (
     AbstractBase,
     AbstractBaseMeta,
-    AsyncRunMixin,
     BaseConfig,
     InputSchema,
     IOSchema,
@@ -52,7 +51,6 @@ __all__ = [
     # Base classes
     "AbstractBase",
     "UnrestrictedAbstractBase",
-    "AsyncRunMixin",
     # Schema classes
     "IOSchema",
     "InputSchema",

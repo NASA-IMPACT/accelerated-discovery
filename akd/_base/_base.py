@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import types
 from abc import ABC, ABCMeta, abstractmethod
+from collections.abc import AsyncIterator
 from typing import Any, Type, Union, cast, get_args, get_origin
 
 from loguru import logger
@@ -18,9 +20,17 @@ from pydantic import (
 from akd.utils import get_model_fields, to_snake_case
 
 from .errors import HumanInputRequired, SchemaValidationError
-from .streaming import StreamingMixin
+from .streaming import (
+    CompletedEvent,
+    CompletedEventData,
+    FailedEvent,
+    FailedEventData,
+    RunningEvent,
+    StartingEvent,
+    StreamEvent,
+    StreamEventType,
+)
 from .structures import RunContext
-from .utils import AsyncRunMixin
 
 
 class BaseConfig(BaseModel):
@@ -294,12 +304,11 @@ class AbstractBaseMeta(ABCMeta):
 class AbstractBase[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](StreamingMixin, AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
-    """
-    Abstract base class for agents and tools that interact with a language model.
-    This class provides the basic structure for an agent or tool that can handle
-    asynchronous operations, manage memory, and utilize a language model
-    for generating responses based on user input.
+](ABC, metaclass=AbstractBaseMeta):
+    """Abstract base class for agents and tools.
+
+    Includes streaming (astream/_astream) and sync run() directly.
+    Formerly split across StreamingMixin and AsyncRunMixin.
     """
 
     input_schema: Type[InSchema]
@@ -331,6 +340,92 @@ class AbstractBase[
         out_label = getattr(out_schema, "__name__", str(out_schema))
         attrs["__qualname__"] = f"{cls.__qualname__}[{in_schema.__name__}, {out_label}]"
         return type(cls.__name__, (cls,), attrs)
+
+    # ── Streaming (folded from StreamingMixin) ──────────────────────
+
+    async def astream(
+        self,
+        params: Any,
+        run_context: RunContext | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Public streaming API with input/output validation.
+
+        Wraps _astream() with validation:
+        - Input validation before any events are yielded
+        - Output validation on COMPLETED event before yielding
+        """
+        params = self._validate_input(params)
+
+        async for event in self._astream(params, run_context, **kwargs):
+            if event.event_type == StreamEventType.COMPLETED:
+                output = event.output
+                if output is not None:
+                    output = self._validate_output(output)
+                    yield CompletedEvent(
+                        source=event.source,
+                        message=event.message,
+                        data=CompletedEventData(output=output),
+                        run_context=event.run_context,
+                    )
+                    continue
+            yield event
+
+    async def _astream(
+        self,
+        params: Any,
+        run_context: RunContext,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamEvent]:
+        """Internal streaming implementation. Override for custom streaming.
+
+        Default yields STARTING/RUNNING, calls _arun(), yields COMPLETED/FAILED.
+        """
+        class_name = self.__class__.__name__
+
+        yield StartingEvent(
+            source=class_name,
+            message=f"Starting {class_name}",
+            run_context=run_context,
+        )
+
+        try:
+            yield RunningEvent(
+                source=class_name,
+                message=f"Running {class_name}",
+                run_context=run_context,
+            )
+
+            output = await self._arun(params, **kwargs)
+
+            yield CompletedEvent(
+                source=class_name,
+                message=f"Completed {class_name}",
+                data=CompletedEventData(output=output),
+                run_context=run_context,
+            )
+        except Exception as e:
+            yield FailedEvent(
+                source=class_name,
+                message=f"Failed: {e!s}",
+                data=FailedEventData(error=str(e), error_type=type(e).__name__),
+                run_context=run_context,
+            )
+            raise
+
+    # ── Sync wrapper (folded from AsyncRunMixin) ─────────────────────
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        """Run arun() synchronously."""
+        try:
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                future = asyncio.ensure_future(self.arun(*args, **kwargs))
+                return loop.run_until_complete(future)
+            else:
+                return asyncio.run(self.arun(*args, **kwargs))
+        except RuntimeError:
+            return asyncio.run(self.arun(*args, **kwargs))
 
     def __init__(
         self,
@@ -521,7 +616,7 @@ class AbstractBase[
 class UnrestrictedAbstractBase[
     InSchema: BaseModel,
     OutSchema: BaseModel,
-](StreamingMixin, AsyncRunMixin, ABC, metaclass=AbstractBaseMeta):
+](ABC, metaclass=AbstractBaseMeta):
     """
     Abstract base class for agents and tools that interact with a language model.
     This class provides the basic structure for an agent or tool that can handle
