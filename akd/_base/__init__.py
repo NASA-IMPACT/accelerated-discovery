@@ -14,6 +14,7 @@ from ._base import (
 )
 from .errors import HumanInputRequired
 from .exposure import ParamExposureMixin, exposed_param
+from .protocols import AKDExecutable, AKDRunContext, AKDTool, RunContextProtocol
 from .session import AgentSession, BaseSession, ToolSession
 from .streaming import (
     CompletedEvent,
@@ -99,6 +100,11 @@ __all__ = [
     "ToolCallingMixin",
     # Context
     "RunContext",
+    "AKDRunContext",
+    # Protocols
+    "AKDExecutable",
+    "AKDTool",
+    "RunContextProtocol",
     # Human interaction
     "HumanResponse",
     "HumanInputRequired",
