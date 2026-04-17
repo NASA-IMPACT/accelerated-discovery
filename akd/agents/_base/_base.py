@@ -242,18 +242,27 @@ class BaseAgent[
         return unique
 
     @property
-    def _system_prompt(self) -> str:
-        """Enhanced system prompt with agent description."""
+    def effective_system_prompt(self) -> str:
+        """System prompt actually sent to the LLM — base prompt + agent description.
+
+        Computed on every access from ``self.system_prompt`` + ``self.description``.
+        The underlying ``config.system_prompt`` is never mutated.
+        """
         content = self.system_prompt
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
         return content
 
+    @property
+    def _system_prompt(self) -> str:
+        """Backward-compat alias for ``effective_system_prompt``."""
+        return self.effective_system_prompt
+
     def _default_system_message(self) -> dict[str, str]:
         """Return default system message."""
         return {
             "role": "system",
-            "content": self._system_prompt,
+            "content": self.effective_system_prompt,
         }
 
     def _build_run_context(self, run_context: RunContext | None) -> RunContext:
