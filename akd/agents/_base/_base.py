@@ -981,6 +981,10 @@ class AKDAgent[
         raise UnexpectedModelBehavior("Non-tool streaming ended without completion")
 
 
+# Aliases for naming symmetry with framework adapters
+# (e.g. OpenAIBaseAgent, PydanticAIBaseAgent — AKDBaseAgent is the akd-native abstract agent)
+AKDBaseAgent = BaseAgent
+
 # Backward compatibility aliases
 LiteLLMInstructorBaseAgent = AKDAgent
 InstructorBaseAgent = AKDAgent
