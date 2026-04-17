@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import uuid
@@ -25,7 +26,7 @@ from akd._base import (
     StreamEventType,
     TextOutput,
     ToolCall,
-    ToolCallingMixin,
+    ToolResult,
 )
 from akd._base.errors import (
     HumanInputRequired,
@@ -456,7 +457,7 @@ class BaseAgent[
 class AKDAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](ToolCallingMixin, OutputRoutingMixin, BaseAgent):
+](OutputRoutingMixin, BaseAgent):
     """Built-in agent using LiteLLM + instructor.
 
     Uses LiteLLM for completion calls and instructor for structured output.
@@ -471,6 +472,65 @@ class AKDAgent[
     ) -> None:
         super().__init__(config=config, debug=debug)
         self.client = instructor.from_litellm(acompletion)
+
+    # ── Tool execution helpers (folded from ToolCallingMixin) ───────
+
+    def _find_tool(
+        self,
+        name: str,
+        tools: list[BaseTool] | None = None,
+    ) -> BaseTool | None:
+        """Find a tool by name (checks both tool.name and class name)."""
+        tools = tools or self.tools
+        return next(
+            (t for t in tools if t.name == name or t.__class__.__name__ == name),
+            None,
+        )
+
+    async def _execute_tool(
+        self,
+        tool_call: ToolCall,
+        tools: list[BaseTool] | None = None,
+    ) -> ToolResult:
+        """Execute a single tool call, returning normalized ToolResult."""
+        tool = self._find_tool(tool_call.tool_name, tools=tools)
+        if not tool:
+            return ToolResult(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                content=None,
+                error=f"Unknown tool: {tool_call.tool_name}",
+            )
+
+        try:
+            input_obj = tool.input_schema(**tool_call.arguments)
+            result = await tool.arun(input_obj)
+            content = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+            return ToolResult(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                content=content,
+            )
+        except Exception as e:
+            logger.exception(f"Tool '{tool_call.tool_name}' failed with args {tool_call.arguments}")
+            return ToolResult(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                content=None,
+                error=str(e),
+            )
+
+    async def _execute_tools_parallel(
+        self,
+        tool_calls: list[ToolCall],
+        tools: list[BaseTool] | None = None,
+    ) -> list[ToolResult]:
+        """Execute multiple tool calls concurrently."""
+        return list(
+            await asyncio.gather(*[self._execute_tool(tc, tools=tools) for tc in tool_calls]),
+        )
+
+    # ── End folded helpers ─────────────────────────────────────────
 
     def _post_init(self):
         super()._post_init()

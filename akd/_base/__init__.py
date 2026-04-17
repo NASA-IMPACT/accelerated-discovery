@@ -43,7 +43,7 @@ from .streaming import (
     ToolResultEventData,
 )
 from .structures import HumanResponse, RunContext
-from .tool_calling import ToolCall, ToolCallingMixin, ToolResult
+from .tool_calling import ToolCall, ToolResult
 from .validation import validate_input, validate_output, validate_schema
 
 __all__ = [
@@ -92,7 +92,6 @@ __all__ = [
     # Tool calling
     "ToolCall",
     "ToolResult",
-    "ToolCallingMixin",
     # Context
     "RunContext",
     "AKDRunContext",
