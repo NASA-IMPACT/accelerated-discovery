@@ -11,7 +11,6 @@ from ._base import (
 )
 from .config_binding import ConfigBindingMixin
 from .errors import HumanInputRequired
-from .exposure import ParamExposureMixin, exposed_param
 from .protocols import AKDExecutable, AKDRunContext, AKDTool, RunContextProtocol
 from .session import AgentSession, BaseSession, ToolSession
 from .streaming import (
@@ -57,9 +56,6 @@ __all__ = [
     "TextOutput",
     # Config classes
     "BaseConfig",
-    # Metadata and decorators
-    "exposed_param",
-    "ParamExposureMixin",
     # Streaming
     "StreamEvent",
     "StreamEventType",

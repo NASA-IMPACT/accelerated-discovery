@@ -20,7 +20,6 @@ from akd._base import (
     BaseConfig,
     InputSchema,
     OutputSchema,
-    ParamExposureMixin,
     RunContext,
     StreamEvent,
     StreamEventType,
@@ -207,7 +206,7 @@ class BaseAgentConfig(BaseConfig):
 class BaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AbstractBase, ParamExposureMixin):
+](AbstractBase):
     """Framework-agnostic base class for chat agents.
 
     Provides session management, validation, lifecycle, and streaming template.
