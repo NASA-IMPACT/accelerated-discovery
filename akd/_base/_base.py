@@ -5,7 +5,7 @@ import inspect
 import types
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any, Type, Union, get_args, get_origin
+from typing import Any, Generic, Type, TypeVar, Union, get_args, get_origin
 
 from loguru import logger
 from pydantic import BaseModel, Field, PrivateAttr, computed_field, create_model
@@ -144,11 +144,16 @@ class TextOutput(OutputSchema):
     content: str = Field(description="The text content response")
 
 
-class AbstractBase[
-    InSchema: InputSchema,
-    OutSchema: OutputSchema,
-](ConfigBindingMixin, ABC):
+InSchema = TypeVar("InSchema", bound=InputSchema)
+OutSchema = TypeVar("OutSchema", bound=OutputSchema)
+
+
+class AbstractBase(Generic[InSchema, OutSchema], ConfigBindingMixin, ABC):
     """Abstract base class for agents and tools.
+
+    Generic is declared first in the bases so multi-inheritance with
+    third-party frameworks using the standard ``(Generic[T], ABC)``
+    layout (e.g. pydantic-ai) resolves cleanly.
 
     Includes streaming (astream/_astream) and sync run() directly.
     Formerly split across StreamingMixin and AsyncRunMixin.
