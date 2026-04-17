@@ -10,8 +10,6 @@ from typing import Any, Generic, Type, TypeVar, Union, get_args, get_origin
 from loguru import logger
 from pydantic import BaseModel, Field, PrivateAttr, computed_field, create_model
 
-from akd.utils import get_model_fields
-
 from .config_binding import ConfigBindingMixin
 from .errors import HumanInputRequired
 from .streaming import (
@@ -335,49 +333,6 @@ class AbstractBase(Generic[InSchema, OutSchema], ConfigBindingMixin, ABC):
             setattr(self, key, value)
 
         self._bind_metadata()
-
-    @property
-    def _input_schema_info(self) -> str:
-        """
-        Extract field names and descriptions from input schema.
-
-        Returns:
-            str: Formatted string with field information, empty if no input schema.
-        """
-        # avoid circular dependency
-        if not hasattr(self, "input_schema") or not self.input_schema:
-            return ""
-
-        fields = get_model_fields(self.input_schema, skip_no_description=False)
-        if not fields:
-            return ""
-
-        return "\n".join(
-            [f"- **{field['name']}**: {field.get('description', field['name'].replace('_', ' '))}" for field in fields],
-        )
-
-    @property
-    def _output_schema_info(self) -> str:
-        """
-        Extract field names and descriptions from output schema.
-
-        Returns:
-            str: Formatted string with field information, empty if no output schema.
-        """
-
-        # avoid circular dependency
-        if not hasattr(self, "output_schema") or not self.output_schema:
-            return ""
-        schema_decl = self.output_schema
-        if not isinstance(schema_decl, type):
-            return ""
-        fields = get_model_fields(schema_decl, skip_no_description=False)
-        if not fields:
-            return ""
-
-        return "\n".join(
-            [f"- **{field['name']}**: {field.get('description', field['name'].replace('_', ' '))}" for field in fields],
-        )
 
     @classmethod
     def from_dict(cls, config_dict: dict[str, Any]) -> AbstractBase:

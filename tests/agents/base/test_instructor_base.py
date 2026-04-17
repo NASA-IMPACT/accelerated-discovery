@@ -182,31 +182,6 @@ class TestInstructorBaseAgentFunctionality:
         assert "OUTPUT FIELD DESCRIPTIONS:" not in system_message["content"]
         assert agent.system_prompt in system_message["content"]
 
-    def test_input_schema_info_property(self, mock_instructor_client):
-        """Test _input_schema_info property."""
-        agent = TestInstructorBaseAgent()
-
-        schema_info = agent._input_schema_info
-
-        assert "**query**:" in schema_info
-        assert "**optional_param**:" in schema_info
-        assert "Test query input" in schema_info
-        assert "Optional parameter" in schema_info
-        assert schema_info.startswith("- **query**:")
-
-    def test_input_schema_info_no_schema(self, mock_instructor_client):
-        """Test _input_schema_info property when no input schema."""
-        agent = TestInstructorBaseAgent()
-
-        original_schema = agent.input_schema
-        agent.input_schema = None
-
-        schema_info = agent._input_schema_info
-
-        assert schema_info == ""
-
-        agent.input_schema = original_schema
-
     def test_agent_description_enabled_by_default(self, mock_instructor_client):
         """Test that agent description is included by default (io_hints=True)."""
         agent = TestInstructorBaseAgent()

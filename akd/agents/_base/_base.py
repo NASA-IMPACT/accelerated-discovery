@@ -60,7 +60,6 @@ from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
 from akd.tools.human import HumanTool, HumanToolInput
-from akd.utils import get_model_fields
 
 from .output_routing import OutputRoutingMixin
 
@@ -241,25 +240,6 @@ class BaseAgent[
             if schema not in unique:
                 unique.append(schema)
         return unique
-
-    @property
-    def _output_schema_info(self) -> str:
-        """Override to describe each branch of union output schemas."""
-        base = super()._output_schema_info
-        schemas = self.output_schema_resolved
-        if len(schemas) <= 1:
-            return base
-
-        parts = []
-        for schema in schemas:
-            doc = (schema.__doc__ or schema.__name__).strip().split("\n")[0]
-            fields = get_model_fields(schema, skip_no_description=False)
-            field_lines = "\n".join(
-                f"  - **{f['name']}**: {f.get('description', f['name'].replace('_', ' '))}" for f in fields
-            )
-            parts.append(f"**{schema.__name__}**: {doc}\n{field_lines}")
-        union_info = "\n".join(parts)
-        return f"{base}\n{union_info}" if base else union_info
 
     @property
     def _system_prompt(self) -> str:

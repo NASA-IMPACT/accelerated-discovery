@@ -14,7 +14,8 @@ Config properties are collision-aware: fields already defined on the class
 
 from __future__ import annotations
 
-from typing import Any
+import types
+from typing import Any, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -49,16 +50,45 @@ def _make_computed_property(field_name: str) -> property:
     return property(getter)
 
 
-def _format_schema_fields(schema: type | None) -> str:
-    """Format a schema's field names and descriptions as a string."""
-    if schema is None or not isinstance(schema, type):
-        return ""
+def _format_single_schema(schema: type) -> str:
+    """Format one schema's fields as bullet lines."""
     fields = get_model_fields(schema, skip_no_description=False)
     if not fields:
         return ""
     return "\n".join(
         f"- **{field['name']}**: {field.get('description', field['name'].replace('_', ' '))}" for field in fields
     )
+
+
+def _format_schema_fields(schema: Any) -> str:
+    """Format schema field names + descriptions as a string.
+
+    Supports single types and union types (e.g. ``A | B``). For unions,
+    each branch is labeled with its docstring and fields are listed under it.
+    """
+    if schema is None:
+        return ""
+
+    origin = get_origin(schema)
+    if origin in (types.UnionType, Union):
+        branches = [arg for arg in get_args(schema) if isinstance(arg, type) and issubclass(arg, BaseModel)]
+        if not branches:
+            return ""
+        parts = []
+        for branch in branches:
+            doc = (branch.__doc__ or branch.__name__).strip().split("\n")[0]
+            lines = _format_single_schema(branch)
+            if lines:
+                indented = "\n".join(f"  {line}" for line in lines.splitlines())
+                parts.append(f"**{branch.__name__}**: {doc}\n{indented}")
+            else:
+                parts.append(f"**{branch.__name__}**: {doc}")
+        return "\n".join(parts)
+
+    if isinstance(schema, type):
+        return _format_single_schema(schema)
+
+    return ""
 
 
 class ConfigBindingMixin:
