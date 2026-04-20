@@ -110,6 +110,12 @@ class OutputSchema(IOSchema):
         """Get the run context associated with this output."""
         return self._run_context
 
+    def is_empty(self) -> bool:
+        """Structurally empty if all fields are None/empty/empty-of-empty (recursive)."""
+        from akd.utils import is_empty as _is_empty
+
+        return _is_empty(self)
+
 
 class TextInput(InputSchema):
     """Simple text-based input schema for unstructured content.
