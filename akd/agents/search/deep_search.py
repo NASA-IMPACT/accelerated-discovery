@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from pydantic import Field
 
-from akd._base import exposed_param
 from akd._base.streaming import (
     CompletedEvent,
     CompletedEventData,
@@ -170,8 +169,9 @@ class DeepLitSearchAgent(LitBaseAgent):
         self.research_history = []
         self.clarification_history = []
 
-    @exposed_param(description="System prompt used for LLM clarification rounds.")
+    @property
     def clarification_prompt(self) -> str:
+        """System prompt used for LLM clarification rounds."""
         return self.clarification_component.config.system_prompt
 
     @clarification_prompt.setter

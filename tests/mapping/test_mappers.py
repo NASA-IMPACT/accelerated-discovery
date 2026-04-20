@@ -12,9 +12,6 @@ import pytest
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents.extraction import ExtractionInputSchema
-
-# Import akd agent schemas
 from akd.agents.query import QueryAgentInputSchema, QueryAgentOutputSchema
 from akd.agents.relevancy import RelevancyAgentInputSchema
 from akd.agents.search import LitSearchAgentInputSchema, LitSearchAgentOutputSchema
@@ -27,6 +24,13 @@ from akd.mapping.mappers import (
     WaterfallMapper,
 )
 from akd.structures import SearchResultItem
+
+
+class ExtractionInputSchema(InputSchema):
+    """Information Extraction input schema"""
+
+    query: str = Field(..., description="Query that is used for answering/extraction")
+    content: str = Field(..., description="Actual text/content to extract information from")
 
 
 # Test schemas for mock scenarios

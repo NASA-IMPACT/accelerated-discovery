@@ -41,34 +41,41 @@ from akd.guardrails.providers.granite_guardian import (
 )
 
 
-def is_ollama_available() -> bool:
-    """Check if Ollama is running and reachable.
-
-    Uses OLLAMA_BASE_URL env var if set, otherwise falls back to localhost:11434.
-    """
+def _ollama_models() -> list[str]:
+    """Return list of Ollama model names, or empty list if Ollama unreachable."""
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     try:
         resp = httpx.get(f"{base_url}/api/tags", timeout=2.0)
-        print(resp.content)
+        if resp.status_code != 200:
+            return []
+        return [m.get("name", "") for m in resp.json().get("models", [])]
+    except (httpx.RequestError, httpx.TimeoutException):
+        return []
+
+
+def is_ollama_available() -> bool:
+    """Check if Ollama is running and reachable."""
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    try:
+        resp = httpx.get(f"{base_url}/api/tags", timeout=2.0)
         return resp.status_code == 200
     except (httpx.RequestError, httpx.TimeoutException):
         return False
 
 
-def is_granite_available() -> bool:
-    """Check if Ollama is running and has granite guardian models pulled.
+def is_model_available(model_id: str) -> bool:
+    """Check if a specific model is pulled in Ollama."""
+    models = _ollama_models()
+    return any(m == model_id or m.startswith(f"{model_id}:") for m in models)
 
-    Uses OLLAMA_BASE_URL env var if set, otherwise falls back to localhost:11434.
-    """
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    try:
-        resp = httpx.get(f"{base_url}/api/tags", timeout=2.0)
-        if resp.status_code != 200:
-            return False
-        models = [m.get("name", "") for m in resp.json().get("models", [])]
-        return any("granite" in model for model in models)
-    except (httpx.RequestError, httpx.TimeoutException):
-        return False
+
+def requires_model(model_id: GuardianModelID | str):
+    """Decorator: skip test if the specified Ollama model isn't available."""
+    name = model_id.value if isinstance(model_id, GuardianModelID) else model_id
+    return pytest.mark.skipif(
+        not is_model_available(name),
+        reason=f"Model not pulled — ollama pull {name}",
+    )
 
 
 # Mark all tests in this module as integration tests; skip if Ollama is not running
@@ -77,10 +84,6 @@ pytestmark = [
     pytest.mark.skipif(
         not is_ollama_available(),
         reason="Ollama not running — start with: ollama serve",
-    ),
-    pytest.mark.skipif(
-        not is_granite_available(),
-        reason="Granite models not available — ollama pull <model_id>",
     ),
 ]
 
@@ -138,6 +141,7 @@ class TestThinkOutputStructure:
     """Test thinking output structure in GuardrailOutput with real Ollama calls."""
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
     async def test_thinking_in_risk_results(self):
         """Thinking should appear in risk_results[category]['thinking'] with real Ollama."""
         config = GraniteGuardianToolConfig(
@@ -164,6 +168,7 @@ class TestThinkOutputStructure:
         await tool.close()
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
     async def test_thinking_for_multiple_categories(self):
         """Thinking should be present for all checked categories in risk_results."""
         config = GraniteGuardianToolConfig(
@@ -190,6 +195,7 @@ class TestThinkOutputStructure:
         await tool.close()
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_8B)
     async def test_no_thinking_when_disabled(self):
         """No thinking should be present when think=False."""
         config = GraniteGuardianToolConfig(
@@ -213,6 +219,7 @@ class TestThinkOutputStructure:
         await tool.close()
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
     async def test_thinking_only_for_checked_categories(self):
         """Thinking should only appear for categories that were checked."""
         config = GraniteGuardianToolConfig(
@@ -240,6 +247,7 @@ class TestThinkOutputStructure:
         await tool.close()
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
     async def test_thinking_present_for_all_results(self):
         """All risk results should have thinking when think=True."""
         config = GraniteGuardianToolConfig(
@@ -276,6 +284,7 @@ class TestMultiRiskThinkBehavior:
         assert config.think is False
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM)
     async def test_multi_risk_no_thinking_output(self):
         """Multi-risk tool should not output thinking data."""
         config = MultiRiskGraniteGuardianToolConfig(
@@ -297,6 +306,7 @@ class TestCompositeGuardrailWithThink:
     """Test composite guardrails with think-enabled tools."""
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
     async def test_composite_all_mode_preserves_thinking(self):
         """Composite ALL mode should preserve thinking from all sub-guardrails."""
         # Create two tools with thinking enabled
@@ -343,6 +353,7 @@ class TestCompositeGuardrailWithThink:
         await tool2.close()
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
     async def test_composite_any_mode_preserves_thinking(self):
         """Composite ANY mode should preserve thinking from all sub-guardrails."""
         config1 = GraniteGuardianToolConfig(
@@ -382,6 +393,8 @@ class TestCompositeGuardrailWithThink:
         await tool2.close()
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
+    @requires_model(GuardianModelID.GUARDIAN_8B)
     async def test_composite_mixed_think_and_no_think(self):
         """Composite should handle mix of think-enabled and think-disabled tools."""
         # Tool with thinking
@@ -431,6 +444,8 @@ class TestCompositeGuardrailWithThink:
         await tool2.close()
 
     @pytest.mark.asyncio
+    @requires_model(GuardianModelID.GUARDIAN_3_3_8B)
+    @requires_model(GuardianModelID.GUARDIAN_3_2_5B_MULTI_HARM)
     async def test_composite_with_multi_risk_no_thinking(self):
         """Composite with single-risk (think) and multi-risk (no think) should work."""
         # Single-risk with thinking

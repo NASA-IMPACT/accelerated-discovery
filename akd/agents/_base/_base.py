@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import uuid
@@ -19,13 +20,12 @@ from akd._base import (
     BaseConfig,
     InputSchema,
     OutputSchema,
-    ParamExposureMixin,
     RunContext,
     StreamEvent,
     StreamEventType,
     TextOutput,
     ToolCall,
-    ToolCallingMixin,
+    ToolResult,
 )
 from akd._base.errors import (
     HumanInputRequired,
@@ -59,7 +59,6 @@ from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
 from akd.tools._base import BaseTool
 from akd.tools.human import HumanTool, HumanToolInput
-from akd.utils import get_model_fields
 
 from .output_routing import OutputRoutingMixin
 
@@ -207,7 +206,7 @@ class BaseAgentConfig(BaseConfig):
 class BaseAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](AbstractBase, ParamExposureMixin):
+](AbstractBase):
     """Framework-agnostic base class for chat agents.
 
     Provides session management, validation, lifecycle, and streaming template.
@@ -242,37 +241,27 @@ class BaseAgent[
         return unique
 
     @property
-    def _output_schema_info(self) -> str:
-        """Override to describe each branch of union output schemas."""
-        base = super()._output_schema_info
-        schemas = self.output_schema_resolved
-        if len(schemas) <= 1:
-            return base
+    def effective_system_prompt(self) -> str:
+        """System prompt actually sent to the LLM — base prompt + agent description.
 
-        parts = []
-        for schema in schemas:
-            doc = (schema.__doc__ or schema.__name__).strip().split("\n")[0]
-            fields = get_model_fields(schema, skip_no_description=False)
-            field_lines = "\n".join(
-                f"  - **{f['name']}**: {f.get('description', f['name'].replace('_', ' '))}" for f in fields
-            )
-            parts.append(f"**{schema.__name__}**: {doc}\n{field_lines}")
-        union_info = "\n".join(parts)
-        return f"{base}\n{union_info}" if base else union_info
-
-    @property
-    def _system_prompt(self) -> str:
-        """Enhanced system prompt with agent description."""
+        Computed on every access from ``self.system_prompt`` + ``self.description``.
+        The underlying ``config.system_prompt`` is never mutated.
+        """
         content = self.system_prompt
         if self.description:
             content += f"\n\nAGENT DESCRIPTION:\n{self.description}"
         return content
 
+    @property
+    def _system_prompt(self) -> str:
+        """Backward-compat alias for ``effective_system_prompt``."""
+        return self.effective_system_prompt
+
     def _default_system_message(self) -> dict[str, str]:
         """Return default system message."""
         return {
             "role": "system",
-            "content": self._system_prompt,
+            "content": self.effective_system_prompt,
         }
 
     def _build_run_context(self, run_context: RunContext | None) -> RunContext:
@@ -456,7 +445,7 @@ class BaseAgent[
 class AKDAgent[
     InSchema: InputSchema,
     OutSchema: OutputSchema,
-](ToolCallingMixin, OutputRoutingMixin, BaseAgent):
+](OutputRoutingMixin, BaseAgent):
     """Built-in agent using LiteLLM + instructor.
 
     Uses LiteLLM for completion calls and instructor for structured output.
@@ -471,6 +460,65 @@ class AKDAgent[
     ) -> None:
         super().__init__(config=config, debug=debug)
         self.client = instructor.from_litellm(acompletion)
+
+    # ── Tool execution helpers (folded from ToolCallingMixin) ───────
+
+    def _find_tool(
+        self,
+        name: str,
+        tools: list[BaseTool] | None = None,
+    ) -> BaseTool | None:
+        """Find a tool by name (checks both tool.name and class name)."""
+        tools = tools or self.tools
+        return next(
+            (t for t in tools if t.name == name or t.__class__.__name__ == name),
+            None,
+        )
+
+    async def _execute_tool(
+        self,
+        tool_call: ToolCall,
+        tools: list[BaseTool] | None = None,
+    ) -> ToolResult:
+        """Execute a single tool call, returning normalized ToolResult."""
+        tool = self._find_tool(tool_call.tool_name, tools=tools)
+        if not tool:
+            return ToolResult(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                content=None,
+                error=f"Unknown tool: {tool_call.tool_name}",
+            )
+
+        try:
+            input_obj = tool.input_schema(**tool_call.arguments)
+            result = await tool.arun(input_obj)
+            content = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+            return ToolResult(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                content=content,
+            )
+        except Exception as e:
+            logger.exception(f"Tool '{tool_call.tool_name}' failed with args {tool_call.arguments}")
+            return ToolResult(
+                tool_call_id=tool_call.tool_call_id,
+                tool_name=tool_call.tool_name,
+                content=None,
+                error=str(e),
+            )
+
+    async def _execute_tools_parallel(
+        self,
+        tool_calls: list[ToolCall],
+        tools: list[BaseTool] | None = None,
+    ) -> list[ToolResult]:
+        """Execute multiple tool calls concurrently."""
+        return list(
+            await asyncio.gather(*[self._execute_tool(tc, tools=tools) for tc in tool_calls]),
+        )
+
+    # ── End folded helpers ─────────────────────────────────────────
 
     def _post_init(self):
         super()._post_init()
@@ -932,6 +980,10 @@ class AKDAgent[
             raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")
         raise UnexpectedModelBehavior("Non-tool streaming ended without completion")
 
+
+# Aliases for naming symmetry with framework adapters
+# (e.g. OpenAIBaseAgent, PydanticAIBaseAgent — AKDBaseAgent is the akd-native abstract agent)
+AKDBaseAgent = BaseAgent
 
 # Backward compatibility aliases
 LiteLLMInstructorBaseAgent = AKDAgent

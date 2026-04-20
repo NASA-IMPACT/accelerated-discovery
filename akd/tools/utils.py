@@ -1,16 +1,17 @@
 import inspect
-from typing import Any, Callable, Coroutine, Dict, Optional, Union
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, create_model
 
-from akd._base import AsyncRunMixin, InputSchema, OutputSchema
+from akd._base import InputSchema, OutputSchema
 from akd.common_types import CallableSpec
 
 from ._base import BaseTool
 
 
-def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
+def tool_wrapper(func: Callable[..., Any] | Coroutine) -> Any:
     """
     Converts any function or coroutine into a type of BaseTool.
     The input params are automatically converted to pydantic schema
@@ -157,7 +158,7 @@ def tool_wrapper(func: Union[Callable[..., Any], Coroutine]) -> Any:
     return tool_instance
 
 
-class ToolRunner(AsyncRunMixin):
+class ToolRunner:
     """
     Generic mapper that binds a state dict to a
     tool's input_schema and invokes it.
@@ -180,7 +181,7 @@ class ToolRunner(AsyncRunMixin):
         self.debug = debug
 
     @staticmethod
-    def get_tool(spec: Union[BaseTool, Callable]) -> BaseTool:
+    def get_tool(spec: BaseTool | Callable) -> BaseTool:
         # Wrap callables into BaseTool via tool_wrapper
         if isinstance(spec, BaseTool):
             return spec
@@ -189,13 +190,13 @@ class ToolRunner(AsyncRunMixin):
     def map_to_schema(
         self,
         tool: BaseTool,
-        data: Dict[str, Any],
-        mapping: Optional[Dict[str, str]] = None,
+        data: dict[str, Any],
+        mapping: dict[str, str] | None = None,
     ) -> BaseModel:
         mapping = mapping or {}
         schema = tool.input_schema
         fields = list(schema.model_fields)
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
 
         if isinstance(data, BaseModel):
             # If data is already a BaseModel, use its model_dump
@@ -214,7 +215,7 @@ class ToolRunner(AsyncRunMixin):
             logger.debug(f"Mapped kwargs: {kwargs} for tool: {tool.__class__.__name__}")
         return schema(**kwargs)
 
-    async def arun(self, spec: CallableSpec, data: Dict[str, Any]) -> Any:
+    async def arun(self, spec: CallableSpec, data: dict[str, Any]) -> Any:
         # Unpack spec
         if isinstance(spec, tuple):
             tool, mapping = spec
