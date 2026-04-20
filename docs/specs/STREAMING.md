@@ -110,12 +110,12 @@ class RunContext(BaseModel):
 
 `RunContext` replaces the previous `context: dict[str, Any]` parameter. It provides type safety for known fields while allowing arbitrary extra keys via `extra="allow"`.
 
-### StreamingMixin
+### `astream()` on `AbstractBase`
 
-Base mixin that adds `astream()` to any agent (`akd/_base/streaming.py`):
+The streaming entry point lives directly on `AbstractBase` (`akd/_base/_base.py`) — any class inheriting from it gets `astream()` for free. Event types and helpers live in `akd/_base/streaming.py`.
 
 ```python
-class StreamingMixin:
+class AbstractBase(Generic[InSchema, OutSchema], ConfigBindingMixin, ABC):
     async def astream(
         self,
         params: Any,
@@ -850,7 +850,7 @@ All streaming types are exported from `akd._base`:
 ```python
 from akd._base import (
     # Core
-    StreamEvent, StreamEventType, StreamingMixin,
+    StreamEvent, StreamEventType,
     # Event data models
     StartingEventData, RunningEventData, CompletedEventData,
     FailedEventData, StreamingEventData, ThinkingEventData,
@@ -861,8 +861,8 @@ from akd._base import (
     StreamingTokenEvent, ThinkingEvent, PartialOutputEvent,
     ToolCallingEvent, ToolResultEvent,
     HumanInputRequiredEvent, HumanResponseEvent,
-    # Tool calling support
-    ToolCall, ToolResult, RunContext, ToolCallingMixin, HumanResponse,
+    # Tool calling data models
+    ToolCall, ToolResult, RunContext, HumanResponse,
 )
 ```
 

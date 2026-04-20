@@ -33,20 +33,22 @@ See `docs/design_philosophy.md` for full design principles.
 
 ### Base System (`akd/_base/`)
 
-Everything inherits from `AbstractBase` or `UnrestrictedAbstractBase`. See `docs/specs/AKD_BASE.md` for the full reference.
+Everything inherits from `AbstractBase`. See `docs/specs/AKD_BASE.md` for the full reference.
 
 **Key exports from `akd._base`:**
 
-| Class | Purpose |
+| Class / Protocol | Purpose |
 |-------|---------|
-| `AbstractBase` | Strict base with schema validation (agents, tools) |
+| `AbstractBase` | Concrete base with schema validation, streaming, and config binding (agents, tools) |
 | `InputSchema` / `OutputSchema` / `IOSchema` | Typed schemas with required docstrings |
 | `BaseConfig` | Configuration base |
-| `StreamEvent` / `StreamingMixin` | Streaming event system |
-| `ToolCall` / `ToolResult` / `ToolCallingMixin` | Tool calling infrastructure |
+| `ConfigBindingMixin` | Opt-in: config property binding + metadata binding (already on `AbstractBase`) |
+| `AKDExecutable` / `AKDTool` / `RunContextProtocol` | Structural protocols — framework adapters satisfy these without inheriting `BaseAgent` / `BaseTool` |
+| `StreamEvent` | Streaming event hierarchy |
+| `ToolCall` / `ToolResult` | Tool calling data models |
 | `RunContext` | Execution context passed to agents (in `_base/structures.py`) |
 | `HumanResponse` | Human reply for HITL resumption (in `_base/structures.py`) |
-| `Memory` | Message storage with session lifecycle |
+| `validate_input` / `validate_output` | Standalone schema validators for non-inheriting adapters |
 
 ### Adding Agents or Tools
 
