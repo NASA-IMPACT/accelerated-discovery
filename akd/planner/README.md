@@ -67,7 +67,7 @@ WorkflowPlan(
     research_goal="Find recent papers on AlphaFold",
     suggested_agents=[
         AgentSuggestion(
-            agent_id="deep_search",
+            agent_id="research_agent",
             agent_name="Deep Search Agent",
             reason="Search scientific literature",
             confidence=0.95,
@@ -76,8 +76,8 @@ WorkflowPlan(
             depends_on=None
         ),
         AgentSuggestion(
-            agent_id="gap_analysis",
-            depends_on=["deep_search"]
+            agent_id="synthesis_agent",
+            depends_on=["research_agent"]
         )
     ],
     workflow_steps=[
@@ -95,7 +95,7 @@ WorkflowPlan(
   "version": "1.0.0",
   "nodes": [
     {
-      "type": "deep_search",
+      "type": "research_agent",
       "input": {
         "fields": [
           {"query": "recent papers on AlphaFold"},
@@ -106,7 +106,7 @@ WorkflowPlan(
       "io_map": null
     },
     {
-      "type": "gap_analysis",
+      "type": "synthesis_agent",
       "input": {
         "fields": [
           {"gap": "research gaps in AlphaFold"}
@@ -114,14 +114,14 @@ WorkflowPlan(
       },
       "output": {"fields": []},
       "io_map": {
-        "search_results": "$.deep_search.outputs.results"
+        "search_results": "$.research_agent.outputs.results"
       }
     }
   ],
   "edges": [
-    {"from_node": "START", "to_node": "deep_search"},
-    {"from_node": "deep_search", "to_node": "gap_analysis"},
-    {"from_node": "gap_analysis", "to_node": "END"}
+    {"from_node": "START", "to_node": "research_agent"},
+    {"from_node": "research_agent", "to_node": "synthesis_agent"},
+    {"from_node": "synthesis_agent", "to_node": "END"}
   ]
 }
 ```
@@ -187,12 +187,12 @@ LLM extracts inputs for each agent using **full conversation context**:
 
 ```python
 filled_inputs = {
-    "deep_search": {
+    "research_agent": {
         "query": "AlphaFold accuracy improvements in structure prediction 2023-2025",  # Synthesized from conversation
         "category": "Biochemistry",  # LLM inferred from conversation
         "max_results": 50            # From user preference in conversation
     },
-    "gap_analysis": {
+    "synthesis_agent": {
         "gap": "research gaps in AlphaFold accuracy improvements"  # Refined from conversation
     }
 }
@@ -293,22 +293,22 @@ Executable JSON with runtime data flow:
 {
   "nodes": [
     {
-      "type": "deep_search",
+      "type": "research_agent",
       "input": {"fields": [{"query": "..."}]},
       "io_map": null
     },
     {
-      "type": "gap_analysis",
+      "type": "synthesis_agent",
       "input": {"fields": [{"gap": "..."}]},
       "io_map": {
-        "search_results": "$.deep_search.outputs.results"
+        "search_results": "$.research_agent.outputs.results"
       }
     }
   ],
   "edges": [
-    {"from_node": "START", "to_node": "deep_search"},
-    {"from_node": "deep_search", "to_node": "gap_analysis"},
-    {"from_node": "gap_analysis", "to_node": "END"}
+    {"from_node": "START", "to_node": "research_agent"},
+    {"from_node": "research_agent", "to_node": "synthesis_agent"},
+    {"from_node": "synthesis_agent", "to_node": "END"}
   ]
 }
 ```
@@ -317,13 +317,13 @@ Executable JSON with runtime data flow:
 
 Orchestrator (LangGraph/Custom) will:
 
-1. Execute `deep_search` with `input.fields`
+1. Execute `research_agent` with `input.fields`
 2. Store outputs in runtime state
-3. For `gap_analysis`:
-   - Read `io_map`: `"$.deep_search.outputs.results"`
+3. For `synthesis_agent`:
+   - Read `io_map`: `"$.research_agent.outputs.results"`
    - Resolve JSONPath from runtime state
    - Inject as `search_results` input
-4. Execute `gap_analysis`
+4. Execute `synthesis_agent`
 5. Return final results
 
 ## Validation Layers
@@ -476,7 +476,7 @@ def _build_field_mappings(agent, prev_agent, agent_id, prev_agent_id):
 
 ```json
 {
-  "deep_search->gap_analysis": {
+  "research_agent->synthesis_agent": {
     "search_results": "results"
   }
 }
@@ -488,7 +488,7 @@ def _build_field_mappings(agent, prev_agent, agent_id, prev_agent_id):
 {
   "version": "1.0.0",
   "mappings": {
-    "deep_search->gap_analysis": {
+    "research_agent->synthesis_agent": {
       "mapping": {"search_results": "results"},
       "confidence": 0.95,
       "user_approved": true,
@@ -575,7 +575,7 @@ planner_config = PlannerConfig(
 
 # Custom registry (selective agents)
 registry = get_agent_registry(config=AgentRegistryConfig(
-    use_agents=["deep_search", "gap_analysis"]
+    use_agents=["research_agent", "synthesis_agent"]
 ))
 
 # Create planner with custom config

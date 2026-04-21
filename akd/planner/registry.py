@@ -34,7 +34,8 @@ class FieldDefinition(BaseModel):
     items_type: str | None = Field(default=None, description="Array item type")
     allowed_values: list[str] | None = Field(default=None, description="Allowed values for enum/Literal fields")
     value: str | int | float | bool | list[Any] | None = Field(
-        default=None, description="Current value (defaults to default)"
+        default=None,
+        description="Current value (defaults to default)",
     )
 
 
@@ -82,22 +83,13 @@ class AgentRegistry:
     _instance = None
     _initialized = False
 
-    # Available agent mappings for auto-discovery
-    # Format: agent_id -> (module_path, class_name)
-    # TODO: Add filesystem scanning for automatic agent discovery in future iterations
-    AVAILABLE_AGENTS: dict[str, tuple[str, str]] = {
-        # "query": ("akd.agents.query", "QueryAgent"),
-        # "followup_query": ("akd.agents.query", "FollowUpQueryAgent"),
-        # "extraction": ("akd.agents.extraction", "EstimationExtractionAgent"),
-        # "relevancy": ("akd.agents.relevancy", "MultiRubricRelevancyAgent"),
-        # "intent": ("akd.agents.intents", "IntentAgent"),
-        # "controlled_search": ("akd.agents.search.controlled", "ControlledSearchAgent"),
-        "deep_search": ("akd.agents.search.deep_search", "DeepLitSearchAgent"),
-        "gap_analysis": ("akd.agents.gap_analysis.gap_analysis", "GapAgent"),
-        # "storm": ("akd.agents.storm.storm", "StormAgent"),
-        # "aspect_search": ("akd.agents.search.aspect_search.aspect_search", "AspectSearchAgent"),
-        "code_search": ("akd.agents.search.code_search", "CodeSearchAgent"),
-    }
+    # Available agent mappings for auto-discovery.
+    # Format: agent_id -> (module_path, class_name).
+    #
+    # akd core ships no built-in agents here — downstream packages (backends,
+    # akd_ext) register their own agents at runtime via
+    # `AgentRegistry.register_agent(YourAgent)`.
+    AVAILABLE_AGENTS: dict[str, tuple[str, str]] = {}
 
     def __new__(cls, config: AgentRegistryConfig | None = None):
         """Create or return the singleton instance."""
@@ -231,8 +223,16 @@ class AgentRegistry:
                         continue
 
                 # Get description: config default → docstring → auto-generated
-                config_desc = getattr(getattr(agent_class, "config_schema", None), "model_fields", {}).get("description")
-                description = " ".join(((config_desc.default if config_desc and config_desc.default else None) or agent_class.__doc__ or f"Agent for {agent_id.replace('_', ' ')}").split())
+                config_desc = getattr(getattr(agent_class, "config_schema", None), "model_fields", {}).get(
+                    "description",
+                )
+                description = " ".join(
+                    (
+                        (config_desc.default if config_desc and config_desc.default else None)
+                        or agent_class.__doc__
+                        or f"Agent for {agent_id.replace('_', ' ')}"
+                    ).split(),
+                )
 
                 discovered[agent_id] = AgentEntry(
                     agent_id=agent_id,
@@ -437,7 +437,11 @@ class AgentRegistry:
 
         # Get description: config default → docstring → auto-generated
         config_desc = getattr(getattr(agent_class, "config_schema", None), "model_fields", {}).get("description")
-        description = ((config_desc.default if config_desc and config_desc.default else None) or agent_class.__doc__ or f"Agent for {agent_id.replace('_', ' ')}").strip()
+        description = (
+            (config_desc.default if config_desc and config_desc.default else None)
+            or agent_class.__doc__
+            or f"Agent for {agent_id.replace('_', ' ')}"
+        ).strip()
 
         # Create entry
         entry = AgentEntry(
