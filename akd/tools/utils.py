@@ -28,9 +28,6 @@ def tool_wrapper(func: Callable[..., Any] | Coroutine) -> Any:
 
         print(add(1, 2))
         # await add.arun(1, 2)
-
-        tool = add.to_langchain_structured_tool()
-        await too.ainvoke(input=dict(x=1, y=2))
         ```
     """
 

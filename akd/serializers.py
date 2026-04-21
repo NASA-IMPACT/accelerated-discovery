@@ -1,34 +1,53 @@
 """Custom serializers for AKD project.
 
-This module provides custom serializers that extend LangGraph's JsonPlusSerializer
-to handle Pydantic models and other complex objects properly.
+``AKDSerializer`` plays two roles:
+
+* Lightweight Pydantic-aware converter — ``_convert_pydantic_to_dict`` is
+  used by the mapping system to render models (and nested structures with
+  special types like numpy arrays, enums, and ``HttpUrl``) into
+  JSON-serializable dicts. This works with no extra dependencies.
+* Optional langgraph checkpoint serde — when ``langgraph`` is installed,
+  ``AKDSerializer`` additionally extends ``JsonPlusSerializer`` so it can be
+  dropped into checkpointers like ``AsyncPostgresSaver(serde=AKDSerializer())``.
+
+The ``langgraph`` import is lazy so ``akd`` core installs without it.
+Consumers that need the checkpoint serde role should install
+``akd[serializer]`` (or pin ``langgraph`` themselves).
 """
 
 from enum import Enum
 from typing import Any
 
 import numpy as np
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from pydantic import BaseModel
 from pydantic.networks import HttpUrl
 
+try:
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer as _SerdeBase
 
-class AKDSerializer(JsonPlusSerializer):
-    """Custom serializer that extends JsonPlusSerializer with better Pydantic handling.
+    _HAS_LANGGRAPH = True
+except ImportError:  # langgraph is an optional extra (`akd[serializer]`)
+    _SerdeBase = object
+    _HAS_LANGGRAPH = False
 
-    This serializer converts Pydantic models to dictionaries before serialization
-    to ensure msgpack compatibility while maintaining all existing functionality.
+
+class AKDSerializer(_SerdeBase):
+    """Pydantic-aware serializer with optional langgraph checkpoint serde support.
+
+    ``_convert_pydantic_to_dict`` always works. ``dumps`` / ``dumps_typed``
+    require ``langgraph`` to be installed (they delegate to
+    ``JsonPlusSerializer`` after converting Pydantic models to plain dicts).
+    ``loads`` / ``loads_typed`` are inherited from ``JsonPlusSerializer``
+    when available.
     """
 
     def _convert_pydantic_to_dict(self, obj: Any) -> Any:
         """Recursively convert Pydantic models and special types to serializable formats."""
         if isinstance(obj, BaseModel):
-            # Use model_dump with mode='json' to properly serialize all Pydantic types
             return obj.model_dump(mode="json")
         elif isinstance(obj, HttpUrl):
             return str(obj)
         elif isinstance(obj, np.ndarray):
-            # Convert NumPy arrays to lists for JSON serialization
             return obj.tolist()
         elif isinstance(obj, dict):
             return {(k.value if isinstance(k, Enum) else k): self._convert_pydantic_to_dict(v) for k, v in obj.items()}
@@ -36,28 +55,21 @@ class AKDSerializer(JsonPlusSerializer):
             return [self._convert_pydantic_to_dict(item) for item in obj]
         elif isinstance(obj, Enum):
             return obj.value
-        # elif isinstance(obj, NodeState):
-        #     # Convert NodeState to a dictionary
-        #     return {
-        #         "messages": obj.messages,
-        #         "inputs": obj.inputs,
-        #         "outputs": obj.outputs,
-        #         "input_guardrails": obj.input_guardrails,
-        #         "output_guardrails": obj.output_guardrails,
-        #         "steps": obj.steps,
-        #         "tool_calls": [tool_call.model_dump(mode="json") for tool_call in obj.tool_calls],
-        #     }
         else:
             return obj
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
-        """Convert object to typed binary format, handling Pydantic models."""
-        # Convert Pydantic models to dictionaries before serialization
-        converted_obj = self._convert_pydantic_to_dict(obj)
-        return super().dumps_typed(converted_obj)
+        """Serialize to typed binary, converting Pydantic models first (requires langgraph)."""
+        if not _HAS_LANGGRAPH:
+            raise RuntimeError(
+                "AKDSerializer.dumps_typed requires `langgraph`. Install with `pip install akd[serializer]`.",
+            )
+        return super().dumps_typed(self._convert_pydantic_to_dict(obj))
 
     def dumps(self, obj: Any) -> bytes:
-        """Convert object to binary format, handling Pydantic models."""
-        # Convert Pydantic models to dictionaries before serialization
-        converted_obj = self._convert_pydantic_to_dict(obj)
-        return super().dumps(converted_obj)
+        """Serialize to binary, converting Pydantic models first (requires langgraph)."""
+        if not _HAS_LANGGRAPH:
+            raise RuntimeError(
+                "AKDSerializer.dumps requires `langgraph`. Install with `pip install akd[serializer]`.",
+            )
+        return super().dumps(self._convert_pydantic_to_dict(obj))
