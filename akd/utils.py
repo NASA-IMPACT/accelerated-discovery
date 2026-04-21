@@ -336,16 +336,17 @@ class PartialModel[T: BaseModel]:
 
     Example:
         from akd.utils import PartialModel
-        from akd.agents.search._base import LitSearchAgentOutputSchema
+        from akd._base import OutputSchema
+
+        class MySchema(OutputSchema):
+            answer: str
+            sources: list[str]
 
         # Create partial with only some fields
-        partial = PartialModel[LitSearchAgentOutputSchema](
-            results=[...],
-            extra={"key_findings": [...]},
-        )
+        partial = PartialModel[MySchema](sources=["a", "b"])
 
         # Serialize for frontend
-        partial.model_dump()  # {'answer': None, 'report': None, 'results': [...], 'extra': {...}}
+        partial.model_dump()  # {'answer': None, 'sources': ['a', 'b']}
     """
 
     _cache: dict[type[BaseModel], type[BaseModel]] = {}

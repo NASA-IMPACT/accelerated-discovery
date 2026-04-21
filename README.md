@@ -79,14 +79,7 @@ This works across any transport — REST APIs, WebSockets, CLI — because the p
 
 | Category | Agent | Description |
 |----------|-------|-------------|
-| **Research** | `DeepLitSearchAgent` | Multi-agent deep literature search with triage, clarification, and synthesis |
-| | `ControlledSearchAgent` | Controlled search with configurable parameters |
-| | `AspectSearchAgent` | Interview-pattern multi-aspect search |
-| | `CodeSearchAgent` | Code repository search |
-| | `QuestionAnsweringAgent` | QA over retrieved content |
-| **Analysis** | `GapAgent` | Research gap identification via knowledge graphs |
-| | `EstimationExtractionAgent` | Intent-based data extraction |
-| | `StormAgent` | Structured narrative generation |
+| **Narrative** | `StormAgent` | Structured narrative generation |
 | **Utility** | `IntentAgent` | User intent classification |
 | | `QueryAgent` | Query reformulation and refinement |
 | | `FollowUpQueryAgent` | Follow-up query generation |
@@ -94,6 +87,8 @@ This works across any transport — REST APIs, WebSockets, CLI — because the p
 | | `MultiRubricRelevancyAgent` | Multi-dimensional relevance scoring |
 | **Base** | `BaseAgent` | Core agent with streaming, tool calling, HITL, message trimming |
 | | `LiteLLMInstructorBaseAgent` | Structured Pydantic output via Instructor |
+
+Search, research-gap, and extraction agents previously shipped in core have been removed; downstream packages are expected to register their own via `AgentRegistry.register_agent(YourAgent)`.
 
 ## Out-of-Box Tools
 
@@ -258,13 +253,6 @@ notebooks/       # Usage examples (Jupyter, Marimo)
 scripts/         # Utility scripts and demos
 tests/           # Test suite (mirrors akd/ structure)
 ```
-
-## Roadmap
-
-These features are part of the design vision but not yet fully implemented:
-
-- **Conflict Agent** — a dedicated agent that specifically searches for contradictory evidence and conflicting findings across sources. Currently, conflict detection is a design principle (see [Design Philosophy](docs/design_philosophy.md)) but lacks a standalone agent implementation.
-- **Full Attribution Chain** — end-to-end traceability from final claims back to specific source sentences. Partial support exists today: `GapAgent` provides `attributed_source_answers` and the guardrail system includes an `ATTRIBUTION` risk category.
 
 ## Contributing
 
