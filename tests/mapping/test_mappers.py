@@ -200,7 +200,7 @@ class TestLLMFallbackMapping:
         """Test LLM fallback behavior without API key."""
         mapper = LLMFallbackMapper()
 
-        if mapper.llm is None:
+        if not mapper.llm_available:
             source = ExtractionOutput(
                 extractions=[{"field": "value"}],
                 confidence_score=0.9,
@@ -220,7 +220,7 @@ class TestLLMFallbackMapping:
         """Test LLM mapping with API key available."""
         mapper = LLMFallbackMapper()
 
-        if mapper.llm is not None:
+        if mapper.llm_available:
             # Create a complex source model
             source = LiteratureSearchOutput(
                 documents=[
@@ -251,7 +251,7 @@ class TestLLMFallbackMapping:
         """Test LLM mapping with complex schema transformation."""
         mapper = LLMFallbackMapper()
 
-        if mapper.llm is not None:
+        if mapper.llm_available:
             # Test transformation between very different schemas
             source = QueryOutput(
                 response="Solar panels achieve 22% efficiency in laboratory conditions",
@@ -275,7 +275,7 @@ class TestLLMFallbackMapping:
         """Test LLM prompt creation for complex mappings."""
         mapper = LLMFallbackMapper()
 
-        if mapper.llm is not None:
+        if mapper.llm_available:
             source = QueryInput(
                 query="What is the efficiency of modern solar panels?",
                 context="renewable energy research",

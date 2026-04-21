@@ -13,9 +13,7 @@ from abc import abstractmethod
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Type
 
-from langchain_openai import (
-    ChatOpenAI,  # TODO: implement liteLLM interface and replace this
-)
+import litellm
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -36,18 +34,24 @@ class MapperConfig(BaseConfig):
 
     # Stage enablement flags
     enable_direct_matching: bool = Field(
-        True, description="Enable exact field name matching as first strategy"
+        True,
+        description="Enable exact field name matching as first strategy",
     )
     enable_semantic_matching: bool = Field(
-        True, description="Enable fuzzy semantic field matching"
+        True,
+        description="Enable fuzzy semantic field matching",
     )
     enable_llm_fallback: bool = Field(
-        True, description="Enable LLM-assisted parsing as final fallback"
+        True,
+        description="Enable LLM-assisted parsing as final fallback",
     )
 
     # Matching thresholds and quality controls
     semantic_threshold: float = Field(
-        0.7, ge=0.0, le=1.0, description="Minimum confidence score for semantic matches"
+        0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score for semantic matches",
     )
 
     # LLM configuration
@@ -58,13 +62,19 @@ class MapperConfig(BaseConfig):
 
     # Performance and reliability settings
     max_retries: int = Field(
-        2, ge=0, le=10, description="Maximum retry attempts for failed operations"
+        2,
+        ge=0,
+        le=10,
+        description="Maximum retry attempts for failed operations",
     )
     circuit_breaker_threshold: int = Field(
-        5, ge=1, description="Number of failures before disabling a strategy"
+        5,
+        ge=1,
+        description="Number of failures before disabling a strategy",
     )
     enable_caching: bool = Field(
-        True, description="Enable result caching for performance"
+        True,
+        description="Enable result caching for performance",
     )
 
     # Semantic field mapping groups
@@ -92,13 +102,14 @@ class MapperInput(InputSchema):
     """
 
     source_model: BaseModel = Field(
-        description="Source Pydantic model instance to be transformed"
+        description="Source Pydantic model instance to be transformed",
     )
     target_schema: Type[BaseModel] = Field(
-        description="Target schema class for type-aware mapping"
+        description="Target schema class for type-aware mapping",
     )
     mapping_hints: dict[str, str] | None = Field(
-        None, description="Optional field mapping hints (source_field -> target_field)"
+        None,
+        description="Optional field mapping hints (source_field -> target_field)",
     )
 
 
@@ -112,13 +123,15 @@ class MapperOutput(OutputSchema):
     """
 
     mapped_model: BaseModel = Field(
-        description="Successfully transformed and validated target model instance"
+        description="Successfully transformed and validated target model instance",
     )
     mapping_confidence: float = Field(
-        ge=0.0, le=1.0, description="Overall confidence in the mapping quality"
+        ge=0.0,
+        le=1.0,
+        description="Overall confidence in the mapping quality",
     )
     used_strategy: str = Field(
-        description="Name of the mapping strategy that succeeded"
+        description="Name of the mapping strategy that succeeded",
     )
     unmapped_fields: List[str] = Field(
         default_factory=list,
@@ -208,7 +221,9 @@ class BaseMappingStrategy(AbstractBase[MapperInput, MapperOutput]):
 
         try:
             result = await self.map_models(
-                params.source_model, params.target_schema, params.mapping_hints
+                params.source_model,
+                params.target_schema,
+                params.mapping_hints,
             )
 
             # Create target model instance from mapped data
@@ -232,7 +247,7 @@ class BaseMappingStrategy(AbstractBase[MapperInput, MapperOutput]):
             if self.failure_count >= self.circuit_breaker_threshold:
                 self.is_disabled = True
                 logger.warning(
-                    f"Disabling {self.__class__.__name__} after {self.failure_count} failures"
+                    f"Disabling {self.__class__.__name__} after {self.failure_count} failures",
                 )
 
             logger.error(f"Mapping strategy {self.__class__.__name__} failed: {e}")
@@ -369,14 +384,14 @@ class SemanticFieldMapper(BaseMappingStrategy):
 
         # Semantic matching for remaining fields
         target_fields = self._get_schema_fields(target_schema)
-        remaining_source_fields = [
-            f for f in source_data.keys() if f not in used_fields
-        ]
+        remaining_source_fields = [f for f in source_data.keys() if f not in used_fields]
 
         for target_field in target_fields:
             if target_field not in mapped:
                 best_match = await self._find_best_semantic_match(
-                    target_field, remaining_source_fields, source_data
+                    target_field,
+                    remaining_source_fields,
+                    source_data,
                 )
 
                 if best_match and best_match["confidence"] >= self.semantic_threshold:
@@ -407,7 +422,10 @@ class SemanticFieldMapper(BaseMappingStrategy):
         }
 
     async def _find_best_semantic_match(
-        self, target_field: str, source_fields: List[str], source_data: Dict[str, Any]
+        self,
+        target_field: str,
+        source_fields: List[str],
+        source_data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """Find the best semantic match for a target field."""
 
@@ -431,7 +449,9 @@ class SemanticFieldMapper(BaseMappingStrategy):
         return best_match if best_confidence > 0.0 else None
 
     def _calculate_semantic_similarity(
-        self, target_field: str, source_field: str
+        self,
+        target_field: str,
+        source_field: str,
     ) -> float:
         """Calculate semantic similarity between two field names."""
 
@@ -476,17 +496,12 @@ class LLMFallbackMapper(BaseMappingStrategy):
     def __init__(self, config: Optional[MapperConfig] = None):
         super().__init__(config)
 
-        # Initialize LLM client with graceful fallback
+        # Initialize LLM client with graceful fallback (LiteLLM is stateless per call)
         project_settings = get_project_settings()
-        api_key = project_settings.model_config_settings.api_keys.openai
+        self.api_key = project_settings.model_config_settings.api_keys.openai
+        self.llm_available = bool(self.api_key)
 
-        if api_key:
-            self.llm = ChatOpenAI(
-                model=self.llm_model, temperature=0.0, api_key=api_key
-            )
-        else:
-            # Mock LLM for testing without API key
-            self.llm = None
+        if not self.llm_available:
             logger.warning("No OpenAI API key found, LLM fallback will be disabled")
 
     async def map_models(
@@ -512,23 +527,32 @@ class LLMFallbackMapper(BaseMappingStrategy):
 
         try:
             # Check if LLM is available
-            if not self.llm:
+            if not self.llm_available:
                 raise Exception("LLM not available (no API key)")
 
             # Create transformation prompt
             prompt = self._create_transformation_prompt(
-                source_data, target_schema, mapping_hints
+                source_data,
+                target_schema,
+                mapping_hints,
             )
 
-            # Get LLM response
-            response = await self.llm.ainvoke(prompt)
+            # Get LLM response via LiteLLM
+            response = await litellm.acompletion(
+                model=self.llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                api_key=self.api_key,
+            )
+            content = response.choices[0].message.content
 
             # Parse the response
-            parsed_data = self._parse_llm_response(response.content)
+            parsed_data = self._parse_llm_response(content)
 
             # Validate against target schema if possible
             confidence = self._estimate_transformation_confidence(
-                parsed_data, target_schema
+                parsed_data,
+                target_schema,
             )
 
             return {
@@ -633,7 +657,9 @@ class LLMFallbackMapper(BaseMappingStrategy):
             return {"parsed_content": response}
 
     def _estimate_transformation_confidence(
-        self, parsed_data: Dict[str, Any], target_schema: Type[BaseModel]
+        self,
+        parsed_data: Dict[str, Any],
+        target_schema: Type[BaseModel],
     ) -> float:
         """Estimate confidence in the LLM transformation."""
 
@@ -670,7 +696,9 @@ class WaterfallMapper(AbstractBase[MapperInput, MapperOutput]):
     config_schema = MapperConfig
 
     def __init__(
-        self, config: Optional[MapperConfig] = None, *mappers: BaseMappingStrategy
+        self,
+        config: Optional[MapperConfig] = None,
+        *mappers: BaseMappingStrategy,
     ) -> None:
         super().__init__(config=config or MapperConfig())
 
@@ -742,7 +770,7 @@ class WaterfallMapper(AbstractBase[MapperInput, MapperOutput]):
                 if self._is_acceptable_result(result):
                     if self.debug:
                         logger.debug(
-                            f"Successful mapping with {strategy_name}: confidence {result.mapping_confidence}"
+                            f"Successful mapping with {strategy_name}: confidence {result.mapping_confidence}",
                         )
 
                     # Cache successful result
