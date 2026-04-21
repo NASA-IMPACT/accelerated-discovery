@@ -110,7 +110,6 @@ akd/
 │   ├── _base.py       #   BaseAgent, InstructorBaseAgent, LiteLLMInstructorBaseAgent
 │   ├── query.py       #   QueryAgent, FollowUpQueryAgent
 │   ├── relevancy.py   #   Relevancy checking agents
-│   ├── storm/         #   STORM workflow agent
 │   └── intents.py     #   Intent detection
 ├── tools/             # Tool implementations
 │   ├── _base.py       #   BaseTool, BaseToolConfig
@@ -121,7 +120,7 @@ akd/
 │   ├── reranker.py    #   CrossEncoder, NoOp rerankers
 │   ├── relevancy.py   #   Relevancy checker
 │   └── source_validator.py
-├── configs/           # Configuration (project, prompts, lit, storm)
+├── configs/           # Configuration (project, prompts, lit)
 ├── guardrails/        # Safety and validation guardrails
 ├── mapping/           # Runtime agent registry + field-mapping machinery
 ├── planner/           # Workflow planning (agents registered at runtime)
