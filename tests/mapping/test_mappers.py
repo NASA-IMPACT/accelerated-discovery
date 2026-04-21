@@ -14,7 +14,6 @@ from pydantic import Field
 from akd._base import InputSchema, OutputSchema
 from akd.agents.query import QueryAgentInputSchema, QueryAgentOutputSchema
 from akd.agents.relevancy import RelevancyAgentInputSchema
-from akd.agents.search import LitSearchAgentInputSchema, LitSearchAgentOutputSchema
 from akd.mapping.mappers import (
     DirectFieldMapper,
     LLMFallbackMapper,
@@ -23,7 +22,6 @@ from akd.mapping.mappers import (
     SemanticFieldMapper,
     WaterfallMapper,
 )
-from akd.structures import SearchResultItem
 
 
 class ExtractionInputSchema(InputSchema):
@@ -370,57 +368,8 @@ class TestRealAgentMappings:
     """Test mappings between real AKD agent schemas."""
 
     @pytest.mark.asyncio
-    async def test_query_agent_to_lit_agent(self):
-        """Test mapping from QueryAgent output to LitAgent input."""
-        mapper = WaterfallMapper()
-
-        # QueryAgent generates search queries
-        query_output = QueryAgentOutputSchema(
-            queries=["solar cell efficiency", "perovskite photovoltaics"],
-            category="science",
-        )
-
-        # Map to LitAgent input (should use first query)
-        result = await mapper.arun(
-            MapperInput(
-                source_model=query_output,
-                target_schema=LitSearchAgentInputSchema,
-                mapping_hints={"queries": "query"},  # Map queries list to single query
-            ),
-        )
-
-        assert result.mapping_confidence > 0.0
-        assert hasattr(result.mapped_model, "query")
-
-    @pytest.mark.asyncio
-    async def test_lit_agent_to_extraction_agent(self):
-        """Test mapping from LitAgent output to ExtractionAgent input."""
-        mapper = WaterfallMapper()
-
-        # Create realistic LitAgent output
-        lit_output = LitSearchAgentOutputSchema(
-            answer="Recent research shows advances in solar cell efficiency.",
-            report="Detailed research report on solar cell technologies.",
-            results=[
-                SearchResultItem(
-                    url="https://example.com/solar-paper",
-                    title="Advanced Solar Cell Technologies",
-                    content="Recent breakthroughs in perovskite solar cells...",
-                    query="solar cell technologies",
-                ),
-            ],
-        )
-
-        result = await mapper.arun(
-            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema),
-        )
-
-        assert result.mapping_confidence > 0.0
-        assert hasattr(result.mapped_model, "content")
-
-    @pytest.mark.asyncio
     async def test_extraction_input_to_relevancy_agent(self):
-        """Test mapping from ExtractionAgent input to RelevancyAgent input."""
+        """Test mapping from an extraction-input schema to RelevancyAgent input."""
         mapper = WaterfallMapper()
 
         # Create extraction input with query and content
@@ -443,48 +392,6 @@ class TestRealAgentMappings:
         assert result.mapped_model.content == "Recent studies show perovskite solar cells achieve 25% efficiency..."
 
     @pytest.mark.asyncio
-    async def test_full_agent_pipeline_mapping(self):
-        """Test mapping through a complete agent pipeline."""
-        mapper = WaterfallMapper()
-
-        # Step 1: QueryAgent output -> LitAgent input
-        query_output = QueryAgentOutputSchema(
-            queries=["solar cell efficiency record", "photovoltaic maximum efficiency"],
-            category="science",
-        )
-
-        lit_result = await mapper.arun(
-            MapperInput(
-                source_model=query_output,
-                target_schema=LitSearchAgentInputSchema,
-            ),
-        )
-
-        # Step 2: LitAgent output -> ExtractionAgent input
-
-        lit_output = LitSearchAgentOutputSchema(
-            answer="Solar cell efficiency has reached 47.1%.",
-            report="Research report on solar cell efficiency improvements.",
-            results=[
-                SearchResultItem(
-                    url="https://example.com/research_paper.pdf",
-                    title="Solar Cell Efficiency Research",
-                    content="Solar cell efficiency has reached 47.1% using concentrated photovoltaics",
-                    query="solar cell efficiency",
-                ),
-            ],
-        )
-
-        extraction_result = await mapper.arun(
-            MapperInput(source_model=lit_output, target_schema=ExtractionInputSchema),
-        )
-
-        # Verify the pipeline works
-        assert lit_result.mapping_confidence > 0.0
-        assert extraction_result.mapping_confidence > 0.0
-        assert hasattr(extraction_result.mapped_model, "content")
-
-    @pytest.mark.asyncio
     async def test_real_agent_schema_compatibility(self):
         """Test compatibility between all real agent schemas."""
         mapper = WaterfallMapper()
@@ -501,9 +408,6 @@ class TestRealAgentMappings:
             QueryAgentOutputSchema: QueryAgentOutputSchema(
                 queries=["query1", "query2"],
             ),
-            LitSearchAgentInputSchema: LitSearchAgentInputSchema(
-                query="literature search",
-            ),
             ExtractionInputSchema: ExtractionInputSchema(
                 query="test",
                 content="content",
@@ -516,7 +420,6 @@ class TestRealAgentMappings:
 
         # Test mappings between compatible schemas
         compatible_pairs = [
-            (QueryAgentInputSchema, LitSearchAgentInputSchema),  # Both have query field
             (
                 ExtractionInputSchema,
                 RelevancyAgentInputSchema,
@@ -646,29 +549,6 @@ class TestConfigurationScenarios:
 
         assert result.used_strategy == "DirectFieldMapper"
         assert result.mapping_confidence == 1.0
-
-    @pytest.mark.asyncio
-    async def test_semantic_only_mapping(self):
-        """Test mapping with only semantic matching enabled."""
-        config = MapperConfig(
-            enable_direct_matching=False,
-            enable_llm_fallback=False,
-            semantic_threshold=0.4,
-        )
-        mapper = WaterfallMapper(config=config)
-
-        # Should use semantic mapping for similar field names
-        source = LitSearchAgentOutputSchema(
-            answer="",  # Empty for simplicity
-            report="",  # Empty for simplicity
-            results=[],  # Empty results for simplicity
-        )
-
-        result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryAgentInputSchema),
-        )
-
-        assert result.used_strategy in ["SemanticFieldMapper", "none"]
 
     @pytest.mark.asyncio
     async def test_llm_only_mapping(self):
