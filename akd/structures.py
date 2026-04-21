@@ -20,9 +20,6 @@ from pydantic import (
 from akd._base import IOSchema
 from akd._base.structures import HumanResponse
 
-# from akd.common_types import ToolType
-from akd.configs.project import CONFIG
-
 # =============================================================================
 # Search and Data Models
 # =============================================================================
@@ -110,28 +107,6 @@ class SearchResultItem(SearchResult):
         if self.published_date:
             return f"{self.title} - (Published {self.published_date})"
         return self.title
-
-
-class ResearchData(BaseModel):
-    """
-    Represents the dataset used in scientific research.
-
-    Captures key metadata about data sources including format, origin,
-    and accessibility for better reproducibility and documentation.
-    """
-
-    data_format: str = Field(
-        ...,
-        description="Type of data used (e.g: HDF5/CSV/JSON) in the research",
-    )
-    origin: str = Field(
-        ...,
-        description="Mission/Instrument/Model the data is derived from (e.g., HLS, MERRA-2)",
-    )
-    data_url: AnyUrl | None = Field(
-        None,
-        description="Valid URL to download data referenced in research. Leave None if unavailable.",
-    )
 
 
 class PaperDataItem(BaseModel):
@@ -244,55 +219,6 @@ class PaperDataItem(BaseModel):
 
 
 # =============================================================================
-# Extraction Schemas
-# =============================================================================
-
-
-class ExtractionSchema(BaseModel):
-    """Base schema for information extraction tasks."""
-
-    answer: str = Field(
-        CONFIG.model_config_settings.default_no_answer,
-        description="Direct, concise answer to the input query",
-    )
-    related_knowledge: list[str] | None = Field(
-        None,
-        description="List of concise related information supporting the query answer",
-    )
-
-
-class SingleEstimation(ExtractionSchema):
-    """
-    Represents an estimation extracted from research literature.
-
-    Used for extracting specific values, parameters, or results based on
-    scientific data and methodologies. Captures estimation process details
-    including methodology, assumptions, and validation.
-    """
-
-    research_data: ResearchData = Field(
-        ...,
-        description="Data used for the estimation in the research",
-    )
-    methodology: str = Field(
-        ...,
-        description="Methodology used for the estimation",
-    )
-    assumptions: list[str] | None = Field(
-        None,
-        description="Key assumptions made during the estimation process",
-    )
-    confidence_level: float | None = Field(
-        None,
-        description="Confidence level of the estimation (e.g., probability or margin of error)",
-    )
-    validation_method: str | None = Field(
-        None,
-        description="How the estimation was validated or cross-checked",
-    )
-
-
-# =============================================================================
 # Tool System Models
 # =============================================================================
 
@@ -329,18 +255,10 @@ class ToolSearchResult(BaseModel):
 # Exports
 # =============================================================================
 
-# Type alias for semantic clarity in literature search contexts
-LitSearchResult = SearchResultItem
-
 __all__ = [
     # Search and Data Models
     "SearchResult",
     "SearchResultItem",
-    "LitSearchResult",
-    "ResearchData",
-    # Extraction Schemas
-    "ExtractionSchema",
-    "SingleEstimation",
     # Tool Models
     "ToolSearchResult",
     # Human interaction (re-exported from akd._base.structures)
