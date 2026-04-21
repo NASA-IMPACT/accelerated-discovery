@@ -97,11 +97,7 @@ node_logic = NodeTemplate(
 )
 ```
 
-To use it in a specific framework like LangGraph, a wrapper is applied. The core logic inside `node_logic` remains unchanged:
-
-```python
-langgraph_node = node_logic.as_langgraph_node(...)
-```
+The node logic is defined independently of any orchestration framework, so the same template can be wrapped by whichever engine the consumer chooses.
 
 ## Deep Guardrails for Scientific Trust
 
