@@ -209,6 +209,27 @@ dependencies = [
 ]
 ```
 
+**Optional extras:** pull in extra dependencies for specific features.
+
+| Extra | What it pulls in | Install when you... |
+|---|---|---|
+| `serializer` | `langgraph` | use `AKDSerializer` as a langgraph checkpoint serde (e.g. `AsyncPostgresSaver(serde=AKDSerializer())`) |
+| `ml` | `pandas`, `sentence-transformers`, `docling`, `deepeval` | need ML-backed rerankers, scrapers, or eval tools |
+| `dev` | `pytest`, `pytest-asyncio`, `pytest-cov`, `pytest-xdist`, `pre-commit`, `memray`, `scalene` | run the test suite or hack on akd itself |
+| `local` | `marimo`, `jupyter`, `ipykernel`, `ipywidgets` | run the marimo notebooks under `notebooks/` |
+
+```bash
+# As a dependency, with an extra:
+uv pip install "akd[serializer] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop"
+```
+
+```toml
+# In your pyproject.toml:
+dependencies = [
+    "akd[serializer] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop",
+]
+```
+
 **For local development:**
 
 ```bash
@@ -216,17 +237,23 @@ dependencies = [
 uv venv --python 3.12
 source .venv/bin/activate
 
-# Install dependencies
+# Install core dependencies
 uv sync
 
-# For development (includes testing tools)
+# With development tooling (pytest, pre-commit, profilers)
 uv sync --extra dev
 
-# For local development (includes marimo and other local tools)
+# With notebooks (marimo, jupyter)
 uv sync --extra dev --extra local
 
-# For ML features (includes sentence-transformers, docling, deepeval)
+# With ML extras (pandas, sentence-transformers, docling, deepeval)
 uv sync --extra ml
+
+# With the langgraph checkpoint serde (AKDSerializer)
+uv sync --extra serializer
+
+# Combine extras freely, e.g. full dev setup:
+uv sync --extra dev --extra local --extra ml --extra serializer
 
 # Setup environment variables
 cp .env.example .env
