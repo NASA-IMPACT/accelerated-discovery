@@ -12,7 +12,6 @@ import pytest
 from pydantic import Field
 
 from akd._base import InputSchema, OutputSchema
-from akd.agents.query import QueryAgentInputSchema, QueryAgentOutputSchema
 from akd.agents.relevancy import RelevancyAgentInputSchema
 from akd.mapping.mappers import (
     DirectFieldMapper,
@@ -401,13 +400,6 @@ class TestRealAgentMappings:
 
         # Create sample instances for each schema
         sample_data = {
-            QueryAgentInputSchema: QueryAgentInputSchema(
-                query="test query",
-                num_queries=3,
-            ),
-            QueryAgentOutputSchema: QueryAgentOutputSchema(
-                queries=["query1", "query2"],
-            ),
             ExtractionInputSchema: ExtractionInputSchema(
                 query="test",
                 content="content",
@@ -541,10 +533,10 @@ class TestConfigurationScenarios:
         mapper = WaterfallMapper(config=config)
 
         # Same schema mapping should have perfect confidence
-        source = QueryAgentInputSchema(query="renewable energy research", num_queries=5)
+        source = QueryInput(query="renewable energy research", context="materials")
 
         result = await mapper.arun(
-            MapperInput(source_model=source, target_schema=QueryAgentInputSchema),
+            MapperInput(source_model=source, target_schema=QueryInput),
         )
 
         assert result.used_strategy == "DirectFieldMapper"
