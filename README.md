@@ -79,16 +79,12 @@ This works across any transport — REST APIs, WebSockets, CLI — because the p
 
 | Category | Agent | Description |
 |----------|-------|-------------|
-| **Narrative** | `StormAgent` | Structured narrative generation |
-| **Utility** | `IntentAgent` | User intent classification |
-| | `QueryAgent` | Query reformulation and refinement |
-| | `FollowUpQueryAgent` | Follow-up query generation |
-| | `RelevancyAgent` | Binary relevance classification |
+| **Utility** | `RelevancyAgent` | Binary relevance classification |
 | | `MultiRubricRelevancyAgent` | Multi-dimensional relevance scoring |
 | **Base** | `BaseAgent` | Core agent with streaming, tool calling, HITL, message trimming |
 | | `LiteLLMInstructorBaseAgent` | Structured Pydantic output via Instructor |
 
-Search, research-gap, and extraction agents previously shipped in core have been removed; downstream packages are expected to register their own via `AgentRegistry.register_agent(YourAgent)`.
+Domain-specific agents live in downstream packages and can be registered at runtime via `AgentRegistry.register_agent(YourAgent)`.
 
 ## Out-of-Box Tools
 

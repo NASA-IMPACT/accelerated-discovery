@@ -400,7 +400,7 @@ class AgentRegistry:
         Args:
             agent_class: Agent class to register. Must inherit from BaseAgent.
             agent_id: Unique identifier for the agent. If not provided, auto-generated
-                      from class name (e.g., QueryAgent -> "query_agent", CMRAgent -> "cmr_agent")
+                      from class name (e.g., RelevancyAgent -> "relevancy_agent", CMRAgent -> "cmr_agent")
             enabled: Whether agent is enabled (default: True)
             tags: Optional tags for categorization
             persist: Save to JSON file (default: False, transient registration)

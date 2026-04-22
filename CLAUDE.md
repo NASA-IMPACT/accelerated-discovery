@@ -108,9 +108,7 @@ akd/
 ├── _base/             # Base classes, streaming, tool calling, memory, structures
 ├── agents/            # Agent implementations
 │   ├── _base.py       #   BaseAgent, InstructorBaseAgent, LiteLLMInstructorBaseAgent
-│   ├── query.py       #   QueryAgent, FollowUpQueryAgent
-│   ├── relevancy.py   #   Relevancy checking agents
-│   └── intents.py     #   Intent detection
+│   └── relevancy.py   #   RelevancyAgent, MultiRubricRelevancyAgent
 ├── tools/             # Tool implementations
 │   ├── _base.py       #   BaseTool, BaseToolConfig
 │   ├── human.py       #   HumanTool (HITL)

@@ -314,7 +314,7 @@ def to_snake_case(name: str) -> str:
 
     Examples:
         SearxNGSearchTool -> searxng_search_tool
-        QueryAgent -> query_agent
+        RelevancyAgent -> relevancy_agent
         CMRDataExtractor -> cmr_data_extractor
     """
     # Insert _ between lowercase and uppercase: deepLit -> deep_Lit

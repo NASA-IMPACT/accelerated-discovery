@@ -9,13 +9,13 @@ The AKD mapping system enables **seamless data transformation between heterogene
 In the AKD framework, different agents may have incompatible input/output schemas:
 
 ```python
-# QueryAgent output
-class QueryAgentOutput(OutputSchema):
+# MySourceAgent output
+class MySourceAgentOutput(OutputSchema):
     queries: List[str] = Field(description="Generated search queries")
     category: str = Field(description="Query category")
 
 # LiteratureSearchAgent input
-class MyAgentInput(InputSchema):
+class MyTargetAgentInput(InputSchema):
     query: str = Field(description="Single search query")
     max_results: int = Field(default=10, description="Maximum results")
 ```
@@ -35,8 +35,8 @@ The mapper enables runtime data transformation in LangGraph workflows:
 │           ┌─────────────────────────────────────────────┐               │
 │           │            Node Results Storage             │               │
 │           │  {                                          │               │
-│           │    "query_1": QueryAgentOutput,             │               │
-│           │    "lit_1": MyAgentOutput,                 │               │
+│           │    "query_1": MySourceAgentOutput,             │               │
+│           │    "lit_1": MyTargetAgentOutput,                 │               │
 │           │    "extract_1": ExtractionOutput            │               │
 │           │  }                                          │               │
 │           └─────────────────────────────────────────────┘               │
@@ -51,7 +51,7 @@ The mapper enables runtime data transformation in LangGraph workflows:
 │                                                                         │
 │  1. Get previous output: state.node_results["query_1"]                  │
 │  2. Map to current input: QueryOutput → LitInput                        │
-│  3. Execute current agent: MyAgent.arun(mapped_input)                  │
+│  3. Execute current agent: MyTargetAgent.arun(mapped_input)                  │
 │  4. Store result: state.node_results["lit_1"] = output                  │
 │                                                                         │
 │           ┌─────────────────────────────────────────────┐               │
@@ -139,14 +139,13 @@ TARGET: QueryInput with fields: query (str), context (str)
 
 ```python
 from akd.mapping.mappers import WaterfallMapper, MapperInput
-from akd.agents.query import QueryAgentOutputSchema
-from mypackage.agents import MyAgentInputSchema
+from mypackage.agents import MySourceAgentOutputSchema, MyTargetAgentInputSchema
 
 # Initialize mapper
 mapper = WaterfallMapper()
 
 # Previous agent output
-query_output = QueryAgentOutputSchema(
+query_output = MySourceAgentOutputSchema(
     queries=["carbon capture materials", "direct air capture"],
     category="materials_science"
 )
@@ -154,7 +153,7 @@ query_output = QueryAgentOutputSchema(
 # Map to next agent input
 result = await mapper.arun(MapperInput(
     source_model=query_output,
-    target_schema=MyAgentInputSchema,
+    target_schema=MyTargetAgentInputSchema,
     mapping_hints={"queries": "query"}  # Use first query
 ))
 
@@ -167,24 +166,24 @@ lit_result = await lit_agent.arun(result.mapped_model)
 
 ```python
 async def query_to_literature_node(state: PlannerState) -> PlannerState:
-    """LangGraph node that transforms QueryAgent output to MyAgent input"""
+    """LangGraph node that transforms MySourceAgent output to MyTargetAgent input"""
 
     # Get previous node output
     query_output_data = state.node_results["query_node"]
-    query_output = QueryAgentOutputSchema(**query_output_data)
+    query_output = MySourceAgentOutputSchema(**query_output_data)
 
     # Transform to literature agent input
     mapping_result = await mapper.arun(MapperInput(
         source_model=query_output,
-        target_schema=MyAgentInputSchema
+        target_schema=MyTargetAgentInputSchema
     ))
 
     # Check mapping confidence
     if mapping_result.mapping_confidence < 0.7:
         # Request human approval for low-confidence mapping
         state.request_human_approval("mapping_approval", {
-            "source_schema": "QueryAgentOutputSchema",
-            "target_schema": "MyAgentInputSchema",
+            "source_schema": "MySourceAgentOutputSchema",
+            "target_schema": "MyTargetAgentInputSchema",
             "confidence": mapping_result.mapping_confidence,
             "unmapped_fields": mapping_result.unmapped_fields
         })
@@ -252,11 +251,11 @@ except Exception as e:
 
 ```python
 # Step 1: Query → Literature Search
-query_output = QueryAgentOutputSchema(queries=["perovskite solar cells"])
-lit_input = await map_schemas(query_output, MyAgentInputSchema)
+query_output = MySourceAgentOutputSchema(queries=["perovskite solar cells"])
+lit_input = await map_schemas(query_output, MyTargetAgentInputSchema)
 
 # Step 2: Literature → Extraction
-lit_output = MyAgentOutputSchema(results=[...])
+lit_output = MyTargetAgentOutputSchema(results=[...])
 extract_input = await map_schemas(lit_output, ExtractionInputSchema)
 
 # Step 3: Extraction → Relevancy
