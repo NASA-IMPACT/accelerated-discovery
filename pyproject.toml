@@ -1,6 +1,6 @@
 [project]
 name = "akd"
-version = "0.1.1"
+version = "0.2.0"
 description = "Human-centric Multi-Agent System (MAS) framework for scientific discovery"
 readme = "README.md"
 license = "Apache-2.0"
