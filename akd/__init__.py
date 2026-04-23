@@ -17,7 +17,7 @@ from importlib.metadata import version as _version
 try:
     __version__ = _version("akd")
 except PackageNotFoundError:
-    __version__ = "0.1.1"
+    __version__ = "0.2.0"
 __author__ = "NASA IMPACT"
 __email__ = "np0069@uah.edu,mr0051@uah.edu"
 
