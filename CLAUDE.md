@@ -99,7 +99,6 @@ See specs:
 
 **`akd/structures.py`** (public, also re-exports `HumanResponse`):
 - `SearchResult` / `SearchResultItem` — search results with metadata
-- `ExtractionSchema` / `SingleEstimation` — extraction output schemas
 - `HumanResponse` — re-exported for backend convenience
 
 ## Project Structure
@@ -109,26 +108,20 @@ akd/
 ├── _base/             # Base classes, streaming, tool calling, memory, structures
 ├── agents/            # Agent implementations
 │   ├── _base.py       #   BaseAgent, InstructorBaseAgent, LiteLLMInstructorBaseAgent
-│   ├── search/        #   SearchAgent, DeepLitSearchAgent, ControlledSearchAgent, AspectSearchAgent
-│   ├── gap_analysis/  #   GapAgent
-│   ├── extraction.py  #   EstimationExtractionAgent
-│   ├── query.py       #   QueryAgent, FollowUpQueryAgent
-│   ├── relevancy.py   #   Relevancy checking agents
-│   ├── storm/         #   STORM workflow agent
-│   └── intents.py     #   Intent detection
+│   └── relevancy.py   #   RelevancyAgent, MultiRubricRelevancyAgent
 ├── tools/             # Tool implementations
 │   ├── _base.py       #   BaseTool, BaseToolConfig
 │   ├── human.py       #   HumanTool (HITL)
-│   ├── search/        #   SearxNG, Serper, SemanticScholar, CodeSearch, Composite, Pipeline
+│   ├── search/        #   SearxNG, Serper, SemanticScholar, Composite, Pipeline
 │   ├── scrapers/      #   Web, PDF, Crawl4AI, PyPaperBot, Docling scrapers
 │   ├── resolvers/     #   DOI, Arxiv, ADS, Unpaywall resolvers
 │   ├── reranker.py    #   CrossEncoder, NoOp rerankers
 │   ├── relevancy.py   #   Relevancy checker
 │   └── source_validator.py
-├── configs/           # Configuration (project, prompts, lit, storm)
+├── configs/           # Configuration (project, prompts, lit)
 ├── guardrails/        # Safety and validation guardrails
-├── mapping/           # Agent/tool registry and field mapping
-├── planner/           # Workflow planning
+├── mapping/           # Runtime agent registry + field-mapping machinery
+├── planner/           # Workflow planning (agents registered at runtime)
 └── structures.py      # Public data structures
 
 tests/                 # Mirrors akd/ structure — pytest + asyncio + xdist

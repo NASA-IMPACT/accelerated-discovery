@@ -34,28 +34,24 @@ NON_INTERACTIVE = False
 
 
 def _register_ext_agents():
-    """Register akd-ext agents and disable base registry agents.
+    """Register akd-ext agents into the runtime registry.
 
-    Only akd-ext agents (CMRCareAgent, CodeSearchCareAgent) should be used
-    by the planner. Base agents (deep_search, gap_analysis, code_search) are
-    disabled so the planner doesn't see them.
-
-    Disabling happens only after akd-ext imports succeed to avoid leaving
-    the registry empty if akd-ext is not installed.
+    akd core no longer ships built-in agents for the planner; downstream
+    packages register their own. This helper registers akd-ext agents if
+    the package is installed.
     """
     registry = get_agent_registry()
 
-    # Register akd-ext agents first — only disable base agents if this succeeds
     try:
+        from akd_ext.agents.closed_loop_cm1 import (
+            CapabilityFeasibilityMapperAgent,
+            ExperimentImplementationAgent,
+            InterpretationPaperAssemblyAgent,
+            WorkflowSpecBuilderAgent,
+        )
         from akd_ext.agents.cmr_care import CMRCareAgent
         from akd_ext.agents.code_search_care import CodeSearchCareAgent
         from akd_ext.agents.gap import GapAgent as ExtGapAgent
-        from akd_ext.agents.closed_loop_cm1 import (
-            CapabilityFeasibilityMapperAgent,
-            WorkflowSpecBuilderAgent,
-            ExperimentImplementationAgent,
-            InterpretationPaperAssemblyAgent,
-        )
 
         ext_agents = [
             CMRCareAgent,
@@ -73,15 +69,8 @@ def _register_ext_agents():
                 registry.register_agent(agent_cls)
                 logger.info(f"Registered {agent_cls.__name__} from akd-ext")
 
-        # Disable base registry agents now that akd-ext agents are available
-        for agent_id in ["deep_search", "gap_analysis", "code_search"]:
-            agent = registry.get_agent(agent_id)
-            if agent and agent.enabled:
-                registry.update_agent(agent_id, enabled=False)
-                logger.info(f"Disabled base agent: {agent_id}")
-
     except ImportError:
-        logger.debug("akd-ext not installed, keeping base agents enabled")
+        logger.debug("akd-ext not installed; planner will have an empty registry")
     except Exception as e:
         logger.warning(f"Failed to register akd-ext agents: {e}")
 
@@ -92,7 +81,7 @@ def print_header():
         Panel.fit(
             "[bold blue]AKD LLM Workflow Planner[/bold blue]\nInteractive research workflow planning system",
             border_style="blue",
-        )
+        ),
     )
 
 
@@ -446,7 +435,10 @@ def interactive():
 def automated(
     goal: str = typer.Argument(..., help="Research goal or question"),
     responses: Optional[str] = typer.Option(
-        None, "-r", "--responses", help="Comma-separated list of hardcoded responses"
+        None,
+        "-r",
+        "--responses",
+        help="Comma-separated list of hardcoded responses",
     ),
     output: Optional[str] = typer.Option(None, "-o", "--output", help="Output file for generated workflow"),
     max_turns: int = typer.Option(10, "--max-turns", help="Maximum conversation turns"),
@@ -507,7 +499,10 @@ def quick(
     goal: str = typer.Argument(..., help="Research goal or question"),
     output: Optional[str] = typer.Option(None, "-o", "--output", help="Output file for generated workflow"),
     non_interactive: bool = typer.Option(
-        False, "--non-interactive", "-n", help="Run without prompts (auto-save if output specified)"
+        False,
+        "--non-interactive",
+        "-n",
+        help="Run without prompts (auto-save if output specified)",
     ),
 ):
     """Quick workflow generation for a research goal."""
@@ -529,7 +524,7 @@ def quick(
                     console.print("\n[bold]Quick Plan Generated:[/bold]")
                     console.print(f"Research Goal: {response.workflow_plan.research_goal}")
                     console.print(
-                        f"Suggested Agents: {[a.agent_name for a in response.workflow_plan.suggested_agents]}"
+                        f"Suggested Agents: {[a.agent_name for a in response.workflow_plan.suggested_agents]}",
                     )
 
                 # Try to generate workflow automatically
@@ -553,7 +548,7 @@ def quick(
                         nodes_with_io_map = [node for node in workflow.nodes if node.io_map]
                         if nodes_with_io_map:
                             console.print(
-                                f"\n[green]✓ Generated {len(nodes_with_io_map)} node(s) with runtime data flow (io_map)[/green]"
+                                f"\n[green]✓ Generated {len(nodes_with_io_map)} node(s) with runtime data flow (io_map)[/green]",
                             )
 
                 except Exception as e:

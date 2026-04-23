@@ -66,7 +66,7 @@ class WorkflowBuilder:
         Build and validate JSONPath expression for field mapping.
 
         Args:
-            node_id: Unique node identifier to reference in JSONPath (e.g., code_search_0)
+            node_id: Unique node identifier to reference in JSONPath (e.g., my_agent_0)
             field_name: Field name to reference in JSONPath
 
         Returns:

@@ -9,13 +9,13 @@ The AKD mapping system enables **seamless data transformation between heterogene
 In the AKD framework, different agents may have incompatible input/output schemas:
 
 ```python
-# QueryAgent output
-class QueryAgentOutput(OutputSchema):
+# MySourceAgent output
+class MySourceAgentOutput(OutputSchema):
     queries: List[str] = Field(description="Generated search queries")
     category: str = Field(description="Query category")
 
-# LiteratureSearchAgent input  
-class LitAgentInput(InputSchema):
+# LiteratureSearchAgent input
+class MyTargetAgentInput(InputSchema):
     query: str = Field(description="Single search query")
     max_results: int = Field(default=10, description="Maximum results")
 ```
@@ -35,8 +35,8 @@ The mapper enables runtime data transformation in LangGraph workflows:
 │           ┌─────────────────────────────────────────────┐               │
 │           │            Node Results Storage             │               │
 │           │  {                                          │               │
-│           │    "query_1": QueryAgentOutput,             │               │
-│           │    "lit_1": LitAgentOutput,                 │               │
+│           │    "query_1": MySourceAgentOutput,             │               │
+│           │    "lit_1": MyTargetAgentOutput,                 │               │
 │           │    "extract_1": ExtractionOutput            │               │
 │           │  }                                          │               │
 │           └─────────────────────────────────────────────┘               │
@@ -51,7 +51,7 @@ The mapper enables runtime data transformation in LangGraph workflows:
 │                                                                         │
 │  1. Get previous output: state.node_results["query_1"]                  │
 │  2. Map to current input: QueryOutput → LitInput                        │
-│  3. Execute current agent: LitAgent.arun(mapped_input)                  │
+│  3. Execute current agent: MyTargetAgent.arun(mapped_input)                  │
 │  4. Store result: state.node_results["lit_1"] = output                  │
 │                                                                         │
 │           ┌─────────────────────────────────────────────┐               │
@@ -78,7 +78,7 @@ target_schema = QueryInput  # has 'query' field
 # Direct mapping fails (queries ≠ query), moves to next stage
 ```
 
-### 2. Semantic Field Matching  
+### 2. Semantic Field Matching
 
 ```python
 # Fuzzy semantic matching with domain knowledge
@@ -116,7 +116,7 @@ TARGET: QueryInput with fields: query (str), context (str)
 ### Type-Safe Design
 
 - **Input**: Pydantic model instances (not raw dicts)
-- **Output**: Validated Pydantic model instances  
+- **Output**: Validated Pydantic model instances
 - **Schema Introspection**: Full access to field metadata
 - **AKDSerializer Integration**: Proper model conversions
 
@@ -139,14 +139,13 @@ TARGET: QueryInput with fields: query (str), context (str)
 
 ```python
 from akd.mapping.mappers import WaterfallMapper, MapperInput
-from akd.agents.query import QueryAgentOutputSchema
-from akd.agents.litsearch import LitAgentInputSchema
+from mypackage.agents import MySourceAgentOutputSchema, MyTargetAgentInputSchema
 
 # Initialize mapper
 mapper = WaterfallMapper()
 
 # Previous agent output
-query_output = QueryAgentOutputSchema(
+query_output = MySourceAgentOutputSchema(
     queries=["carbon capture materials", "direct air capture"],
     category="materials_science"
 )
@@ -154,7 +153,7 @@ query_output = QueryAgentOutputSchema(
 # Map to next agent input
 result = await mapper.arun(MapperInput(
     source_model=query_output,
-    target_schema=LitAgentInputSchema,
+    target_schema=MyTargetAgentInputSchema,
     mapping_hints={"queries": "query"}  # Use first query
 ))
 
@@ -167,36 +166,36 @@ lit_result = await lit_agent.arun(result.mapped_model)
 
 ```python
 async def query_to_literature_node(state: PlannerState) -> PlannerState:
-    """LangGraph node that transforms QueryAgent output to LitAgent input"""
-    
+    """LangGraph node that transforms MySourceAgent output to MyTargetAgent input"""
+
     # Get previous node output
     query_output_data = state.node_results["query_node"]
-    query_output = QueryAgentOutputSchema(**query_output_data)
-    
+    query_output = MySourceAgentOutputSchema(**query_output_data)
+
     # Transform to literature agent input
     mapping_result = await mapper.arun(MapperInput(
         source_model=query_output,
-        target_schema=LitAgentInputSchema
+        target_schema=MyTargetAgentInputSchema
     ))
-    
+
     # Check mapping confidence
     if mapping_result.mapping_confidence < 0.7:
         # Request human approval for low-confidence mapping
         state.request_human_approval("mapping_approval", {
-            "source_schema": "QueryAgentOutputSchema",
-            "target_schema": "LitAgentInputSchema", 
+            "source_schema": "MySourceAgentOutputSchema",
+            "target_schema": "MyTargetAgentInputSchema",
             "confidence": mapping_result.mapping_confidence,
             "unmapped_fields": mapping_result.unmapped_fields
         })
         return state
-    
+
     # Execute literature agent
     lit_agent = LiteratureSearchAgent()
     lit_output = await lit_agent.arun(mapping_result.mapped_model)
-    
+
     # Store result for next node
     state.update_node_result("lit_node", lit_output.model_dump())
-    
+
     return state
 ``` -->
 
@@ -211,15 +210,15 @@ config = MappingConfig(
     enable_direct_matching=True,
     enable_semantic_matching=True,
     enable_llm_fallback=True,
-    
+
     # Quality thresholds
     semantic_threshold=0.7,          # Minimum semantic similarity
     circuit_breaker_threshold=5,    # Failures before disabling strategy
-    
+
     # Performance settings
     enable_caching=True,
     max_retries=2,
-    
+
     # LLM settings
     llm_model="gpt-4o-mini"
 )
@@ -235,12 +234,12 @@ try:
         source_model=complex_output,
         target_schema=TargetSchema
     ))
-    
+
     if result.mapping_confidence < 0.5:
         print(f"Low confidence mapping: {result.mapping_confidence}")
         print(f"Strategy used: {result.used_strategy}")
         print(f"Unmapped fields: {result.unmapped_fields}")
-    
+
 except Exception as e:
     print(f"Mapping failed: {e}")
     # System provides minimal fallback
@@ -251,12 +250,12 @@ except Exception as e:
 ### Literature Search Pipeline
 
 ```python
-# Step 1: Query → Literature Search  
-query_output = QueryAgentOutputSchema(queries=["perovskite solar cells"])
-lit_input = await map_schemas(query_output, LitAgentInputSchema)
+# Step 1: Query → Literature Search
+query_output = MySourceAgentOutputSchema(queries=["perovskite solar cells"])
+lit_input = await map_schemas(query_output, MyTargetAgentInputSchema)
 
 # Step 2: Literature → Extraction
-lit_output = LitAgentOutputSchema(results=[...])  
+lit_output = MyTargetAgentOutputSchema(results=[...])
 extract_input = await map_schemas(lit_output, ExtractionInputSchema)
 
 # Step 3: Extraction → Relevancy
@@ -305,7 +304,7 @@ results = await asyncio.gather(*tasks)
 class MyCustomAgent(BaseAgent):
     input_schema = MyInputSchema
     output_schema = MyOutputSchema
-    
+
     async def _arun(self, params: MyInputSchema) -> MyOutputSchema:
         # Your agent logic
         return MyOutputSchema(...)
@@ -356,7 +355,7 @@ async def mapping_with_approval(source_model, target_schema):
         source_model=source_model,
         target_schema=target_schema
     ))
-    
+
     if result.mapping_confidence < 0.7:
         # In LangGraph workflow, this triggers human intervention
         approval = await request_human_approval({
@@ -364,7 +363,7 @@ async def mapping_with_approval(source_model, target_schema):
             "unmapped_fields": result.unmapped_fields,
             "suggested_hints": generate_mapping_suggestions(result)
         })
-        
+
         if approval.provide_hints:
             # Retry with human-provided hints
             result = await mapper.arun(MapperInput(
@@ -372,10 +371,10 @@ async def mapping_with_approval(source_model, target_schema):
                 target_schema=target_schema,
                 mapping_hints=approval.mapping_hints
             ))
-    
+
     return result
 ```
-<!-- 
+<!--
 ## Contributing
 
 ### Adding New Mapping Strategies
@@ -388,7 +387,7 @@ async def mapping_with_approval(source_model, target_schema):
 ```python
 class CustomMappingStrategy(BaseMappingStrategy):
     async def map_models(
-        self, 
+        self,
         source_model: BaseModel,
         target_schema: Type[BaseModel],
         mapping_hints: Optional[Dict[str, str]] = None
