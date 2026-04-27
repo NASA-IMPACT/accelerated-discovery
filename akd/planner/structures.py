@@ -10,7 +10,6 @@ from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
 from akd._base import OutputSchema
-
 from akd.configs.project import CONFIG
 
 
@@ -60,7 +59,7 @@ class WorkflowPlan(OutputSchema):
             # Add both agent_id and agent_name (normalized)
             agent_identifiers.add(agent.agent_id.lower())
             agent_identifiers.add(agent.agent_name.lower())
-            # Add normalized versions (e.g., "deep_search" -> "deep search") I was able to visualize rough changes to            agent_identifiers.add(agent.agent_id.replace("_", " ").lower())
+            # Add normalized versions (e.g., "my_agent" -> "my agent") I was able to visualize rough changes to            agent_identifiers.add(agent.agent_id.replace("_", " ").lower())
 
         # Check each step mentions at least one agent (soft validation)
         # Plain language steps without explicit agent names are valid UX choice
@@ -69,7 +68,7 @@ class WorkflowPlan(OutputSchema):
             if not any(agent_id in step_lower for agent_id in agent_identifiers):
                 logger.debug(
                     f"Workflow step {i} ('{step[:50]}...') uses plain language description. "
-                    f"Agents in workflow: {[a.agent_id for a in suggested_agents]}"
+                    f"Agents in workflow: {[a.agent_id for a in suggested_agents]}",
                 )
 
         return steps
@@ -102,8 +101,12 @@ class PlannerConfig(BaseModel):
     temperature: float = Field(default=0.3, description="Temperature for LLM generation (deterministic planning)")
     max_conversation_turns: int = Field(default=25, description="Maximum conversation turns before forcing completion")
     field_mapping_confidence_threshold: float = Field(
-        default=0.8, ge=0.0, le=1.0, description="Confidence threshold for auto-approving field mappings"
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Confidence threshold for auto-approving field mappings",
     )
     input_extraction_temperature: float = Field(
-        default=0.1, description="Temperature for input extraction LLM calls (very deterministic)"
+        default=0.1,
+        description="Temperature for input extraction LLM calls (very deterministic)",
     )

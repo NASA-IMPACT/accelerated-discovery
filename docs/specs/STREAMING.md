@@ -110,12 +110,12 @@ class RunContext(BaseModel):
 
 `RunContext` replaces the previous `context: dict[str, Any]` parameter. It provides type safety for known fields while allowing arbitrary extra keys via `extra="allow"`.
 
-### StreamingMixin
+### `astream()` on `AbstractBase`
 
-Base mixin that adds `astream()` to any agent (`akd/_base/streaming.py`):
+The streaming entry point lives directly on `AbstractBase` (`akd/_base/_base.py`) — any class inheriting from it gets `astream()` for free. Event types and helpers live in `akd/_base/streaming.py`.
 
 ```python
-class StreamingMixin:
+class AbstractBase(Generic[InSchema, OutSchema], ConfigBindingMixin, ABC):
     async def astream(
         self,
         params: Any,
@@ -284,7 +284,7 @@ Emitted once at execution start. Carries input params.
 
 ```python
 StartingEvent(
-    source="DeepLitSearchAgent",
+    source="MyResearchAgent",
     message="Starting deep literature search",
     data=StartingEventData(params=input_data),
     run_context=run_context,
@@ -297,7 +297,7 @@ Emitted for pipeline progress. `RunningEventData` uses `extra="allow"` for flexi
 
 ```python
 RunningEvent(
-    source="DeepLitSearchAgent",
+    source="MyResearchAgent",
     message="Starting research iteration 2/5",
     data=RunningEventData(
         step="research.iteration",
@@ -361,10 +361,10 @@ Validated partial output as JSON builds:
 
 ```python
 PartialOutputEvent(
-    source="DeepLitSearchAgent",
+    source="MyResearchAgent",
     message="Research results available",
     data=PartialEventData(
-        partial_output=PartialModel[LitSearchAgentOutputSchema](
+        partial_output=PartialModel[MyResearchAgentOutputSchema](
             results=[...],
             extra={"key_findings": [...]},
         )
@@ -454,9 +454,9 @@ Successful completion with validated output:
 
 ```python
 CompletedEvent(
-    source="DeepLitSearchAgent",
-    message="Completed DeepLitSearchAgent",
-    data=CompletedEventData(output=LitSearchAgentOutputSchema(...)),
+    source="MyResearchAgent",
+    message="Completed MyResearchAgent",
+    data=CompletedEventData(output=MyResearchAgentOutputSchema(...)),
     run_context=run_context,
 )
 ```
@@ -467,7 +467,7 @@ Error with details. The original exception is re-raised after this event.
 
 ```python
 FailedEvent(
-    source="DeepLitSearchAgent",
+    source="MyResearchAgent",
     message="Failed: Connection timeout",
     data=FailedEventData(error="Connection timeout", error_type="TimeoutError"),
     run_context=run_context,
@@ -569,11 +569,17 @@ async def _arun(
 `PartialModel[T]` creates a version of any Pydantic model where all fields are Optional (`akd/utils.py`):
 
 ```python
+from akd._base import OutputSchema
 from akd.utils import PartialModel
-from akd.agents.search._base import LitSearchAgentOutputSchema
+
+class MyResearchOutput(OutputSchema):
+    answer: str
+    report: str
+    results: list
+    extra: dict
 
 # Create partial with only some fields populated
-partial = PartialModel[LitSearchAgentOutputSchema](
+partial = PartialModel[MyResearchOutput](
     results=[...],           # Available
     extra={"key_findings": [...]},
     # answer=None (implicit)
@@ -594,7 +600,7 @@ yield PartialOutputEvent(
     source=class_name,
     message="Search results available",
     data=PartialEventData(
-        partial_output=PartialModel[LitSearchAgentOutputSchema](
+        partial_output=PartialModel[MyResearchAgentOutputSchema](
             results=all_results,
             extra={"iterations_performed": iteration},
         ),
@@ -689,26 +695,6 @@ async for event in agent.astream(input_data):
 
     elif isinstance(event, FailedEvent):
         print(f"\nError: {event.data.error}")
-```
-
-### DeepLitSearchAgent - Multi-Step Pipeline
-
-```python
-from akd.agents.search.deep_search import DeepLitSearchAgent, LitSearchAgentInputSchema
-
-agent = DeepLitSearchAgent()
-input_data = LitSearchAgentInputSchema(query="climate change mitigation strategies")
-
-async for event in agent.astream(input_data):
-    if isinstance(event, RunningEvent):
-        print(f"  {event.message}")
-    elif isinstance(event, PartialOutputEvent):
-        partial = event.data.partial_output
-        if partial.results:
-            print(f"  Results so far: {len(partial.results)}")
-    elif isinstance(event, CompletedEvent):
-        result = event.data.output
-        print(f"Complete: {len(result.results)} results")
 ```
 
 ### Base Agent LLM Streaming
@@ -850,7 +836,7 @@ All streaming types are exported from `akd._base`:
 ```python
 from akd._base import (
     # Core
-    StreamEvent, StreamEventType, StreamingMixin,
+    StreamEvent, StreamEventType,
     # Event data models
     StartingEventData, RunningEventData, CompletedEventData,
     FailedEventData, StreamingEventData, ThinkingEventData,
@@ -861,8 +847,8 @@ from akd._base import (
     StreamingTokenEvent, ThinkingEvent, PartialOutputEvent,
     ToolCallingEvent, ToolResultEvent,
     HumanInputRequiredEvent, HumanResponseEvent,
-    # Tool calling support
-    ToolCall, ToolResult, RunContext, ToolCallingMixin, HumanResponse,
+    # Tool calling data models
+    ToolCall, ToolResult, RunContext, HumanResponse,
 )
 ```
 

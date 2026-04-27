@@ -60,7 +60,7 @@ class WorkflowNodeIO(BaseModel):
 class WorkflowNode(BaseModel):
     """Individual node in a workflow definition."""
 
-    id: str = Field(..., description="Unique node identifier (e.g., code_search_0, gap_analysis_0)")
+    id: str = Field(..., description="Unique node identifier (e.g., my_agent_0)")
     type_: str = Field(..., alias="type", description="Node type corresponding to agent type for registry lookup")
     input: WorkflowNodeIO = Field(default_factory=WorkflowNodeIO)
     output: WorkflowNodeIO | None = Field(default=None)

@@ -79,21 +79,12 @@ This works across any transport — REST APIs, WebSockets, CLI — because the p
 
 | Category | Agent | Description |
 |----------|-------|-------------|
-| **Research** | `DeepLitSearchAgent` | Multi-agent deep literature search with triage, clarification, and synthesis |
-| | `ControlledSearchAgent` | Controlled search with configurable parameters |
-| | `AspectSearchAgent` | Interview-pattern multi-aspect search |
-| | `CodeSearchAgent` | Code repository search |
-| | `QuestionAnsweringAgent` | QA over retrieved content |
-| **Analysis** | `GapAgent` | Research gap identification via knowledge graphs |
-| | `EstimationExtractionAgent` | Intent-based data extraction |
-| | `StormAgent` | Structured narrative generation |
-| **Utility** | `IntentAgent` | User intent classification |
-| | `QueryAgent` | Query reformulation and refinement |
-| | `FollowUpQueryAgent` | Follow-up query generation |
-| | `RelevancyAgent` | Binary relevance classification |
+| **Utility** | `RelevancyAgent` | Binary relevance classification |
 | | `MultiRubricRelevancyAgent` | Multi-dimensional relevance scoring |
 | **Base** | `BaseAgent` | Core agent with streaming, tool calling, HITL, message trimming |
 | | `LiteLLMInstructorBaseAgent` | Structured Pydantic output via Instructor |
+
+Domain-specific agents live in downstream packages and can be registered at runtime via `AgentRegistry.register_agent(YourAgent)`.
 
 ## Out-of-Box Tools
 
@@ -214,6 +205,27 @@ dependencies = [
 ]
 ```
 
+**Optional extras:** pull in extra dependencies for specific features.
+
+| Extra | What it pulls in | Install when you... |
+|---|---|---|
+| `serializer` | `langgraph` | use `AKDSerializer` as a langgraph checkpoint serde (e.g. `AsyncPostgresSaver(serde=AKDSerializer())`) |
+| `ml` | `pandas`, `sentence-transformers`, `docling`, `deepeval` | need ML-backed rerankers, scrapers, or eval tools |
+| `dev` | `pytest`, `pytest-asyncio`, `pytest-cov`, `pytest-xdist`, `pre-commit`, `memray`, `scalene` | run the test suite or hack on akd itself |
+| `local` | `marimo`, `jupyter`, `ipykernel`, `ipywidgets` | run the marimo notebooks under `notebooks/` |
+
+```bash
+# As a dependency, with an extra:
+uv pip install "akd[serializer] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop"
+```
+
+```toml
+# In your pyproject.toml:
+dependencies = [
+    "akd[serializer] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop",
+]
+```
+
 **For local development:**
 
 ```bash
@@ -221,17 +233,23 @@ dependencies = [
 uv venv --python 3.12
 source .venv/bin/activate
 
-# Install dependencies
+# Install core dependencies
 uv sync
 
-# For development (includes testing tools)
+# With development tooling (pytest, pre-commit, profilers)
 uv sync --extra dev
 
-# For local development (includes marimo and other local tools)
+# With notebooks (marimo, jupyter)
 uv sync --extra dev --extra local
 
-# For ML features (includes sentence-transformers, docling, deepeval)
+# With ML extras (pandas, sentence-transformers, docling, deepeval)
 uv sync --extra ml
+
+# With the langgraph checkpoint serde (AKDSerializer)
+uv sync --extra serializer
+
+# Combine extras freely, e.g. full dev setup:
+uv sync --extra dev --extra local --extra ml --extra serializer
 
 # Setup environment variables
 cp .env.example .env
@@ -258,13 +276,6 @@ notebooks/       # Usage examples (Jupyter, Marimo)
 scripts/         # Utility scripts and demos
 tests/           # Test suite (mirrors akd/ structure)
 ```
-
-## Roadmap
-
-These features are part of the design vision but not yet fully implemented:
-
-- **Conflict Agent** — a dedicated agent that specifically searches for contradictory evidence and conflicting findings across sources. Currently, conflict detection is a design principle (see [Design Philosophy](docs/design_philosophy.md)) but lacks a standalone agent implementation.
-- **Full Attribution Chain** — end-to-end traceability from final claims back to specific source sentences. Partial support exists today: `GapAgent` provides `attributed_source_answers` and the guardrail system includes an `ATTRIBUTION` risk category.
 
 ## Contributing
 

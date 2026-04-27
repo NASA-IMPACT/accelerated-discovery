@@ -1,22 +1,14 @@
-# Type Definitions for tools, guardrails, and callables
-from typing import Any, Callable
+"""Shared type aliases."""
 
-try:
-    from typing import TypeAlias  # Python 3.10+
-except ImportError:
-    from typing_extensions import TypeAlias
+from typing import Any, Callable, TypeAlias
 
 from .agents._base import BaseAgent
 from .tools._base import BaseTool
 
-ToolType: TypeAlias = BaseTool | BaseAgent
+# A tool, agent, or raw callable — optionally paired with an input-key mapping.
+# Used by ToolRunner to bind a state dict to a tool's input_schema.
+CallableSpec: TypeAlias = (
+    BaseTool | BaseAgent | Callable[..., Any] | tuple[BaseTool | BaseAgent | Callable[..., Any], dict[str, str]]
+)
 
-# Callable specifications (used for ToolRunner)
-AnyCallable: TypeAlias = BaseTool | BaseAgent | Callable[..., Any]
-CallableSpec: TypeAlias = AnyCallable | tuple[AnyCallable, dict[str, str]]
-
-__all__ = [
-    "ToolType",
-    "AnyCallable",
-    "CallableSpec",
-]
+__all__ = ["CallableSpec"]

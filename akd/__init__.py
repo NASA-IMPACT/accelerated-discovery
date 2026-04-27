@@ -17,28 +17,15 @@ from importlib.metadata import version as _version
 try:
     __version__ = _version("akd")
 except PackageNotFoundError:
-    __version__ = "0.1.1"
+    __version__ = "0.2.0"
 __author__ = "NASA IMPACT"
 __email__ = "np0069@uah.edu,mr0051@uah.edu"
 
 # Core base classes
-from akd._base import (
-    AbstractBase,
-    BaseConfig,
-    InputSchema,
-    IOSchema,
-    OutputSchema,
-    UnrestrictedAbstractBase,
-)
+from akd._base import AbstractBase, BaseConfig, InputSchema, IOSchema, OutputSchema
 
 # Core structures
-from akd.structures import (
-    ExtractionSchema,
-    ResearchData,
-    SearchResultItem,
-    SingleEstimation,
-    ToolSearchResult,
-)
+from akd.structures import SearchResultItem, ToolSearchResult
 
 # Tool system
 from akd.tools._base import BaseTool, BaseToolConfig
@@ -50,7 +37,6 @@ __all__ = [
     "__email__",
     # Base classes
     "AbstractBase",
-    "UnrestrictedAbstractBase",
     "BaseConfig",
     "IOSchema",
     "InputSchema",
@@ -60,8 +46,5 @@ __all__ = [
     "BaseToolConfig",
     # Core structures
     "SearchResultItem",
-    "ResearchData",
-    "ExtractionSchema",
-    "SingleEstimation",
     "ToolSearchResult",
 ]

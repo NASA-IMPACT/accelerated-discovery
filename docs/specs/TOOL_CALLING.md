@@ -92,9 +92,11 @@ class MyTool(BaseTool[MyToolInput, MyToolOutput]):
 
 ---
 
-## ToolCallingMixin
+## Tool execution helpers (on AKDAgent)
 
-`ToolCallingMixin` (`akd/_base/tool_calling.py`) provides reusable tool execution helpers to any class with a `self.tools` list.
+`AKDAgent` (`akd/agents/_base/_base.py`) provides the reusable tool execution helpers directly — they're not a separate mixin. Any class inheriting `AKDAgent` with a `self.tools` list gets them automatically.
+
+`ToolCall` and `ToolResult` data models live in `akd/_base/tool_calling.py` and are exported from `akd._base` for use by any adapter.
 
 ### `_find_tool(name, tools=None)`
 

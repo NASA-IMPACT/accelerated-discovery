@@ -175,6 +175,29 @@ def is_server_available(url: str | HttpUrl) -> bool:
         return False
 
 
+def is_empty(value: Any) -> bool:
+    """Recursively check if a value is structurally empty.
+
+    Returns True when the value is None, an empty (or whitespace-only) string,
+    empty bytes, or a container (pydantic BaseModel, dict, list, tuple, set,
+    frozenset) whose contents are all recursively empty. Concrete scalars like
+    0, False, or datetime instances are NOT considered empty.
+    """
+    if value is None:
+        return True
+    if isinstance(value, BaseModel):
+        return is_empty(value.model_dump())
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, bytes):
+        return len(value) == 0
+    if isinstance(value, dict):
+        return all(is_empty(v) for v in value.values())
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return all(is_empty(item) for item in value)
+    return False
+
+
 def get_model_fields(
     model_class: type[BaseModel],
     skip_no_description: bool = True,
@@ -291,7 +314,7 @@ def to_snake_case(name: str) -> str:
 
     Examples:
         SearxNGSearchTool -> searxng_search_tool
-        QueryAgent -> query_agent
+        RelevancyAgent -> relevancy_agent
         CMRDataExtractor -> cmr_data_extractor
     """
     # Insert _ between lowercase and uppercase: deepLit -> deep_Lit
@@ -313,16 +336,17 @@ class PartialModel[T: BaseModel]:
 
     Example:
         from akd.utils import PartialModel
-        from akd.agents.search._base import LitSearchAgentOutputSchema
+        from akd._base import OutputSchema
+
+        class MySchema(OutputSchema):
+            answer: str
+            sources: list[str]
 
         # Create partial with only some fields
-        partial = PartialModel[LitSearchAgentOutputSchema](
-            results=[...],
-            extra={"key_findings": [...]},
-        )
+        partial = PartialModel[MySchema](sources=["a", "b"])
 
         # Serialize for frontend
-        partial.model_dump()  # {'answer': None, 'report': None, 'results': [...], 'extra': {...}}
+        partial.model_dump()  # {'answer': None, 'sources': ['a', 'b']}
     """
 
     _cache: dict[type[BaseModel], type[BaseModel]] = {}
