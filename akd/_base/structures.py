@@ -103,9 +103,13 @@ class RunContext(BaseModel):
         default=None,
         description="Human response for resumption after HUMAN_INPUT_REQUIRED",
     )
-    messages: list[dict[str, Any]] | None = Field(
+    messages: list[Any] | None = Field(
         default=None,
-        description="Conversation history for resumption",
+        description=(
+            "Conversation history for resumption. AKD's own BaseAgent populates "
+            "these as OpenAI-style {role, content} dicts; adapters (pydantic-ai, "
+            "langchain, etc.) may carry their native message types instead."
+        ),
     )
     run_id: str | None = Field(
         default=None,
