@@ -9,6 +9,7 @@ from functools import cached_property
 from typing import Any, Literal, cast, get_args, get_origin
 
 import instructor
+import logfire
 from litellm import acompletion
 from litellm.utils import get_model_info, supports_reasoning
 from loguru import logger
@@ -57,6 +58,7 @@ from akd._base.streaming import (
 from akd._base.structures import RunUsage
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+from akd.observability import init_observability, run_tags, scrub_payload
 from akd.tools._base import BaseTool
 from akd.tools.human import HumanTool, HumanToolInput
 
@@ -224,6 +226,7 @@ class BaseAgent[
         config: BaseAgentConfig | None = None,
         **kwargs,
     ) -> None:
+        init_observability(service_name="accelerated-discovery")
         super().__init__(config=config, **kwargs)
 
     @cached_property
@@ -268,6 +271,10 @@ class BaseAgent[
         """Create a run context copy and ensure it has a run_id."""
         ctx = (run_context or RunContext()).model_copy()
         ctx.run_id = ctx.run_id or uuid.uuid4().hex[:8]
+        ctx.workflow_id = ctx.workflow_id or ctx.run_id
+        ctx.control_layer = ctx.control_layer or "litellm"
+        ctx.provider_runtime = ctx.provider_runtime or "litellm"
+        ctx.repo = ctx.repo or "accelerated-discovery"
         return ctx
 
     def _open_session(
@@ -479,6 +486,7 @@ class AKDAgent[
         self,
         tool_call: ToolCall,
         tools: list[BaseTool] | None = None,
+        run_context: RunContext | None = None,
     ) -> ToolResult:
         """Execute a single tool call, returning normalized ToolResult."""
         tool = self._find_tool(tool_call.tool_name, tools=tools)
@@ -491,16 +499,51 @@ class AKDAgent[
             )
 
         try:
-            input_obj = tool.input_schema(**tool_call.arguments)
-            result = await tool.arun(input_obj)
-            content = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
-            return ToolResult(
-                tool_call_id=tool_call.tool_call_id,
-                tool_name=tool_call.tool_name,
-                content=content,
-            )
+            with logfire.span(
+                "akd.tool.execute",
+                **(
+                    self._trace_tags(run_context, tool_name=tool_call.tool_name)
+                    if run_context
+                    else {"tool_name": tool_call.tool_name}
+                ),
+            ):
+                input_obj = tool.input_schema(**tool_call.arguments)
+                result = await tool.arun(input_obj)
+                content = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+                logfire.info(
+                    "akd.tool.success",
+                    **scrub_payload(
+                        {
+                            **(
+                                self._trace_tags(run_context, tool_name=tool_call.tool_name)
+                                if run_context
+                                else {"tool_name": tool_call.tool_name}
+                            ),
+                            "tool_call_id": tool_call.tool_call_id,
+                        }
+                    ),
+                )
+                return ToolResult(
+                    tool_call_id=tool_call.tool_call_id,
+                    tool_name=tool_call.tool_name,
+                    content=content,
+                )
         except Exception as e:
             logger.exception(f"Tool '{tool_call.tool_name}' failed with args {tool_call.arguments}")
+            logfire.info(
+                "akd.tool.failure",
+                **scrub_payload(
+                    {
+                        **(
+                            self._trace_tags(run_context, tool_name=tool_call.tool_name)
+                            if run_context
+                            else {"tool_name": tool_call.tool_name}
+                        ),
+                        "tool_call_id": tool_call.tool_call_id,
+                        "error": str(e),
+                    }
+                ),
+            )
             return ToolResult(
                 tool_call_id=tool_call.tool_call_id,
                 tool_name=tool_call.tool_name,
@@ -512,10 +555,13 @@ class AKDAgent[
         self,
         tool_calls: list[ToolCall],
         tools: list[BaseTool] | None = None,
+        run_context: RunContext | None = None,
     ) -> list[ToolResult]:
         """Execute multiple tool calls concurrently."""
         return list(
-            await asyncio.gather(*[self._execute_tool(tc, tools=tools) for tc in tool_calls]),
+            await asyncio.gather(
+                *[self._execute_tool(tc, tools=tools, run_context=run_context) for tc in tool_calls]
+            ),
         )
 
     # ── End folded helpers ─────────────────────────────────────────
@@ -541,16 +587,34 @@ class AKDAgent[
 
     @staticmethod
     def _extract_usage(chunk: Any) -> RunUsage:
-        """Extract token usage from LiteLLM stream chunk."""
+        """Extract token usage from LiteLLM/instructor responses."""
         run_usage = RunUsage()
         usage = getattr(chunk, "usage", None)
         if usage:
-            run_usage.input_tokens = getattr(usage, "prompt_tokens", 0) or 0
-            run_usage.output_tokens = getattr(usage, "completion_tokens", 0) or 0
+            if isinstance(usage, dict):
+                run_usage.input_tokens = (
+                    int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0) or 0
+                )
+                run_usage.output_tokens = (
+                    int(usage.get("completion_tokens") or usage.get("output_tokens") or 0) or 0
+                )
+            else:
+                run_usage.input_tokens = (
+                    int(getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0) or 0) or 0
+                )
+                run_usage.output_tokens = (
+                    int(getattr(usage, "completion_tokens", 0) or getattr(usage, "output_tokens", 0) or 0) or 0
+                )
             run_usage.requests = 1
+            run_usage.details["total_tokens"] = int(
+                (getattr(usage, "total_tokens", None) if not isinstance(usage, dict) else usage.get("total_tokens"))
+                or (run_usage.input_tokens + run_usage.output_tokens)
+            )
 
             for details_attr in ("completion_tokens_details", "prompt_tokens_details"):
                 details_obj = getattr(usage, details_attr, None)
+                if isinstance(usage, dict):
+                    details_obj = usage.get(details_attr)
                 if details_obj is None:
                     continue
                 items = (
@@ -562,6 +626,24 @@ class AKDAgent[
                     if isinstance(v, int) and v > 0:
                         run_usage.details[f"{details_attr}.{k}"] = v
         return run_usage
+
+    @staticmethod
+    def _normalized_usage_attributes(usage: RunUsage) -> dict[str, Any]:
+        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+        output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+        total_tokens = int((getattr(usage, "details", {}) or {}).get("total_tokens") or (input_tokens + output_tokens))
+        details = getattr(usage, "details", {}) or {}
+        return {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+            # OpenAI-style aliases for dashboard portability
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "request_count": int(getattr(usage, "requests", 0) or 0),
+            "usage_missing": total_tokens <= 0,
+            **details,
+        }
 
     @staticmethod
     def _create_instructor_compatible_model(response_model: type[Any]) -> type[BaseModel]:
@@ -586,9 +668,38 @@ class AKDAgent[
             schema["required"] = list(schema["properties"].keys())
         return schema
 
+    @staticmethod
+    def _trace_tags(run_context: RunContext, **extra: Any) -> dict[str, Any]:
+        tags = run_tags(
+            workflow_id=run_context.workflow_id or run_context.run_id,
+            run_id=run_context.run_id,
+            session_id=run_context.session_id,
+            request_id=run_context.request_id,
+            parent_run_id=run_context.parent_run_id,
+            control_layer=run_context.control_layer,
+            provider_runtime=run_context.provider_runtime,
+            repo=run_context.repo,
+            **extra,
+        )
+        return tags
+
+    @staticmethod
+    def _litellm_metadata(run_context: RunContext) -> dict[str, Any]:
+        return {
+            "workflow_id": run_context.workflow_id or run_context.run_id,
+            "run_id": run_context.run_id,
+            "session_id": run_context.session_id,
+            "request_id": run_context.request_id,
+            "parent_run_id": run_context.parent_run_id,
+            "control_layer": run_context.control_layer,
+            "provider_runtime": run_context.provider_runtime,
+            "repo": run_context.repo,
+        }
+
     def _build_completion_kwargs(
         self,
         *,
+        run_context: RunContext,
         stream: bool,
         tools: list[dict[str, Any]] | None = None,
         output_schema: type[OutputSchema] | None = None,
@@ -603,6 +714,7 @@ class AKDAgent[
             "num_retries": self.num_retries,
             "drop_params": True,
             "stream": stream,
+            "metadata": self._litellm_metadata(run_context),
         }
         if self.reasoning_effort:
             kwargs["reasoning_effort"] = self.reasoning_effort
@@ -650,19 +762,48 @@ class AKDAgent[
         response_model = response_model or self.output_schema
         instructor_model = self._create_instructor_compatible_model(response_model)
 
-        kwargs = self._build_completion_kwargs(stream=False)
+        kwargs = self._build_completion_kwargs(run_context=run_context, stream=False)
         # Remove stream-related keys not needed for instructor
         kwargs.pop("stream", None)
         kwargs.pop("stream_options", None)
 
-        response, completion = await self.client.chat.completions.create_with_completion(
-            messages=run_context.messages,
-            response_model=instructor_model,
-            **kwargs,
-        )
+        with logfire.span(
+            "akd.llm.instructor_call",
+            **self._trace_tags(run_context, agent_name=self.__class__.__name__, model=self.model_name),
+        ) as instructor_span:
+            response, completion = await self.client.chat.completions.create_with_completion(
+                messages=run_context.messages,
+                response_model=instructor_model,
+                **kwargs,
+            )
+            usage = self._extract_usage(completion)
+            run_context.usage += usage
+            usage_attrs = self._normalized_usage_attributes(usage)
+            span_attrs = scrub_payload(
+                {
+                    **self._trace_tags(
+                        run_context,
+                        agent_name=self.__class__.__name__,
+                        model=self.model_name,
+                    ),
+                    "event_name": "akd.llm.instructor_call",
+                    "provider": "litellm",
+                    **usage_attrs,
+                }
+            )
+            instructor_span.set_attributes(span_attrs)
 
-        usage = self._extract_usage(completion)
-        run_context.usage += usage
+        logfire.info(
+            "akd.llm.instructor_usage",
+            **scrub_payload(
+                {
+                    **self._trace_tags(run_context, agent_name=self.__class__.__name__, model=self.model_name),
+                    "event_name": "akd.llm.instructor_usage",
+                    "provider": "litellm",
+                    **usage_attrs,
+                }
+            ),
+        )
 
         if hasattr(response, "model_dump"):
             content = json.dumps(response.model_dump())
@@ -690,6 +831,9 @@ class AKDAgent[
         Direct mode (no tools): one-shot instructor extraction via get_response_async.
         Tool mode: consumes _run_engine_stream, watches for CompletedEvent.
         """
+        run_context.control_layer = run_context.control_layer or "litellm"
+        run_context.provider_runtime = run_context.provider_runtime or "litellm"
+
         has_union = len(self.output_schema_resolved) > 1
         use_tool_loop = bool(self.tools) or (has_union and self.output_mode == "multi_tool")
 
@@ -759,6 +903,7 @@ class AKDAgent[
 
         for _ in range(max_turns):
             completion_kwargs = self._build_completion_kwargs(
+                run_context=run_context,
                 stream=True,
                 tools=tool_defs or None,
                 output_schema=response_model,
@@ -769,51 +914,55 @@ class AKDAgent[
             accumulated_tool_calls: dict[int, dict[str, str]] = {}
 
             # Stream chunks directly from acompletion — no adapter intermediary
-            response = await acompletion(messages=messages, **completion_kwargs)
-            async for chunk in response:
-                # Usage extraction
-                usage = self._extract_usage(chunk)
-                if usage.requests or usage.input_tokens or usage.output_tokens or usage.details:
-                    run_context.usage += usage
+            with logfire.span(
+                "akd.llm.stream_turn",
+                **self._trace_tags(run_context, agent_name=class_name, model=self.model_name),
+            ):
+                response = await acompletion(messages=messages, **completion_kwargs)
+                async for chunk in response:
+                    # Usage extraction
+                    usage = self._extract_usage(chunk)
+                    if usage.requests or usage.input_tokens or usage.output_tokens or usage.details:
+                        run_context.usage += usage
 
-                if not getattr(chunk, "choices", None):
-                    continue
+                    if not getattr(chunk, "choices", None):
+                        continue
 
-                delta = chunk.choices[0].delta
+                    delta = chunk.choices[0].delta
 
-                # Reasoning deltas
-                reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "thinking", None)
-                if reasoning:
-                    yield ThinkingEvent(
-                        source=class_name,
-                        message="Reasoning...",
-                        data=ThinkingEventData(thinking_content=reasoning, streaming=True),
-                        run_context=run_context,
-                    )
+                    # Reasoning deltas
+                    reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "thinking", None)
+                    if reasoning:
+                        yield ThinkingEvent(
+                            source=class_name,
+                            message="Reasoning...",
+                            data=ThinkingEventData(thinking_content=reasoning, streaming=True),
+                            run_context=run_context,
+                        )
 
-                # Accumulate tool call deltas
-                for tc in getattr(delta, "tool_calls", None) or []:
-                    idx = getattr(tc, "index", 0)
-                    function = getattr(tc, "function", None)
-                    if idx not in accumulated_tool_calls:
-                        accumulated_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
-                    if tc_id := getattr(tc, "id", None):
-                        accumulated_tool_calls[idx]["id"] = tc_id
-                    if tc_name := (getattr(function, "name", None) if function else None):
-                        accumulated_tool_calls[idx]["name"] = tc_name
-                    accumulated_tool_calls[idx]["arguments"] += (
-                        getattr(function, "arguments", "") if function else ""
-                    ) or ""
+                    # Accumulate tool call deltas
+                    for tc in getattr(delta, "tool_calls", None) or []:
+                        idx = getattr(tc, "index", 0)
+                        function = getattr(tc, "function", None)
+                        if idx not in accumulated_tool_calls:
+                            accumulated_tool_calls[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_id := getattr(tc, "id", None):
+                            accumulated_tool_calls[idx]["id"] = tc_id
+                        if tc_name := (getattr(function, "name", None) if function else None):
+                            accumulated_tool_calls[idx]["name"] = tc_name
+                        accumulated_tool_calls[idx]["arguments"] += (
+                            getattr(function, "arguments", "") if function else ""
+                        ) or ""
 
-                # Text content deltas
-                text_content = getattr(delta, "content", None)
-                if text_content:
-                    accumulated_content += text_content
-                    yield StreamingTokenEvent(
-                        source=class_name,
-                        data=StreamingEventData(token=text_content),
-                        run_context=run_context,
-                    )
+                    # Text content deltas
+                    text_content = getattr(delta, "content", None)
+                    if text_content:
+                        accumulated_content += text_content
+                        yield StreamingTokenEvent(
+                            source=class_name,
+                            data=StreamingEventData(token=text_content),
+                            run_context=run_context,
+                        )
 
             # Assemble tool calls from accumulated deltas
             for idx in sorted(accumulated_tool_calls):
@@ -929,7 +1078,7 @@ class AKDAgent[
                 )
 
             # Execute tools
-            results = await self._execute_tools_parallel(tool_calls, tools=all_tools)
+            results = await self._execute_tools_parallel(tool_calls, tools=all_tools, run_context=run_context)
             total_tool_calls += len(tool_calls)
 
             for result in results:
@@ -975,6 +1124,25 @@ class AKDAgent[
                     data=ThinkingEventData(reflection_prompt=self.reflection_prompt),
                     run_context=run_context,
                 )
+
+            logfire.info(
+                "akd.llm.stream_turn.done",
+                **scrub_payload(
+                    {
+                        **self._trace_tags(run_context, agent_name=class_name, model=self.model_name),
+                        "event_name": "akd.llm.stream_turn.done",
+                        "provider": "litellm",
+                        "tool_calls_in_turn": len(tool_calls),
+                        "input_tokens": run_context.usage.input_tokens,
+                        "output_tokens": run_context.usage.output_tokens,
+                        "total_tokens": run_context.usage.total_tokens,
+                        "prompt_tokens": run_context.usage.input_tokens,
+                        "completion_tokens": run_context.usage.output_tokens,
+                        "request_count": run_context.usage.requests,
+                        "usage_missing": int(run_context.usage.total_tokens) <= 0,
+                    }
+                ),
+            )
 
         if tool_defs:
             raise MaxToolIterationsExceeded(f"Exceeded {self.max_tool_iterations} tool iterations")

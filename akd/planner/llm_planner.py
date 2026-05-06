@@ -260,7 +260,12 @@ class LLMWorkflowPlanner(LiteLLMInstructorBaseAgent[PlannerInput, PlannerRespons
 
             # Get response from LLM
             response = await self.get_response_async(
-                run_context=RunContext(messages=messages),
+                run_context=RunContext(
+                    messages=messages,
+                    control_layer="litellm",
+                    provider_runtime="litellm",
+                    repo="accelerated-discovery",
+                ),
             )
 
             if self.debug:

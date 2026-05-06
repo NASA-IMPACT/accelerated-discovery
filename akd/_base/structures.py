@@ -115,6 +115,34 @@ class RunContext(BaseModel):
         default=None,
         description="Unique identifier for this execution run",
     )
+    workflow_id: str | None = Field(
+        default=None,
+        description="Cross-system workflow identifier (defaults to run_id when omitted)",
+    )
+    session_id: str | None = Field(
+        default=None,
+        description="Optional session identifier for multi-turn workflow grouping",
+    )
+    request_id: str | None = Field(
+        default=None,
+        description="Optional user/API request identifier",
+    )
+    parent_run_id: str | None = Field(
+        default=None,
+        description="Optional parent run identifier for nested executions",
+    )
+    control_layer: str | None = Field(
+        default=None,
+        description="Control-plane executor label (for example litellm)",
+    )
+    provider_runtime: str | None = Field(
+        default=None,
+        description="Runtime provider label (for example litellm, openai-agents)",
+    )
+    repo: str | None = Field(
+        default=None,
+        description="Repository source label for cross-repo traces",
+    )
     usage: RunUsage = Field(
         default_factory=RunUsage,
         description="Accumulated token usage for this run",

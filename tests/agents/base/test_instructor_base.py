@@ -1,7 +1,8 @@
 # noqa: F841
 """Test cases for InstructorBaseAgent (now an alias for LiteLLMInstructorBaseAgent)."""
 
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -160,6 +161,118 @@ class TestInstructorBaseAgentFunctionality:
         assert isinstance(result, AgentTestOutputSchema)
         assert result.response == "custom model response"
         assert result.metadata == {"custom": True}
+
+    @pytest.mark.asyncio
+    async def test_instructor_usage_emits_normalized_token_fields(self, mock_instructor_client, monkeypatch):
+        """Token usage fields should be normalized on both span and usage event."""
+        monkeypatch.setenv("LOGFIRE_INSTRUMENT_HTTPX", "false")
+
+        class FakeSpan:
+            def __init__(self):
+                self.attrs = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def set_attributes(self, attrs):
+                self.attrs.update(attrs)
+
+        fake_span = FakeSpan()
+        with patch("akd.agents._base._base.logfire.span", return_value=fake_span):
+            with patch("akd.agents._base._base.logfire.info") as mock_logfire_info:
+                mock_response = MagicMock()
+                mock_response.model_dump.return_value = {
+                    "response": "usage response",
+                    "metadata": {},
+                }
+                mock_completion = MagicMock()
+                mock_completion.usage = SimpleNamespace(
+                    prompt_tokens=11,
+                    completion_tokens=7,
+                    total_tokens=18,
+                )
+                mock_instructor_client.chat.completions.create_with_completion = AsyncMock(
+                    return_value=(mock_response, mock_completion),
+                )
+
+                agent = TestInstructorBaseAgent()
+                test_messages = [{"role": "user", "content": "test message"}]
+                await agent.get_response_async(run_context=RunContext(messages=test_messages))
+
+                assert fake_span.attrs.get("event_name") == "akd.llm.instructor_call"
+                assert fake_span.attrs.get("input_tokens") == 11
+                assert fake_span.attrs.get("output_tokens") == 7
+                assert fake_span.attrs.get("total_tokens") == 18
+                assert fake_span.attrs.get("prompt_tokens") == 11
+                assert fake_span.attrs.get("completion_tokens") == 7
+                assert fake_span.attrs.get("usage_missing") is False
+
+                usage_event = next(
+                    call.kwargs["attributes"]
+                    for call in mock_logfire_info.call_args_list
+                    if call.args and call.args[0] == "akd.llm.instructor_usage"
+                )
+                assert usage_event["event_name"] == "akd.llm.instructor_usage"
+                assert usage_event["input_tokens"] == 11
+                assert usage_event["output_tokens"] == 7
+                assert usage_event["total_tokens"] == 18
+                assert usage_event["prompt_tokens"] == 11
+                assert usage_event["completion_tokens"] == 7
+                assert usage_event["usage_missing"] is False
+
+    @pytest.mark.asyncio
+    async def test_instructor_usage_missing_is_logged_safely(self, mock_instructor_client, monkeypatch):
+        """Missing usage should not crash and should set usage_missing=true."""
+        monkeypatch.setenv("LOGFIRE_INSTRUMENT_HTTPX", "false")
+
+        class FakeSpan:
+            def __init__(self):
+                self.attrs = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def set_attributes(self, attrs):
+                self.attrs.update(attrs)
+
+        fake_span = FakeSpan()
+        with patch("akd.agents._base._base.logfire.span", return_value=fake_span):
+            with patch("akd.agents._base._base.logfire.info") as mock_logfire_info:
+                mock_response = MagicMock()
+                mock_response.model_dump.return_value = {
+                    "response": "missing usage response",
+                    "metadata": {},
+                }
+                mock_completion = MagicMock()
+                mock_completion.usage = None
+                mock_instructor_client.chat.completions.create_with_completion = AsyncMock(
+                    return_value=(mock_response, mock_completion),
+                )
+
+                agent = TestInstructorBaseAgent()
+                test_messages = [{"role": "user", "content": "test message"}]
+                await agent.get_response_async(run_context=RunContext(messages=test_messages))
+
+                assert fake_span.attrs.get("usage_missing") is True
+                assert fake_span.attrs.get("input_tokens") == 0
+                assert fake_span.attrs.get("output_tokens") == 0
+                assert fake_span.attrs.get("total_tokens") == 0
+
+                usage_event = next(
+                    call.kwargs["attributes"]
+                    for call in mock_logfire_info.call_args_list
+                    if call.args and call.args[0] == "akd.llm.instructor_usage"
+                )
+                assert usage_event["usage_missing"] is True
+                assert usage_event["input_tokens"] == 0
+                assert usage_event["output_tokens"] == 0
+                assert usage_event["total_tokens"] == 0
 
     def test_io_hints_enabled_by_default(self, mock_instructor_client):
         """Test that IO hints are enabled by default (io_hints=True in BaseConfig)."""

@@ -14,12 +14,14 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Type
 
 import litellm
+import logfire
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from akd._base import AbstractBase, BaseConfig, InputSchema, OutputSchema
 from akd.configs.project import get_project_settings
 from akd.configs.prompts import LLM_TRANSFORMATION_PROMPT
+from akd.observability import scrub_payload
 from akd.serializers import AKDSerializer
 
 
@@ -538,13 +540,35 @@ class LLMFallbackMapper(BaseMappingStrategy):
             )
 
             # Get LLM response via LiteLLM
-            response = await litellm.acompletion(
+            with logfire.span(
+                "akd.mapping.llm_fallback",
                 model=self.llm_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-                api_key=self.api_key,
-            )
+                control_layer="litellm",
+                provider_runtime="litellm",
+                repo="accelerated-discovery",
+            ):
+                response = await litellm.acompletion(
+                    model=self.llm_model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.0,
+                    api_key=self.api_key,
+                    metadata={
+                        "control_layer": "litellm",
+                        "provider_runtime": "litellm",
+                        "repo": "accelerated-discovery",
+                    },
+                )
             content = response.choices[0].message.content
+            logfire.info(
+                "akd.mapping.llm_fallback.done",
+                **scrub_payload(
+                    {
+                        "model": self.llm_model,
+                        "source_schema": source_model.__class__.__name__,
+                        "target_schema": target_schema.__name__,
+                    }
+                ),
+            )
 
             # Parse the response
             parsed_data = self._parse_llm_response(content)
