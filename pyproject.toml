@@ -36,6 +36,7 @@ dependencies = [
     "jsonpath-ng>=1.6.1",
     "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
     "litellm>=1.81.0",
+    "logfire[litellm]>=4.32.0",
     "dateparser>=1.2.2",
 ]
 

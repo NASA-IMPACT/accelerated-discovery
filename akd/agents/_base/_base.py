@@ -57,6 +57,7 @@ from akd._base.streaming import (
 from akd._base.structures import RunUsage
 from akd.configs.project import CONFIG
 from akd.configs.prompts import DEFAULT_SYSTEM_PROMPT
+from akd.observability import init_observability
 from akd.tools._base import BaseTool
 from akd.tools.human import HumanTool, HumanToolInput
 
@@ -224,6 +225,7 @@ class BaseAgent[
         config: BaseAgentConfig | None = None,
         **kwargs,
     ) -> None:
+        init_observability(service_name="accelerated-discovery")
         super().__init__(config=config, **kwargs)
 
     @cached_property
