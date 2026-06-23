@@ -19,11 +19,11 @@ STAC ─fetch──┘   (filter)      (blueprint+draft)   (add data)    (+valid
 
 ```bash
 # Clone and enter the repo
-git clone <repo-url> accelerated-discovery
-cd accelerated-discovery
+git clone git@github.com:NASA-IMPACT/veda-accelerated-discovery.git
+cd veda-accelerated-discovery
 
 # Check out the story-teller branch
-git checkout agent/story-teller
+git checkout story-teller-showcase
 
 # Create + activate the virtualenv (Python 3.12)
 uv venv --python 3.12
