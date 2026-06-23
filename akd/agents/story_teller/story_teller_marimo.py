@@ -382,5 +382,24 @@ def _(collection, mo, story_mdx):
     return
 
 
+@app.cell
+def _(mo):
+    mo.callout(
+        mo.md(
+            """
+            **Note — pick a collection and DOI that share a common context.**
+
+            The map visualization is only generated when the STAC collection and the
+            publication describe the **same subject, region, and time period**. When they
+            overlap, the relevance filter keeps the data and the story embeds an interactive
+            map block for it. If the two are unrelated, the data gets filtered out and the
+            story is produced **without any map**.
+            """
+        ),
+        kind="info",
+    )
+    return
+
+
 if __name__ == "__main__":
     app.run()
