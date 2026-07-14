@@ -25,9 +25,12 @@ jobs:
           cache: "pip"
 
       - name: Install requirements
+        # Core is lightweight; the full suite exercises scrapers/agents/ML/etc.,
+        # so install every runtime extra (`all`) plus dev tooling. `.[dev,ml]`
+        # alone no longer pulls crawl4ai/litellm/deepeval/docling/...
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,ml]"
+          pip install -e ".[all,dev]"
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
       - name: Run tests with coverage
