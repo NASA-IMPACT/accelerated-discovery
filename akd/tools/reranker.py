@@ -3,12 +3,13 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import Literal
 
-import numpy as np
 from pydantic.fields import Field
 
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
+
+# numpy is deferred to _rerank_results (it is provided by akd[search]/akd[ml]).
 
 # Reranker type options for factory function
 RerankerType = Literal["cross_encoder", "identity", "no_op", "nope", "none"]
@@ -140,6 +141,8 @@ class CrossEncoderRerankerTool(RerankerTool):
         pairs = [(query, result.content) for result in results]
 
         # get similarity scores from CrossEncoder
+        import numpy as np  # deferred: numpy is in akd[search]/akd[ml]
+
         scores = self.reranker_model.predict(pairs)
         scores = 1 / (1 + np.exp(-scores))
 

@@ -155,27 +155,46 @@ name = "akd"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "crawl4ai" },
     { name = "dateparser" },
-    { name = "gdown" },
     { name = "httpx" },
-    { name = "instructor" },
     { name = "jsonpath-ng" },
-    { name = "litellm" },
     { name = "loguru" },
-    { name = "markdownify" },
-    { name = "openai" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "pymupdf" },
-    { name = "pypaperbot" },
     { name = "rapidfuzz" },
-    { name = "readability-lxml" },
-    { name = "requests" },
-    { name = "tiktoken" },
 ]
 
 [package.optional-dependencies]
+agents = [
+    { name = "instructor" },
+    { name = "litellm" },
+    { name = "openai" },
+    { name = "tiktoken" },
+]
+all = [
+    { name = "aiohttp" },
+    { name = "beautifulsoup4" },
+    { name = "crawl4ai" },
+    { name = "deepeval" },
+    { name = "docling" },
+    { name = "docling-core" },
+    { name = "gdown" },
+    { name = "instructor" },
+    { name = "langgraph" },
+    { name = "litellm" },
+    { name = "markdownify" },
+    { name = "numpy" },
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "playwright" },
+    { name = "pymupdf" },
+    { name = "pypaperbot" },
+    { name = "pyyaml" },
+    { name = "readability-lxml" },
+    { name = "requests" },
+    { name = "sentence-transformers" },
+    { name = "tiktoken" },
+]
 dev = [
     { name = "memray" },
     { name = "pre-commit" },
@@ -185,6 +204,12 @@ dev = [
     { name = "pytest-xdist" },
     { name = "scalene" },
 ]
+gg = [
+    { name = "pyyaml" },
+]
+guardrails = [
+    { name = "pyyaml" },
+]
 local = [
     { name = "ipykernel" },
     { name = "ipywidgets" },
@@ -192,53 +217,117 @@ local = [
     { name = "marimo" },
 ]
 ml = [
-    { name = "deepeval" },
-    { name = "docling" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "sentence-transformers" },
 ]
+omni = [
+    { name = "aiohttp" },
+    { name = "beautifulsoup4" },
+    { name = "crawl4ai" },
+    { name = "docling" },
+    { name = "docling-core" },
+    { name = "gdown" },
+    { name = "markdownify" },
+    { name = "playwright" },
+    { name = "pymupdf" },
+    { name = "pypaperbot" },
+    { name = "pyyaml" },
+    { name = "readability-lxml" },
+    { name = "requests" },
+]
+risk-agent = [
+    { name = "deepeval" },
+    { name = "instructor" },
+    { name = "litellm" },
+    { name = "openai" },
+    { name = "pyyaml" },
+    { name = "tiktoken" },
+]
+scrapers = [
+    { name = "aiohttp" },
+    { name = "beautifulsoup4" },
+    { name = "crawl4ai" },
+    { name = "gdown" },
+    { name = "markdownify" },
+    { name = "playwright" },
+    { name = "pymupdf" },
+    { name = "pypaperbot" },
+    { name = "pyyaml" },
+    { name = "readability-lxml" },
+    { name = "requests" },
+]
+search = [
+    { name = "beautifulsoup4" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+    { name = "requests" },
+]
 serializer = [
     { name = "langgraph" },
+    { name = "numpy" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "crawl4ai", specifier = ">=0.7.6" },
+    { name = "aiohttp", marker = "extra == 'scrapers'", specifier = ">=3.9.0" },
+    { name = "akd", extras = ["agents"], marker = "extra == 'risk-agent'" },
+    { name = "akd", extras = ["gg"], marker = "extra == 'all'" },
+    { name = "akd", extras = ["guardrails"], marker = "extra == 'gg'" },
+    { name = "akd", extras = ["guardrails"], marker = "extra == 'risk-agent'" },
+    { name = "akd", extras = ["ml"], marker = "extra == 'all'" },
+    { name = "akd", extras = ["omni"], marker = "extra == 'all'" },
+    { name = "akd", extras = ["risk-agent"], marker = "extra == 'all'" },
+    { name = "akd", extras = ["scrapers"], marker = "extra == 'omni'" },
+    { name = "akd", extras = ["search"], marker = "extra == 'all'" },
+    { name = "akd", extras = ["serializer"], marker = "extra == 'all'" },
+    { name = "beautifulsoup4", marker = "extra == 'scrapers'", specifier = ">=4.12.0" },
+    { name = "beautifulsoup4", marker = "extra == 'search'", specifier = ">=4.12.0" },
+    { name = "crawl4ai", marker = "extra == 'scrapers'", specifier = ">=0.7.6" },
     { name = "dateparser", specifier = ">=1.2.2" },
-    { name = "deepeval", marker = "extra == 'ml'", specifier = ">=3.4.0" },
-    { name = "docling", marker = "extra == 'ml'", specifier = ">=2.37.0" },
-    { name = "gdown", specifier = ">=5.2.0" },
+    { name = "deepeval", marker = "extra == 'risk-agent'", specifier = ">=3.4.0" },
+    { name = "docling", marker = "extra == 'omni'", specifier = ">=2.37.0" },
+    { name = "docling-core", marker = "extra == 'omni'", specifier = ">=2.0.0" },
+    { name = "gdown", marker = "extra == 'scrapers'", specifier = ">=5.2.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "instructor", specifier = "==1.13.0" },
+    { name = "instructor", marker = "extra == 'agents'", specifier = "==1.13.0" },
     { name = "ipykernel", marker = "extra == 'local'", specifier = ">=6.30.0" },
     { name = "ipywidgets", marker = "extra == 'local'", specifier = ">=8.1.7" },
     { name = "jsonpath-ng", specifier = ">=1.6.1" },
     { name = "jupyter", marker = "extra == 'local'" },
     { name = "langgraph", marker = "extra == 'serializer'", specifier = "==1.0.3" },
-    { name = "litellm", specifier = ">=1.81.0" },
+    { name = "litellm", marker = "extra == 'agents'", specifier = ">=1.81.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "marimo", marker = "extra == 'local'", specifier = "==0.15.0" },
-    { name = "markdownify", specifier = ">=1.1.0" },
+    { name = "markdownify", marker = "extra == 'scrapers'", specifier = ">=1.1.0" },
     { name = "memray", marker = "extra == 'dev'", specifier = ">=1.18.0" },
-    { name = "openai", specifier = ">=1.75.0" },
+    { name = "numpy", marker = "extra == 'ml'", specifier = ">=1.26.0" },
+    { name = "numpy", marker = "extra == 'search'", specifier = ">=1.26.0" },
+    { name = "numpy", marker = "extra == 'serializer'", specifier = ">=1.26.0" },
+    { name = "openai", marker = "extra == 'agents'", specifier = ">=1.75.0" },
     { name = "pandas", marker = "extra == 'ml'", specifier = ">=2.3.1" },
+    { name = "playwright", marker = "extra == 'scrapers'", specifier = ">=1.40.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.2.0" },
     { name = "pydantic", specifier = ">=2.10.3" },
     { name = "pydantic-settings", specifier = ">=2.9.1" },
-    { name = "pymupdf", specifier = ">=1.25.4" },
-    { name = "pypaperbot", git = "https://github.com/NISH1001/PyPaperBot.git?rev=develop" },
+    { name = "pymupdf", marker = "extra == 'scrapers'", specifier = ">=1.25.4" },
+    { name = "pypaperbot", marker = "extra == 'scrapers'", git = "https://github.com/NISH1001/PyPaperBot.git?rev=develop" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "pyyaml", marker = "extra == 'guardrails'", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'scrapers'", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'search'", specifier = ">=6.0" },
     { name = "rapidfuzz", specifier = ">=3.13.0" },
-    { name = "readability-lxml", specifier = ">=0.8.1" },
-    { name = "requests", specifier = ">=2.32.3" },
+    { name = "readability-lxml", marker = "extra == 'scrapers'", specifier = ">=0.8.1" },
+    { name = "requests", marker = "extra == 'scrapers'", specifier = ">=2.32.3" },
+    { name = "requests", marker = "extra == 'search'", specifier = ">=2.32.3" },
     { name = "scalene", marker = "extra == 'dev'", specifier = ">=1.5.55" },
     { name = "sentence-transformers", marker = "extra == 'ml'", specifier = ">=5.0.0" },
-    { name = "tiktoken", specifier = ">=0.9.0" },
+    { name = "tiktoken", marker = "extra == 'agents'", specifier = ">=0.9.0" },
 ]
-provides-extras = ["dev", "local", "ml", "serializer"]
+provides-extras = ["guardrails", "gg", "risk-agent", "agents", "scrapers", "omni", "search", "ml", "serializer", "all", "dev", "local"]
 
 [[package]]
 name = "alphashape"

@@ -49,32 +49,38 @@ def test_guardrails_import_does_not_load_heavy_deps(import_stmt: str, forbidden:
 
 def test_providers_lazy_names_resolve():
     """Every name in providers.__all__ resolves via module __getattr__."""
-    code = (
-        "import akd.guardrails.providers as p; "
-        "[getattr(p, name) for name in p.__all__]"
-    )
+    code = "import akd.guardrails.providers as p; [getattr(p, name) for name in p.__all__]"
     result = _run_in_subprocess(code)
     assert result.returncode == 0, result.stderr
 
 
 def test_providers_dir_lists_lazy_names():
     """dir() shows lazy names (REPL/tab-completion support)."""
+    code = "import akd.guardrails.providers as p; assert 'RiskAgent' in dir(p) and 'GraniteGuardianTool' in dir(p)"
+    result = _run_in_subprocess(code)
+    assert result.returncode == 0, result.stderr
+
+
+def test_risk_agent_importable_without_deepeval():
+    """The RiskAgent class imports without deepeval (deferred to method calls)."""
     code = (
-        "import akd.guardrails.providers as p; "
-        "assert 'RiskAgent' in dir(p) and 'GraniteGuardianTool' in dir(p)"
+        "import sys; sys.modules['deepeval'] = None\n"
+        "from akd.guardrails.providers import RiskAgent  # must not raise\n"
+        "assert RiskAgent is not None"
     )
     result = _run_in_subprocess(code)
     assert result.returncode == 0, result.stderr
 
 
 def test_risk_agent_missing_deepeval_error_is_friendly():
-    """When deepeval is absent, accessing RiskAgent explains the [ml] extra."""
+    """When deepeval is absent, instantiating RiskAgent explains the [risk_agent] extra."""
     code = (
         "import sys; sys.modules['deepeval'] = None\n"
+        "from akd.guardrails.providers import RiskAgent\n"
         "try:\n"
-        "    from akd.guardrails.providers import RiskAgent\n"
+        "    RiskAgent()\n"
         "except ModuleNotFoundError as e:\n"
-        "    assert 'akd[ml]' in str(e), str(e)\n"
+        "    assert 'akd[risk_agent]' in str(e), str(e)\n"
         "else:\n"
         "    raise AssertionError('expected ModuleNotFoundError')"
     )

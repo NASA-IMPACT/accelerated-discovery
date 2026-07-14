@@ -159,7 +159,7 @@ def mock_instructor_client():
     Patches instructor.from_litellm in the agent module so that
     AKDAgent.__init__ gets a mock client.
     """
-    with patch("akd.agents._base._base.instructor.from_litellm") as mock_from_litellm:
+    with patch("instructor.from_litellm") as mock_from_litellm:
         mock_client = MagicMock()
         mock_from_litellm.return_value = mock_client
         yield mock_client
@@ -168,7 +168,7 @@ def mock_instructor_client():
 @pytest.fixture
 def mock_litellm_client():
     """Create a mock LiteLLM instructor client for testing."""
-    with patch("akd.agents._base._base.instructor.from_litellm") as mock_from_litellm:
+    with patch("instructor.from_litellm") as mock_from_litellm:
         mock_client = AsyncMock()
         mock_from_litellm.return_value = mock_client
         yield mock_client

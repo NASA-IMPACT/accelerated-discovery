@@ -54,7 +54,7 @@ def __getattr__(name: str):
         except ModuleNotFoundError as e:
             if e.name and e.name.split(".")[0] == "deepeval":
                 raise ModuleNotFoundError(
-                    f"{name} requires the 'deepeval' package. Install it with: uv pip install 'akd[ml]'",
+                    f"{name} requires the 'deepeval' package. Install it with: uv pip install 'akd[risk_agent]'",
                 ) from e
             raise
         return getattr(module, name)

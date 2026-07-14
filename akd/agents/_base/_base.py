@@ -8,9 +8,6 @@ from collections.abc import AsyncIterator
 from functools import cached_property
 from typing import Any, Literal, cast, get_args, get_origin
 
-import instructor
-from litellm import acompletion
-from litellm.utils import get_model_info, supports_reasoning
 from loguru import logger
 from pydantic import AnyUrl, BaseModel, Field, create_model, model_validator
 
@@ -175,6 +172,10 @@ class BaseAgentConfig(BaseConfig):
         if not (self.model_name and self.max_tokens):
             return self
         try:
+            from litellm.utils import (
+                get_model_info,  # deferred: litellm is in akd[agents]
+            )
+
             model_info = get_model_info(self.model_name)
         except Exception as e:
             logger.error(f"Could not retrieve model info for '{self.model_name}': {e}")
@@ -195,6 +196,10 @@ class BaseAgentConfig(BaseConfig):
             return self
 
         try:
+            from litellm.utils import (
+                supports_reasoning,  # deferred: litellm is in akd[agents]
+            )
+
             if not supports_reasoning(model=self.model_name):
                 logger.warning(f"Model '{self.model_name}' may not support reasoning params")
         except Exception:
@@ -459,6 +464,10 @@ class AKDAgent[
         debug: bool = False,
     ) -> None:
         super().__init__(config=config, debug=debug)
+        # deferred: litellm/instructor are in akd[agents]
+        import instructor
+        from litellm import acompletion
+
         self.client = instructor.from_litellm(acompletion)
 
     # ── Tool execution helpers (folded from ToolCallingMixin) ───────
@@ -533,6 +542,10 @@ class AKDAgent[
             if k == "client":
                 continue
             setattr(result, k, copy.deepcopy(v, memo))
+
+        # deferred: litellm/instructor are in akd[agents]
+        import instructor
+        from litellm import acompletion
 
         result.client = instructor.from_litellm(acompletion)
         return result
@@ -613,6 +626,10 @@ class AKDAgent[
 
         if stream:
             # Use OpenAI responses API route for gpt-5 streaming with reasoning.
+            from litellm.utils import (
+                supports_reasoning,  # deferred: litellm is in akd[agents]
+            )
+
             if (
                 self.model_name.startswith("gpt-5")
                 and self.reasoning_effort
@@ -769,6 +786,8 @@ class AKDAgent[
             accumulated_tool_calls: dict[int, dict[str, str]] = {}
 
             # Stream chunks directly from acompletion — no adapter intermediary
+            from litellm import acompletion  # deferred: litellm is in akd[agents]
+
             response = await acompletion(messages=messages, **completion_kwargs)
             async for chunk in response:
                 # Usage extraction

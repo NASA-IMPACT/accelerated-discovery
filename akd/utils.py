@@ -164,14 +164,14 @@ def is_server_available(url: str | HttpUrl) -> bool:
         logger.warning(f"URL {url} is not a valid URL.")
         return False
 
-    import requests  # deferred for lazy loading
+    import httpx  # core dependency
 
     try:
         # Check if the URL is reachable
-        requests.head(url, timeout=5, allow_redirects=True)
+        httpx.head(str(url), timeout=5, follow_redirects=True)
         logger.info(f"URL {url} is reachable.")
         return True
-    except requests.RequestException:
+    except httpx.HTTPError:
         logger.warning(f"URL {url} is not reachable.")
         return False
 

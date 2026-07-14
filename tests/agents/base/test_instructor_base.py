@@ -113,7 +113,7 @@ class TestInstructorBaseAgentFunctionality:
 
     def test_client_configuration(self, custom_config):
         """Test that LiteLLM instructor client is configured correctly."""
-        with patch("akd.agents._base._base.instructor.from_litellm") as mock_from_litellm:
+        with patch("instructor.from_litellm") as mock_from_litellm:
             mock_client = MagicMock()
             mock_from_litellm.return_value = mock_client
 

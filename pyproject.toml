@@ -18,24 +18,18 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 requires-python = ">=3.12,<4.0"
+# Lightweight core: schemas, protocols, base agent/tool machinery, guardrail
+# contracts, mapping. NO ML / browser / LLM-SDK weight here — those live in the
+# extras below and are lazy-imported at their call sites (see the lazy-loading
+# regression tests in tests/base/test_lazy_imports.py). Install `akd[all]` to
+# restore the previous batteries-included behaviour.
 dependencies = [
-    "crawl4ai>=0.7.6",
-    "gdown>=5.2.0",
-    "instructor==1.13.0",
     "loguru>=0.7.3",
-    "markdownify>=1.1.0",
-    "openai>=1.75.0",
     "pydantic>=2.10.3",
     "pydantic-settings>=2.9.1",
-    "pymupdf>=1.25.4",
-    "readability-lxml>=0.8.1",
-    "requests>=2.32.3",
     "httpx>=0.28.1",
-    "tiktoken>=0.9.0",
     "rapidfuzz>=3.13.0",
     "jsonpath-ng>=1.6.1",
-    "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
-    "litellm>=1.81.0",
     "dateparser>=1.2.2",
 ]
 
@@ -83,7 +77,100 @@ markers = [
 ]
 
 # Optional dependencies (extras)
+#
+# Layering (each extra sits on top of the lightweight core; extras compose via
+# self-references so `pip install akd[risk_agent]` pulls agents + guardrails too):
+#
+#   core (default)   pydantic · loguru · httpx · rapidfuzz · jsonpath-ng · dateparser
+#     ├─ guardrails  + pyyaml            schemas · protocol · risk categories · composite
+#     │    ├─ gg     (= guardrails)      GraniteGuardianTool (httpx only)
+#     │    └─ risk_agent = agents + deepeval   RiskAgent (deepeval DAG metrics)
+#     ├─ agents      + litellm · instructor · openai · tiktoken
+#     ├─ scrapers    + crawl4ai · playwright · pymupdf · ...   web/PDF scrapers, resolvers
+#     │    └─ omni   + docling · docling-core   DoclingScraper (torch/transformers)
+#     ├─ search      + numpy · bs4 · requests · pyyaml   search tools + resolvers
+#     └─ ml          + sentence-transformers · pandas · numpy   rerankers, embeddings
+#
+# `akd[all]` = every runtime extra (previous batteries-included behaviour).
 [project.optional-dependencies]
+# ── Guardrails ──────────────────────────────────────────────────────────
+# Contracts only: GuardrailInput/Output/Protocol + RiskCategory enums (loaded
+# from YAML). Lets a downstream service (e.g. akd-guardrails-service) code
+# against the lightweight schemas without any ML/LLM weight.
+guardrails = [
+    "pyyaml>=6.0",
+]
+# Granite Guardian tool — talks to a served model over HTTP (httpx is in core).
+gg = [
+    "akd[guardrails]",
+]
+# Risk agent — deepeval DAG metrics + an LLM agent backend.
+risk_agent = [
+    "akd[guardrails]",
+    "akd[agents]",
+    "deepeval>=3.4.0",
+]
+
+# ── Agents (LLM stack) ──────────────────────────────────────────────────
+agents = [
+    "litellm>=1.81.0",
+    "instructor==1.13.0",
+    "openai>=1.75.0",
+    "tiktoken>=0.9.0",
+]
+
+# ── Scrapers / search ───────────────────────────────────────────────────
+scrapers = [
+    "crawl4ai>=0.7.6",
+    "playwright>=1.40.0",
+    "pymupdf>=1.25.4",
+    "markdownify>=1.1.0",
+    "readability-lxml>=0.8.1",
+    "beautifulsoup4>=4.12.0",
+    "aiohttp>=3.9.0",
+    "requests>=2.32.3",
+    "pyyaml>=6.0",
+    "gdown>=5.2.0",
+    "pypaperbot @ git+https://github.com/NISH1001/PyPaperBot.git@develop",
+]
+# Docling / omni scraper — pulls the docling (torch/transformers) tree.
+omni = [
+    "akd[scrapers]",
+    "docling>=2.37.0",
+    "docling-core>=2.0.0",
+]
+search = [
+    "numpy>=1.26.0",
+    "beautifulsoup4>=4.12.0",
+    "requests>=2.32.3",
+    "pyyaml>=6.0",
+]
+
+# ── ML (rerankers / embeddings) ─────────────────────────────────────────
+ml = [
+    "numpy>=1.26.0",
+    "sentence-transformers>=5.0.0",
+    "pandas>=2.3.1",
+]
+
+# Install this extra if you plan to use AKDSerializer as a langgraph
+# checkpoint serde (e.g. `AsyncPostgresSaver(serde=AKDSerializer())`).
+serializer = [
+    "langgraph==1.0.3",
+    "numpy>=1.26.0",
+]
+
+# Everything above — restores the previous batteries-included install.
+all = [
+    "akd[gg]",
+    "akd[risk_agent]",
+    "akd[omni]",
+    "akd[search]",
+    "akd[ml]",
+    "akd[serializer]",
+]
+
+# ── Tooling (not part of `all`) ─────────────────────────────────────────
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
@@ -98,17 +185,6 @@ local = [
     "jupyter",
     "ipykernel>=6.30.0",
     "ipywidgets>=8.1.7",
-]
-ml = [
-    "pandas>=2.3.1",
-    "sentence-transformers>=5.0.0",
-    "docling>=2.37.0",
-    "deepeval>=3.4.0",
-]
-# Install this extra if you plan to use AKDSerializer as a langgraph
-# checkpoint serde (e.g. `AsyncPostgresSaver(serde=AKDSerializer())`).
-serializer = [
-    "langgraph==1.0.3",
 ]
 
 [tool.ruff.lint.per-file-ignores]

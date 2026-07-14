@@ -15,6 +15,11 @@ import sys
 import pytest
 
 # Modules that must NOT be loaded as a side effect of the given import.
+#
+# These guarantees are what let a downstream service install a slim extra
+# (e.g. `akd[guardrails]`) and import the relevant surface without the heavy
+# ML / browser / LLM-SDK trees. Heavy deps are declared in pyproject extras and
+# lazy-imported at their call sites; each row below pins one import surface.
 LAZY_GUARANTEES = [
     # Bare import must stay free of every heavy/optional dependency.
     ("import akd", ["litellm", "gdown", "instructor", "aiohttp", "requests", "dateparser"]),
@@ -23,8 +28,24 @@ LAZY_GUARANTEES = [
     ("import akd.utils", ["gdown", "requests", "dateparser"]),
     # source_validator is on the bare path (pulled via akd.tools); aiohttp must stay lazy.
     ("import akd.tools.source_validator", ["aiohttp"]),
-    # Scrapers must not drag in the docling/torch tree (lazy DoclingScraper gate).
-    ("import akd.tools.scrapers", ["torch", "docling", "transformers", "fitz"]),
+    # Scrapers must not drag in the docling/torch tree nor crawl4ai/playwright
+    # (lazy DoclingScraper gate + deferred crawl4ai in web_scrapers).
+    ("import akd.tools.scrapers", ["torch", "docling", "transformers", "fitz", "crawl4ai", "playwright"]),
+    # Agents package stays light: the LiteLLM/instructor stack loads only when an
+    # agent is instantiated/run, not at import.
+    ("import akd.agents", ["litellm", "instructor", "openai", "tiktoken"]),
+    # Guardrail contracts (schemas/protocol/categories) are ML/LLM-free — this is
+    # the akd[guardrails] surface a downstream service codes against.
+    ("import akd.guardrails", ["deepeval", "litellm", "torch", "crawl4ai"]),
+    # Granite Guardian tool is httpx-only; must not pull the RiskAgent deps.
+    ("from akd.guardrails.providers import GraniteGuardianTool", ["deepeval", "litellm"]),
+    # The RiskAgent module itself is importable without deepeval loaded (deferred
+    # to the methods that build/measure the DAG).
+    ("import akd.guardrails.providers.risk_agent", ["deepeval"]),
+    # Search tools stay free of numpy/reranker-ML and the scraper browser tree.
+    ("import akd.tools.search", ["numpy", "crawl4ai", "playwright"]),
+    # Reranker module imports without numpy/sentence-transformers/torch.
+    ("import akd.tools.reranker", ["numpy", "sentence_transformers", "torch"]),
 ]
 
 

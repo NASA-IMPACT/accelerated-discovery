@@ -205,24 +205,48 @@ dependencies = [
 ]
 ```
 
-**Optional extras:** pull in extra dependencies for specific features.
+**The core install is lightweight.** A bare `pip install akd` pulls only the
+schema/protocol layer — `pydantic`, `pydantic-settings`, `loguru`, `httpx` plus
+small utilities (`rapidfuzz`, `jsonpath-ng`, `dateparser`). No ML, browser, or
+LLM-SDK weight. Heavy dependencies live in the extras below and are lazy-imported
+at their call sites, so importing `akd`, `akd.guardrails`, `akd.agents`, etc.
+stays fast and free of the heavy trees until you actually use a feature that
+needs them. (Regression-tested in `tests/base/test_lazy_imports.py`.)
 
-| Extra | What it pulls in | Install when you... |
+**Optional extras** — each sits on top of core and composes with the others
+(`akd[risk_agent]` automatically pulls `akd[agents]` + `akd[guardrails]`):
+
+| Extra | Adds on top of core | Install when you... |
 |---|---|---|
-| `serializer` | `langgraph` | use `AKDSerializer` as a langgraph checkpoint serde (e.g. `AsyncPostgresSaver(serde=AKDSerializer())`) |
-| `ml` | `pandas`, `sentence-transformers`, `docling`, `deepeval` | need ML-backed rerankers, scrapers, or eval tools |
+| `guardrails` | `pyyaml` | code against the guardrail contracts — `GuardrailInput/Output/Protocol`, `RiskCategory` (e.g. a downstream guardrails service) |
+| `gg` | *(core `httpx` only)* | use `GraniteGuardianTool` (talks to a served model over HTTP) |
+| `risk_agent` | `akd[guardrails]` + `akd[agents]` + `deepeval` | use `RiskAgent` (deepeval DAG-metric risk evaluation) |
+| `agents` | `litellm`, `instructor`, `openai`, `tiktoken` | run LLM agents (`akd.agents`) |
+| `scrapers` | `crawl4ai`, `playwright`, `pymupdf`, `markdownify`, `readability-lxml`, `beautifulsoup4`, `aiohttp`, `pypaperbot`, `gdown` | scrape web/PDF pages or use the search pipeline |
+| `omni` | `akd[scrapers]` + `docling`, `docling-core` | use the docling-backed `DoclingScraper` (torch/transformers) |
+| `search` | `numpy`, `beautifulsoup4`, `requests`, `pyyaml` | use search tools + resolvers |
+| `ml` | `numpy`, `sentence-transformers`, `pandas` | use ML-backed rerankers / embeddings |
+| `serializer` | `langgraph`, `numpy` | use `AKDSerializer` as a langgraph checkpoint serde (e.g. `AsyncPostgresSaver(serde=AKDSerializer())`) |
+| `all` | every runtime extra above | want the previous batteries-included install |
 | `dev` | `pytest`, `pytest-asyncio`, `pytest-cov`, `pytest-xdist`, `pre-commit`, `memray`, `scalene` | run the test suite or hack on akd itself |
 | `local` | `marimo`, `jupyter`, `ipykernel`, `ipywidgets` | run the marimo notebooks under `notebooks/` |
 
+> **Migrating from a previous install:** the default `akd` no longer bundles
+> scrapers/agents/ML. If you relied on those, install the matching extra
+> (`akd[agents]`, `akd[scrapers]`, `akd[ml]`, …) or `akd[all]` for the old
+> behaviour. Note: `crawl4ai`/`playwright` (in `akd[scrapers]`) also need a
+> one-time `playwright install` to fetch browsers.
+
 ```bash
-# As a dependency, with an extra:
-uv pip install "akd[serializer] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop"
+# As a dependency, with one or more extras:
+uv pip install "akd[guardrails] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop"
+uv pip install "akd[gg,risk_agent] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop"
 ```
 
 ```toml
-# In your pyproject.toml:
+# In your pyproject.toml (e.g. a downstream guardrails service):
 dependencies = [
-    "akd[serializer] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop",
+    "akd[guardrails] @ git+https://github.com/NASA-IMPACT/accelerated-discovery.git@develop",
 ]
 ```
 
@@ -233,23 +257,22 @@ dependencies = [
 uv venv --python 3.12
 source .venv/bin/activate
 
-# Install core dependencies
+# Install the lightweight core only
 uv sync
 
 # With development tooling (pytest, pre-commit, profilers)
 uv sync --extra dev
 
-# With notebooks (marimo, jupyter)
-uv sync --extra dev --extra local
+# Guardrails contracts / Granite Guardian / risk agent
+uv sync --extra guardrails
+uv sync --extra gg
+uv sync --extra risk_agent
 
-# With ML extras (pandas, sentence-transformers, docling, deepeval)
-uv sync --extra ml
+# Agents, scrapers, search, ML
+uv sync --extra agents --extra scrapers --extra search --extra ml
 
-# With the langgraph checkpoint serde (AKDSerializer)
-uv sync --extra serializer
-
-# Combine extras freely, e.g. full dev setup:
-uv sync --extra dev --extra local --extra ml --extra serializer
+# Everything (previous batteries-included behaviour) + dev + notebooks
+uv sync --extra all --extra dev --extra local
 
 # Setup environment variables
 cp .env.example .env
