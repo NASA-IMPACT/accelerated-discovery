@@ -45,7 +45,7 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.enable_trimming is True
 
     @pytest.mark.asyncio
-    @patch("akd._base.session.trim_messages")
+    @patch("litellm.utils.trim_messages")
     @patch("instructor.from_litellm")
     async def test_full_arun_workflow(
         self,

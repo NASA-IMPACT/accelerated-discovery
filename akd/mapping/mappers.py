@@ -13,7 +13,6 @@ from abc import abstractmethod
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Type
 
-import litellm
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -537,7 +536,9 @@ class LLMFallbackMapper(BaseMappingStrategy):
                 mapping_hints,
             )
 
-            # Get LLM response via LiteLLM
+            # Get LLM response via LiteLLM for lazy loading
+            import litellm
+
             response = await litellm.acompletion(
                 model=self.llm_model,
                 messages=[{"role": "user", "content": prompt}],

@@ -6,8 +6,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from litellm.utils import trim_messages
-
 from .structures import RunContext
 
 type Message = dict[str, Any]
@@ -77,6 +75,10 @@ class AgentSession(BaseSession):
         self.run_context.messages = self.store
 
         if self.enable_trimming and self.model_name and self.max_tokens:
+            
+            # Deferred import for lazy loading
+            from litellm.utils import trim_messages
+
             trimmed = trim_messages(
                 self.store,
                 model=self.model_name,

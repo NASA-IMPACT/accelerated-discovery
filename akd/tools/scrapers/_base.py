@@ -1,19 +1,24 @@
+from __future__ import annotations
+
 import json
 import os
 import re
 import tempfile
-from typing import Literal, Tuple
+from typing import TYPE_CHECKING, Literal, Tuple
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
 from loguru import logger
 from pydantic import AnyUrl, Field, computed_field
-from readability import Document
 
 from akd._base import InputSchema, OutputSchema
 from akd.structures import SearchResultItem
 from akd.tools._base import BaseTool, BaseToolConfig
+
+if TYPE_CHECKING:
+    # Deferred for lazy loading
+    from bs4 import BeautifulSoup
+    from readability import Document
 
 
 class ScraperToolInputSchema(InputSchema):

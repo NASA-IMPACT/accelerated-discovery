@@ -17,7 +17,6 @@ from ._base import (
     ScraperToolInputSchema,
     ScraperToolOutputSchema,
 )
-from .omni import DoclingScraper
 
 # Detect if PyPaperBot module is available in the current environment
 _PYPAPERBOT_AVAILABLE: bool = importlib.util.find_spec("PyPaperBot") is not None
@@ -84,7 +83,12 @@ class PyPaperBotScraper(ScraperToolBase):
         debug: bool = False,
     ) -> None:
         super().__init__(config=config or PyPaperBotScraperConfig(), debug=debug)
-        self.scraper = scraper or DoclingScraper(debug=debug)
+        if scraper is None:
+            # Deferred for lazy loading: DoclingScraper pulls the docling/torch/transformers 
+            from .omni import DoclingScraper
+
+            scraper = DoclingScraper(debug=debug)
+        self.scraper = scraper
         logger.info(
             f"Initialized PyPaperBotScraper with config: {self.config} | scraper={self.scraper.__class__.__name__}",
         )

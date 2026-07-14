@@ -12,7 +12,6 @@ import json
 import re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import aiohttp
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -22,7 +21,7 @@ from akd.tools._base import BaseTool, BaseToolConfig
 from akd.utils import get_akd_root
 
 if TYPE_CHECKING:
-    pass
+    import aiohttp
 
 
 class SourceInfo(BaseModel):
@@ -214,6 +213,8 @@ class SourceValidator(
         Returns:
             Metadata dictionary or None if failed
         """
+        import aiohttp  # deferred for lazy loading
+
         url = f"{self.config.crossref_base_url}/{doi}"
         headers = {"User-Agent": self.config.user_agent, "Accept": "application/json"}
 
@@ -425,6 +426,9 @@ class SourceValidator(
             self._whitelist = self._load_whitelist()
 
         validated_results = []
+
+        # Deferred import for lazy loading
+        import aiohttp
 
         # Create aiohttp session with semaphore for concurrent requests
         connector = aiohttp.TCPConnector(limit=self.config.max_concurrent_requests)

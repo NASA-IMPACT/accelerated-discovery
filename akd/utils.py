@@ -6,9 +6,6 @@ from functools import lru_cache, wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
-import dateparser
-import gdown
-import requests
 from loguru import logger
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
@@ -142,6 +139,8 @@ def google_drive_downloader(
         quiet (bool): Whether to suppress download output.
     """
     try:
+        import gdown  # deferred for lazy loading
+
         url = f"https://drive.google.com/uc?id={file_id}"
         gdown.download(url, output_path, quiet=quiet)
         logger.info(f"Downloaded file from Google Drive to '{output_path}'")
@@ -164,6 +163,8 @@ def is_server_available(url: str | HttpUrl) -> bool:
     if not (url.startswith("http://") or url.startswith("https://")):
         logger.warning(f"URL {url} is not a valid URL.")
         return False
+
+    import requests  # deferred for lazy loading
 
     try:
         # Check if the URL is reachable
@@ -303,6 +304,8 @@ def parse_date(date_input: str | int | None) -> datetime | None:
 
     # Handle string dates
     elif isinstance(date_input, str):
+        import dateparser  # deferred for lazy loading
+
         parsed_date = dateparser.parse(date_input)
 
     return parsed_date
