@@ -12,10 +12,15 @@ from akd.guardrails.categories.granite import GraniteHarmCategory, GraniteRiskCa
 
 # YAML-based categories - None if files don't exist
 try:
-    from akd.guardrails.categories.atlas import AtlasRiskCategory, ScienceRiskCategory
+    from akd.guardrails.categories.atlas import (
+        AtlasRiskCategory,
+        ScienceRiskCategory,
+        build_risk_category_from_yaml,
+    )
 except Exception:
     AtlasRiskCategory = None  # type: ignore
     ScienceRiskCategory = None  # type: ignore
+    build_risk_category_from_yaml = None  # type: ignore
 
 __all__ = [
     # Risk types
@@ -25,6 +30,8 @@ __all__ = [
     "GraniteHarmCategory",
     "AtlasRiskCategory",
     "ScienceRiskCategory",
+    # Dynamic category builder (path or YAML string)
+    "build_risk_category_from_yaml",
     # IO schemas
     "GuardrailInput",
     "GuardrailOutput",
