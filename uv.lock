@@ -196,6 +196,7 @@ all = [
     { name = "tiktoken" },
 ]
 dev = [
+    { name = "fastapi" },
     { name = "memray" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -288,6 +289,7 @@ requires-dist = [
     { name = "deepeval", marker = "extra == 'risk-agent'", specifier = ">=3.4.0" },
     { name = "docling", marker = "extra == 'omni'", specifier = ">=2.37.0" },
     { name = "docling-core", marker = "extra == 'omni'", specifier = ">=2.0.0" },
+    { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.110.0" },
     { name = "gdown", marker = "extra == 'scrapers'", specifier = ">=5.2.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "instructor", marker = "extra == 'agents'", specifier = "==1.13.0" },
@@ -346,6 +348,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/2e/83/67ff905694df5b34a777123b59fdfd05998d5a31766f188aafbf5b340055/alphashape-1.3.1.tar.gz", hash = "sha256:7a27340afc5f8ed301577acec46bb0cf2bada5410045f7289142e735ef6977ec", size = 26316, upload-time = "2021-04-16T17:47:19.486Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e4/ad/77fad9d6f974ec58d837cb49fb9b483d6227a420c4f908c3578633de1d47/alphashape-1.3.1-py2.py3-none-any.whl", hash = "sha256:96a5ddd5f09534a35f03a8916aeeaac00fe4d6bec2f9ad78f87f57be3007f795", size = 13122, upload-time = "2021-04-16T17:47:17.773Z" },
+]
+
+[[package]]
+name = "annotated-doc"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz", hash = "sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4", size = 7288, upload-time = "2025-11-10T22:07:42.062Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl", hash = "sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320", size = 5303, upload-time = "2025-11-10T22:07:40.673Z" },
 ]
 
 [[package]]
@@ -1323,6 +1334,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5e/77/1c3ff07b6739b9a1d23ca01ec0a90a309a33b78e345a3eb52f9ce9240e36/faker-40.1.2.tar.gz", hash = "sha256:b76a68163aa5f171d260fc24827a8349bc1db672f6a665359e8d0095e8135d30", size = 1949802, upload-time = "2026-01-13T20:51:49.917Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/ec/91a434c8a53d40c3598966621dea9c50512bec6ce8e76fa1751015e74cef/faker-40.1.2-py3-none-any.whl", hash = "sha256:93503165c165d330260e4379fd6dc07c94da90c611ed3191a0174d2ab9966a42", size = 1985633, upload-time = "2026-01-13T20:51:47.982Z" },
+]
+
+[[package]]
+name = "fastapi"
+version = "0.139.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "pydantic" },
+    { name = "starlette" },
+    { name = "typing-extensions" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d3/af/a5f50ccfa659ec1802cb4ca842c23f06d906a8cc9aef6016a2caeea3d4ed/fastapi-0.139.0.tar.gz", hash = "sha256:99ab7b2d92223c76d6cf10757ab3f89d45b38267fc20b2a136cf02f6beac3145", size = 423016, upload-time = "2026-07-01T16:35:33.436Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/7c/8e3c6ad324ea5cb36604fc3f968554887891c316d9dfde57761611d907ad/fastapi-0.139.0-py3-none-any.whl", hash = "sha256:cf15e1e9e667ddb0ad63811e60bd11390d1aac838ca4a7a23f421807b2308189", size = 130339, upload-time = "2026-07-01T16:35:32.19Z" },
 ]
 
 [[package]]

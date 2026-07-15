@@ -179,6 +179,10 @@ dev = [
     "pre-commit>=4.2.0",
     "memray>=1.18.0",
     "scalene>=1.5.55",
+    # litellm imports its proxy pre-call utils (fastapi/starlette) on some
+    # completion/health-check paths exercised by the real-LLM integration tests.
+    # Not a runtime dep of akd itself — only needed to run the suite.
+    "fastapi>=0.110.0",
 ]
 local = [
     "marimo==0.15.0",
