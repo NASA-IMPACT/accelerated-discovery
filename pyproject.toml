@@ -117,6 +117,9 @@ agents = [
     "instructor==1.13.0",
     "openai>=1.75.0",
     "tiktoken>=0.9.0",
+    # litellm needs orjson on its runtime path but only declares it under its
+    # own [proxy] extra, so every akd[agents] consumer must pull it explicitly.
+    "orjson>=3.11.6",
 ]
 
 # ── Scrapers / search ───────────────────────────────────────────────────
