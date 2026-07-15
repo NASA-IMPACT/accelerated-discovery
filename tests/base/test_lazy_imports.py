@@ -71,3 +71,20 @@ def test_import_does_not_load_heavy_deps(import_stmt: str, forbidden: list[str])
     )
     result = _run_in_subprocess(code)
     assert result.returncode == 0, f"{import_stmt!r} loaded forbidden modules:\n{result.stderr}"
+
+
+def test_pypaperbot_default_construction_stays_light():
+    """Default PyPaperBotScraper() must not pull docling/torch at construction.
+
+    The default DoclingScraper converter is built lazily on first `.scraper`
+    access, so merely constructing a PyPaperBotScraper stays light.
+    """
+    code = (
+        "import sys\n"
+        "from akd.tools.scrapers.pypaperbot import PyPaperBotScraper\n"
+        "PyPaperBotScraper()  # default construction — must not build DoclingScraper\n"
+        "loaded = [m for m in ['torch', 'docling', 'transformers'] if m in sys.modules]\n"
+        "assert not loaded, f'default construction eagerly loaded: {loaded}'"
+    )
+    result = _run_in_subprocess(code)
+    assert result.returncode == 0, result.stderr

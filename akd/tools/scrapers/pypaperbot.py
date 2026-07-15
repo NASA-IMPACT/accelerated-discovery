@@ -83,15 +83,27 @@ class PyPaperBotScraper(ScraperToolBase):
         debug: bool = False,
     ) -> None:
         super().__init__(config=config or PyPaperBotScraperConfig(), debug=debug)
-        if scraper is None:
-            # Deferred for lazy loading: DoclingScraper pulls the docling/torch/transformers 
+        # constructing the scraper here defeats the lazy-import goal
+        self._scraper = scraper
+        logger.info(
+            f"Initialized PyPaperBotScraper with config: {self.config} | "
+            f"scraper={scraper.__class__.__name__ if scraper is not None else 'DoclingScraper (lazy default)'}",
+        )
+
+    @property
+    def scraper(self) -> ScraperToolBase:
+        """PDF→Markdown converter. Defaults to DoclingScraper, constructed lazily
+        on first access so docling/torch stay off the import and construction paths."""
+        if self._scraper is None:
+            # Deferred: DoclingScraper pulls the docling/torch/transformers stack.
             from .omni import DoclingScraper
 
-            scraper = DoclingScraper(debug=debug)
-        self.scraper = scraper
-        logger.info(
-            f"Initialized PyPaperBotScraper with config: {self.config} | scraper={self.scraper.__class__.__name__}",
-        )
+            self._scraper = DoclingScraper(debug=self.debug)
+        return self._scraper
+
+    @scraper.setter
+    def scraper(self, value: ScraperToolBase | None) -> None:
+        self._scraper = value
 
     def _find_downloaded_pdf(self, directory: Path) -> Optional[Path]:
         """Find first PDF file in directory."""
