@@ -108,7 +108,10 @@ gg = [
 risk_agent = [
     "akd[guardrails]",
     "akd[agents]",
-    "deepeval>=3.4.0",
+    # Cap below 4.0: deepeval 4.x reworked the DAG metric API (DAGMetric/TaskNode/
+    # VerdictNode/DeepAcyclicGraph), which RiskAgent builds against. Unbounded,
+    # a fresh install pulls 4.x and RiskAgent breaks. Lift once ported to 4.x.
+    "deepeval>=3.4.0,<4",
 ]
 
 # ── Agents (LLM stack) ──────────────────────────────────────────────────
