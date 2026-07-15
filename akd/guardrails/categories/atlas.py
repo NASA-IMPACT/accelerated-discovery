@@ -18,10 +18,14 @@ def _load_yaml(yaml_path: Path) -> dict[str, Any]:
 
 def build_risk_category_from_yaml(
     enum_name: str,
-    yaml_path: Path,
+    yaml: str | Path,
 ) -> type[RiskCategory]:
     """
-    Dynamically build a RiskCategory enum from YAML at import time.
+    Dynamically build a RiskCategory enum from YAML.
+
+    ``yaml`` is either a YAML file (a ``Path``, or a ``str`` naming an existing
+    file) or a raw YAML document string (e.g. supplied in a request body by a
+    downstream guardrails service).
 
     YAML format:
         risks:
@@ -33,7 +37,14 @@ def build_risk_category_from_yaml(
             tag: "harmful-content"
             type: "output"
     """
-    data = _load_yaml(yaml_path)
+    # Decide the source: a Path (or a str naming an existing file) is loaded as
+    # a file; anything else is treated as a raw YAML string.
+    if isinstance(yaml, Path) or Path(yaml).is_file():
+        data = _load_yaml(Path(yaml)) or {}
+    else:
+        from yaml import safe_load  # local: the `yaml` param shadows the module
+
+        data = safe_load(yaml) or {}
 
     # Build enum members: {ENUM_KEY: (value, RiskMetadata)}
     members: dict[str, tuple[str, RiskMetadata]] = {}
