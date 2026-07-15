@@ -1,16 +1,10 @@
 import re
-from typing import List, Literal
+from typing import TYPE_CHECKING, Any, List, Literal
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, UndetectedAdapter
-from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
 from loguru import logger
-from markdownify import markdownify
 from pydantic import ConfigDict, Field, computed_field
-from readability import Document
-from requests import HTTPError, RequestException
 
 from ._base import (
     ScraperToolInputSchema,
@@ -18,6 +12,13 @@ from ._base import (
     WebScraper,
     WebScraperToolConfig,
 )
+
+if TYPE_CHECKING:
+    # Type-only imports; the runtime imports are deferred to call sites so that
+    # `import akd.tools.scrapers` does not eagerly pull crawl4ai/playwright,
+    # bs4, readability or markdownify. Install them via `akd[scrapers]`.
+    from bs4 import BeautifulSoup
+    from crawl4ai import AsyncWebCrawler, BrowserConfig
 
 
 class SimpleWebScraper(WebScraper):
@@ -66,10 +67,20 @@ class SimpleWebScraper(WebScraper):
                 return response.text
 
         except httpx.HTTPStatusError as http_err:
+            from requests import HTTPError  # deferred: requests is in akd[scrapers]
+
             raise HTTPError(f"HTTP error occurred: {http_err}")
         except httpx.TimeoutException as timeout_err:
+            from requests import (
+                RequestException,  # deferred: requests is in akd[scrapers]
+            )
+
             raise RequestException(f"Request timeout: {timeout_err}")
         except httpx.RequestError as req_err:
+            from requests import (
+                RequestException,  # deferred: requests is in akd[scrapers]
+            )
+
             raise RequestException(f"Error fetching webpage: {req_err}")
 
     async def _clean_markdown(self, markdown: str) -> str:
@@ -90,7 +101,7 @@ class SimpleWebScraper(WebScraper):
         markdown = markdown.strip() + "\n"
         return markdown
 
-    async def _extract_main_content(self, soup: BeautifulSoup) -> str:
+    async def _extract_main_content(self, soup: "BeautifulSoup") -> str:
         """
         Extracts the main content from the webpage using custom heuristics.
 
@@ -149,7 +160,9 @@ class SimpleWebScraper(WebScraper):
                 f"Fetched content appears to be PDF binary data (starts with %PDF-): {params.url}",
             )
 
-        # Parse HTML with BeautifulSoup
+        # Parse HTML with BeautifulSoup (deferred: bs4 is in akd[scrapers])
+        from bs4 import BeautifulSoup
+
         soup = BeautifulSoup(html_content, "html.parser")
 
         # Extract main content using custom extraction
@@ -166,6 +179,9 @@ class SimpleWebScraper(WebScraper):
         if not params.include_links:
             markdown_options["strip"].append("a")
 
+        # deferred: markdownify is in akd[scrapers]
+        from markdownify import markdownify
+
         markdown_content = markdownify(main_content, **markdown_options)
 
         # Clean up the markdown
@@ -174,7 +190,9 @@ class SimpleWebScraper(WebScraper):
         # Detect anti-bot/security checks in content
         self._validate_security_check(markdown_content, str(params.url))
 
-        # Extract metadata
+        # Extract metadata (deferred: readability is in akd[scrapers])
+        from readability import Document
+
         metadata = await self._extract_metadata(
             soup,
             Document(html_content),
@@ -348,7 +366,12 @@ class Crawl4AIScraperConfig(WebScraperToolConfig):
     )
 
     @computed_field
-    def _run_config(self) -> CrawlerRunConfig:
+    def _run_config(self) -> Any:
+        # Return type is Any (not CrawlerRunConfig) so the config class can be
+        # defined without crawl4ai installed; the crawl4ai import is deferred to
+        # this body, which only runs when a Crawl4AI scraper is actually used.
+        from crawl4ai import CrawlerRunConfig
+
         config_params = {
             "excluded_tags": self.excluded_tags if self.filter_header_footer else [],
             "excluded_selector": self.excluded_selector if self.filter_header_footer else "",
@@ -483,7 +506,7 @@ class Crawl4AIWebScraper(WebScraper):
             )
             return base_url
 
-    def _create_crawler(self, browser_config: BrowserConfig) -> AsyncWebCrawler:
+    def _create_crawler(self, browser_config: "BrowserConfig") -> "AsyncWebCrawler":
         """
         Create AsyncWebCrawler with optional UndetectedAdapter.
 
@@ -493,6 +516,10 @@ class Crawl4AIWebScraper(WebScraper):
         Returns:
             Configured AsyncWebCrawler instance
         """
+        # deferred: crawl4ai/playwright are in akd[scrapers]
+        from crawl4ai import AsyncWebCrawler, UndetectedAdapter
+        from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
+
         if self.use_undetected_browser:
             adapter = UndetectedAdapter()
             strategy = AsyncPlaywrightCrawlerStrategy(
@@ -522,6 +549,9 @@ class Crawl4AIWebScraper(WebScraper):
 
     async def _fetch_with_docker(self, url: str):
         """Fetch URL using Docker-based browser with anti-bot bypass."""
+        # deferred: crawl4ai/playwright are in akd[scrapers]
+        from crawl4ai import BrowserConfig
+
         # Discover the full CDP endpoint URL
         cdp_url = await self._get_cdp_endpoint(self.playwright_cdp_url)
 
@@ -540,6 +570,9 @@ class Crawl4AIWebScraper(WebScraper):
 
     async def _fetch_with_local(self, url: str):
         """Fetch URL using local Playwright with anti-bot bypass."""
+        # deferred: crawl4ai/playwright are in akd[scrapers]
+        from crawl4ai import BrowserConfig
+
         browser_config = BrowserConfig(
             browser_type=self.browser_type,
             headless=self.headless,
@@ -562,7 +595,9 @@ class Crawl4AIWebScraper(WebScraper):
             HTTPError: If HTTP status code >= 400
             RuntimeError: If crawl was unsuccessful
         """
-        # Check for HTTP errors
+        # Check for HTTP errors (deferred: requests is in akd[scrapers])
+        from requests import HTTPError
+
         if crawl_result.status_code and crawl_result.status_code >= 400:
             raise HTTPError(
                 f"HTTP {crawl_result.status_code} error fetching {url}: "
@@ -591,6 +626,10 @@ class Crawl4AIWebScraper(WebScraper):
         self._validate_security_check(markdown, str(params.url))
 
         # Use original HTML for metadata extraction
+        # deferred: bs4/readability are in akd[scrapers]
+        from bs4 import BeautifulSoup
+        from readability import Document
+
         soup = BeautifulSoup(crawl_result.html, "html.parser")
         metadata = await self._extract_metadata(soup, Document(crawl_result.html), str(params.url))
 

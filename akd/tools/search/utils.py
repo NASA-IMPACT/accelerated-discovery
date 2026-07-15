@@ -14,7 +14,6 @@ from collections import defaultdict
 from typing import Callable
 from urllib.parse import urlparse
 
-import numpy as np
 from loguru import logger
 from pydantic import AnyUrl
 
@@ -500,6 +499,8 @@ def reciprocal_rank_fusion(
 
     # Normalize scores if requested
     if normalize:
+        import numpy as np  # deferred: numpy is in akd[search]/akd[ml]
+
         scores = np.array([item.score for item in fused_results])
         score_range = scores.max() - scores.min()
 

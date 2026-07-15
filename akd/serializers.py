@@ -15,10 +15,10 @@ Consumers that need the checkpoint serde role should install
 ``akd[serializer]`` (or pin ``langgraph`` themselves).
 """
 
+import sys
 from enum import Enum
 from typing import Any
 
-import numpy as np
 from pydantic import BaseModel
 from pydantic.networks import HttpUrl
 
@@ -47,7 +47,9 @@ class AKDSerializer(_SerdeBase):
             return obj.model_dump(mode="json")
         elif isinstance(obj, HttpUrl):
             return str(obj)
-        elif isinstance(obj, np.ndarray):
+        # numpy is an optional dep (akd[search]/akd[ml]); detect arrays without
+        # importing it. If numpy was never imported, obj cannot be an ndarray.
+        elif (_np := sys.modules.get("numpy")) is not None and isinstance(obj, _np.ndarray):
             return obj.tolist()
         elif isinstance(obj, dict):
             return {(k.value if isinstance(k, Enum) else k): self._convert_pydantic_to_dict(v) for k, v in obj.items()}

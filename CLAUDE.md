@@ -7,7 +7,10 @@ Guidance for Claude Code when working in this repository.
 ```bash
 # Setup
 uv venv --python 3.12 && source .venv/bin/activate
-uv sync --extra dev          # install with test deps
+# Core is lightweight; the full test suite exercises scrapers/agents/ML, so
+# install every runtime extra plus dev tooling. (`--extra dev` alone only gives
+# test tooling, not the heavy deps the suite imports.)
+uv sync --extra all --extra dev
 
 # Run anything through uv (never bare python/pytest)
 uv run pytest                         # full suite (parallel, coverage)

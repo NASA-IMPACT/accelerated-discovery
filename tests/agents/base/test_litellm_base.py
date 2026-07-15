@@ -45,7 +45,7 @@ class TestLiteLLMInstructorBaseAgent:
         assert agent.enable_trimming is True
 
     @pytest.mark.asyncio
-    @patch("akd._base.session.trim_messages")
+    @patch("litellm.utils.trim_messages")
     @patch("instructor.from_litellm")
     async def test_full_arun_workflow(
         self,
@@ -134,7 +134,7 @@ class TestLiteLLMInstructorBaseAgent:
     def test_litellm_client_initialization(self, litellm_config):
         """Test that LiteLLM client is properly initialized."""
         with patch("instructor.from_litellm") as mock_from_litellm:
-            with patch("akd.agents._base._base.acompletion") as mock_acompletion:
+            with patch("litellm.acompletion") as mock_acompletion:
                 mock_client = MagicMock()
                 mock_from_litellm.return_value = mock_client
 

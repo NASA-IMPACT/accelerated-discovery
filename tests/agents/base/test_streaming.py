@@ -36,7 +36,7 @@ class TestStreaming:
         """Test astream emits STARTING, RUNNING, COMPLETED."""
         json_output = '{"response": "Test", "confidence": 0.9}'
 
-        with patch("akd.agents._base._base.acompletion") as mock_acompletion:
+        with patch("litellm.acompletion") as mock_acompletion:
             mock_acompletion.return_value = make_stream(make_chunk(json_output))
 
             agent = TestLiteLLMAgent(config=litellm_config)
@@ -52,7 +52,7 @@ class TestStreaming:
         """Test source is set on all events."""
         json_output = '{"response": "Test", "confidence": 0.9}'
 
-        with patch("akd.agents._base._base.acompletion") as mock_acompletion:
+        with patch("litellm.acompletion") as mock_acompletion:
             mock_acompletion.return_value = make_stream(make_chunk(json_output))
 
             agent = TestLiteLLMAgent(config=litellm_config)
@@ -65,7 +65,7 @@ class TestStreaming:
         """Test COMPLETED event has output."""
         json_output = '{"response": "Test", "confidence": 0.9}'
 
-        with patch("akd.agents._base._base.acompletion") as mock_acompletion:
+        with patch("litellm.acompletion") as mock_acompletion:
             mock_acompletion.return_value = make_stream(make_chunk(json_output))
 
             agent = TestLiteLLMAgent(config=litellm_config)
@@ -77,7 +77,7 @@ class TestStreaming:
     @pytest.mark.asyncio
     async def test_astream_emits_thinking_events(self, litellm_config):
         """Test THINKING events for reasoning tokens."""
-        with patch("akd.agents._base._base.acompletion") as mock_acompletion:
+        with patch("litellm.acompletion") as mock_acompletion:
             mock_acompletion.return_value = make_stream(
                 make_chunk(reasoning="Let me think..."),
                 make_chunk('{"response": "Test", "confidence": 0.9}'),
@@ -93,7 +93,7 @@ class TestStreaming:
     @pytest.mark.asyncio
     async def test_astream_emits_streaming_token_events(self, litellm_config):
         """Test StreamingTokenEvent for text deltas."""
-        with patch("akd.agents._base._base.acompletion") as mock_acompletion:
+        with patch("litellm.acompletion") as mock_acompletion:
             mock_acompletion.return_value = make_stream(
                 make_chunk('{"response": "Test", "confidence": 0.9}'),
             )
@@ -107,7 +107,7 @@ class TestStreaming:
     @pytest.mark.asyncio
     async def test_astream_error_yields_failed(self, litellm_config):
         """Test error yields FAILED event."""
-        with patch("akd.agents._base._base.acompletion") as mock_acompletion:
+        with patch("litellm.acompletion") as mock_acompletion:
             mock_acompletion.side_effect = ValueError("API Error!")
 
             agent = TestLiteLLMAgent(config=litellm_config)

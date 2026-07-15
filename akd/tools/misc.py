@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
-import numpy as np
-import openai
-import tiktoken
 from loguru import logger
 from pydantic import HttpUrl, TypeAdapter
+
+# numpy (akd[search]/akd[ml]), openai + tiktoken (akd[agents]) are deferred to
+# call sites so importing this module stays lightweight.
+if TYPE_CHECKING:
+    import numpy as np
 
 HttpUrlAdapter = TypeAdapter(HttpUrl)
 
@@ -83,6 +86,7 @@ class Embedder:
 
     def _parse_embedding(self, emb_str) -> np.ndarray:
         """Parse embedding from string format to numpy array."""
+        import numpy as np  # deferred: numpy is in akd[search]/akd[ml]
 
         # If it's already a numpy array, return it
         if isinstance(emb_str, np.ndarray):
@@ -108,6 +112,8 @@ class OpenAIEmbedder(Embedder):
         api_key: str = None,
         debug: bool = False,
     ):
+        import openai  # deferred: openai is in akd[agents]
+
         self.model_name = model_name
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.client = openai.OpenAI(api_key=self.api_key)
@@ -120,6 +126,8 @@ class OpenAIEmbedder(Embedder):
         buffer: int = 200,
     ) -> str:
         """Use tiktoken to truncate text to a maximum number of tokens."""
+        import tiktoken  # deferred: tiktoken is in akd[agents]
+
         enc = tiktoken.encoding_for_model(self.model_name)
         tokens = enc.encode(text)
         if len(tokens) > max_tokens:
@@ -127,6 +135,8 @@ class OpenAIEmbedder(Embedder):
         return text
 
     def embed_texts(self, texts: list[str], batch_size: int = 32) -> np.ndarray:
+        import numpy as np  # deferred: numpy is in akd[search]/akd[ml]
+
         if isinstance(texts, str):
             texts = [texts]
 

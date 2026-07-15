@@ -22,12 +22,31 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.12"
-          cache: "pip"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Cache ML model downloads (HuggingFace / torch hub)
+        # sentence-transformers / docling download models on first use at test
+        # runtime; cache them so repeat runs skip the re-download.
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/torch
+          key: ml-models-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ml-models-${{ runner.os }}-
 
       - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,ml]"
+        # Core is lightweight and the full suite exercises scrapers/agents/ML/etc,
+        # so install every runtime extra (`all`) + dev tooling. Use uv (fast,
+        # parallel, cached) and pin torch to the CPU wheels — the default Linux
+        # CUDA build (~2.5GB) is useless in CI and dominates install time.
+        run: uv pip install --system --torch-backend=cpu -e ".[all,dev]"
         working-directory: ${{ vars.CDK_WORKING_DIRECTORY }}
 
       - name: Run tests with coverage

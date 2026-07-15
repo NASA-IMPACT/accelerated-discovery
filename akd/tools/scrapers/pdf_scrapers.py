@@ -2,8 +2,6 @@ import os
 import re
 from urllib.parse import unquote
 
-import fitz
-from markdownify import markdownify
 from pydantic import AnyUrl, Field, field_validator
 
 from ._base import (
@@ -89,6 +87,8 @@ class SimplePDFScraper(PDFScraper):
         """
         Extracts text from a PDF file using PyMuPDF (fitz).
         """
+        import fitz  # deferred: PyMuPDF only needed for actual PDF extraction
+
         try:
             doc = fitz.open(pdf_path)
             text = "\n".join([page.get_text("text") for page in doc])
@@ -106,6 +106,8 @@ class SimplePDFScraper(PDFScraper):
         """
         Extracts metadata from a PDF file.
         """
+        import fitz  # deferred: PyMuPDF only needed for actual PDF extraction
+
         try:
             doc = fitz.open(path)
             metadata = doc.metadata
@@ -177,6 +179,8 @@ class SimplePDFScraper(PDFScraper):
         extracted_text = await self._fetch_pdf_text(path)
 
         # Convert to markdown
+        from markdownify import markdownify  # deferred: only needed during conversion
+
         markdown_content = markdownify(extracted_text)
 
         # Clean markdown content

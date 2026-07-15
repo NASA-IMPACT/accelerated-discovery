@@ -5,20 +5,14 @@ and builds DAG metrics for hierarchical evaluation. It directly uses
 GuardrailInput/GuardrailOutput for unified interface with other guardrail providers.
 """
 
+from __future__ import annotations
+
 import asyncio
 import re
 from collections.abc import Sequence
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from deepeval.metrics import DAGMetric
-from deepeval.metrics.dag import (
-    DeepAcyclicGraph,
-    NonBinaryJudgementNode,
-    TaskNode,
-    VerdictNode,
-)
-from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -36,6 +30,27 @@ from akd.guardrails.categories._base import RiskCategory
 
 # Dynamically created from YAML - may be None if file doesn't exist
 from akd.guardrails.categories.atlas import ScienceRiskCategory
+
+if TYPE_CHECKING:
+    # deepeval is heavy and only needed at runtime when RiskAgent runs; it is
+    # provided by the akd[risk_agent] extra. Runtime uses import it locally.
+    from deepeval.metrics import DAGMetric
+    from deepeval.metrics.dag import TaskNode, VerdictNode
+
+
+def _require_deepeval() -> None:
+    """Raise a friendly error if the (heavy) deepeval dependency is missing.
+
+    RiskAgent is importable without deepeval so the module stays lightweight;
+    this fail-fast guard runs at instantiation and points at the right extra.
+    """
+    import importlib.util
+
+    if importlib.util.find_spec("deepeval") is None:
+        raise ModuleNotFoundError(
+            "RiskAgent requires the 'deepeval' package. Install it with: uv pip install 'akd[risk_agent]'",
+            name="deepeval",
+        )
 
 
 class CriterionImportance(StrEnum):
@@ -222,6 +237,7 @@ class RiskAgent(
         debug: bool = False,
     ) -> None:
         """Initialize the RiskAgent with configuration."""
+        _require_deepeval()
         config = config or RiskAgentConfig()
         super().__init__(config=config, debug=debug)
         self._risk_report_agent = _RiskReportAgent(
@@ -345,6 +361,16 @@ class RiskAgent(
             - criterion_nodes_by_risk maps RiskCategory to list of TaskNodes in same order as criteria
             - risk_agg_nodes_by_risk maps RiskCategory to its aggregation TaskNode
         """
+        # deferred: deepeval is in akd[risk_agent]
+        from deepeval.metrics import DAGMetric
+        from deepeval.metrics.dag import (
+            DeepAcyclicGraph,
+            NonBinaryJudgementNode,
+            TaskNode,
+            VerdictNode,
+        )
+        from deepeval.test_case import LLMTestCaseParams
+
         root_nodes: list[TaskNode] = []
         final_risk_nodes: list[TaskNode] = []
         criterion_nodes_by_risk: dict[RiskCategory, list[TaskNode]] = {}
@@ -574,6 +600,9 @@ Model Output: {content}
             - criterion_verdicts maps criterion_id (e.g., "consistency_1") to verdict
             - risk_verdicts maps RiskCategory to whether it passed
         """
+        # deferred: deepeval is in akd[risk_agent]
+        from deepeval.metrics.dag import TaskNode
+
         criterion_verdicts: dict[str, bool] = {}
         risk_verdicts: dict[RiskCategory, bool] = {}
 
@@ -810,7 +839,9 @@ Model Output: {content}
         )
         logger.info("DAG metric created.")
 
-        # Evaluate the DAG metric
+        # Evaluate the DAG metric (deferred: deepeval is in akd[risk_agent])
+        from deepeval.test_case import LLMTestCase
+
         test_case = LLMTestCase(
             input=params.context or "",
             actual_output=params.content,
